@@ -50,6 +50,12 @@ _Avoid_: fallback, interpreter, pure mode
 A job that people write hand-written NIFs for today, reproduced from a named package and measured against that package's Elixir version and its NIF. The target workloads are the yardstick for what the kernel subset must express.
 _Avoid_: use case, benchmark
 
+**Anchor package**:
+The real Hex package a target workload reproduces. Its pure-Elixir version is the first baseline and its NIF is the native comparison.
+
+**Realistic size**:
+The input size a target workload's anchor package is typically called with, declared before anything is measured. The workload verdict is measured at this size; other sizes and the crossover are reported beside it.
+
 **Supporting example**:
 A catalog entry that isn't tied to a real NIF package. It illustrates defk but doesn't count towards the verdict.
 
