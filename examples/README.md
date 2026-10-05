@@ -37,7 +37,7 @@ Loops over numbers or bytes, where the data is already packed, or is packed once
 Also not what defk is for (no script needed):
 
 - **Wrapping an existing native library** (codecs, crypto, databases): use Rustler, Zigler or an existing binding.
-- **Tensor and ML work**: use Nx, which compiles to XLA or LibTorch. Ticket `defk-9p6.2` will measure where the boundary lies.
+- **Tensor and ML work**: use Nx, which compiles to XLA or LibTorch. Ticket `defk-9p6.3` will measure where the boundary lies.
 - **I/O-bound work**: native code doesn't make the network faster.
 
 Numbers are from an M-series Mac (OTP 29, Elixir 1.20); ranges cover the runs so far.
