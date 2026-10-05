@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T12:05:55Z",
+  "description": "Follow-up to defk-5s3. Measured on fuzzy_search search/4 vs search_blocking/4, one query at a time (ratio): tick checks only, never yields, no labels = 1.02; + resume labels/switch = 1.04-1.05; full = 1.08-1.09. Making yields 5x more frequent did not change the time, so actual yields are ~free. The cost is code shape: (1) resume goto targets inside loops make the CFG irreducible for LLVM; (2) the spill-and-return path at each safepoint. Ideas: resume by re-entering each loop through its header (a dispatch at the top of each enclosing loop body), so loops stay reducible; move the spill out of the loops. Done when search/4 is within ~5% of search_blocking/4 and demo section 4 still shows yielding.",
+  "id": "defk-nua",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Reduce the code-shape cost of resumable kernels (~8% on fuzzy_search)",
+  "type": "task",
+  "updated_at": "2026-10-05T12:05:55Z"
+}
