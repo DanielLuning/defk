@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T09:49:14Z",
+  "description": "Prototype restrictions in Defk.Compiler: branch_type! rejects array-valued branches, and returned arrays must come from alloc/2. Cause: param array views are rebound on every resume, so copies held in frame vars would go stale after GC. Needs tracking of which view a variable refers to, or rebinding of all aliases on resume.",
+  "id": "defk-gqk",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Allow arrays through if/cond branches and returning input arrays",
+  "type": "task",
+  "updated_at": "2026-10-05T09:49:14Z"
+}
