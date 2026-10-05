@@ -16,9 +16,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution: the one rule is \"A kernel is Elixir over numbers and binaries: it gives the result Elixir would, or raises where its types can't hold that result, or doesn't compile. It never gives a different answer.\" It opens docs/language.md verbatim and replaces the draft in the map Notes; error messages don't repeat it (each why: line is the rule applied).\n\n- Limit (new term): raises or refuses to compile where Elixir would succeed (i64 overflow, guard errors raising). Allowed, listed in docs/language.md.\n- Divergence (narrowed): a different value or behaviour without raising. Not allowed: done requires zero; each is removed or turned into a limit. An undocumented limit or any divergence is a bug.\n- Arrays: [T] is a binary of native-endian T; a[i] reads as the bitstring match does (f32 widens to f64 with Elixir's rounding, narrow ints widen to i64); out[i] = v rebuilds the binary. A value that doesn't fit its type raises, including array writes (today's behaviour: defk raises \"value 300 does not fit in u8\" where Elixir's \u003c\u003c300::8\u003e\u003e wraps; this is a limit). Elixir mode applies the same check, so the modes agree. Wrapping is written explicitly: band(v, 0xFF).\n- No semantic opt-outs (no fast_math, unchecked or wrapping modes); options may change only performance or scheduling (yield: false). Wrapping hash arithmetic is written the Elixir way, band(h * p, @mask64), and the compiler recognises the mask.\n- Placement: array aliasing on write = divergence, must be removed (defk-i2e decides how); inf/NaN inside kernels = divergence, must become Elixir's ArithmeticError (defk-q1c decides how; candidate: sticky FP exception flags checked at kernel exit); guard errors raising = limit (defk-7a6 stays nice-to-have).\n- Remaining differences are found by the differential tests of \"How are kernels checked against Elixir mode?\", not a manual audit.\nChecked on OTP 29: \u003c\u003c40000::signed-16\u003e\u003e wraps, \u003c\u003c1.0e40::float-32\u003e\u003e stores +inf, f64 overflow and :math.log(0.0) raise ArithmeticError, band(x * 31 + 7, mask64) is exact.",
+      "timestamp": "2026-10-05T20:25:40Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "What is the one rule a kernel author keeps in their head?",
   "type": "task",
-  "updated_at": "2026-10-05T20:22:19Z"
+  "updated_at": "2026-10-05T20:25:40Z"
 }
