@@ -14,11 +14,15 @@
     {
       "text": "Resolution: docs/verdict.md serves both a library go/no-go and a guide for Elixir developers. Sections: (1) Conclusion, 3-5 sentences incl. the go/no-go; (2) \"Should I use defk for X?\" guide by job type (Elixir / defk / Nx / Rustler), plus a traps list (poor_list_data, poor_tiny_calls, out_of_scope_word_count); (3) Workload results, a frozen snapshot tied to a commit, one row per target workload incl. poor/out_of_scope; (4) Runtime contract, one row per promise (preemption, cleanup on process death, hot code upgrade, errors as exceptions) with linked test/bench, measured figure, known gaps; (5) Developer experience, the three-part bar with evidence (error catalogue, docs/language.md with divergence page, the one rule shown consistent with every divergence) plus a cold-test log (fresh agent session with only the docs writes a new kernel); (6) Limitations and what would change the verdict; (7) Method, short, linking examples/README.md.\n\nWorkload verdict = defk vs optimised Elixir baseline, 2x bar (unchanged). Beside it, never changing it: defk vs the existing NIF (or plain C where cheap), responsiveness (worst tick gap), and Nx where it is the realistic alternative (at least one row has it).\n\nEvidence bar per row: baseline :optimized (no provisional verdict counts), quiet-machine run_all.exs, best of N with spread, machine/OTP/Elixir/commit, Elixir attempts linked from the example header. One machine; other architectures go under Limitations.\n\nPre-registered go/no-go (recorded in Method before rows are filled): grow into a library only if (a) \u003e= half the target workloads are good on optimised baselines, spanning \u003e= 2 NIF-survey categories; (b) no open safety gap in the runtime contract (performance gaps OK); (c) devex bar met and the cold test completed a kernel from the docs alone; (d) the C-compiler-at-build-time stance is settled. Otherwise: a research result, not a library. The conclusion may argue against the rule's outcome only explicitly.\n\nDone = every section meets its bar, run_all.exs green at the snapshot commit, and the user accepts the conclusion in a final session; then the map closes. A library effort would be a new map.\n\nGlossary: per-workload outcome renamed \"Workload verdict\"; \"Verdict\" is docs/verdict.md (CONTEXT.md).",
       "timestamp": "2026-10-05T19:30:53Z"
+    },
+    {
+      "text": "Amended by 'Plan the catalog build for the six target workloads' (defk-dtw.15): each workload verdict is measured at a realistic size declared in the script before any numbers (recorded in Method beside the go/no-go rule); the other size and the crossover are reported beside it.",
+      "timestamp": "2026-10-05T21:21:53Z"
     }
   ],
   "priority": 2,
   "status": "closed",
   "title": "What must docs/verdict.md contain to count as done?",
   "type": "task",
-  "updated_at": "2026-10-05T19:30:53Z"
+  "updated_at": "2026-10-05T21:21:53Z"
 }
