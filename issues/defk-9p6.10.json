@@ -6,7 +6,8 @@
     "defk-9p6.12",
     "defk-9p6.13",
     "defk-9p6.14",
-    "defk-9p6.15"
+    "defk-9p6.15",
+    "defk-9p6.16"
   ],
   "created": "2026-10-05T21:21:32Z",
   "description": "Decided in defk-dtw.15. report/1 takes optional native: (timing + package/version label), responsiveness: (max and p99 1 ms tick gap per side), realistic_size: and sweep: (sizes, times, crossover) keys; DEFK_RESULT JSON carries them so the verdict's workload-results snapshot is generated from run_all.exs output. Move bench/tick_gap.exs's method into a shared helper (one scheduler online, 1 ms ticker, implementation at the large size) so all six scripts measure identically. Done when: an existing example uses each key, run_all.exs prints them, and the snapshot table can be generated from its output.",
@@ -17,5 +18,5 @@
   "status": "open",
   "title": "Extend Defk.Bench.report/1 for target workloads",
   "type": "task",
-  "updated_at": "2026-10-05T21:21:32Z"
+  "updated_at": "2026-10-05T21:21:33Z"
 }
