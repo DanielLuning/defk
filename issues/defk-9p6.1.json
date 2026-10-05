@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T11:18:39Z",
+  "description": "examples/README.md (index, conventions, verdict rules), examples/_template.exs, examples/run_all.exs (scoreboard), and first scripts. Good fits: rolling time-series stats, image blur on raw pixels, geo nearest-neighbour. Poor fits: data that lives in lists (conversion dominates), tiny per-element calls (boundary dominates), maps/strings (out of scope: compiler refuses). Index links the fuzzy_search app (defk-nv1).",
+  "id": "defk-9p6.1",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 1,
+  "status": "open",
+  "title": "Set up example catalog with first batch of use cases",
+  "type": "task",
+  "updated_at": "2026-10-05T11:18:39Z"
+}
