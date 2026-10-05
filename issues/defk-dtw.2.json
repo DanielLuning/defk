@@ -11,9 +11,15 @@
     "wayfinder:research"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Research findings: branch research/nx-boundary, docs/research/nx-boundary.md. Summary: Nx (1.0) owns whole-tensor, fixed-shape, batched numerics (reductions, windows, scans, linalg, conv, grads, GPU); defk should not compete there.\nGaps Nx leaves: (1) sequential scalar loops with data dependencies or early exit. defn has only while (no recursion, no break), its docs say to avoid hand loops, XLA while is sequential (nx#122), and on the default Evaluator it is interpreted op by op.\n(2) Variable-length or small inputs at high call rates. defn compiles once per shape, the jit cache lookup 'may take milliseconds', every EXLA call takes a per-device GenServer lock (one host device by default), and empty tensors are not allowed.\n(3) Bytes and integer-exact work. There are no dynamic shapes (no masking or filtering), ints wrap silently, and integer div by zero is UB.\n(4) Scheduling. EXLA and Torchx run as dirty NIFs and EMLX on worker threads. None of them yields, and per ERTS a dirty NIF keeps running after its process is killed. Only the pure-Elixir Evaluator is preemptible.\ndefk's yielding on normal schedulers is the property no Nx backend offers.",
+      "timestamp": "2026-10-05T18:54:46Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Where does Nx already cover native-speed numerics for Elixir?",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:55Z"
+  "updated_at": "2026-10-05T18:54:46Z"
 }
