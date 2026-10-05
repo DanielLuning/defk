@@ -5,7 +5,9 @@
   "created": "2026-10-05T18:48:39Z",
   "description": "## Question\n\nShould the same kernel source run as plain Elixir (for debugging in IEx, for property tests that compare defk against Elixir, and as a fallback without a C compiler)? What would it constrain in the kernel subset, and where is it switched (per call, per module, per environment)?",
   "id": "defk-dtw.6",
-  "labels": [],
+  "labels": [
+    "wayfinder:grilling"
+  ],
   "parent": "defk-dtw",
   "priority": 2,
   "status": "open",
