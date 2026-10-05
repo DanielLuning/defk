@@ -15,11 +15,15 @@
     {
       "text": "Research findings: branch research/nx-boundary, docs/research/nx-boundary.md. Summary: Nx (1.0) owns whole-tensor, fixed-shape, batched numerics (reductions, windows, scans, linalg, conv, grads, GPU); defk should not compete there.\nGaps Nx leaves: (1) sequential scalar loops with data dependencies or early exit. defn has only while (no recursion, no break), its docs say to avoid hand loops, XLA while is sequential (nx#122), and on the default Evaluator it is interpreted op by op.\n(2) Variable-length or small inputs at high call rates. defn compiles once per shape, the jit cache lookup 'may take milliseconds', every EXLA call takes a per-device GenServer lock (one host device by default), and empty tensors are not allowed.\n(3) Bytes and integer-exact work. There are no dynamic shapes (no masking or filtering), ints wrap silently, and integer div by zero is UB.\n(4) Scheduling. EXLA and Torchx run as dirty NIFs and EMLX on worker threads. None of them yields, and per ERTS a dirty NIF keeps running after its process is killed. Only the pure-Elixir Evaluator is preemptible.\ndefk's yielding on normal schedulers is the property no Nx backend offers.",
       "timestamp": "2026-10-05T18:54:46Z"
+    },
+    {
+      "text": "Resolution: Nx's niche is whole-tensor numerics on large arrays with fixed shapes (batched, GPU, autodiff). Nx doesn't fit: (1) sequential or early-exit scalar loops (defn has only while, no break; Evaluator interprets op by op; EXLA runs the loop as one call that can't be interrupted); (2) small or variable-length inputs at high call rates (one compile per shape, a per-device lock that probably runs concurrent calls one at a time); (3) byte work and exact integers (no dynamic shapes, integers wrap silently). Every native Nx backend runs as dirty NIFs or on its own threads, so nothing yields or stops when its process dies. defk's place: sequential/early-exit kernels, variable-length byte work, many concurrent mid-sized calls that must stay preemptible. Open: measure EXLA-CPU per-call latency and while cost (a catalog entry with the same kernel in Elixir, defk and defn+EXLA). Detail: branch research/nx-boundary, docs/research/nx-boundary.md.",
+      "timestamp": "2026-10-05T18:55:10Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Where does Nx already cover native-speed numerics for Elixir?",
   "type": "task",
-  "updated_at": "2026-10-05T18:54:46Z"
+  "updated_at": "2026-10-05T18:55:10Z"
 }
