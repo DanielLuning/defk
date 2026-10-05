@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-05T21:21:53Z",
   "created": "2026-10-05T19:56:14Z",
   "description": "## Question\n\nHow does each of the six target workloads (see \"Choose the target workload set\") get into the catalog to the verdict's evidence bar (see \"What must docs/verdict.md contain to count as done?\"): how the anchor package's Elixir version and NIF are brought in (Mix.install of the package, vendored copy, or a faithful port), how responsiveness (worst tick gap) is measured beside the NIF, how small/large sizes and the crossover are reported, and which build tickets are handed off to the catalog epic (defk-9p6) with which real technical blockers (bitwise ops, [f32], [i16]/[i32], wrapping arithmetic, bit output).",
   "id": "defk-dtw.15",
@@ -28,8 +29,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Plan the catalog build for the six target workloads",
   "type": "task",
-  "updated_at": "2026-10-05T21:21:52Z"
+  "updated_at": "2026-10-05T21:21:53Z"
 }
