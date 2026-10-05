@@ -6,9 +6,10 @@
   "description": "b = a then a[i] = x is visible through b: alloc'd arrays are mutable buffers, unlike Elixir's immutable values. Options: forbid aliasing writable arrays, copy-on-write, or a uniqueness check (Perceus-style refcount == 1). Document the choice in README.",
   "id": "defk-i2e",
   "labels": [],
+  "parent": "defk-dtw",
   "priority": 3,
   "status": "open",
   "title": "Decide array value semantics (aliasing on write)",
   "type": "task",
-  "updated_at": "2026-10-05T09:49:14Z"
+  "updated_at": "2026-10-05T18:48:44Z"
 }
