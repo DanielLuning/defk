@@ -4,6 +4,7 @@
     "defk-dtw.5"
   ],
   "blocks": [],
+  "closed_at": "2026-10-05T20:29:56Z",
   "created": "2026-10-05T18:48:40Z",
   "description": "## Question\n\nWorkloads like an n-body step or a rolling window keep native state between calls. Should the kernel own it (a resource, mutated in place) or should the caller pass packed binaries back in each call? Weigh copying cost, Elixir value semantics, concurrency, cleanup and hot upgrade, against the workloads that need it.",
   "id": "defk-dtw.9",
@@ -18,7 +19,7 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "State kept between kernel calls: kernel-owned resources or binaries passed back in?",
   "type": "task",
   "updated_at": "2026-10-05T20:29:56Z"
