@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T15:28:24Z",
+  "description": "Since defk-nbl each loaded library image has its own frame resource type and counters, so __defk_stats__/0 (frames_live, promotions, yields) reports only the current library. Frames still live in an upgraded-away library (a kernel suspended across a reload) are not counted. Decide: document per-library semantics in README, and/or add an aggregate across loaded images (e.g. a shared counter in a separate tiny runtime NIF or :persistent_term updated from load/unload). Add a test in test/upgrade_test.exs for whichever semantics is chosen.",
+  "id": "defk-9qv",
+  "labels": [],
+  "priority": 4,
+  "status": "open",
+  "title": "Define __defk_stats__ semantics across hot reloads",
+  "type": "task",
+  "updated_at": "2026-10-05T15:28:24Z"
+}
