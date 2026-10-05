@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T09:49:14Z",
+  "description": "Only the entry kernel's loops have safepoints; call-mode functions (k*_call) run to completion, so a long loop inside a callee blocks the scheduler. Options: inline callees into the entry state machine, or make callees resumable with their own frames. Done when a long-running callee loop yields (extend the demo section 4 check).",
+  "id": "defk-jaj",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Kernels called from other kernels cannot yield",
+  "type": "task",
+  "updated_at": "2026-10-05T09:49:14Z"
+}
