@@ -20,3 +20,17 @@ Elixir today pushes people towards a hand-written NIF.
 - **Treat Elixir wins as results, not failures.** Poor fits stay in the catalog.
 
 Details: `examples/README.md`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in beadwork (`bw`), on the `beadwork` branch of this repo. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), applied with `bw label`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
