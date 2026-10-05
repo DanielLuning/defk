@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T09:49:14Z",
+  "description": "Today kernels are compiled ahead of time with cc -O3 at mix compile. A Rustler NIF embedding Cranelift could JIT kernels at runtime (Livebook, value-specialised kernels, no C toolchain needed on the target). Measure code quality vs the LLVM path on the demo kernels.",
+  "id": "defk-o1w",
+  "labels": [],
+  "priority": 4,
+  "status": "open",
+  "title": "Explore Cranelift JIT backend for runtime-specialised kernels",
+  "type": "task",
+  "updated_at": "2026-10-05T09:49:14Z"
+}
