@@ -5,6 +5,7 @@
     "defk-dtw.2"
   ],
   "blocks": [
+    "defk-dtw.10",
     "defk-dtw.9"
   ],
   "created": "2026-10-05T18:48:39Z",
@@ -18,5 +19,5 @@
   "status": "open",
   "title": "Choose the target workload set",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:48Z"
+  "updated_at": "2026-10-05T18:55:35Z"
 }
