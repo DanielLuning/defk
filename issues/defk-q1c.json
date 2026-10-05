@@ -11,9 +11,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Per 'Should a kernel body also run as plain Elixir?' (defk-dtw.6): Elixir mode is normative, so its result is the expected one. Decide to match Elixir here, or list the difference as a divergence.",
+      "timestamp": "2026-10-05T20:09:53Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Decide policy for inf/NaN inside kernels",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:44Z"
+  "updated_at": "2026-10-05T20:09:53Z"
 }
