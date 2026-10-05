@@ -12,9 +12,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): no semantic modes. Answer how wrapping is written the Elixir way, band(h * p, @mask64), and recognised by the compiler to emit a wrapping multiply with Elixir's exact result.",
+      "timestamp": "2026-10-05T20:25:40Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Should kernels offer opt-in wrapping integer arithmetic for hashes?",
   "type": "task",
-  "updated_at": "2026-10-05T18:55:36Z"
+  "updated_at": "2026-10-05T20:25:40Z"
 }
