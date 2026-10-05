@@ -28,6 +28,10 @@ A documented case where a kernel raises or refuses to compile where Elixir would
 A case where a kernel gives a different value or behaviour from Elixir mode without raising. Not allowed by the one rule: each is a bug to remove or turn into a limit.
 _Avoid_: difference (alone)
 
+**Masked arithmetic**:
+Integer arithmetic written inside `band(expr, 2^k - 1)`, which a kernel computes with wrapping machine arithmetic and which still gives Elixir's exact result. It is how hashes and checksums wrap.
+_Avoid_: wrapping mode, unchecked arithmetic
+
 **Elixir mode**:
 A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir. It is never a fallback in production and never a baseline.
 _Avoid_: fallback, interpreter, pure mode
