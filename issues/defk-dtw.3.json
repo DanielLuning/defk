@@ -12,9 +12,15 @@
     "wayfinder:research"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Research findings: branch research/predictable-subsets, docs/research/predictable-subsets.md. Summary: Best references list each construct as supported / supported with restrictions / unsupported, and keep a separate page for where they differ from the host language (Numba). Best errors show file:line:col with a caret, say what, why and what to write instead (Nx, Taichi, Cython), and link to a versioned error index with an example and the fix for each error (Futhark). Several references disagree with their compiler (Numba dict comprehensions, Nx recursion that loops forever, Pythran accepting polymorphic variables), so defk should test its reference. Running the same code in the host language (NUMBA_DISABLE_JIT, Cython pure mode, Pythran) gives a debugger and a test oracle but drifts: Numba returned garbage or a wrapped integer where Python raised. Nx's Evaluator avoids the drift by interpreting the same graph. defk could copy: one error template, columns and carets, error codes plus docs/subset.md, a report of fast-path facts, and an opt-in Elixir mode for differential tests.",
+      "timestamp": "2026-10-05T19:02:53Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "How do comparable native subsets keep their rules predictable?",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:55Z"
+  "updated_at": "2026-10-05T19:02:53Z"
 }
