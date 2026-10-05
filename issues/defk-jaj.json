@@ -6,9 +6,15 @@
   "description": "Only the entry kernel's loops have safepoints; call-mode functions (k*_call) run to completion, so a long loop inside a callee blocks the scheduler. Options: inline callees into the entry state machine, or make callees resumable with their own frames. Done when a long-running callee loop yields (extend the demo section 4 check).",
   "id": "defk-jaj",
   "labels": [],
+  "comments": [
+    {
+      "text": "Design: inline callees into the caller's state machine, not resumable callee frames. Inlining: a call lowers as the callee body with args bound to fresh locals (arrays aliased); its loops nest in the caller's loop stack, so safepoints, spills and header re-entry (defk-nua) work unchanged at any depth; ~40 lines, and the call form (k*_call) and check_recursion! go away. Recursion is detected by the inlining stack (same error), which also guarantees termination. Frames would need: a per-callee frame nested in the caller's, a yield/return protocol, a resume path into the middle of the caller's loop body at the call expression (breaking reducible resume), and re-binding of array views passed down, which point into binaries that can move between yields. Cost of inlining: code size = call sites along each chain (fine for this DSL; noted in README). Bonus: argument range facts flow into the callee. Perf: inlined prime? made its 1000-trip flat loop take the strip path (DEFK_STRIP 512 -\u003e two strips per number), count_primes(1M) yielding 189 vs 181 ms yield:false (+5%). Not the rem checks (assume d\u003e=2 changed nothing); it is the per-strip overhead. Raised DEFK_STRIP to 2048: ratio back to ~1.00 at 1M/4M, 1.02 at 9M (was 1.06); flat exp loop tick gaps unchanged (2.2-2.3 ms short and long), run_all and fuzzy unchanged vs main.",
+      "timestamp": "2026-10-05T14:51:11Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Kernels called from other kernels cannot yield",
   "type": "task",
-  "updated_at": "2026-10-05T14:19:01Z"
+  "updated_at": "2026-10-05T14:51:11Z"
 }
