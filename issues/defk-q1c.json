@@ -19,11 +19,15 @@
     {
       "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): inf/NaN inside a kernel is a divergence: Elixir raises ArithmeticError at the operation, so the kernel must raise too. Raising at kernel exit is the same outcome; a candidate mechanism is checking sticky FP exception flags (FE_OVERFLOW/FE_INVALID/FE_DIVBYZERO) at exit. Mind f32 writes: Elixir stores +inf for \u003c\u003c1.0e40::float-32\u003e\u003e, but under the one rule a value that doesn't fit raises.",
       "timestamp": "2026-10-05T20:25:40Z"
+    },
+    {
+      "text": "Per 'What do narrow element types ([f32], [i16], [i32]) mean in a kernel?' (defk-dtw.13): input arrays ([f64] today, [f32] soon) can carry inf/NaN bit patterns. Elixir mode's \u003c\u003cf::float-32/64\u003e\u003e match fails on them, so the kernel must raise too. Sticky FP flags at exit won't catch this: quiet NaN arithmetic sets no flag. Options: check on read, or validate input arrays at entry (one vectorisable pass). Decide here.",
+      "timestamp": "2026-10-05T21:08:05Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Decide policy for inf/NaN inside kernels",
   "type": "task",
-  "updated_at": "2026-10-05T20:25:40Z"
+  "updated_at": "2026-10-05T21:08:05Z"
 }
