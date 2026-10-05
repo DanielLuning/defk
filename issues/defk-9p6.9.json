@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T11:34:31Z",
+  "description": "Its 'good' verdict is provisional until the Elixir side is as fast as we can make it. Ideas: Tuple/:array rows, parallel chunking of the catalog per request, early cut-off on the Elixir side (needs defk-9vl for the defk side). Re-run the load test and update the app README. If Elixir comes within 2x, the verdict becomes marginal and Elixir is the recommendation: record that as a result.",
+  "id": "defk-9p6.9",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 1,
+  "status": "open",
+  "title": "Optimise the Elixir baseline: fuzzy_search app",
+  "type": "task",
+  "updated_at": "2026-10-05T11:34:31Z"
+}
