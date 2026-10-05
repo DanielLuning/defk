@@ -19,7 +19,11 @@ What a kernel promises the BEAM while it runs: preemption, isolation, cleanup on
 An idiomatic Elixir form in the kernel subset that exists because a developer would write it first, and that costs nothing over the equivalent loop.
 
 **Divergence**:
-A documented case where a kernel's result differs from what the same code would give in Elixir. Any undocumented difference is a bug.
+A documented case where a kernel's result differs from what the same code would give in Elixir, as Elixir mode computes it. Any undocumented difference is a bug.
+
+**Elixir mode**:
+A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir. It is never a fallback in production and never a baseline.
+_Avoid_: fallback, interpreter, pure mode
 
 ## Measurement
 
