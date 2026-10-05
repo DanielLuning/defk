@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T09:49:14Z",
+  "description": "demo section 4, one scheduler: yielding kernel worst 1ms-tick gap ~3.5ms vs ~2.2ms for a busy Elixir process (idle timer jitter ~2.3-2.9ms). ~1.5ms of compute per yield (1784 yields / ~900ms). Tune defk_tick: report timeslice usage more eagerly or yield after a fixed wall-clock budget. Done when the gap is comparable to the Elixir reference without measurable throughput loss.",
+  "id": "defk-j3h",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Yielding kernel worst-case scheduler gap is above plain Elixir",
+  "type": "task",
+  "updated_at": "2026-10-05T09:49:14Z"
+}
