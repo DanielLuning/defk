@@ -9,7 +9,8 @@ mix run demo.exs              # correctness, throughput vs Elixir and plain C, b
                               # preemption on one scheduler, failure isolation
 mix run bench/tick_gap.exs    # worst scheduler gap: idle vs Elixir vs kernel
 mix run bench/yield_cost.exs  # throughput cost of yielding
-mix test                      # resumed kernels match yield: false, incl. a forced yield at every clock read
+mix test                      # resumed kernels match yield: false, incl. a forced yield at every clock read;
+                              # reloading a module while a kernel is suspended
 ```
 
 Needs Elixir ≥ 1.18 and a C compiler (`cc`, or set `CC`).
@@ -95,6 +96,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 5. **Adaptive safepoint budget.** The clock is read every ~100–250 µs regardless of how expensive one loop iteration is.
 6. **`sigsetjmp(jb, 0)` for errors.** Plain `setjmp` saves the signal mask on macOS (a syscall), which cost 160 ns per call.
 7. **Never take the address of an array view in kernel code.** If it escapes, clang reloads `data`/`len` on every iteration.
+8. **Hot code upgrade: a suspended kernel finishes in the code it started in.** Recompiling a module builds a new `.so` (its path carries a hash of the C source and runtime). A yielded kernel reschedules its own library's step function, and ERTS keeps that library mapped until the continuation returns. Each loaded library has its own frame resource type and is never taken over by a newer library, so the old library destroys its own frames with the frame layout it was built with, and stays loaded while any exist. Purging the old code (`:code.purge/1`, or loading a third version while the kernel is still running) kills processes still running it, as for any old Erlang code, and the old library frees their frames. `__defk_stats__/0` counts the current library's frames only. Earlier, the new library took over a shared frame type: its destructor and `frames_live` counter were applied to old frames, which is unsafe once the frame layout changes. `test/upgrade_test.exs` covers all of this.
 
 ## Results (M-series Mac, OTP 29, Elixir 1.20; noisy, single runs)
 
@@ -121,5 +123,5 @@ These are deliberate, to keep defk small for now.
 - An array may be returned only if it was created with `alloc/2`. Arrays can't flow through `if`/`cond` branches.
 - No `while`/early exit, no `case`, no maps, lists or strings.
 - Array writes alias: `b = a` then `a[i] = x` is visible through `b`.
-- Hot code upgrade has an `upgrade` callback that takes over the resource type, but it hasn't been tested.
+- A kernel survives one reload of its module; a second reload before it finishes purges its code and kills it (standard BEAM old-code semantics).
 - The C compiler runs at compile time on the build machine (no Cranelift JIT path).

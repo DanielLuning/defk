@@ -11,6 +11,7 @@
 #define DEFK_RUNTIME_H
 
 #include <erl_nif.h>
+#include <inttypes.h>
 #include <math.h>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -413,8 +414,28 @@ static ERL_NIF_TERM defk_force_yields_nif(ErlNifEnv *env, int argc, const ERL_NI
   return enif_make_atom(env, "ok");
 }
 
+/*
+ * Hot code upgrade (defk-nbl). Each loaded library image gets its own frame
+ * resource type, named after the address of one of its statics. A yielded
+ * kernel's continuation (step_N, rescheduled with enif_schedule_nif) always
+ * belongs to the library that started it, and ERTS keeps that library mapped
+ * until the continuation returns. Taking over one shared "defk_frame" type
+ * instead would hand the old library's frames to the new library's destructor
+ * (and frames_live counter), which assumes the new defk_ctx layout.
+ *
+ * With a type per image, ERTS keeps an upgraded-away library loaded while any
+ * of its frames exist and destroys them with its own destructor, so a
+ * suspended kernel finishes in the code it started in. If the old module is
+ * purged first (code:purge, or loading a third version), ERTS kills processes
+ * still running its code, like any other old code, and the old library frees
+ * the frames. A name can only exist already if the same image is loaded again
+ * (same .so, same statics): the takeover then hands the frames to the same
+ * destructor.
+ */
 static int defk_open_rt(ErlNifEnv *env, ErlNifResourceFlags flags) {
-  defk_frame_rt = enif_open_resource_type(env, NULL, "defk_frame", defk_frame_dtor, flags, NULL);
+  char name[48];
+  snprintf(name, sizeof name, "defk_frame_%" PRIxPTR, (uintptr_t)&defk_frame_rt);
+  defk_frame_rt = enif_open_resource_type(env, NULL, name, defk_frame_dtor, flags, NULL);
   return defk_frame_rt ? 0 : 1;
 }
 static int defk_load(ErlNifEnv *env, void **priv, ERL_NIF_TERM info) {
@@ -422,7 +443,6 @@ static int defk_load(ErlNifEnv *env, void **priv, ERL_NIF_TERM info) {
   (void)info;
   return defk_open_rt(env, ERL_NIF_RT_CREATE);
 }
-/* hot code upgrade: take over the resource type so suspended frames survive */
 static int defk_upgrade(ErlNifEnv *env, void **priv, void **old, ERL_NIF_TERM info) {
   (void)priv;
   (void)old;
