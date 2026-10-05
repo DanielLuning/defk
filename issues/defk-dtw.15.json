@@ -17,11 +17,15 @@
     {
       "text": "Per 'What do narrow element types ([f32], [i16], [i32]) mean in a kernel?' (defk-dtw.13): the [f32] and [i16]/[i32] blocker is now the build ticket 'Add [i16], [i32] and [f32] element types' (defk-4ai).",
       "timestamp": "2026-10-05T21:08:09Z"
+    },
+    {
+      "text": "Per 'Can a kernel produce variable-length bit output, and in what form?' (defk-dtw.14): Gorilla's bit-output blocker is [Add the bitstring accumulator](defk-cmr); its bit reinterpretation is Defk.Bits.f64_to_u64/1, to be built with the rest of Defk.Bits and u64 from defk-dtw.10 (no build ticket for those exists yet; hand it off here).",
+      "timestamp": "2026-10-05T21:14:39Z"
     }
   ],
   "priority": 2,
   "status": "open",
   "title": "Plan the catalog build for the six target workloads",
   "type": "task",
-  "updated_at": "2026-10-05T21:08:09Z"
+  "updated_at": "2026-10-05T21:14:39Z"
 }
