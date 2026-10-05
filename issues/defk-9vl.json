@@ -6,9 +6,15 @@
   "description": "No while/break/reduce_while or case in kernels, so algorithms like trial division scan the whole range (Elixir's Enum.all? stops early). Candidates: Enum.reduce_while-style {:cont, acc}/{:halt, acc} in for reduce, and case on integer literals.",
   "id": "defk-9vl",
   "labels": [],
+  "comments": [
+    {
+      "text": "Early-exit syntax: Enum.reduce_while(enumerable, init, fn x, acc -\u003e ... {:cont, acc} | {:halt, acc} end), plus Enum.all?/any?(enumerable, fn x -\u003e bool end) as sugar over it. Rejected: {:cont, acc}/{:halt, acc} returned from a for ... reduce: clause. That is valid syntax but not early exit in Elixir: for/reduce has no halt protocol, so the tuple just becomes the next accumulator (for x \u003c- 1..3, reduce: 0 do acc -\u003e if x == 2, do: {:halt, acc}, else: {:cont, acc} end returns {:cont, {:halt, {:cont, 0}}}). Giving it halt semantics in kernels would make the same code mean different things in Elixir and defk. reduce_while is the stdlib's early-exit fold, carries tuple accumulators naturally, and its fn scope matches defk's for scoping. Enum.all?/any? cost ~10 lines as a desugaring and are what Elixir code actually writes for trial division (prime? = Enum.all?(2..limit//1, fn d -\u003e rem(x, d) != 0 end)), so the Elixir baseline can use the identical call. find_index skipped (needs a nil/integer result, no nil in kernels). Enumerable: the same sources as a for generator (ranges with or without step, arrays). {:cont, _}/{:halt, _} must be literal tuples in every tail position of the fn body (through blocks, if/else, cond, case); anything else is a compile error. Halt is a goto to a label after that reduce_while's loop, so it exits only its own (innermost) loop; loops keep a single entry, so reducible resume (defk-nua) is unaffected.",
+      "timestamp": "2026-10-05T15:34:12Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Support early loop exit and case",
   "type": "task",
-  "updated_at": "2026-10-05T15:30:35Z"
+  "updated_at": "2026-10-05T15:34:12Z"
 }
