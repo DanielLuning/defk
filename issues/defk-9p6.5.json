@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T11:29:49Z",
+  "description": "The goal is not to show defk beats Elixir; it is to find use cases where defk helps Elixir. When an Elixir solution is equally good or fast, Elixir is the right choice, and the Elixir baseline must be optimised as far as we can before claiming defk. Record this in examples/README.md, README.md, AGENTS.md, the template and Defk.Bench docs; make baseline status (first-pass vs optimised) visible in the scoreboard so unoptimised claims show as provisional.",
+  "id": "defk-9p6.5",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 1,
+  "status": "open",
+  "title": "Record the catalog's purpose: Elixir first, defk only where it helps",
+  "type": "task",
+  "updated_at": "2026-10-05T11:29:49Z"
+}
