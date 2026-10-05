@@ -55,6 +55,16 @@ Measured on an M-series Mac with 12 cores, OTP 29 and Elixir 1.20; two runs agre
 3. **defk keeps `/health` p99 in the same range as pure Elixir** (10–13 ms against 4–10 ms) while serving 4.3× the traffic. This is the BEAM promise the example exists to test.
 4. **defk is ~30% slower than the blocking build.** Most of that is per-iteration safepoint overhead in the innermost DP loop, not yielding itself: with yields disabled, the yielding build still takes 26.5 ms against 22.0 ms. Ticket `defk-5s3` (loop versioning for short inner loops) targets that gap.
 
+## Elixir baseline: first pass
+
+The Elixir backend is careful (a precomputed charlist catalog in
+`:persistent_term`, tail-recursive rows, bounded top-k) but not yet
+optimised, so the 4.3× is **provisional**. Not yet tried:
+
+- a tuple or `:array` row instead of rebuilding lists,
+- processing the catalog in parallel chunks per request,
+- the early cut-off below, applied to the Elixir side too.
+
 ## Not modelled
 
 Real fuzzy search adds things none of the three backends do:

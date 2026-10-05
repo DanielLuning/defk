@@ -9,6 +9,10 @@
 #
 # Use defk when data is already packed or is packed once and reused (see
 # rolling_stats, geo_nearest). For one pass over a list, stay in Elixir.
+#
+# Elixir baseline: optimised. Measured on 1M floats: Enum.sum/1 4.6 ms,
+# :lists.sum/1 4.9 ms, hand-written tail recursion 5.0 ms, Enum.reduce/3 with
+# a 0.0 accumulator 7.2 ms. Enum.sum/1 is the fastest of these.
 
 Mix.install([{:defk, path: Path.expand("..", __DIR__)}])
 
@@ -34,6 +38,7 @@ end
 Defk.Bench.report(
   name: "poor_list_data",
   expected: :poor,
+  baseline: :optimized,
   elixir: elixir_avg,
   defk: defk_avg,
   check: fn -> abs(elixir_avg.() - defk_avg.()) < 1.0e-6 end,

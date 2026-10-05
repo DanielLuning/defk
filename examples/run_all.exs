@@ -4,7 +4,8 @@
 #
 # Examples run one at a time (parallel runs would distort the timings).
 # Exits 1 if any example is incorrect, crashes, or measures a verdict that
-# differs from the one it claims.
+# differs from the one it claims. A `good` verdict whose Elixir baseline is
+# not yet optimised is reported as provisional (it does not fail the run).
 
 dir = __DIR__
 
@@ -34,7 +35,7 @@ results =
 pad = fn v, n -> String.pad_trailing(to_string(v), n) end
 num = fn nil -> "-"; x -> to_string(x) end
 
-IO.puts("\n" <> pad.("example", 26) <> pad.("expected", 14) <> pad.("measured", 14) <> pad.("speedup", 10) <> pad.("elixir ms", 11) <> pad.("defk ms", 10) <> "ok")
+IO.puts("\n" <> pad.("example", 26) <> pad.("expected", 14) <> pad.("measured", 14) <> pad.("speedup", 10) <> pad.("elixir ms", 11) <> pad.("defk ms", 10) <> pad.("baseline", 12) <> "ok")
 
 bad =
   for r <- results, reduce: 0 do
@@ -48,6 +49,7 @@ bad =
           pad.(if(r["speedup"], do: "#{r["speedup"]}x", else: "-"), 10) <>
           pad.(num.(r["elixir_ms"]), 11) <>
           pad.(num.(r["defk_ms"]), 10) <>
+          pad.(r["baseline"] || "?", 12) <>
           if(ok, do: "yes", else: "NO")
       )
 
@@ -55,4 +57,13 @@ bad =
   end
 
 IO.puts("\n#{length(results) - bad}/#{length(results)} examples behave as claimed")
+
+provisional = Enum.filter(results, &(&1["verdict"] == "good" and &1["baseline"] != "optimized"))
+
+if provisional != [] do
+  IO.puts(
+    "#{length(provisional)} 'good' claim(s) are provisional: the Elixir baseline is not optimised yet " <>
+      "(#{Enum.map_join(provisional, ", ", & &1["example"])})"
+  )
+end
 if bad > 0, do: System.halt(1)

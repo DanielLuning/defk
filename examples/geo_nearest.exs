@@ -6,10 +6,16 @@
 #
 #   elixir examples/geo_nearest.exs
 #
-# Both versions keep their index in their natural form, built once at boot:
-# a list of tuples for Elixir, packed f64 arrays for defk. Candidates are
+# Both versions keep their index in their natural form, built once at boot
+# and stored in :persistent_term as a real app would: a list of tuples for
+# Elixir, packed f64 arrays for defk. (With the 500k tuples on the benchmark
+# process's heap instead, GC copying them tripled the Elixir time.) Candidates are
 # ranked by the haversine term `a` (monotonic in distance), so no asin/sqrt
 # per candidate; kilometres are computed for the 10 winners only.
+#
+# Elixir baseline: first pass. Not yet tried: storing the index as packed
+# binaries and walking them with binary matching; a coarse grid or bounding
+# box so most candidates are never scored (helps both sides).
 
 Mix.install([{:defk, path: Path.expand("..", __DIR__)}])
 
@@ -80,26 +86,33 @@ end
 n = 500_000
 rad = &(&1 * :math.pi() / 180)
 
-points =
+# built once, as at application boot; kept out of this process's heap
+index = fn ->
   for i <- 1..n do
     lat = rad.(36 + rem(i * 7919, 3400) / 100)
     lon = rad.(-10 + rem(i * 104_729, 4000) / 100)
     {lat, lon, :math.cos(lat)}
   end
+end
 
-pack = fn f -> for p <- points, into: <<>>, do: <<f.(p)::float-64-native>> end
-{lat, lon, coslat} = {pack.(&elem(&1, 0)), pack.(&elem(&1, 1)), pack.(&elem(&1, 2))}
+:persistent_term.put(:geo_points, index.())
+pack = fn f -> for p <- :persistent_term.get(:geo_points), into: <<>>, do: <<f.(p)::float-64-native>> end
+:persistent_term.put(:geo_packed, {pack.(&elem(&1, 0)), pack.(&elem(&1, 1)), pack.(&elem(&1, 2))})
 {qlat, qlon} = {rad.(59.3293), rad.(18.0686)}
 
+elixir_nearest = fn -> Geo.Elixir.nearest(:persistent_term.get(:geo_points), qlat, qlon, 10) end
+
 defk_nearest = fn ->
+  {lat, lon, coslat} = :persistent_term.get(:geo_packed)
   for <<i::64-signed-native <- Geo.Kernels.nearest(lat, lon, coslat, qlat, qlon, 10)>>, do: i
 end
 
 Defk.Bench.report(
   name: "geo_nearest",
   expected: :good,
-  elixir: fn -> Geo.Elixir.nearest(points, qlat, qlon, 10) end,
+  baseline: :first_pass,
+  elixir: elixir_nearest,
   defk: defk_nearest,
-  check: fn -> Enum.sort(Geo.Elixir.nearest(points, qlat, qlon, 10)) == Enum.sort(defk_nearest.()) end,
+  check: fn -> Enum.sort(elixir_nearest.()) == Enum.sort(defk_nearest.()) end,
   reason: "float math per candidate over a packed index reused by every query"
 )

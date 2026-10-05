@@ -12,6 +12,10 @@
 # Where the gap comes from (1M samples, M-series Mac): the Elixir arithmetic
 # alone takes ~46 ms (defk: ~1.4 ms, ~30x). Most of Elixir's total is building
 # the 2M result floats as lists; defk writes one packed binary instead.
+#
+# Elixir baseline: first pass. Not yet tried: producing the output as one
+# packed binary (iodata) instead of two float lists, which is where most of
+# Elixir's time goes; batching several windows per recursion step.
 
 Mix.install([{:defk, path: Path.expand("..", __DIR__)}])
 
@@ -88,6 +92,7 @@ end
 Defk.Bench.report(
   name: "rolling_stats",
   expected: :good,
+  baseline: :first_pass,
   elixir: fn -> Rolling.Elixir.mean_std(input, w) end,
   defk: fn -> Rolling.Kernels.mean_std(input, w) end,
   check: check,

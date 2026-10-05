@@ -7,3 +7,16 @@ ALWAYS run `bw prime` before starting work. Without it, you're missing workflow 
 often conflicts with in-progress changes.
 
 Committing, closing issues, and syncing are part of completing a task — not separate actions requiring additional permission.
+
+## Purpose and measurement
+
+defk exists to help Elixir, not to beat it. We are looking for the jobs where
+Elixir today pushes people towards a hand-written NIF.
+
+- **Elixir is the default.** If an Elixir solution is as good or as fast, it is the right choice, and that is a valid result to record.
+- **Optimise the Elixir side before claiming defk.** Try the stdlib, Erlang BIFs and modules, established libraries, and a better data layout or algorithm. Measure the alternatives instead of assuming which is fastest, and write down what you tried.
+- **Mark baselines honestly** (`baseline: :first_pass` / `:optimized` in `Defk.Bench.report/1`). A defk win over a first-pass baseline is provisional.
+- **Keep comparisons fair.** Give both sides the same algorithmic tricks. Measure end to end from the data a real caller has, kept where a real app keeps it (shared indexes in `:persistent_term`/ETS, not on the benchmark process's heap, where GC skews the timing).
+- **Treat Elixir wins as results, not failures.** Poor fits stay in the catalog.
+
+Details: `examples/README.md`.

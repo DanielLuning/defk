@@ -9,6 +9,10 @@
 #
 # Starts from raw RGB bytes (what a decoder hands you). Decoding JPEG/PNG is
 # out of scope: use an existing library (Vix/libvips) for codecs.
+#
+# Elixir baseline: first pass. Not yet tried: a separable blur (horizontal
+# then vertical pass), walking three rows at a time with binary matching
+# instead of 9 :binary.at/2 reads per pixel, and building output as iodata.
 
 Mix.install([{:defk, path: Path.expand("..", __DIR__)}])
 
@@ -71,6 +75,7 @@ rgb =
 Defk.Bench.report(
   name: "image_blur",
   expected: :good,
+  baseline: :first_pass,
   runs: 3,
   elixir: fn -> Blur.Elixir.gray_blur(rgb, w, h) end,
   defk: fn -> Blur.Kernels.gray_blur(rgb, w, h) end,

@@ -11,21 +11,35 @@ mix run demo.exs        # correctness, throughput vs Elixir and plain C, boundar
 
 Needs Elixir ≥ 1.18 and a C compiler (`cc`, or set `CC`).
 
-## Examples: what defk is good at, and what not to use it for
+## Purpose: help Elixir, not compete with it
+
+The goal of defk is not to beat Elixir. It is to find the jobs where Elixir
+today pushes people towards a hand-written NIF, and to offer something
+better there.
+
+Elixir stays the default. When an Elixir solution is as good or as fast, it
+is the right choice. So before claiming defk should be used anywhere, we
+optimise the Elixir solution as far as we can, and we keep the cases where
+Elixir wins as part of the record.
+
+## Examples: where defk helps, and where Elixir is the right choice
 
 [`examples/`](examples) is a growing catalog of real use cases, each written in
-plain Elixir and in defk, checked for agreement and measured end to end.
-`elixir examples/run_all.exs` prints the scoreboard. So far:
+Elixir and in defk, checked for agreement and measured end to end.
+`elixir examples/run_all.exs` prints the scoreboard. The measurement rules are
+in [`examples/README.md`](examples/README.md).
 
-- **Good fits:**
-  - rolling sensor statistics: 165×
-  - nearest of 500k locations: 43×
-  - 1080p image blur: 28×
-  - a fuzzy-search web service: 4.3× req/s, and `/health` latency stays at pure-Elixir levels, while a blocking NIF pushes it to ~80 ms p99
-- **Poor fits:**
-  - data that arrives as lists: 4× slower
-  - one kernel call per element: 2× slower
-  - maps and strings: not expressible
+So far:
+
+- **Where defk looks like it helps.** These are provisional: the Elixir baselines are first passes and still need optimising.
+  - rolling sensor statistics
+  - nearest of 500k locations
+  - 1080p image blur
+  - a fuzzy-search web service, where `/health` latency stays at Elixir levels while a blocking NIF pushes it to ~80 ms p99
+- **Where Elixir is the right choice:**
+  - data that arrives as lists (defk ≈3× slower)
+  - one kernel call per element (defk ≈2.5× slower)
+  - maps and strings (not expressible)
 
 ## What it is
 
