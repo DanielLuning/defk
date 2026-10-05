@@ -6,9 +6,15 @@
   "description": "Follow-up to defk-5s3. Measured on fuzzy_search search/4 vs search_blocking/4, one query at a time (ratio): tick checks only, never yields, no labels = 1.02; + resume labels/switch = 1.04-1.05; full = 1.08-1.09. Making yields 5x more frequent did not change the time, so actual yields are ~free. The cost is code shape: (1) resume goto targets inside loops make the CFG irreducible for LLVM; (2) the spill-and-return path at each safepoint. Ideas: resume by re-entering each loop through its header (a dispatch at the top of each enclosing loop body), so loops stay reducible; move the spill out of the loops. Done when search/4 is within ~5% of search_blocking/4 and demo section 4 still shows yielding.",
   "id": "defk-nua",
   "labels": [],
+  "comments": [
+    {
+      "text": "Landed on branch defk-nua/reducible-resume. Reducible resume alone closed the gap: harness ratio 1.11x -\u003e 0.99-1.02x; examples/fuzzy_search verify.exs 20 ms defk vs 20 ms blocking (3 runs). Tried a shared spill-and-return block for all safepoints (move spill out of the loops): WORSE, 1.04-1.05x (one join point with a phi per local), dropped; per-safepoint inline spill stays. Correctness: fuzzy identical over 2.1M forced yields (runtime patched to yield at every clock read), plus stress kernels (array generator + filter + nested range, loop in if-branch, 3-deep with flat siblings, long strip loops) identical to yield:false under forced yields. Demo section 4: yielding gap 3.54 ms vs 864 ms yield:false. run_all 6/6, no regressions vs main.",
+      "timestamp": "2026-10-05T12:26:52Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Reduce the code-shape cost of resumable kernels (~8% on fuzzy_search)",
   "type": "task",
-  "updated_at": "2026-10-05T12:17:40Z"
+  "updated_at": "2026-10-05T12:26:52Z"
 }
