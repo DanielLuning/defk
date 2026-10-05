@@ -9,9 +9,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution: the bitstring accumulator (glossary term added to CONTEXT.md).\n- Form: what an Elixir developer writes first, acc = \u003c\u003cacc::bitstring, 1::1, 0::1, v::size(n)\u003e\u003e, starting from \u003c\u003c\u003e\u003e; Elixir mode is the code itself. Rejected: a worst-case [u8] with Defk.Bits.put (unidiomatic, awkward Elixir meaning); dropping Gorilla.\n- Allowed: start \u003c\u003c\u003e\u003e; append integer segments v::size(n) / v::k (unsigned, MSB-first, Elixir's default); bit_size/1; return alone or in a tuple. Not allowed until a workload needs it: reading/indexing, float/binary segments, starting from an input bitstring, passing to another kernel.\n- A segment value that doesn't fit its width raises, like array writes (a limit: Elixir truncates); authors mask with band. Width outside 0..64 raises (a limit). Elixir mode checks the same.\n- Return: a real bitstring. The NIF returns bytes + bit length; the generated wrapper builds it with \u003c\u003cb::bitstring-size(len), _::bitstring\u003e\u003e = bin (O(1)). Padding to bytes, as Gorilla does, is an explicit append.\n- Runtime: growable buffer kept in the frame across yields, freed on exception and process death (same machinery as owned arrays).\n- f64 -\u003e bits: Defk.Bits.f64_to_u64/1, a plain Elixir function whose body is \u003c\u003cb::64\u003e\u003e = \u003c\u003cx::float-64\u003e\u003e, joining the Defk.Bits set from defk-dtw.10. The match form stays in the 'Convenience constructs per workload' fog; u64 -\u003e f64 not added (decoding isn't a target workload).\n- Signature type name: bitstring, e.g. :: {bitstring, u64, i64, i64}.\nFacts (gorilla_stream 3.0.3): Elixir encoder appends \u003c\u003c1::1, 0::1, v::size(n)\u003e\u003e to an iolist and calls :erlang.list_to_bitstring, masking every segment first; the C++ NIF uses an MSB-first growable std::vector BitWriter and pads to a byte at the end; worst case 77 bits per value.\nBuild handed off as [Add the bitstring accumulator](defk-cmr).",
+      "timestamp": "2026-10-05T21:14:39Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Can a kernel produce variable-length bit output, and in what form?",
   "type": "task",
-  "updated_at": "2026-10-05T21:08:38Z"
+  "updated_at": "2026-10-05T21:14:39Z"
 }
