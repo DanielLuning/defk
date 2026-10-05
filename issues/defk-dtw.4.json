@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-05T18:48:39Z",
@@ -10,8 +10,8 @@
   ],
   "parent": "defk-dtw",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "What must docs/verdict.md contain to count as done?",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:39Z"
+  "updated_at": "2026-10-05T19:09:47Z"
 }
