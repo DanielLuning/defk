@@ -302,6 +302,13 @@ typedef struct {
 
 #define DEFK_BUDGET0 256
 
+/* Flat inner loops (no nested loop, no kernel call) run up to this many
+ * iterations without a safepoint, so the check does not stop vectorisation.
+ * Even expensive builtins (exp, pow) keep that far below the ~100us clock period. */
+#ifndef DEFK_STRIP
+#define DEFK_STRIP 512
+#endif
+
 static void defk_clock_init(defk_clock *c) {
   c->last = enif_monotonic_time(ERL_NIF_USEC);
   c->unreported = 0;

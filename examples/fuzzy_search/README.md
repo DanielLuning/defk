@@ -53,7 +53,7 @@ Measured on an M-series Mac with 12 cores, OTP 29 and Elixir 1.20; two runs agre
 1. **defk gives 4.3× the throughput of pure Elixir and cuts p99 latency by 3.9×**, from the same code shape. The speedup is smaller than the 10–15× seen on float arrays, because the BEAM JIT handles small-integer DP loops well.
 2. **The blocking NIF is faster still, but it slows every other request.** `/health`, which does nothing, takes a median of 34–39 ms and up to 86 ms at p99. Processes queued on a scheduler that is busy in a NIF wait until the NIF finishes. Even with only 4 clients (8 of 12 cores idle) its `/health` p99 was 26 ms, against 2 ms for defk.
 3. **defk keeps `/health` p99 in the same range as pure Elixir** (10–13 ms against 4–10 ms) while serving 4.3× the traffic. This is the BEAM promise the example exists to test.
-4. **defk is ~30% slower than the blocking build.** Most of that is per-iteration safepoint overhead in the innermost DP loop, not yielding itself: with yields disabled, the yielding build still takes 26.5 ms against 22.0 ms. Ticket `defk-5s3` (loop versioning for short inner loops) targets that gap.
+4. **defk is ~30% slower than the blocking build** under load. Measured one query at a time, the gap has shrunk from ~20% to ~8% (23 ms against 21 ms): bounds checks are now elided (`defk-88q`), and the short inner DP loops no longer check a safepoint per cell (`defk-5s3`). The yields themselves cost almost nothing (making them 5× more frequent didn't change the time). What remains comes from the kernel being resumable: resume labels inside the loops and the spill path at each safepoint. The load-test table above predates these changes.
 
 ## Elixir baseline: first pass
 

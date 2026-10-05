@@ -105,6 +105,7 @@ defmodule Defk.Compiler do
     Process.put(:defk_decls, [])
     Process.put(:defk_sp, 0)
     Process.put(:defk_calls, MapSet.new())
+    Process.put(:defk_ncalls, 0)
 
     vars =
       Map.new(k.params, fn {p, t} ->
@@ -584,6 +585,7 @@ defmodule Defk.Compiler do
           err!(m, "kernel #{name}/#{arity} returns a tuple and can only be called from Elixir")
 
         Process.put(:defk_calls, MapSet.put(Process.get(:defk_calls), {name, arity}))
+        Process.put(:defk_ncalls, Process.get(:defk_ncalls) + 1)
 
         args =
           Enum.zip_with(vals, k.params, fn v, {p, t} -> coerce!(v, t, m, "argument #{p} of #{name}").c end)
@@ -645,15 +647,18 @@ defmodule Defk.Compiler do
     e = fresh("stop", :i64)
     setup = [sa, sb, "#{i} = #{va.c};\n#{e} = #{vb.c};\n"]
 
-    {setup, done, incr, iv} =
+    {setup, done, incr, iv, strip} =
       case literal_int(step) do
         k when is_integer(k) and k > 0 ->
           # counting up from a to b: in the body a <= i <= b
           facts = %{lo: va[:lo], hi: vb[:hi], lb: lb(va), ub: ub(vb)}
-          {setup, "#{i} > #{e}", "#{i} += #{k};\n", Map.merge(val(i, :i64), facts)}
+          iv = Map.merge(val(i, :i64), facts)
+          strip = %{done_at: &"#{i} > #{&1}", remaining: "((uint64_t)#{e} - (uint64_t)#{i}) / #{k}", step: k}
+          {setup, "#{i} > #{e}", "#{i} += #{k};\n", iv, strip}
 
         k when is_integer(k) and k < 0 ->
-          {setup, "#{i} < #{e}", "#{i} -= #{-k};\n", val(i, :i64)}
+          strip = %{done_at: &"#{i} < #{&1}", remaining: "((uint64_t)#{i} - (uint64_t)#{e}) / #{-k}", step: k}
+          {setup, "#{i} < #{e}", "#{i} -= #{-k};\n", val(i, :i64), strip}
 
         0 ->
           err!(m, "range step cannot be zero")
@@ -672,12 +677,14 @@ defmodule Defk.Compiler do
                "if (#{st} == 0) defk_fail(ctx, DEFK_E_ARG, \"range step cannot be zero\");\n"]
             end
 
-          {[setup, step_setup], "(#{st} > 0 ? #{i} > #{e} : #{i} < #{e})", "#{i} += #{st};\n", val(i, :i64)}
+          {[setup, step_setup], "(#{st} > 0 ? #{i} > #{e} : #{i} < #{e})", "#{i} += #{st};\n", val(i, :i64), nil}
       end
 
     env = put_var(env, name, iv)
 
-    [setup, "while (!(#{done})) {\n", lower_quals(rest, env, inner), incr, safepoint(), "}\n"]
+    {body, flat?} = lower_quals_tracked(rest, env, inner)
+    strip = strip && Map.merge(strip, %{var: i, stop: e})
+    [setup, loop(done, strip, flat?, [body, incr])]
   end
 
   defp array_loop(name, src, rest, env, inner, m) do
@@ -700,9 +707,47 @@ defmodule Defk.Compiler do
     env = put_var(env, name, if(e == :u8, do: u8_val(x), else: val(x, xt)))
 
     # index is in range by construction: no bounds check
-    [s, "#{k} = 0;\nwhile (#{k} < #{arr}.len) {\n#{x} = #{arr}.data[#{k}];\n",
-     lower_quals(rest, env, inner), "#{k} += 1;\n", safepoint(), "}\n"]
+    {body, flat?} = lower_quals_tracked(rest, env, inner)
+    body = ["#{x} = #{arr}.data[#{k}];\n", body, "#{k} += 1;\n"]
+    strip = %{done_at: &"#{k} > #{&1}", remaining: "(uint64_t)(#{arr}.len - #{k} - 1)", step: 1, var: k, stop: "#{arr}.len - 1"}
+    [s, "#{k} = 0;\n", loop("#{k} >= #{arr}.len", strip, flat?, body)]
   end
+
+  # Lower the rest of a loop and note whether that body is flat: no nested
+  # loop and no kernel call, so one iteration costs a bounded amount of work.
+  defp lower_quals_tracked(rest, env, inner) do
+    before = {Process.get(:defk_sp), Process.get(:defk_ncalls)}
+    body = lower_quals(rest, env, inner)
+    {body, before == {Process.get(:defk_sp), Process.get(:defk_ncalls)}}
+  end
+
+  # A loop with a safepoint on every back-edge, except for a flat loop whose
+  # trip count is known on entry:
+  #   * short (< DEFK_STRIP trips left): the plain loop with no safepoint; its
+  #     trips are charged to the budget afterwards and the enclosing loop's
+  #     safepoint does the check, so at most DEFK_STRIP flat iterations per
+  #     enclosing iteration go unchecked
+  #   * long: strips of DEFK_STRIP iterations, one safepoint per strip
+  # Neither inner loop has a safepoint, so clang can vectorise it. Forms that
+  # never yield define DEFK_SHORT as 1 and the strip version is dead code.
+  #   strip.remaining - trips left after the next one, as uint64
+  #   strip.done_at   - the loop's exit test against a given last index
+  defp loop(done, strip, true, body) when is_map(strip) do
+    r = fresh("rem", {:c, "uint64_t"})
+    se = fresh("strip_stop", :i64)
+    %{var: i, stop: e, step: k} = strip
+
+    # no overflow: taken only when the strip ends before the loop's last index
+    strip_stop = "(int64_t)((uint64_t)#{i} + (uint64_t)(DEFK_STRIP - 1) * (uint64_t)INT64_C(#{k}))"
+
+    ["#{r} = #{strip.remaining};\nif (DEFK_SHORT(#{r})) {\n",
+     "while (!(#{done})) {\n", body, "}\nDEFK_TICKS(#{r} + 1)\n} else {\n",
+     "while (!(#{done})) {\n#{se} = #{strip.remaining} < DEFK_STRIP ? #{e} : #{strip_stop};\n",
+     "while (!(#{strip.done_at.(se)})) {\n", body, "}\n", safepoint("DEFK_STRIP"), "}\n}\n"]
+  end
+
+  defp loop(done, _strip, _flat?, body),
+    do: ["while (!(#{done})) {\n", body, safepoint(), "}\n"]
 
   defp lower_reduce(quals, init_ast, clauses, env, m) do
     {pat, body} =
@@ -777,10 +822,11 @@ defmodule Defk.Compiler do
     {[si, init_s, loops], result}
   end
 
-  defp safepoint do
+  # `weight` back-edges are charged to the budget at once
+  defp safepoint(weight \\ "1") do
     n = Process.get(:defk_sp) + 1
     Process.put(:defk_sp, n)
-    "DEFK_SP(#{n})\n"
+    "DEFK_SP(#{n}, #{weight})\n"
   end
 
   # ---------------------------------------------------------- range facts --
@@ -880,10 +926,10 @@ defmodule Defk.Compiler do
 
     [
       String.trim_trailing(call_proto(k), ";\n"),
-      " {\n#define DEFK_SP(N)\n",
+      " {\n#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) 1\n#define DEFK_TICKS(W)\n",
       decl_locals(k),
       k.stmts,
-      "return #{ret};\n#undef DEFK_SP\n}\n\n"
+      "return #{ret};\n#undef DEFK_SP\n#undef DEFK_SHORT\n#undef DEFK_TICKS\n}\n\n"
     ]
   end
 
@@ -921,9 +967,10 @@ defmodule Defk.Compiler do
 
     sp_macro =
       if yields? do
-        "#define DEFK_SP(N) if (DEFK_UNLIKELY(++defk_ticks >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = DEFK_BUDGET0; return DEFK_YIELD; } } R##N:;\n"
+        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = DEFK_BUDGET0; return DEFK_YIELD; } } R##N:;\n" <>
+          "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n"
       else
-        "#define DEFK_SP(N)\n"
+        "#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) 1\n#define DEFK_TICKS(W)\n"
       end
 
     [
@@ -948,7 +995,7 @@ defmodule Defk.Compiler do
       decode,
       sp_macro,
       k.stmts,
-      "*result = #{result};\nreturn DEFK_DONE;\n#undef DEFK_SP\n}\n\n",
+      "*result = #{result};\nreturn DEFK_DONE;\n#undef DEFK_SP\n#undef DEFK_SHORT\n#undef DEFK_TICKS\n}\n\n",
       # setjmp lives in a separate frame so it does not pessimise the kernel body
       "static __attribute__((noinline)) int guard_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n",
       "if (sigsetjmp(F->ctx.jb, 0)) return DEFK_ERR;\nreturn run_#{k.cid}(env, F, argv, result);\n}\n\n",
@@ -1019,6 +1066,7 @@ defmodule Defk.Compiler do
   defp ctype(:f64), do: "double"
   defp ctype(:bool), do: "int"
   defp ctype({:arr, e}), do: "defk_arr_#{e}"
+  defp ctype({:c, ct}), do: ct
 
   defp to_f(%{t: :i64, c: c}), do: "((double)#{c})"
   defp to_f(%{c: c}), do: c
