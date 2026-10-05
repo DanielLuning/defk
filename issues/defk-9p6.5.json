@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-05T11:29:49Z",
@@ -8,7 +8,7 @@
   "labels": [],
   "parent": "defk-9p6",
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Record the catalog's purpose: Elixir first, defk only where it helps",
   "type": "task",
   "updated_at": "2026-10-05T11:29:49Z"
