@@ -8,6 +8,7 @@
     "defk-dtw.10",
     "defk-dtw.9"
   ],
+  "closed_at": "2026-10-05T19:55:54Z",
   "created": "2026-10-05T18:48:39Z",
   "description": "## Question\n\nFrom the NIF survey and the Nx boundary, which workloads become the yardstick the kernel subset must express? How many, which categories, which existing catalog entries stay, and which candidates are ruled out (e.g. because Nx or an Erlang BIF already covers them).",
   "id": "defk-dtw.5",
@@ -22,7 +23,7 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Choose the target workload set",
   "type": "task",
   "updated_at": "2026-10-05T19:55:54Z"
