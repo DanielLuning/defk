@@ -2,7 +2,8 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [
-    "defk-dtw.6"
+    "defk-dtw.6",
+    "defk-dtw.8"
   ],
   "created": "2026-10-05T18:48:39Z",
   "description": "## Question\n\nHow do Numba (nopython mode), Nx defn, Cython, Pythran, Mojo, Julia (type-stable code) and similar systems define what is allowed in their compiled subset, explain it to developers, and report unsupported constructs? Also: which of them can run the same code in the host language (e.g. Numba's NUMBA_DISABLE_JIT, Nx.Defn.Evaluator), and what that costs or gains. Output: patterns for error messages, subset references, and dual execution, with examples.",
