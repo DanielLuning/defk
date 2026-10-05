@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-05T21:02:30Z",
   "created": "2026-10-05T19:31:00Z",
   "description": "## Question\n\ndefk runs the C compiler on the build machine at compile time. The verdict's go/no-go rule (see \"What must docs/verdict.md contain to count as done?\") requires this stance to be settled: is a C toolchain at build time an acceptable requirement for a defk library (as for elixir_make packages), or does a library need a named way out (precompiled artefacts, a bundled compiler, a Cranelift JIT path, defk-o1w)? What does each option cost, and what goes in the verdict's Limitations?",
   "id": "defk-dtw.11",
@@ -16,7 +17,7 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Is a C compiler at build time acceptable for a defk library?",
   "type": "task",
   "updated_at": "2026-10-05T21:02:30Z"
