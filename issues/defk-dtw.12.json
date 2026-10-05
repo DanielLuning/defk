@@ -9,9 +9,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution:\n- Safety gap = any way that code which compiles, called with any arguments, can crash the VM, corrupt memory, leak memory permanently, or break cleanup on process death or hot upgrade. Not safety: performance, observability, devex, compile-time cost.\n- The four ticketed issues are nice to have, not required for done: defk-9qv (__defk_stats__ across reloads: observability; document per-library meaning), defk-ls8 (frame layout tag: the per-library frame type invariant holds and upgrade_test.exs covers it), defk-juw (hang-proof resume tests: the bug still shows, as a hang), defk-6ag (code-size blowup: compile-time cost; becomes a limit with a clear error).\n- New safety gap found: alloc/2 computes n * sizeof(T) unchecked; alloc(f64, 2^61) wraps to 0 bytes with length 2^61 and an out-of-range write crashed the VM (SIGBUS, exit 138). Required for done. Bug: defk-gtv \"alloc/2 size overflow crashes the VM\" (P1), including an audit of every size calculation.\n- Reviewed safe by reading the code (to be tested): inputs are re-bound from the rescheduled argv on every resume, so moved heap binaries and GC are fine; the error path frees every owned buffer; process kill frees the frame (already tested).\n- Evidence for \"no open safety gap\": (a) a runtime threat list next to the runtime-contract table in the verdict, each entry a test: defk-5fc \"Runtime threat list with a test per entry\"; (b) the differential tests of \"How are kernels checked against Elixir mode?\" also run once with kernels built under AddressSanitizer/UBSan, with generators including huge and negative sizes.",
+      "timestamp": "2026-10-05T20:49:14Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Which open runtime issues are safety gaps?",
   "type": "task",
-  "updated_at": "2026-10-05T20:37:41Z"
+  "updated_at": "2026-10-05T20:49:14Z"
 }
