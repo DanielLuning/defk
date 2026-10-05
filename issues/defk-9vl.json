@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T09:49:14Z",
+  "description": "No while/break/reduce_while or case in kernels, so algorithms like trial division scan the whole range (Elixir's Enum.all? stops early). Candidates: Enum.reduce_while-style {:cont, acc}/{:halt, acc} in for reduce, and case on integer literals.",
+  "id": "defk-9vl",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Support early loop exit and case",
+  "type": "task",
+  "updated_at": "2026-10-05T09:49:14Z"
+}
