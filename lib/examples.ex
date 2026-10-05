@@ -14,7 +14,7 @@ defmodule Examples.Kernels do
     end
   end
 
-  # indexed access: bounds-checked a[i]
+  # indexed access: i provably in range for a and b, so a[i]/b[i] are unchecked
   defk dot(a :: [f64], b :: [f64]) :: f64 do
     n = min(len(a), len(b))
 

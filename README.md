@@ -84,7 +84,7 @@ At `mix compile`, `defk` type-checks the body, emits C
    - `/` always returns a float and raises on division by zero
    - `div`/`rem` follow Elixir rounding
    - `a..b` counts down when `a > b`
-   - bounds failures raise `Enum.OutOfBoundsError` in the caller
+   - bounds failures raise `Enum.OutOfBoundsError` in the caller. The check is dropped when the compiler can prove the index is in range, e.g. `i <- 0..(n - 1)//1` with `n = min(len(a), len(b))`, or a `[u8]` value indexing a 256-element `alloc`
 3. **Automatic yielding.** Every loop back-edge is a safepoint. Locals live in registers and are spilled to a frame struct only when the kernel actually yields; resume jumps back to the label.
 4. **Pay for yielding only when you yield.** A kernel starts on a C stack frame. Only on its first yield is the frame copied into a resource, whose destructor frees owned buffers if the process dies.
 5. **Adaptive safepoint budget.** The clock is read every ~100–250 µs regardless of how expensive one loop iteration is.
@@ -96,7 +96,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 | | Elixir | defk | plain C |
 |---|---|---|---|
 | sum of 5M f64 (ns/elem) | 8.5 (list), 16.7 (binary comprehension) | 0.58 | 0.64 |
-| dot of 5M f64 with bounds-checked `a[i]` (ns/elem) | 12.2 (list) | 0.79 | 0.62 |
+| dot of 5M f64 via `a[i]` (ns/elem) | 12.2 (list) | 0.79 (0.50 with `yield: false`) | 0.50 |
 | count_primes(1M), trial division (ms) | 1490 | 317 | 188 |
 | call overhead (ns/call) | 1.6 | 12 | — |
 | worst 1 ms-ticker gap on one scheduler (ms) | 2.2 (busy Elixir process) | 3.5 (yielding), 939 (`yield: false`) | — |
@@ -106,7 +106,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 
 **Still open:**
 - `count_primes` is 1.7× slower than C. It isn't the `rem` checks (C with the same checks is the same speed), and switching the loop shape didn't change it.
-- `dot` pays ~25% for bounds checks, because the compiler doesn't yet prove `i < len`.
+- `dot` is ~1.6× slower than C when it yields. Its bounds checks are now elided, but the safepoint on every iteration still stops clang from vectorising the loop. With `yield: false` it matches C.
 
 ## Known limitations
 
