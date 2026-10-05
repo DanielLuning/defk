@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-05T12:05:55Z",
@@ -7,8 +7,8 @@
   "id": "defk-nua",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Reduce the code-shape cost of resumable kernels (~8% on fuzzy_search)",
   "type": "task",
-  "updated_at": "2026-10-05T12:05:55Z"
+  "updated_at": "2026-10-05T12:17:40Z"
 }
