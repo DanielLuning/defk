@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T11:09:16Z",
+  "description": "Found by the fuzzy_search example (defk-nv1): Levenshtein kernel search/4 takes 26.5ms with yields disabled vs 22.0ms for the yield: false build (~20%), so the cost is the per-iteration safepoint counter compare+branch in the innermost DP loop, not yielding (actual yields add ~5%). Proposal: for innermost loops (no nested loop) with a computable trip count (range with literal step, array generator), version the loop: if trips \u003c= DEFK_STRIP run a copy without safepoints and add trips to defk_ticks afterwards; else run the safepointed copy. Keeps preemption for long flat loops. Done when search/4 is within ~5% of search_blocking/4 and demo section 4 still shows yielding.",
+  "id": "defk-5s3",
+  "labels": [],
+  "priority": 1,
+  "status": "open",
+  "title": "Remove safepoint overhead from short innermost loops (loop versioning)",
+  "type": "task",
+  "updated_at": "2026-10-05T11:09:16Z"
+}
