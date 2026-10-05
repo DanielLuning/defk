@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T11:06:27Z",
+  "description": "Real-world use case where people reach for a NIF: Levenshtein top-k search over the 236k-word /usr/share/dict/words, served over HTTP (Plug + Bandit). Backends: pure Elixir, defk (yielding), defk yield: false (stands in for a typical blocking NIF). Load generator in a separate VM reports search throughput/latency and /health latency under load (scheduler fairness). Lives in examples/fuzzy_search as a separate Mix project with defk as a path dependency.",
+  "id": "defk-nv1",
+  "labels": [],
+  "priority": 1,
+  "status": "open",
+  "title": "Example app: typo-tolerant fuzzy search service",
+  "type": "task",
+  "updated_at": "2026-10-05T11:06:27Z"
+}
