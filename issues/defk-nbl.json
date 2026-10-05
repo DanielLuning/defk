@@ -6,9 +6,15 @@
   "description": "defk_upgrade takes over the defk_frame resource type (ERL_NIF_RT_TAKEOVER) but is untested. Risk: a frame suspended under the old NIF resumes into the new library's step function with a different frame layout. Test: reload the module while a kernel is mid-yield; decide whether to version frames or refuse the upgrade while frames are live.",
   "id": "defk-nbl",
   "labels": [],
+  "comments": [
+    {
+      "text": "Findings (OTP 29.0.3 / ERTS 17.0.3; source erl_nif.c, beam_bif_load.c, erl_nif docs at tag OTP-29.0.3). Experiment: start spin(4e8), suspend the caller between yields (:erlang.suspend_process), recompile the module with a different body and frame struct, resume.\n(1) The feared crash cannot happen: the continuation is the OLD library's step_N function pointer. enif_schedule_nif bumps the calling library's dynlib_refc on first schedule (erl_nif.c ~396) and drops it when the NIF finally returns (nfunc_cleanup_nif_mod), so the old .so stays mapped and the kernel resumes in its own code with its own layout. Observed: old call returned the correct old-version result, new calls ran the new code.\n(2) check_process_code counts a process with a pending scheduled NIF as running old code (erts_check_nfunc_in_area, beam_bif_load.c ~1172): soft_purge returns false, code:purge (or loading a third version) kills the caller. VM survives.\n(3) The real bug was ERL_NIF_RT_TAKEOVER of the shared \"defk_frame\" type: the new library's dtor and frames_live counter applied to old frames. Observed new frames_live = -1 and old stuck at 1 after the old kernel finished or was killed. Harmless only while defk_ctx keeps its layout; with a padded defk_ctx in the new runtime the new dtor read past the old frame (UB, silent in that run).\nPolicy: per-image frame resource type (\"defk_frame_\u003caddress of a static\u003e\"), no cross-library takeover. ERTS keeps a library loaded while instances of its resource types exist and destroys them with its own dtor (documented; erts_unload_nif/steal_resource_type). Upgrade uses CREATE|TAKEOVER, which only takes over when the same .so image is reloaded (same statics, same dtor). Refusing the upgrade was rejected: it would break every recompile while a kernel runs, and BEAM already keeps the old code alive correctly. After the fix: both counters return to 0, the old .so is unmapped (lsof) once its frames are gone and it is purged. Hot path untouched (load callbacks only), so no perf run.",
+      "timestamp": "2026-10-05T15:17:40Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Test hot code upgrade with suspended kernel frames",
   "type": "task",
-  "updated_at": "2026-10-05T15:08:44Z"
+  "updated_at": "2026-10-05T15:17:40Z"
 }
