@@ -13,9 +13,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution: yes, as Elixir mode: a test oracle (property/differential tests) and a debugging tool (dbg, IO.inspect, IEx breakpoints in a kernel body). Not a fallback without a C compiler: a silent 30-100x slowdown in production is a cliff nobody chose, and Elixir-first says write idiomatic Elixir instead; \"Is a C compiler at build time acceptable for a defk library?\" must not count on Elixir mode as its way out. Generated Elixir is never a baseline and its timings are never quoted.\n\nMechanism: a compile-time transform generates real Elixir source (x[i] reads the packed binary, len/alloc map to binary ops, writes rebind an array threaded through loops and ifs). Not an IR interpreter, which would lose debugging. Drift is caught by running every catalog kernel and the subset's own tests in both modes.\n\nElixir mode is normative: its result is \"what the same code gives in Elixir\". Any C/Elixir disagreement is a C-backend bug unless listed as a Divergence. Known gaps: array aliasing on write (defk-i2e), inf/NaN inside a kernel (defk-q1c); yielding and timing don't exist in Elixir mode and aren't results.\n\nConstraint on the subset: every construct must have an Elixir meaning; if Elixir mode can't express it, it isn't in the subset (or it is a listed divergence). out[i] = v stays as a convenience construct meaning \"rebind out with that element replaced\", i.e. value semantics for arrays.\n\nSwitches: a per-call entry point (Defk.Elixir.run/3 or a generated Mod.__defk_elixir__/2); a per-environment config :defk, mode: :elixir, allowed only in :dev/:test, default native; Defk.Test.assert_agrees(Mod, :fun, args). Elixir mode is always compiled in :test.",
+      "timestamp": "2026-10-05T20:09:53Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Should a kernel body also run as plain Elixir?",
   "type": "task",
-  "updated_at": "2026-10-05T19:59:37Z"
+  "updated_at": "2026-10-05T20:09:53Z"
 }
