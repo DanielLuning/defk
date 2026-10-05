@@ -6,9 +6,15 @@
   "description": "Since defk-jaj a kernel call is inlined, so generated code grows with the number of call sites along every call chain (a diamond-shaped call graph doubles per level). Decide on a limit: count inlined nodes per entry kernel and warn or error past a threshold with a message naming the chain, and/or measure compile time and .so size for a deep/wide call graph. Document the result in README known limitations.",
   "id": "defk-6ag",
   "labels": [],
+  "comments": [
+    {
+      "text": "Classified nice to have (not a safety gap, not required for the verdict) by 'Which open runtime issues are safety gaps?' (defk-dtw.12).",
+      "timestamp": "2026-10-05T20:49:15Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Guard against code-size blowup from inlined kernel calls",
   "type": "task",
-  "updated_at": "2026-10-05T15:08:11Z"
+  "updated_at": "2026-10-05T20:49:15Z"
 }
