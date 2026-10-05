@@ -152,7 +152,7 @@ The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show
 - [x] Early exit: `Enum.reduce_while`, `Enum.all?/any?` (defk-9vl)
 - [x] `case` on `i64`/`bool` (defk-9vl)
 - [x] Calls between kernels that yield (defk-jaj)
-- [ ] Bitwise operators (`band`/`bor`/`bxor`/`bsl`/`bsr`) for hashing and checksums (needed by defk-9p6.2)
+- [ ] Bitwise operators (`band`/`bor`/`bxor`/`bsl`/`bsr`) for hashing and checksums (defk-w38)
 - [ ] Arrays through `if`/`cond` branches, and returning input arrays (defk-gqk)
 - [ ] `Enum.reduce/3`, and a `find_index` that keeps Elixir semantics without `nil` (defk-nii)
 - [ ] More `case` patterns: `x in [1, 2, 3]` and ranges (defk-gid)
@@ -179,7 +179,7 @@ The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show
 - [ ] Layout version tag on frames, as defence in depth (defk-ls8)
 
 **6. Catalog: map the boundary of defk's niche**
-- [ ] Checksum/hash over binaries, compared with `:erlang.crc32` (defk-9p6.2, needs bitwise operators)
+- [ ] Checksum/hash over binaries, compared with `:erlang.crc32` (defk-9p6.2, needs defk-w38)
 - [ ] Matrix multiply against Nx (expected verdict: use Nx) (defk-9p6.3)
 - [ ] n-body step with state kept packed between calls (defk-9p6.4)
 - [ ] Fair early-exit cutoff for fuzzy_search's Levenshtein, in both backends (defk-8i4)
