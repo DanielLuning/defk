@@ -73,6 +73,11 @@ defmodule Examples.Kernels do
     end
   end
 
+  # all the work happens two calls deep; callees are inlined, so it still yields
+  defk count_primes_via_call(n :: i64) :: i64 do
+    count_primes(n)
+  end
+
   defk prime?(x :: i64) :: bool do
     limit = trunc(:math.sqrt(x))
 

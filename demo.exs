@@ -143,7 +143,9 @@ row.("plain Elixir busy process: runtime / worst gap", "#{div(us0, 1000)} ms / #
 row.("yielding kernel: runtime / worst tick gap", "#{div(us, 1000)} ms / #{fmt.(gap1 / 1000)} ms")
 {us2, r2, gap2} = Bench.max_tick_gap(run.(fn -> K.count_primes_noyield(pn2) end))
 row.("yield: false   : runtime / worst tick gap", "#{div(us2, 1000)} ms / #{fmt.(gap2 / 1000)} ms")
-check.("same answer (#{r1})", r1 == r2)
+{us3, r3, gap3} = Bench.max_tick_gap(run.(fn -> K.count_primes_via_call(pn2) end))
+row.("loops in callees (count_primes_via_call)", "#{div(us3, 1000)} ms / #{fmt.(gap3 / 1000)} ms")
+check.("same answer (#{r1})", r1 == r2 and r1 == r3)
 row.("frame promotions / yields so far", inspect(Map.take(K.__defk_stats__(), [:promotions, :yields])))
 :erlang.system_flag(:schedulers_online, System.schedulers())
 

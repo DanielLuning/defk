@@ -338,11 +338,14 @@ typedef struct {
 #define DEFK_SLICE_US 250
 #endif
 
-/* Flat inner loops (no nested loop, no kernel call) run up to this many
- * iterations without a safepoint, so the check does not stop vectorisation.
- * Even expensive builtins (exp, pow) keep that far below the clock period. */
+/* Flat inner loops (no nested loop, including one in an inlined kernel call)
+ * run up to this many iterations without a safepoint, so the check does not
+ * stop vectorisation. Even expensive builtins (exp, pow) keep that below the
+ * clock period. A loop just over the limit pays for a second, short strip:
+ * at 512, count_primes' trial division (up to 1000 trips at 1M) ran 6%
+ * slower than yield: false; at 2048 it is within 1% (defk-jaj). */
 #ifndef DEFK_STRIP
-#define DEFK_STRIP 512
+#define DEFK_STRIP 2048
 #endif
 
 static void defk_clock_init(defk_clock *c) {
