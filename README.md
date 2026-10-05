@@ -134,3 +134,55 @@ These are deliberate, to keep defk small for now.
 - Array writes alias: `b = a` then `a[i] = x` is visible through `b`.
 - A kernel survives one reload of its module; a second reload before it finishes purges its code and kills it (standard BEAM old-code semantics).
 - The C compiler runs at compile time on the build machine (no Cranelift JIT path).
+
+## Roadmap
+
+The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show <id>`); ticked items are closed.
+
+**1. Honest measurement: show where defk helps Elixir**
+- [x] Record the purpose: Elixir first, defk only where it helps (defk-9p6.5)
+- [x] Example catalog with a scoreboard (defk-9p6.1)
+- [x] fuzzy_search example app (defk-nv1)
+- [ ] Optimise the Elixir baselines, so the `good` verdicts are no longer provisional: rolling_stats (defk-9p6.6), geo_nearest (defk-9p6.7), image_blur (defk-9p6.8), fuzzy_search (defk-9p6.9)
+- [ ] Re-measure fuzzy_search, yielding against blocking, on a quiet machine (defk-klw)
+- [ ] Refresh the results table and demo numbers on a quiet machine (defk-yzw)
+- [ ] Separate code-layout noise (±3%) from real effects (defk-wnu)
+
+**2. Language: express the algorithms people write NIFs for**
+- [x] Early exit: `Enum.reduce_while`, `Enum.all?/any?` (defk-9vl)
+- [x] `case` on `i64`/`bool` (defk-9vl)
+- [x] Calls between kernels that yield (defk-jaj)
+- [ ] Bitwise operators (`band`/`bor`/`bxor`/`bsl`/`bsr`) for hashing and checksums (needed by defk-9p6.2)
+- [ ] Arrays through `if`/`cond` branches, and returning input arrays (defk-gqk)
+- [ ] `Enum.reduce/3`, and a `find_index` that keeps Elixir semantics without `nil` (defk-nii)
+- [ ] More `case` patterns: `x in [1, 2, 3]` and ranges (defk-gid)
+
+**3. Semantics: behave like Elixir where it matters**
+- [ ] Array value semantics: aliasing on write (defk-i2e)
+- [ ] inf/NaN inside kernels (defk-q1c)
+- [ ] An error inside a guard fails the clause instead of raising (defk-7a6)
+
+**4. Performance: plain-C speed from Elixir-shaped code**
+- [x] Bounds-check elimination for provably in-range `a[i]` (defk-88q)
+- [x] count_primes at C speed: `if`/`cond` arms compiled as selects (defk-jp3, defk-7q5)
+- [ ] Guard against code-size blowup from inlined calls (defk-6ag)
+- [ ] No C compiler warnings in generated code (defk-5dd)
+
+**5. Runtime: be a good BEAM citizen**
+- [x] Safepoints cost ~0% in hot loops (defk-5s3, defk-nua)
+- [x] Worst scheduler gap in line with a busy Elixir process (defk-j3h)
+- [x] Resume correctness under forced yields (defk-h8a)
+- [x] Hot code upgrade with suspended kernels (defk-nbl)
+- [ ] Resume tests fail instead of hanging on a resume bug (defk-juw)
+- [ ] Show an early-exit kernel in the preemption demo and `tick_gap` (defk-tfh)
+- [ ] `__defk_stats__` semantics across reloads (defk-9qv)
+- [ ] Layout version tag on frames, as defence in depth (defk-ls8)
+
+**6. Catalog: map the boundary of defk's niche**
+- [ ] Checksum/hash over binaries, compared with `:erlang.crc32` (defk-9p6.2, needs bitwise operators)
+- [ ] Matrix multiply against Nx (expected verdict: use Nx) (defk-9p6.3)
+- [ ] n-body step with state kept packed between calls (defk-9p6.4)
+- [ ] Fair early-exit cutoff for fuzzy_search's Levenshtein, in both backends (defk-8i4)
+
+**7. Later**
+- [ ] Cranelift JIT backend for kernels specialised at runtime (defk-o1w)
