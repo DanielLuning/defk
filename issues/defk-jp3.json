@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-05T13:41:08Z",
   "created": "2026-10-05T09:49:14Z",
   "description": "demo.exs: count_primes(1M) defk ~317ms vs bench/native.c ~188ms, same algorithm and -O3. Ruled out: rem/2 zero/-1 checks (C with identical checks runs at the same speed) and loop shape (for(;;)+break vs while: no change). Suspects: prime? call-mode fn inlined into the entry kernel differently, defk_trunc/defk_sqrt domain checks per outer iteration, signed vs unsigned induction vars. Done when the cause is identified (asm diff of the inner loop) and either fixed or documented in README.",
   "id": "defk-jp3",
@@ -13,7 +14,7 @@
     }
   ],
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Find why count_primes is 1.7x slower than plain C",
   "type": "bug",
   "updated_at": "2026-10-05T13:41:08Z"
