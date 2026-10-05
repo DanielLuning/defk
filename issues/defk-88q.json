@@ -6,9 +6,15 @@
   "description": "dot with a[i]/b[i] is ~1.25x plain C (0.79 vs 0.62 ns/elem); sum via 'x \u003c- a' generator has no checks and matches C. Add range analysis in Defk.Compiler: for 'i \u003c- 0..(n - 1)//1' where n is len(a) or min(len(a), ...), emit unchecked a.data[i]. Done when dot is within ~5% of C and out-of-range indexes still raise Enum.OutOfBoundsError.",
   "id": "defk-88q",
   "labels": [],
+  "comments": [
+    {
+      "text": "Landed range facts in Defk.Compiler. Measured dot (ns/elem, n=4k/64k/5M): C 0.48/0.50/0.50; yielding defk before 0.81/0.81/0.80, after 0.80/0.79/0.78; yield:false checked 0.82/0.80/0.80, yield:false unchecked 0.51/0.50/0.50. So with checks gone dot matches C only when safepoints are compiled out. In the yielding kernel the DEFK_SP counter exit still stops clang vectorising (C uses fmul.2d x4 + in-order fadd). The remaining gap is defk-5s3. OOB still raises: tested 0..len, -1.., max(len), a[i+1], a[i-1], short alloc, non-literal offset, shadowed array, u8 into alloc(255).",
+      "timestamp": "2026-10-05T11:45:29Z"
+    }
+  ],
   "priority": 1,
   "status": "in_progress",
   "title": "Bounds-check elimination for provably in-range a[i]",
   "type": "task",
-  "updated_at": "2026-10-05T11:39:25Z"
+  "updated_at": "2026-10-05T11:45:29Z"
 }
