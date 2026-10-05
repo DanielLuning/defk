@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-05T12:35:03Z",
@@ -7,8 +7,8 @@
   "id": "defk-h8a",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Add resume stress test (forced yields)",
   "type": "task",
-  "updated_at": "2026-10-05T12:35:03Z"
+  "updated_at": "2026-10-05T12:35:07Z"
 }
