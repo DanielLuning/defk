@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-dtw.5"
+  ],
   "created": "2026-10-05T18:48:39Z",
   "description": "## Question\n\nWhat do Nx (defn, Nx.Defn.Evaluator, EXLA, Torchx) and other existing Elixir libraries already do well for loop-heavy and numeric work, and where they don't fit (scalar loops with early exit, small inputs, data dependencies between iterations, byte processing, startup cost, scheduler behaviour)? Output: the boundary between Nx's niche and the jobs left for something like defk, with sources.",
   "id": "defk-dtw.2",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Where does Nx already cover native-speed numerics for Elixir?",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:39Z"
+  "updated_at": "2026-10-05T18:48:48Z"
 }
