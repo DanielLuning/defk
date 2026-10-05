@@ -2,13 +2,14 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-05T14:11:45Z",
   "created": "2026-10-05T13:41:49Z",
   "description": "Follow-up to defk-jp3. An `if` value whose arms are pure arithmetic (vars, literals, + - *, comparisons, boolean ops) now compiles to a flagged select (select/7 and speculate?/1 in lib/defk/compiler.ex): both arms computed with defk_*_i64_s overflow flags, the taken arm re-run with raising checks only on overflow. `cond` used as a value still emits an if/else chain, so a checked op in one clause blocks clang's if-conversion the same way (1.7x on count_primes before the fix). Extend the select to cond: evaluate each clause condition once, in order (conditions may call kernels, so keep left-to-right evaluation and don't evaluate a later condition's raising ops speculatively unless it is speculate?-safe too), compute every pure arm flagged, select by the first true condition, redo the taken arm on overflow. Done when a cond counterpart of test/select_test.exs passes (untaken-arm overflow doesn't raise, taken-arm overflow raises the same message) and a cond-shaped count_primes runs at the if version's speed.",
   "id": "defk-7q5",
   "labels": [],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Compile pure-arithmetic cond arms as a select",
   "type": "task",
-  "updated_at": "2026-10-05T14:07:41Z"
+  "updated_at": "2026-10-05T14:11:45Z"
 }
