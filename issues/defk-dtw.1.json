@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-dtw.5"
+  ],
   "created": "2026-10-05T18:48:39Z",
   "description": "## Question\n\nSurvey real NIF code (Hex packages using Rustler/Zigler/elixir_make/C NIFs, GitHub, ElixirForum threads asking for 'a NIF for X') and group it into workload categories. For each: representative packages, input/output data shapes (binaries, lists, numbers, strings, maps), call pattern (one big call vs many small), whether it blocks schedulers or uses dirty schedulers, and why the author went native. Output: a ranked candidate list of target workloads with the evidence.",
   "id": "defk-dtw.1",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Which jobs do people write NIFs for today?",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:39Z"
+  "updated_at": "2026-10-05T18:48:48Z"
 }
