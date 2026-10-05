@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-dtw.7"
+  ],
   "blocks": [],
   "created": "2026-10-05T09:49:14Z",
   "description": "BEAM floats cannot be inf/NaN and Elixir raises on overflow. Kernels allow them internally and only raise when a non-finite float is returned; output arrays can contain inf/NaN bit patterns. Choose between per-op checks (blocks vectorisation), checks at the boundary including output arrays, or documenting the deviation.",
