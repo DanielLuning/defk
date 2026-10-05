@@ -5,7 +5,9 @@
   "created": "2026-10-05T20:09:53Z",
   "description": "## Question\n\nElixir mode is normative (see \"Should a kernel body also run as plain Elixir?\"): every C/Elixir disagreement is a bug unless it is a listed divergence. How is agreement checked: which input generators (edge values such as i64 overflow boundaries, empty and length-1 arrays, out-of-bounds indices, division by zero, extreme floats), which tests run in both modes (catalog kernels, the subset's own tests, every docs/language.md example), how errors are compared (same exception type and message?), and what the check costs in CI time.",
   "id": "defk-dtw.16",
-  "labels": [],
+  "labels": [
+    "wayfinder:grilling"
+  ],
   "parent": "defk-dtw",
   "priority": 2,
   "status": "open",
