@@ -11,9 +11,15 @@
     "wayfinder:research"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Research findings: branch research/nif-workloads, docs/research/nif-workloads.md. Summary: Most NIFs on Hex (about 47 of the top 50 Rustler packages, plus bcrypt/argon2/vix/exqlite/explorer) wrap an existing library, and defk can't help there. The hand-written ones are a long tail, mostly loops over packed binaries, and many either block normal schedulers (evil_crc32c, bandit_native mask, Membrane mixer) or hand-roll chunking or dirty twins (ex_data_sketch, ecsv). Ranked targets: (1) byte transforms (WS masking, CRC32C, pixel conversion), (2) PCM audio mixing, (3) batched HLL/CMS sketch updates, (4) f32 vector distances/NMS, (5) batched string distance, (6) time-series encode/stats. Several have a pure-Elixir twin to use as the baseline (Bandit ws_mask, Membrane Adder, ExDataSketch.Backend.Pure). Main gaps: bitwise ops, [f32]/[i16]/[i32] types, wrapping u64 hash arithmetic.",
+      "timestamp": "2026-10-05T18:55:05Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Which jobs do people write NIFs for today?",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:55Z"
+  "updated_at": "2026-10-05T18:55:05Z"
 }
