@@ -101,16 +101,14 @@ At `mix compile`, `defk` type-checks the body, emits C
 |---|---|---|---|
 | sum of 5M f64 (ns/elem) | 8.5 (list), 16.7 (binary comprehension) | 0.58 | 0.64 |
 | dot of 5M f64 via `a[i]` (ns/elem) | 12.2 (list) | 0.50 | 0.50 |
-| count_primes(1M), trial division (ms) | 1490 | 317 | 188 |
+| count_primes(1M), trial division (ms) | 1400 | 180 | 186 |
 | call overhead (ns/call) | 1.6 | 12 | — |
 | worst 1 ms-ticker gap on one scheduler (ms) | 2.0–2.2 (busy Elixir process) | 2.3–2.5 (yielding), 867 (`yield: false`) | — |
 
 - Safepoint overhead: ~0% (within noise), including branchy nested loops such as the fuzzy_search Levenshtein kernel (20 ms yielding vs 20 ms `yield: false`).
 - A kernel yields after 250 µs of wall time (`DEFK_SLICE_US`). At 1 ms, the limit ERTS allows a NIF, the ticker's worst gap was 3.5 ms. A busy Elixir process yields every few µs. Each yield costs a few µs of scheduler work (mostly its I/O poll): 2–3% on `count_primes`, which yields ~3,300 times a second, and nothing measurable on fuzzy_search. `bench/tick_gap.exs` and `bench/yield_cost.exs` measure both sides.
 - Killing a process mid-kernel frees its frame (`frames_live` 1 → 0).
-
-**Still open:**
-- `count_primes` is 1.7× slower than C. It isn't the `rem` checks (C with the same checks is the same speed), and switching the loop shape didn't change it.
+- `count_primes` used to be 1.7× slower than C because of the overflow check in `if prime?(i), do: count + 1, else: count`. A check that can raise inside one arm keeps clang from turning the `if` into a select. Clang then threads the branch into `prime?`'s inner loop, and that loop ran 1.7× slower. Now an `if` whose arms are pure arithmetic is compiled as a select: both arms are computed with overflow flags, and only an overflow in the taken arm raises, with the same error.
 
 ## Known limitations
 

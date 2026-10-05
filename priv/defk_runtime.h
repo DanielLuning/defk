@@ -233,6 +233,23 @@ static inline int64_t defk_mul_i64(defk_ctx *ctx, int64_t a, int64_t b) {
 static inline int64_t defk_neg_i64(defk_ctx *ctx, int64_t a) {
   return defk_sub_i64(ctx, 0, a);
 }
+/* the same, flagging overflow instead of raising (arms of a speculated `if`) */
+static inline int64_t defk_add_i64_s(int *ovf, int64_t a, int64_t b) {
+  int64_t r;
+  *ovf |= __builtin_add_overflow(a, b, &r);
+  return r;
+}
+static inline int64_t defk_sub_i64_s(int *ovf, int64_t a, int64_t b) {
+  int64_t r;
+  *ovf |= __builtin_sub_overflow(a, b, &r);
+  return r;
+}
+static inline int64_t defk_mul_i64_s(int *ovf, int64_t a, int64_t b) {
+  int64_t r;
+  *ovf |= __builtin_mul_overflow(a, b, &r);
+  return r;
+}
+static inline int64_t defk_neg_i64_s(int *ovf, int64_t a) { return defk_sub_i64_s(ovf, 0, a); }
 static inline int64_t defk_div_i64(defk_ctx *ctx, int64_t a, int64_t b) {
   if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "div/2 by zero");
   if (DEFK_UNLIKELY(a == INT64_MIN && b == -1)) defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in div/2");

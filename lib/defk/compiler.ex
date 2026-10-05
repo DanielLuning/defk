@@ -365,14 +365,18 @@ defmodule Defk.Compiler do
 
   defp lower_expr({:if, m, [cond, kw]}, env) when is_list(kw) do
     else_ast = Keyword.get(kw, :else) || err!(m, "`if` used as a value needs an else branch")
+    do_ast = Keyword.fetch!(kw, :do)
     {sc, c} = lower_cond(cond, env, m)
-    {sa, a} = lower_block(Keyword.fetch!(kw, :do), env)
+    {sa, a} = lower_block(do_ast, env)
     {sb, b} = lower_block(else_ast, env)
     t = branch_type!([a, b], m)
     tmp = fresh("if", t)
 
-    {[sc, "if (#{c}) {\n", sa, "#{tmp} = #{a.c};\n} else {\n", sb, "#{tmp} = #{b.c};\n}\n"],
-     val(tmp, t, tmp)}
+    if IO.iodata_length([sa, sb]) == 0 and speculate?(do_ast) and speculate?(else_ast) do
+      select(sc, c, {do_ast, a}, {else_ast, b}, t, tmp, env)
+    else
+      branch(sc, c, {sa, a}, {sb, b}, tmp, t)
+    end
   end
 
   defp lower_expr({:cond, m, [[do: clauses]]}, env) do
@@ -418,9 +422,9 @@ defmodule Defk.Compiler do
     v =
       case {op, va.t, vb.t} do
         {:/, _, _} -> val("defk_fdiv(ctx, #{to_f(va)}, #{to_f(vb)})", :f64)
-        {:+, :i64, :i64} -> Map.merge(val("defk_add_i64(ctx, #{va.c}, #{vb.c})", :i64), add_facts(va, vb))
-        {:-, :i64, :i64} -> Map.merge(val("defk_sub_i64(ctx, #{va.c}, #{vb.c})", :i64), sub_facts(va, vb))
-        {:*, :i64, :i64} -> val("defk_mul_i64(ctx, #{va.c}, #{vb.c})", :i64)
+        {:+, :i64, :i64} -> Map.merge(val("defk_add_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64), add_facts(va, vb))
+        {:-, :i64, :i64} -> Map.merge(val("defk_sub_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64), sub_facts(va, vb))
+        {:*, :i64, :i64} -> val("defk_mul_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64)
         _ -> val("(#{to_f(va)} #{op} #{to_f(vb)})", :f64)
       end
 
@@ -478,7 +482,7 @@ defmodule Defk.Compiler do
   defp lower_expr({:-, m, [a]}, env) do
     {s, v} = lower_expr(a, env)
     numeric!(v, m, :-)
-    c = if v.t == :i64, do: "defk_neg_i64(ctx, #{v.c})", else: "(-#{v.c})"
+    c = if v.t == :i64, do: "defk_neg_i64#{checked(env)}, #{v.c})", else: "(-#{v.c})"
     {s, val(c, v.t)}
   end
 
@@ -526,6 +530,50 @@ defmodule Defk.Compiler do
       many -> err!(m, "branches have different types: #{Enum.map_join(many, ", ", &fmt(&1.t))}")
     end
   end
+
+  # An `if` value whose arms are pure arithmetic is compiled as a select: both
+  # arms are computed with overflow flags instead of raising, and only an
+  # overflow re-runs the taken arm with the raising checks. A raise inside one
+  # arm would otherwise keep clang from if-converting the branch; it then
+  # threads the branch into the loop that computed the condition, which made
+  # `if prime?(i), do: count + 1, else: count` 1.7x slower than C (defk-jp3).
+  defp select(sc, c, {do_ast, a}, {else_ast, b}, t, tmp, env) do
+    flagged = fn ast, flag -> elem(lower_block(ast, Map.put(env, :ovf, flag)), 1).c end
+
+    if flagged.(do_ast, "_") == a.c and flagged.(else_ast, "_") == b.c do
+      # nothing can raise: clang if-converts the plain branch itself
+      branch(sc, c, {[], a}, {[], b}, tmp, t)
+    else
+      [oa, ob] = for _ <- 1..2, do: fresh("ovf", :bool)
+      fa = %{c: flagged.(do_ast, oa)}
+      fb = %{c: flagged.(else_ast, ob)}
+      cv = fresh("cond", :bool)
+      [ta, tb] = for _ <- 1..2, do: fresh("arm", t)
+
+      {[sc, "#{cv} = #{c};\n#{oa} = 0;\n#{ob} = 0;\n#{ta} = #{fa.c};\n#{tb} = #{fb.c};\n",
+        "#{tmp} = #{cv} ? #{ta} : #{tb};\n",
+        "if (DEFK_UNLIKELY(#{oa} | #{ob})) {\nif (#{cv}) (void)(#{a.c});\nelse (void)(#{b.c});\n}\n"],
+       val(tmp, t, tmp)}
+    end
+  end
+
+  defp branch(sc, c, {sa, a}, {sb, b}, tmp, t) do
+    {[sc, "if (#{c}) {\n", sa, "#{tmp} = #{a.c};\n} else {\n", sb, "#{tmp} = #{b.c};\n}\n"],
+     val(tmp, t, tmp)}
+  end
+
+  defp checked(%{ovf: flag}), do: "_s(&#{flag}"
+  defp checked(_env), do: "(ctx"
+
+  # pure expressions that can only fail by i64 overflow: safe to evaluate untaken
+  defp speculate?({:__block__, _, [e]}), do: speculate?(e)
+  defp speculate?(x) when is_number(x) or is_boolean(x), do: true
+  defp speculate?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: true
+
+  defp speculate?({op, _, args}) when op in [:+, :-, :*, :==, :!=, :===, :!==, :<, :>, :<=, :>=, :and, :or, :&&, :||, :not, :!],
+    do: Enum.all?(args, &speculate?/1)
+
+  defp speculate?(_), do: false
 
   # ---------------------------------------------------------------- calls --
 
