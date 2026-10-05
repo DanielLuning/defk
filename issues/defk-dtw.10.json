@@ -1,7 +1,8 @@
 {
   "assignee": "",
   "blocked_by": [
-    "defk-dtw.5"
+    "defk-dtw.5",
+    "defk-dtw.7"
   ],
   "blocks": [],
   "created": "2026-10-05T18:55:35Z",
@@ -15,5 +16,5 @@
   "status": "open",
   "title": "Should kernels offer opt-in wrapping integer arithmetic for hashes?",
   "type": "task",
-  "updated_at": "2026-10-05T18:55:35Z"
+  "updated_at": "2026-10-05T18:55:36Z"
 }
