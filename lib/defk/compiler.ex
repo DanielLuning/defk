@@ -17,6 +17,10 @@ defmodule Defk.Compiler do
   # range facts carried by values (see "range facts" below)
   @facts [:lo, :hi, :lb, :ub, :len_lo, :len_lb]
 
+  # forms that never yield: safepoints vanish and resume dispatch is dead code
+  @no_yield_macros "#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) 1\n#define DEFK_TICKS(W)\n#define DEFK_RESUMING 0\nint defk_rs = 0;\n"
+  @undef_macros "#undef DEFK_SP\n#undef DEFK_SHORT\n#undef DEFK_TICKS\n#undef DEFK_RESUMING\n"
+
   # ---------------------------------------------------------------- entry ---
 
   def compile(module, raw_kernels, file) do
@@ -104,6 +108,9 @@ defmodule Defk.Compiler do
     Process.put(:defk_n, 0)
     Process.put(:defk_decls, [])
     Process.put(:defk_sp, 0)
+    Process.put(:defk_sps, [])
+    Process.put(:defk_loops, [])
+    Process.put(:defk_nloops, 0)
     Process.put(:defk_calls, MapSet.new())
     Process.put(:defk_ncalls, 0)
 
@@ -122,6 +129,7 @@ defmodule Defk.Compiler do
       ret_vals: ret_vals,
       decls: Enum.reverse(Process.get(:defk_decls)),
       sp_count: Process.get(:defk_sp),
+      sps: Process.get(:defk_sps),
       calls: Process.get(:defk_calls)
     })
   end
@@ -682,9 +690,11 @@ defmodule Defk.Compiler do
 
     env = put_var(env, name, iv)
 
-    {body, flat?} = lower_quals_tracked(rest, env, inner)
-    strip = strip && Map.merge(strip, %{var: i, stop: e})
-    [setup, loop(done, strip, flat?, [body, incr])]
+    in_loop(fn id ->
+      {body, flat?} = lower_quals_tracked(rest, env, inner)
+      strip = strip && Map.merge(strip, %{var: i, stop: e})
+      [setup, loop(id, done, strip, flat?, [body, incr])]
+    end)
   end
 
   defp array_loop(name, src, rest, env, inner, m) do
@@ -707,10 +717,12 @@ defmodule Defk.Compiler do
     env = put_var(env, name, if(e == :u8, do: u8_val(x), else: val(x, xt)))
 
     # index is in range by construction: no bounds check
-    {body, flat?} = lower_quals_tracked(rest, env, inner)
-    body = ["#{x} = #{arr}.data[#{k}];\n", body, "#{k} += 1;\n"]
-    strip = %{done_at: &"#{k} > #{&1}", remaining: "(uint64_t)(#{arr}.len - #{k} - 1)", step: 1, var: k, stop: "#{arr}.len - 1"}
-    [s, "#{k} = 0;\n", loop("#{k} >= #{arr}.len", strip, flat?, body)]
+    in_loop(fn id ->
+      {body, flat?} = lower_quals_tracked(rest, env, inner)
+      body = ["#{x} = #{arr}.data[#{k}];\n", body, "#{k} += 1;\n"]
+      strip = %{done_at: &"#{k} > #{&1}", remaining: "(uint64_t)(#{arr}.len - #{k} - 1)", step: 1, var: k, stop: "#{arr}.len - 1"}
+      [s, "#{k} = 0;\n", loop(id, "#{k} >= #{arr}.len", strip, flat?, body)]
+    end)
   end
 
   # Lower the rest of a loop and note whether that body is flat: no nested
@@ -732,7 +744,7 @@ defmodule Defk.Compiler do
   # never yield define DEFK_SHORT as 1 and the strip version is dead code.
   #   strip.remaining - trips left after the next one, as uint64
   #   strip.done_at   - the loop's exit test against a given last index
-  defp loop(done, strip, true, body) when is_map(strip) do
+  defp loop(id, done, strip, true, body) when is_map(strip) do
     r = fresh("rem", {:c, "uint64_t"})
     se = fresh("strip_stop", :i64)
     %{var: i, stop: e, step: k} = strip
@@ -742,12 +754,48 @@ defmodule Defk.Compiler do
 
     ["#{r} = #{strip.remaining};\nif (DEFK_SHORT(#{r})) {\n",
      "while (!(#{done})) {\n", body, "}\nDEFK_TICKS(#{r} + 1)\n} else {\n",
-     "while (!(#{done})) {\n#{se} = #{strip.remaining} < DEFK_STRIP ? #{e} : #{strip_stop};\n",
+     "defk_l#{id}:;\nwhile (!(#{done})) {\n#{se} = #{strip.remaining} < DEFK_STRIP ? #{e} : #{strip_stop};\n",
      "while (!(#{strip.done_at.(se)})) {\n", body, "}\n", safepoint("DEFK_STRIP"), "}\n}\n"]
   end
 
-  defp loop(done, _strip, _flat?, body),
-    do: ["while (!(#{done})) {\n", body, safepoint(), "}\n"]
+  defp loop(id, done, _strip, _flat?, body),
+    do: ["defk_l#{id}:;\nwhile (!(#{done})) {\n", resume_dispatch(), body, safepoint(), "}\n"]
+
+  # Resuming re-enters loops only through their headers, so every loop keeps a
+  # single entry (an irreducible CFG would cost LLVM most loop optimisations).
+  # A safepoint is the last statement of its loop's body, so continuing after
+  # it means re-testing that loop's condition. The kernel's top dispatch jumps
+  # to the label in front of the outermost loop on the way to the safepoint;
+  # the top of that loop's body dispatches to the next loop down, and so on.
+  # The step that reaches the safepoint's own loop clears defk_rs.
+  defp in_loop(fun) do
+    id = Process.get(:defk_nloops) + 1
+    Process.put(:defk_nloops, id)
+    stack = Process.get(:defk_loops)
+    Process.put(:defk_loops, [id | stack])
+    res = fun.(id)
+    Process.put(:defk_loops, stack)
+    res
+  end
+
+  # Dispatch for the loops entered from here (the current loop body, or the
+  # kernel top level when no loop is open).
+  defp resume_dispatch do
+    case resume_cases(Process.get(:defk_sps), Enum.reverse(Process.get(:defk_loops))) do
+      [] -> []
+      cases -> ["if (DEFK_RESUMING) switch (defk_rs) {\n", cases, "}\n"]
+    end
+  end
+
+  # `here` is the path of loop ids (outermost first) whose body we are in
+  defp resume_cases(sps, here) do
+    depth = length(here)
+
+    for {n, path} <- Enum.sort(sps), length(path) > depth, List.starts_with?(path, here) do
+      clear = if length(path) == depth + 1, do: "defk_rs = 0; ", else: ""
+      "case #{n}: #{clear}goto defk_l#{Enum.at(path, depth)};\n"
+    end
+  end
 
   defp lower_reduce(quals, init_ast, clauses, env, m) do
     {pat, body} =
@@ -826,6 +874,7 @@ defmodule Defk.Compiler do
   defp safepoint(weight \\ "1") do
     n = Process.get(:defk_sp) + 1
     Process.put(:defk_sp, n)
+    Process.put(:defk_sps, [{n, Enum.reverse(Process.get(:defk_loops))} | Process.get(:defk_sps)])
     "DEFK_SP(#{n}, #{weight})\n"
   end
 
@@ -926,10 +975,10 @@ defmodule Defk.Compiler do
 
     [
       String.trim_trailing(call_proto(k), ";\n"),
-      " {\n#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) 1\n#define DEFK_TICKS(W)\n",
+      " {\n", @no_yield_macros,
       decl_locals(k),
       k.stmts,
-      "return #{ret};\n#undef DEFK_SP\n#undef DEFK_SHORT\n#undef DEFK_TICKS\n}\n\n"
+      "return #{ret};\n", @undef_macros, "}\n\n"
     ]
   end
 
@@ -967,10 +1016,10 @@ defmodule Defk.Compiler do
 
     sp_macro =
       if yields? do
-        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = DEFK_BUDGET0; return DEFK_YIELD; } } R##N:;\n" <>
-          "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n"
+        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = DEFK_BUDGET0; return DEFK_YIELD; } }\n" <>
+          "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n#define DEFK_RESUMING DEFK_UNLIKELY(defk_rs)\n"
       else
-        "#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) 1\n#define DEFK_TICKS(W)\n"
+        @no_yield_macros
       end
 
     [
@@ -981,21 +1030,20 @@ defmodule Defk.Compiler do
       # noinline: keep the kernel body out of the setjmp frame below
       "static __attribute__((noinline)) int run_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n",
       "defk_ctx *ctx = &F->ctx;\n",
-      if(yields?, do: "int64_t defk_ticks = 0;\nint64_t defk_budget = F->resume ? F->budget : DEFK_BUDGET0;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk);\n", else: ""),
+      if(yields?, do: "int defk_rs = F->resume;\nint64_t defk_ticks = 0;\nint64_t defk_budget = defk_rs ? F->budget : DEFK_BUDGET0;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk);\n", else: ""),
       Enum.map(k.params, fn {p, t} -> "#{ctype(t)} p_#{sanitize(p)} = {0};\n" end),
       decl_locals(k),
       bind,
       if yields? do
-        ["if (F->resume) {\n", Enum.map(saved, &"#{&1} = F->#{&1};\n"),
-         "switch (F->resume) {\n", Enum.map(1..k.sp_count//1, &"case #{&1}: goto R#{&1};\n"),
-         "}\n}\n"]
+        ["if (defk_rs) {\n", Enum.map(saved, &"#{&1} = F->#{&1};\n"),
+         "switch (defk_rs) {\n", resume_cases(k.sps, []), "}\n}\n"]
       else
         ""
       end,
       decode,
       sp_macro,
       k.stmts,
-      "*result = #{result};\nreturn DEFK_DONE;\n#undef DEFK_SP\n#undef DEFK_SHORT\n#undef DEFK_TICKS\n}\n\n",
+      "*result = #{result};\nreturn DEFK_DONE;\n", @undef_macros, "}\n\n",
       # setjmp lives in a separate frame so it does not pessimise the kernel body
       "static __attribute__((noinline)) int guard_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n",
       "if (sigsetjmp(F->ctx.jb, 0)) return DEFK_ERR;\nreturn run_#{k.cid}(env, F, argv, result);\n}\n\n",
