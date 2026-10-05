@@ -1,0 +1,38 @@
+# defk
+
+defk explores whether a typed subset of Elixir can compile to native code at C speed while keeping the BEAM's promises, and where that helps Elixir developers who would otherwise write a NIF.
+
+## Language
+
+**Kernel**:
+A function written in the kernel subset with `defk`, compiled to native code and called from Elixir.
+_Avoid_: NIF (a kernel is compiled to one, but a NIF is any native function), native function
+
+**Kernel subset**:
+The part of Elixir a kernel may use: its types, constructs, convenience constructs, and the semantics they keep.
+_Avoid_: defk language, DSL
+
+**Runtime contract**:
+What a kernel promises the BEAM while it runs: preemption, isolation, cleanup on process death, and hot code upgrade.
+
+**Convenience construct**:
+An idiomatic Elixir form in the kernel subset that exists because a developer would write it first, and that costs nothing over the equivalent loop.
+
+**Divergence**:
+A documented case where a kernel's result differs from what the same code would give in Elixir. Any undocumented difference is a bug.
+
+## Measurement
+
+**Target workload**:
+A job that people write hand-written NIFs for today, chosen as a yardstick for what the kernel subset must express.
+_Avoid_: use case, benchmark
+
+**Catalog**:
+The set of target workloads, each written in Elixir and as a kernel, checked for agreement and measured end to end.
+_Avoid_: examples, benchmark suite
+
+**Baseline**:
+The Elixir solution a kernel is measured against, marked first-pass or optimized. A win over a first-pass baseline is provisional.
+
+**Verdict**:
+The outcome for one target workload (defk helps, or Elixir is the right choice), and also the written conclusion of the whole effort.
