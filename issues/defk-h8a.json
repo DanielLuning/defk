@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T12:35:03Z",
+  "description": "Add an ExUnit resume-correctness test: kernels covering loop shapes (array generator + filter + nested range, loop in if-branch, 3-deep with flat siblings, long strip loops, fuzzy_search Levenshtein) must match their yield: false twins, both with natural yields and with a yield forced at every clock read. Needs a per-module __defk_force_yields__/1 NIF hook. Follow-up to defk-nua.",
+  "id": "defk-h8a",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Add resume stress test (forced yields)",
+  "type": "task",
+  "updated_at": "2026-10-05T12:35:03Z"
+}
