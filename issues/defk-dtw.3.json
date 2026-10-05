@@ -5,6 +5,7 @@
     "defk-dtw.6",
     "defk-dtw.8"
   ],
+  "closed_at": "2026-10-05T19:03:19Z",
   "created": "2026-10-05T18:48:39Z",
   "description": "## Question\n\nHow do Numba (nopython mode), Nx defn, Cython, Pythran, Mojo, Julia (type-stable code) and similar systems define what is allowed in their compiled subset, explain it to developers, and report unsupported constructs? Also: which of them can run the same code in the host language (e.g. Numba's NUMBA_DISABLE_JIT, Nx.Defn.Evaluator), and what that costs or gains. Output: patterns for error messages, subset references, and dual execution, with examples.",
   "id": "defk-dtw.3",
@@ -23,7 +24,7 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "How do comparable native subsets keep their rules predictable?",
   "type": "task",
   "updated_at": "2026-10-05T19:03:19Z"
