@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-9p6.10"
+  ],
   "blocks": [],
   "created": "2026-10-05T21:21:32Z",
   "description": "1k x 384 / 100k x 384. vettore 0.3.5 has no pure-Elixir version: write the Elixir baseline. Each side's index resident as a real app keeps it: vettore flat index (flat_new_cosine / flat_insert_many, called with flat_search); defk packed [f32] in :persistent_term; Nx tensor in :persistent_term (carries the verdict's Nx row); Elixir baseline in its best layout. Header warns that Vettore.Nifs.cosine_similarity returns a raw dot product. Agreement: identical top-k indices, scores within a stated tolerance (vettore computes in f32).\n\nEvidence bar (from defk-dtw.4/defk-dtw.15): script examples/\u003cname\u003e.exs with Mix.install of the pinned anchor package; the anchor's Elixir version is the first baseline and must be optimised further in Elixir before the verdict counts (what was tried listed in the header; baseline: :optimized); realistic size declared in the header before any numbers; workload verdict at the realistic size, other size beside; ~6-point geometric sweep with crossover (smallest size where defk \u003e= 2x, or none), skipped if a large run exceeds ~1 min; NIF timing and responsiveness (max and p99 1 ms tick gap, one scheduler, large size, for Elixir/defk/NIF) via Defk.Bench.report/1; Elixir, defk and NIF outputs must agree (failure fails the script); quiet-machine run_all.exs; row added to examples/README.md.",
