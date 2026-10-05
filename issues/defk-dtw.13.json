@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-dtw.7"
   ],
@@ -22,8 +22,8 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "What do narrow element types ([f32], [i16], [i32]) mean in a kernel?",
   "type": "task",
-  "updated_at": "2026-10-05T20:36:13Z"
+  "updated_at": "2026-10-05T21:03:00Z"
 }
