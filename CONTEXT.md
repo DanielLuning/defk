@@ -32,6 +32,10 @@ _Avoid_: difference (alone)
 Integer arithmetic written inside `band(expr, 2^k - 1)`, which a kernel computes with wrapping machine arithmetic and which still gives Elixir's exact result. It is how hashes and checksums wrap.
 _Avoid_: wrapping mode, unchecked arithmetic
 
+**Element type**:
+The type of each value in a kernel array, which is a binary of native-endian values of that type. Narrow element types (`u8`, `i16`, `i32`, `f32`) exist only inside arrays: reading one gives an `i64` or `f64`, and a write must fit the element type or raise.
+_Avoid_: array type, dtype
+
 **Elixir mode**:
 A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir. It is never a fallback in production and never a baseline.
 _Avoid_: fallback, interpreter, pure mode
