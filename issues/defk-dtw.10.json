@@ -16,11 +16,15 @@
     {
       "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): no semantic modes. Answer how wrapping is written the Elixir way, band(h * p, @mask64), and recognised by the compiler to emit a wrapping multiply with Elixir's exact result.",
       "timestamp": "2026-10-05T20:25:40Z"
+    },
+    {
+      "text": "Resolution: no opt-in wrapping mode (the one rule allows no semantic opt-outs). Instead, masked arithmetic:\n- `band(expr, mask)` with a compile-time constant mask 2^k - 1, k \u003c= 64 (a literal, a module attribute, or a constant expression like (1 \u003c\u003c\u003c 64) - 1). Inside the mask, `+ - * bsl band bor bxor bnot` may nest freely: their low k bits depend only on the operands' low k bits, so wrapping machine arithmetic gives exactly Elixir's (bignum) result. `bsr`, `div`, `rem` may only take values already in range (their high bits would leak down), e.g. rotations `bor(bsl(x, r), bsr(x, 64 - r))` with x a u64 variable. Covers FNV, murmur3, xxhash, CRC32C, HLL bucket hashing.\n- Recognition is syntactic: the arithmetic must sit inside the visible band(...). `x = h * p` then `band(x, @m)` raises at x (a limit; in Elixir x is a bignum); the compile error's hint says to move it inside band(..., @mask64). No mask tracking through variables.\n- New `u64` scalar and `[u64]` element type. band(_, @mask64) yields u64; band(x, @mask64) is also the Elixir-meaningful i64 -\u003e u64 conversion. A u64 used where an i64 is expected is checked (raises if it doesn't fit: a limit). Mixing i64 and u64 in + - * outside a mask is a compile error with a hint. Masks with k \u003c 64 need nothing new (results fit i64). HLL's hashes become [u64], needed for bit-for-bit agreement with ex_data_sketch.\n- `Defk.Bits`: plain Elixir functions clz/2, ctz/2, popcount/1, rotl/3, rotr/3 (width as an argument where it matters). Kernels call them and the compiler maps them to __builtin_clzll etc.; their Elixir bodies are Elixir mode's meaning, and plain Elixir can call them too.\nGlossary: \"Masked arithmetic\" added to CONTEXT.md.",
+      "timestamp": "2026-10-05T20:36:13Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Should kernels offer opt-in wrapping integer arithmetic for hashes?",
   "type": "task",
-  "updated_at": "2026-10-05T20:30:25Z"
+  "updated_at": "2026-10-05T20:36:13Z"
 }
