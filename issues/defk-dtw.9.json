@@ -11,9 +11,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution: binaries passed back in. State travels as values: binaries and scalars in, a new binary or tuple out (tuples with arrays already work: `defk upd(regs :: [u8], items :: [i64]) :: {[u8], i64}` compiles and returns {new_regs, n} at main). Kernel-owned mutable resources have no Elixir meaning under the one rule (Elixir mode could only fake them with ETS or the process dictionary), so they stay the expansion candidate \"persistent mutable structures via kernel-owned resources\" and are not built in this map.\n\n- Never mutate an input binary in place: the caller's binary would change, a divergence. The per-call copy is accepted (16 KiB of HLL registers; at 100 items it likely dominates). BEAM binaries are immutable, so the Elixir version and almost certainly the Rust NIF pay the same copy; the catalog build confirms it for the NIF, and the small-size workload verdict reports it.\n- Of the six target workloads only two carry state: HLL as update_many(regs :: [u8], hashes :: [i64]) :: [u8]; Gorilla as the previous chunk's state passed in as scalars (previous value, previous leading/trailing zero counts, ...) with {bits, bit_len, state...} returned; the bit form is left to \"Can a kernel produce variable-length bit output, and in what form?\". PCM mixing's queue stays in Elixir (decided in \"Choose the target workload set\"); n-body is an expansion candidate and rolling_stats a supporting example.",
+      "timestamp": "2026-10-05T20:29:56Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "State kept between kernel calls: kernel-owned resources or binaries passed back in?",
   "type": "task",
-  "updated_at": "2026-10-05T20:26:04Z"
+  "updated_at": "2026-10-05T20:29:56Z"
 }
