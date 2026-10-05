@@ -5,7 +5,9 @@
   "created": "2026-10-05T09:49:14Z",
   "description": "BEAM floats cannot be inf/NaN and Elixir raises on overflow. Kernels allow them internally and only raise when a non-finite float is returned; output arrays can contain inf/NaN bit patterns. Choose between per-op checks (blocks vectorisation), checks at the boundary including output arrays, or documenting the deviation.",
   "id": "defk-q1c",
-  "labels": [],
+  "labels": [
+    "wayfinder:grilling"
+  ],
   "parent": "defk-dtw",
   "priority": 3,
   "status": "open",
