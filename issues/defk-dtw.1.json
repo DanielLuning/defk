@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-dtw.5"
@@ -12,8 +12,8 @@
   ],
   "parent": "defk-dtw",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Which jobs do people write NIFs for today?",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:48Z"
+  "updated_at": "2026-10-05T18:48:55Z"
 }
