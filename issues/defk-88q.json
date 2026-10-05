@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-05T11:45:29Z",
   "created": "2026-10-05T09:49:14Z",
   "description": "dot with a[i]/b[i] is ~1.25x plain C (0.79 vs 0.62 ns/elem); sum via 'x \u003c- a' generator has no checks and matches C. Add range analysis in Defk.Compiler: for 'i \u003c- 0..(n - 1)//1' where n is len(a) or min(len(a), ...), emit unchecked a.data[i]. Done when dot is within ~5% of C and out-of-range indexes still raise Enum.OutOfBoundsError.",
   "id": "defk-88q",
@@ -13,7 +14,7 @@
     }
   ],
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Bounds-check elimination for provably in-range a[i]",
   "type": "task",
   "updated_at": "2026-10-05T11:45:29Z"
