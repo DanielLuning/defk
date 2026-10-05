@@ -1,7 +1,8 @@
 {
   "assignee": "",
   "blocked_by": [
-    "defk-9p6.10"
+    "defk-9p6.10",
+    "defk-wlu"
   ],
   "blocks": [],
   "created": "2026-10-05T21:21:32Z",
@@ -13,5 +14,5 @@
   "status": "open",
   "title": "Target workload: HLL update_many vs ex_data_sketch",
   "type": "task",
-  "updated_at": "2026-10-05T21:21:32Z"
+  "updated_at": "2026-10-05T21:21:33Z"
 }
