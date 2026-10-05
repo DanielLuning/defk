@@ -18,8 +18,15 @@ What a kernel promises the BEAM while it runs: preemption, isolation, cleanup on
 **Convenience construct**:
 An idiomatic Elixir form in the kernel subset that exists because a developer would write it first, and that costs nothing over the equivalent loop.
 
+**The one rule**:
+A kernel is Elixir over numbers and binaries: it gives the result Elixir would, or raises where its types can't hold that result, or doesn't compile. It never gives a different answer.
+
+**Limit**:
+A documented case where a kernel raises or refuses to compile where Elixir would have succeeded, such as i64 overflow. Allowed by the one rule.
+
 **Divergence**:
-A documented case where a kernel's result differs from what the same code would give in Elixir, as Elixir mode computes it. Any undocumented difference is a bug.
+A case where a kernel gives a different value or behaviour from Elixir mode without raising. Not allowed by the one rule: each is a bug to remove or turn into a limit.
+_Avoid_: difference (alone)
 
 **Elixir mode**:
 A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir. It is never a fallback in production and never a baseline.
