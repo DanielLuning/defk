@@ -1,0 +1,6 @@
+/_build/
+/deps/
+/.elixir_ls/
+/.ast-bro/
+erl_crash.dump
+*.ez
