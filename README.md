@@ -76,7 +76,9 @@ At `mix compile`, `defk` type-checks the body, emits C
 
 **Language:**
 - Types: `i64`, `f64`, `bool`, `[f64]`, `[i64]`, `[u8]`, and tuples for return values.
-- Constructs: `=`, `if`/`else`, `cond`, `for` with ranges, array generators, filters and `reduce:` (including tuple accumulators).
+- Constructs: `=`, `if`/`else`, `cond`, `case`, `for` with ranges, array generators, filters and `reduce:` (including tuple accumulators).
+- Early exit: `Enum.reduce_while(enumerable, acc, fn x, acc -> {:cont, acc} | {:halt, acc} end)`, and `Enum.all?/2` / `Enum.any?/2` with a `fn`. The enumerable is a range or an array, as in a `for` generator.
+- `case` on an `i64` or `bool`: integer literals, `true`/`false`, `^pinned`, `_` or a variable, each with an optional guard. Used as a value or a statement.
 - Operators: `a[i]`, `out[i] = v` (only on `alloc/2` arrays), `+ - * /`, `div`, `rem`, comparisons, `and`/`or`/`not`.
 - Builtins: `len`, `min`, `max`, `abs`, `float`, `trunc`, `round`, `sqrt`, `exp`, `log`, `sin`, `cos`, `pow` (also as `:math.*`), plus calls to other kernels (inlined).
 
@@ -88,9 +90,12 @@ At `mix compile`, `defk` type-checks the body, emits C
    - `/` always returns a float and raises on division by zero
    - `div`/`rem` follow Elixir rounding
    - `a..b` counts down when `a > b`
+   - a `case` that no clause matches raises `CaseClauseError`, so a catch-all is optional
+   - a `{:halt, acc}` ends only the `Enum.reduce_while` it belongs to, also inside nested loops and inlined calls
    - bounds failures raise `Enum.OutOfBoundsError` in the caller. The check is dropped when the compiler can prove the index is in range, e.g. `i <- 0..(n - 1)//1` with `n = min(len(a), len(b))`, or a `[u8]` value indexing a 256-element `alloc`
 3. **Automatic yielding.** Every loop back-edge is a safepoint. Locals live in registers and are spilled to a frame struct only when the kernel actually yields. Resume re-enters each loop through its header, so loops keep a single entry and clang optimises them like ordinary loops.
    A call to another kernel is inlined, so the callee's loops (however many calls deep) are loops of the kernel called from Elixir and yield like its own. `yield: false` applies to the kernel called from Elixir, including what it calls.
+   A `{:halt, acc}` jumps to the end of its loop. Jumping out of loops keeps their single entry, so it needs no change to resume.
    A flat inner loop (no nested loop, also none in an inlined call, so each iteration costs a bounded amount) skips the per-iteration check, which would stop clang from vectorising it. If it has fewer than `DEFK_STRIP` (2048) trips, it runs as a plain loop, its trips are charged to the budget, and the enclosing loop's safepoint does the check. A longer loop runs in strips of 2048 with one safepoint per strip.
 4. **Pay for yielding only when you yield.** A kernel starts on a C stack frame. Only on its first yield is the frame copied into a resource, whose destructor frees owned buffers if the process dies.
 5. **Adaptive safepoint budget.** The clock is read every ~100–250 µs regardless of how expensive one loop iteration is.
@@ -105,12 +110,14 @@ At `mix compile`, `defk` type-checks the body, emits C
 | sum of 5M f64 (ns/elem) | 8.5 (list), 16.7 (binary comprehension) | 0.58 | 0.64 |
 | dot of 5M f64 via `a[i]` (ns/elem) | 12.2 (list) | 0.50 | 0.50 |
 | count_primes(1M), trial division (ms) | 1400 | 180 | 186 |
+| count_primes_early(1M), trial division to the first divisor (ms) | 236 (`Enum.all?`), 140 (tail recursion, fastest tried) | 33 | 32 |
 | call overhead (ns/call) | 1.6 | 12 | — |
 | worst 1 ms-ticker gap on one scheduler (ms) | 2.0–2.2 (busy Elixir process) | 2.3–2.5 (yielding), 2.3 (loop in a called kernel), 867 (`yield: false`) | — |
 
 - Safepoint overhead: ~0% (within noise), including branchy nested loops such as the fuzzy_search Levenshtein kernel (20 ms yielding vs 20 ms `yield: false`).
 - A kernel yields after 250 µs of wall time (`DEFK_SLICE_US`). At 1 ms, the limit ERTS allows a NIF, the ticker's worst gap was 3.5 ms. A busy Elixir process yields every few µs. Each yield costs a few µs of scheduler work (mostly its I/O poll): 2–3% on `count_primes`, which yields ~3,300 times a second, and nothing measurable on fuzzy_search. `bench/tick_gap.exs` and `bench/yield_cost.exs` measure both sides.
 - Kernel calls are inlined, so a loop in a callee yields too: `count_primes_via_call` (all its work two calls deep) has the yielding kernel's worst tick gap (2.3 ms). Inlining costs `count_primes` nothing measurable: `prime?`'s trial division (up to 1000 trips at 1M) is a flat loop, and since `DEFK_STRIP` went from 512 to 2048 it runs as one plain loop (at 512 it ran in two strips, 6% slower than `yield: false`).
+- `count_primes_early` is `count_primes` with `prime?` written as `Enum.all?(2..limit//1, fn d -> rem(x, d) != 0 end)`, so trial division stops at the first divisor. Elixir and C get the same algorithm (`Enum.all?` or tail recursion; a `return` in C). It is a separate kernel, so `count_primes` stays the long-running yield and preemption workload. With early exit, defk is 4.3× faster than the fastest Elixir version, against 8× when both sides scan the whole range: Elixir gains more from early exit, because each of its iterations costs more. The yielding and `yield: false` forms run within 1–2% of each other.
 - Killing a process mid-kernel frees its frame (`frames_live` 1 → 0).
 - `count_primes` used to be 1.7× slower than C because of the overflow check in `if prime?(i), do: count + 1, else: count`. A check that can raise inside one arm keeps clang from turning the `if` into a select. Clang then threads the branch into `prime?`'s inner loop, and that loop ran 1.7× slower. Now an `if` or `cond` whose arms are pure arithmetic is compiled as a select: every arm is computed with overflow flags, and only an overflow in the taken arm raises, with the same error. A `cond` gets the select only when its conditions after the first are pure arithmetic too, since those run only when the earlier ones are false.
 
@@ -121,7 +128,9 @@ These are deliberate, to keep defk small for now.
 - No recursion (rejected at compile time). Kernel calls are inlined, so the generated code grows with the number of call sites along each call chain.
 - inf/NaN are allowed inside a kernel; a non-finite *returned* float raises.
 - An array may be returned only if it was created with `alloc/2`. Arrays can't flow through `if`/`cond` branches.
-- No `while`/early exit, no `case`, no maps, lists or strings.
+- No maps, lists or strings.
+- Early exit only through `Enum.reduce_while` and `Enum.all?/any?`. Every tail of the `fn` must be a literal `{:cont, acc}` or `{:halt, acc}` (through `if`/`cond`/`case`). There is no `while`/`break`, and `{:halt, acc}` in a `for ..., reduce:` is not early exit, as in Elixir. No `Enum.find`/`find_index` (no `nil`).
+- `case` matches only `i64`/`bool` subjects against literals, variables and pins (no floats, tuples or ranges). An error inside a guard (overflow, `rem` by zero) raises, where Elixir would fail that clause. Kernel calls are rejected in guards, as Elixir rejects them.
 - Array writes alias: `b = a` then `a[i] = x` is visible through `b`.
 - A kernel survives one reload of its module; a second reload before it finishes purges its code and kills it (standard BEAM old-code semantics).
 - The C compiler runs at compile time on the build machine (no Cranelift JIT path).

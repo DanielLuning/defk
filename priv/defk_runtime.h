@@ -27,6 +27,8 @@
 #define DEFK_E_ARG 1
 #define DEFK_E_ARITH 2
 #define DEFK_E_OOB 3
+#define DEFK_E_CASE_I64 4  /* CaseClauseError; the term is err_index */
+#define DEFK_E_CASE_BOOL 5
 
 #define DEFK_LIKELY(x) __builtin_expect(!!(x), 1)
 #define DEFK_UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -71,6 +73,14 @@ __attribute__((noreturn, cold)) static void defk_oob(defk_ctx *ctx, int64_t i, i
   ctx->err_index = i;
   defk_fail(ctx, DEFK_E_OOB, "index %lld out of bounds for array of length %lld",
             (long long)i, (long long)len);
+}
+
+/* a `case` with no matching clause: CaseClauseError, like Elixir */
+__attribute__((noreturn, cold)) static void defk_no_clause(defk_ctx *ctx, int is_bool, int64_t v) {
+  ctx->err_index = v;
+  ctx->msg[0] = 0;
+  ctx->err = is_bool ? DEFK_E_CASE_BOOL : DEFK_E_CASE_I64;
+  siglongjmp(ctx->jb, 1);
 }
 
 static void defk_release_owned(defk_ctx *ctx) {
@@ -375,6 +385,16 @@ __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c
 /* ---- exceptions ---------------------------------------------------------- */
 
 static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
+  if (ctx->err == DEFK_E_CASE_I64 || ctx->err == DEFK_E_CASE_BOOL) {
+    ERL_NIF_TERM term = ctx->err == DEFK_E_CASE_I64 ? enif_make_int64(env, ctx->err_index)
+                        : enif_make_atom(env, ctx->err_index ? "true" : "false");
+    ERL_NIF_TERM ks[3] = {enif_make_atom(env, "__struct__"), enif_make_atom(env, "__exception__"),
+                          enif_make_atom(env, "term")};
+    ERL_NIF_TERM vs[3] = {enif_make_atom(env, "Elixir.CaseClauseError"), enif_make_atom(env, "true"), term};
+    ERL_NIF_TERM exc;
+    enif_make_map_from_arrays(env, ks, vs, 3, &exc);
+    return enif_raise_exception(env, exc);
+  }
   const char *mod = ctx->err == DEFK_E_ARITH ? "Elixir.ArithmeticError"
                     : ctx->err == DEFK_E_OOB ? "Elixir.Enum.OutOfBoundsError"
                                              : "Elixir.ArgumentError";

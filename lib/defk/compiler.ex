@@ -106,6 +106,8 @@ defmodule Defk.Compiler do
     Process.put(:defk_sps, [])
     Process.put(:defk_loops, [])
     Process.put(:defk_nloops, 0)
+    Process.put(:defk_nhalts, 0)
+    Process.put(:defk_halts_emitted, 0)
 
     vars =
       Map.new(k.params, fn {p, t} ->
@@ -234,6 +236,11 @@ defmodule Defk.Compiler do
     end
   end
 
+  defp lower_stmt({:case, m, [subject, [do: clauses]]}, env) do
+    {ss, arms, cenv} = case_arms(subject, clauses, m, env)
+    {[ss, branch_chain(arms, cenv, m, &elem(lower_stmts(&1, &2), 0))], env}
+  end
+
   defp lower_stmt({:for, m, args} = ast, env) do
     case parse_for(args, m) do
       {quals, nil, body} ->
@@ -347,6 +354,38 @@ defmodule Defk.Compiler do
     {last_cond, _} = List.last(clauses) |> clause_parts()
     last_cond == true || err!(m, "`cond` used as a value must end with a `true ->` clause")
     lower_arms(Enum.map(clauses, &clause_parts/1), "cond", m, env)
+  end
+
+  defp lower_expr({:case, m, [subject, [do: clauses]]}, env) do
+    {ss, arms, cenv} = case_arms(subject, clauses, m, env)
+    {sa, v} = lower_arms(arms, "case", m, cenv)
+    {[ss, sa], v}
+  end
+
+  defp lower_expr({:case, m, _}, _env), do: err!(m, "`case` needs a do block with `pattern -> body` clauses")
+
+  defp lower_expr({{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m, args}, env) do
+    case args do
+      [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}] -> lower_reduce_while(src, init, x, acc, body, env, m)
+      _ -> err!(m, "usage: Enum.reduce_while(enumerable, acc, fn x, acc -> {:cont, acc} | {:halt, acc} end), with one fn clause and no guard")
+    end
+  end
+
+  # Enum.all?/any? with a predicate fn are reduce_while with a bool accumulator
+  defp lower_expr({{:., _, [{:__aliases__, _, [:Enum]}, f]}, m, args}, env) when f in [:all?, :any?] do
+    {src, x, pred} =
+      case args do
+        [src, {:fn, _, [{:->, _, [[x], pred]}]}] -> {src, x, pred}
+        _ -> err!(m, "usage: Enum.#{f}(enumerable, fn x -> boolean end), with one fn clause and no guard")
+      end
+
+    # all?: halt with false at the first false; any?: halt with true at the first true
+    {init, kw} =
+      if f == :all?,
+        do: {true, [do: {:cont, true}, else: {:halt, false}]},
+        else: {false, [do: {:halt, true}, else: {:cont, false}]}
+
+    lower_reduce_while(src, init, x, {:_, m, nil}, {:if, m, [pred, kw]}, env, m)
   end
 
   defp lower_expr({:for, m, args}, env) do
@@ -476,15 +515,21 @@ defmodule Defk.Compiler do
 
   # The clauses of an `if` or `cond` value, the last one `true ->`. Each arm is
   # {cond_ast, body_ast, {stmts, c} | :else, body_stmts, body_val}.
+  # A `case` without a catch-all ends in {:nomatch, stmts} instead, which
+  # raises CaseClauseError.
   defp lower_arms(clauses, name, m, env) do
     arms =
-      Enum.map(clauses, fn {c, body} ->
-        cond = if c == true, do: :else, else: lower_cond(c, env, m)
-        {sb, v} = lower_block(body, env)
-        {c, body, cond, sb, v}
+      Enum.map(clauses, fn
+        {:nomatch, s} ->
+          {nil, nil, :nomatch, s, nil}
+
+        {c, body} ->
+          cond = if c == true, do: :else, else: lower_cond(c, env, m)
+          {sb, v} = lower_block(body, env)
+          {c, body, cond, sb, v}
       end)
 
-    t = branch_type!(Enum.map(arms, &elem(&1, 4)), m)
+    t = branch_type!(for({_, _, _, _, v} <- arms, v, do: v), m)
     tmp = fresh(name, t)
     code = if select?(arms), do: select(arms, t, tmp, m, env), else: chain(arms, tmp)
     {code, val(tmp, t, tmp)}
@@ -498,14 +543,19 @@ defmodule Defk.Compiler do
   # computed the condition, which made `if prime?(i), do: count + 1, else:
   # count` 1.7x slower than C (defk-jp3). The first condition always runs, so
   # it is evaluated once as written and may call kernels.
+  # (A `case` with no catch-all ends in a :nomatch arm and is never a select.)
   defp select?([{_, _, {_, _}, _, _} | later] = arms) do
-    {later, [{_, _, :else, _, _}]} = Enum.split(later, -1)
+    case Enum.split(later, -1) do
+      {later, [{_, _, :else, _, _}]} ->
+        Enum.all?(arms, fn {_, body, _, sb, _} -> IO.iodata_length(sb) == 0 and speculate?(body) end) and
+          Enum.all?(later, fn
+            {c, _, {sc, _}, _, _} -> IO.iodata_length(sc) == 0 and speculate?(c)
+            _ -> false
+          end)
 
-    Enum.all?(arms, fn {_, body, _, sb, _} -> IO.iodata_length(sb) == 0 and speculate?(body) end) and
-      Enum.all?(later, fn
-        {c, _, {sc, _}, _, _} -> IO.iodata_length(sc) == 0 and speculate?(c)
-        _ -> false
-      end)
+      _ ->
+        false
+    end
   end
 
   defp select?(_arms), do: false
@@ -549,6 +599,7 @@ defmodule Defk.Compiler do
   defp chain(arms, tmp) do
     List.foldr(arms, [], fn
       {_, _, :else, sb, v}, _rest -> [sb, "#{tmp} = #{v.c};\n"]
+      {_, _, :nomatch, s, _}, _rest -> s
       {_, _, {sc, c}, sb, v}, rest -> [sc, "if (#{c}) {\n", sb, "#{tmp} = #{v.c};\n} else {\n", rest, "}\n"]
     end)
   end
@@ -803,11 +854,20 @@ defmodule Defk.Compiler do
 
   # Lower the rest of a loop and note whether that body is flat: no nested
   # loop, including one in an inlined kernel call, so one iteration costs a
-  # bounded amount of work.
+  # bounded amount of work. flat :: false | :plain | :exits (a reduce_while
+  # halt jumps out of it).
   defp lower_quals_tracked(rest, env, inner) do
-    before = Process.get(:defk_sp)
+    before = {Process.get(:defk_sp), Process.get(:defk_halts_emitted, 0)}
     body = lower_quals(rest, env, inner)
-    {body, before == Process.get(:defk_sp)}
+
+    flat =
+      case {before, {Process.get(:defk_sp), Process.get(:defk_halts_emitted, 0)}} do
+        {{sp, h}, {sp, h}} -> :plain
+        {{sp, _}, {sp, _}} -> :exits
+        _ -> false
+      end
+
+    {body, flat}
   end
 
   # A loop with a safepoint on every back-edge, except for a flat loop whose
@@ -815,13 +875,15 @@ defmodule Defk.Compiler do
   #   * short (< DEFK_STRIP trips left): the plain loop with no safepoint; its
   #     trips are charged to the budget afterwards and the enclosing loop's
   #     safepoint does the check, so at most DEFK_STRIP flat iterations per
-  #     enclosing iteration go unchecked
+  #     enclosing iteration go unchecked. A loop a reduce_while halt can leave
+  #     (flat == :exits) charges them on entry instead, so the jump past the
+  #     loop cannot skip the charge (it overcharges by under DEFK_STRIP).
   #   * long: strips of DEFK_STRIP iterations, one safepoint per strip
   # Neither inner loop has a safepoint, so clang can vectorise it. Forms that
   # never yield define DEFK_SHORT as 1 and the strip version is dead code.
   #   strip.remaining - trips left after the next one, as uint64
   #   strip.done_at   - the loop's exit test against a given last index
-  defp loop(id, done, strip, true, body) when is_map(strip) do
+  defp loop(id, done, strip, flat, body) when is_map(strip) and flat in [:plain, :exits] do
     r = fresh("rem", {:c, "uint64_t"})
     se = fresh("strip_stop", :i64)
     %{var: i, stop: e, step: k} = strip
@@ -830,7 +892,10 @@ defmodule Defk.Compiler do
     strip_stop = "(int64_t)((uint64_t)#{i} + (uint64_t)(DEFK_STRIP - 1) * (uint64_t)INT64_C(#{k}))"
 
     ["#{r} = #{strip.remaining};\nif (DEFK_SHORT(#{r})) {\n",
-     "while (!(#{done})) {\n", body, "}\nDEFK_TICKS(#{r} + 1)\n} else {\n",
+     if(flat == :exits, do: "DEFK_TICKS(#{r} + 1)\n", else: []),
+     "while (!(#{done})) {\n", body, "}\n",
+     if(flat == :exits, do: [], else: "DEFK_TICKS(#{r} + 1)\n"),
+     "} else {\n",
      "defk_l#{id}:;\nwhile (!(#{done})) {\n#{se} = #{strip.remaining} < DEFK_STRIP ? #{e} : #{strip_stop};\n",
      "while (!(#{strip.done_at.(se)})) {\n", body, "}\n", safepoint("DEFK_STRIP"), "}\n}\n"]
   end
@@ -881,12 +946,56 @@ defmodule Defk.Compiler do
         _ -> err!(m, "`for ..., reduce:` needs exactly one `acc -> body` clause")
       end
 
+    {si, accs} = reduce_accs(pat, init_ast, "reduce: init", env, m)
+
+    inner = fn genv ->
+      {sb, res} = lower_block(body, acc_env(accs, genv))
+      [sb, assign_accs(accs, res, m, "reduce body")]
+    end
+
+    {[si, lower_quals(quals, env, inner)], acc_result(accs)}
+  end
+
+  # Enum.reduce_while(src, init, fn x, acc -> ... end) is the loop of
+  # `for x <- src`, with the accumulator of `for ..., reduce: init`. Every tail
+  # position of the fn body is a literal {:cont, acc} or {:halt, acc} (see
+  # lower_tail), so the next accumulator is assigned where the tuple is
+  # written, and a halt jumps to a label after this loop. That leaves only
+  # this loop (and the loops nested in it), so a halt in a nested
+  # reduce_while ends the inner fold only, as in Elixir. Jumping out of loops
+  # keeps every loop's single entry, which resume relies on (defk-nua).
+  # `for ..., reduce:` with {:cont, acc}/{:halt, acc} is not early exit in
+  # Elixir (the tuple becomes the next accumulator), so it is not one here.
+  defp lower_reduce_while(src, init_ast, x, acc_pat, body, env, m) do
+    {si, accs} = reduce_accs(acc_pat, init_ast, "Enum.reduce_while initial accumulator", env, m)
+    id = Process.get(:defk_nhalts) + 1
+    Process.put(:defk_nhalts, id)
+    label = "defk_halt#{id}"
+
+    leaf = fn tag, v_ast, env ->
+      {s, v} = lower_expr(v_ast, env)
+      assign = assign_accs(accs, v, m, "Enum.reduce_while {:#{tag}, acc}")
+      if tag == :halt do
+        Process.put({:defk_halted, id}, true)
+        Process.put(:defk_halts_emitted, Process.get(:defk_halts_emitted, 0) + 1)
+      end
+      [s, assign, if(tag == :halt, do: "goto #{label};\n", else: [])]
+    end
+
+    inner = fn genv -> lower_tail(body, acc_env(accs, genv), leaf) end
+    loops = lower_quals([{:<-, m, [x, src]}], env, inner)
+    halt = if Process.delete({:defk_halted, id}), do: "#{label}:;\n", else: []
+    {[si, loops, halt], acc_result(accs)}
+  end
+
+  # accumulators [{name, cvar, init_value}] from `acc` or `{a, b, ...}` and init
+  defp reduce_accs(pat, init_ast, what, env, m) do
     {si, init} = lower_expr(init_ast, env)
     inits = Map.get(init, :elems, [init])
     pats = if is_tuple(pat) and tuple_items(pat), do: tuple_items(pat), else: [pat]
 
     length(pats) == length(inits) ||
-      err!(m, "accumulator pattern has #{length(pats)} elements, reduce: init has #{length(inits)}")
+      err!(m, "accumulator pattern has #{length(pats)} elements, #{what} has #{length(inits)}")
 
     accs =
       Enum.zip_with(pats, inits, fn p, v ->
@@ -901,50 +1010,207 @@ defmodule Defk.Compiler do
         {name, fresh(name, v.t), v}
       end)
 
-    init_s = Enum.map(accs, fn {_, c, v} -> "#{c} = #{v.c};\n" end)
+    {[si, Enum.map(accs, fn {_, c, v} -> "#{c} = #{v.c};\n" end)], accs}
+  end
 
-    inner = fn genv ->
-      benv =
-        Enum.reduce(accs, genv, fn {name, c, v}, e ->
-          if String.starts_with?(Atom.to_string(name), "_"), do: e, else: put_var(e, name, val(c, v.t))
-        end)
+  defp acc_env(accs, env) do
+    Enum.reduce(accs, env, fn {name, c, v}, e ->
+      if String.starts_with?(Atom.to_string(name), "_"), do: e, else: put_var(e, name, val(c, v.t))
+    end)
+  end
 
-      {sb, res} = lower_block(body, benv)
-      results = Map.get(res, :elems, [res])
+  defp assign_accs(accs, res, m, what) do
+    results = Map.get(res, :elems, [res])
 
-      length(results) == length(accs) ||
-        err!(m, "reduce body returns #{length(results)} values, accumulator has #{length(accs)}")
+    length(results) == length(accs) ||
+      err!(m, "#{what} has #{length(results)} values, accumulator has #{length(accs)}")
 
-      outs =
-        Enum.zip_with(accs, results, fn {name, _c, v}, r ->
-          coerce!(r, v.t, m, "reduce body result for #{name}")
-        end)
+    outs =
+      Enum.zip_with(accs, results, fn {name, _c, v}, r ->
+        coerce!(r, v.t, m, "#{what} result for #{name}")
+      end)
 
-      assign =
-        case accs do
-          [{_, c, _}] ->
-            "#{c} = #{hd(outs).c};\n"
+    case accs do
+      [{_, c, _}] ->
+        "#{c} = #{hd(outs).c};\n"
 
-          _ ->
-            # compute all new values before assigning (they may read each other)
-            tmps = Enum.map(accs, fn {name, _, v} -> fresh("#{name}_next", v.t) end)
+      _ ->
+        # compute all new values before assigning (they may read each other)
+        tmps = Enum.map(accs, fn {name, _, v} -> fresh("#{name}_next", v.t) end)
 
-            [Enum.zip_with(tmps, outs, &"#{&1} = #{&2.c};\n"),
-             Enum.zip_with(accs, tmps, fn {_, c, _}, t -> "#{c} = #{t};\n" end)]
-        end
+        [Enum.zip_with(tmps, outs, &"#{&1} = #{&2.c};\n"),
+         Enum.zip_with(accs, tmps, fn {_, c, _}, t -> "#{c} = #{t};\n" end)]
+    end
+  end
 
-      [sb, assign]
+  defp acc_result([{_, c, v}]), do: val(c, v.t, c)
+
+  defp acc_result(accs),
+    do: %{t: {:tuple, Enum.map(accs, &elem(&1, 2).t)}, elems: Enum.map(accs, fn {_, c, v} -> val(c, v.t, c) end)}
+
+  # The body of a reduce_while fn: statements, then a tail that is a literal
+  # {:cont, acc} or {:halt, acc}, or an if/cond/case whose branches end in one.
+  # `leaf.(tag, acc_ast, env)` emits a tail tuple.
+  defp lower_tail(ast, env, leaf) do
+    {init, [last]} = Enum.split(exprs(ast), -1)
+
+    {s, env} =
+      Enum.reduce(init, {[], env}, fn e, {acc, env} ->
+        {s, env} = lower_stmt(e, env)
+        {[acc, s], env}
+      end)
+
+    [s, tail_expr(last, env, leaf)]
+  end
+
+  defp tail_expr({tag, v}, env, leaf) when tag in [:cont, :halt], do: leaf.(tag, v, env)
+  defp tail_expr({:__block__, _, _} = b, env, leaf), do: lower_tail(b, env, leaf)
+
+  defp tail_expr({:if, m, [c, kw]}, env, leaf) when is_list(kw) do
+    else_ast = Keyword.get(kw, :else) || err!(m, "an `if` that ends a reduce_while fn needs an else branch returning {:cont, acc} or {:halt, acc}")
+    branch_chain([{c, Keyword.fetch!(kw, :do)}, {true, else_ast}], env, m, &lower_tail(&1, &2, leaf))
+  end
+
+  defp tail_expr({:cond, m, [[do: clauses]]}, env, leaf) do
+    arms = Enum.map(clauses, &clause_parts/1)
+    match?({true, _}, List.last(arms)) || err!(m, "`cond` used as a value must end with a `true ->` clause")
+    branch_chain(arms, env, m, &lower_tail(&1, &2, leaf))
+  end
+
+  defp tail_expr({:case, m, [subject, [do: clauses]]}, env, leaf) do
+    {ss, arms, cenv} = case_arms(subject, clauses, m, env)
+    [ss, branch_chain(arms, cenv, m, &lower_tail(&1, &2, leaf))]
+  end
+
+  defp tail_expr(other, _env, _leaf) do
+    err!(meta(other), "a reduce_while fn must return a literal {:cont, acc} or {:halt, acc} in every branch, got: #{Macro.to_string(other)}")
+  end
+
+  # An if/else chain over [{cond_ast | true, body_ast} | {:nomatch, stmts}],
+  # each body lowered by `lower_body.(body_ast, env)`.
+  defp branch_chain(arms, env, m, lower_body) do
+    arms
+    |> Enum.map(fn
+      {:nomatch, s} -> {:nomatch, s}
+      {true, body} -> {true, lower_body.(body, env)}
+      {c, body} -> {lower_cond(c, env, m), lower_body.(body, env)}
+    end)
+    |> List.foldr([], fn
+      {:nomatch, s}, _ -> s
+      {true, sb}, _ -> sb
+      {{sc, c}, sb}, rest -> [sc, "if (#{c}) {\n", sb, "} else {\n", rest, "}\n"]
+    end)
+  end
+
+  # ----------------------------------------------------------------- case --
+  # `case` on an i64 or bool. Patterns: integer literals (bool: true/false),
+  # `^pinned`, `_`, or a variable that binds the subject; each with an
+  # optional guard. Lowered to [{cond_ast | true, body_ast}] for lower_arms
+  # (a value; pure-arithmetic arms become a select) or branch_chain (a
+  # statement or a reduce_while tail). The clauses test in order, like an
+  # if/else chain; clang turns literal tests into a switch where that pays.
+  # Like Elixir, a value no clause matches raises CaseClauseError, so a
+  # catch-all is not required. Clauses after one that always matches are
+  # unreachable and dropped. Returns {stmts, arms, env with the subject bound}.
+  defp case_arms(subject, clauses, m, env) do
+    {ss, sv} = lower_expr(subject, env)
+    sv.t in [:i64, :bool] || err!(m, "`case` subject must be i64 or bool, got #{fmt(sv.t)}")
+
+    c = fresh("case", sv.t)
+    # a name no Elixir variable can have, bound to the subject evaluated once
+    name = :"defk case #{c}"
+    env = put_var(env, name, Map.merge(Map.take(sv, @facts), %{c: c, t: sv.t, owned: false, var: c}))
+    subj = {name, [], nil}
+
+    {arms, exhaustive?} =
+      Enum.reduce_while(clauses, {[], MapSet.new()}, fn clause, {arms, seen} ->
+        {pat, guard, body, cm} =
+          case clause do
+            {:->, cm, [[{:when, _, [pat, guard]}], body]} -> {pat, guard, body, cm}
+            {:->, cm, [[pat], body]} -> {pat, nil, body, cm}
+            {:->, cm, _} -> err!(cm, "a `case` clause takes one pattern")
+          end
+
+        {test, rename} = case_pattern(pat, sv.t, subj, cm)
+        guard = guard && rename.(guard_safe!(guard, cm))
+        body = rename.(body)
+        seen = if guard == nil and match?({:lit, _, _}, test), do: MapSet.put(seen, elem(test, 1)), else: seen
+        always? = guard == nil and (test == :any or MapSet.equal?(seen, MapSet.new([true, false])))
+
+        cond_ast =
+          cond do
+            always? -> true
+            test == :any -> guard
+            guard == nil -> elem(test, 2)
+            true -> {:and, cm, [elem(test, 2), guard]}
+          end
+
+        arms = [{cond_ast, body} | arms]
+        if always?, do: {:halt, {arms, true}}, else: {:cont, {arms, seen}}
+      end)
+
+    nomatch = "defk_no_clause(ctx, #{if sv.t == :bool, do: 1, else: 0}, #{c});\n"
+    # exhaustive? is the set of literals seen unless a clause always matches
+    arms = Enum.reverse(arms) ++ if(exhaustive? == true, do: [], else: [{:nomatch, nomatch}])
+    {[ss, "#{c} = #{sv.c};\n"], arms, env}
+  end
+
+  # {test, rename}: test is :any or {:lit | :pin, value, cond_ast}; rename
+  # renames a bound variable to the subject in the guard and the body
+  defp case_pattern(pat, t, subj, m) do
+    same = & &1
+    lit_cond = fn v -> {:===, m, [subj, v]} end
+
+    case {pat, t} do
+      {n, :i64} when is_integer(n) ->
+        {{:lit, n, lit_cond.(n)}, same}
+
+      {{:-, _, [n]}, :i64} when is_integer(n) ->
+        {{:lit, -n, lit_cond.(-n)}, same}
+
+      {b, :bool} when is_boolean(b) ->
+        {{:lit, b, lit_cond.(b)}, same}
+
+      {{:^, _, [{v, _, ctx} = var]}, _} when is_atom(v) and is_atom(ctx) ->
+        {{:pin, v, {:===, m, [subj, var]}}, same}
+
+      {{v, _, ctx}, _} when is_atom(v) and is_atom(ctx) ->
+        if String.starts_with?(Atom.to_string(v), "_"),
+          do: {:any, same},
+          else: {:any, &rename_var(&1, v, subj)}
+
+      {p, _} when is_integer(p) or is_boolean(p) ->
+        err!(m, "`case` pattern #{inspect(p)} can never match a #{fmt(t)} subject")
+
+      {p, _} ->
+        err!(m, "unsupported `case` pattern #{Macro.to_string(p)}; use an integer literal, true/false, ^var, _ or a variable, with an optional guard")
+    end
+  end
+
+  # every occurrence of variable `name` in `ast` (a consistent renaming, so
+  # rebinding and shadowing inside keep their meaning)
+  defp rename_var(ast, name, {to, _, _}) do
+    Macro.prewalk(ast, fn
+      {^name, meta, ctx} when is_atom(ctx) -> {to, meta, nil}
+      other -> other
+    end)
+  end
+
+  # Elixir allows only guard-safe expressions in guards: no kernel calls,
+  # indexing or `&&`. An error in a defk guard (overflow, rem by zero) raises,
+  # where Elixir would fail the clause.
+  @guard_ops [:+, :-, :*, :/, :==, :!=, :===, :!==, :<, :>, :<=, :>=, :and, :or, :not,
+              :div, :rem, :abs, :trunc, :round, :min, :max]
+
+  defp guard_safe!(guard, m) do
+    case guard do
+      x when is_number(x) or is_boolean(x) -> :ok
+      {v, _, ctx} when is_atom(v) and is_atom(ctx) -> :ok
+      {op, _, args} when op in @guard_ops and is_list(args) -> Enum.each(args, &guard_safe!(&1, m))
+      other -> err!(Keyword.put_new(meta(other), :line, m[:line]), "#{Macro.to_string(other)} is not allowed in a `case` guard; guards may use variables, literals, arithmetic, comparisons, and/or/not, div, rem, abs, trunc, round, min and max")
     end
 
-    loops = lower_quals(quals, env, inner)
-
-    result =
-      case accs do
-        [{_, c, v}] -> val(c, v.t, c)
-        _ -> %{t: {:tuple, Enum.map(accs, &elem(&1, 2).t)}, elems: Enum.map(accs, fn {_, c, v} -> val(c, v.t, c) end)}
-      end
-
-    {[si, init_s, loops], result}
+    guard
   end
 
   # `weight` back-edges are charged to the budget at once

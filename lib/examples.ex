@@ -86,6 +86,24 @@ defmodule Examples.Kernels do
     end
   end
 
+  # trial division that stops at the first divisor (Enum.all? exits early);
+  # demo.exs and bench/native.c compare it with the same algorithm in Elixir and C
+  defk count_primes_early(n :: i64) :: i64 do
+    for i <- 2..n//1, reduce: 0 do
+      count -> if prime_early?(i), do: count + 1, else: count
+    end
+  end
+
+  defk count_primes_early_noyield(n :: i64) :: i64, yield: false do
+    for i <- 2..n//1, reduce: 0 do
+      count -> if prime_early?(i), do: count + 1, else: count
+    end
+  end
+
+  defk prime_early?(x :: i64) :: bool do
+    Enum.all?(2..trunc(:math.sqrt(x))//1, fn d -> rem(x, d) != 0 end)
+  end
+
   # error paths
   defk oob(a :: [f64]) :: f64 do
     a[len(a)]

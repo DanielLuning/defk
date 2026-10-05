@@ -21,6 +21,17 @@ defmodule Bench do
   def ex_prime?(x), do: Enum.reduce(2..trunc(:math.sqrt(x))//1, true, &(&2 and rem(x, &1) != 0))
   def ex_count_primes(n), do: Enum.count(2..n//1, &ex_prime?/1)
 
+  # count_primes_early: stop at the first divisor. Enum.all? is the kernel's
+  # code; tail recursion with guards was the fastest Elixir tried (Enum.all?
+  # 1.7x, Enum.reduce_while 3x slower; d * d > x instead of sqrt: the same)
+  def ex_prime_early?(x), do: Enum.all?(2..trunc(:math.sqrt(x))//1, &(rem(x, &1) != 0))
+  def ex_count_primes_early(n), do: Enum.count(2..n//1, &ex_prime_early?/1)
+  def ex_prime_rec?(x), do: no_divisor?(x, 2, trunc(:math.sqrt(x)))
+  defp no_divisor?(_x, d, limit) when d > limit, do: true
+  defp no_divisor?(x, d, _limit) when rem(x, d) == 0, do: false
+  defp no_divisor?(x, d, limit), do: no_divisor?(x, d + 1, limit)
+  def ex_count_primes_rec(n), do: Enum.count(2..n//1, &ex_prime_rec?/1)
+
   # boundary micro-benchmark: compiled loops, remote calls
   def eadd(a, b), do: a + b
   def loop_elixir(0, acc), do: acc
@@ -75,6 +86,9 @@ counts = for <<c::64-signed-native <- hist>>, do: c
 ref = bytes |> :binary.bin_to_list() |> Enum.frequencies()
 check.("histogram ([u8] in, [i64] out)", counts == Enum.map(0..255, &Map.get(ref, &1, 0)))
 check.("count_primes(20_000)", K.count_primes(20_000) == Bench.ex_count_primes(20_000))
+check.("count_primes_early(20_000) (Enum.all? exits early)",
+      K.count_primes_early(20_000) == Bench.ex_count_primes_early(20_000) and
+        K.count_primes_early(20_000) == Bench.ex_count_primes_rec(20_000))
 <<_::8, unaligned::binary>> = <<0>> <> bx
 check.("unaligned sub-binary input (copied once)", K.sum(unaligned) == K.sum(bx))
 
@@ -88,7 +102,7 @@ pn = 1_000_000
 native = Path.join(System.tmp_dir!(), "defk_native_bench")
 {_, 0} = System.cmd("cc", ["-O3", "-o", native, "bench/native.c", "-lm"])
 {out, 0} = System.cmd(native, ["#{n}", "#{pn}"], stderr_to_stdout: false)
-[c_sum, c_dot, c_primes] = out |> String.split() |> Enum.map(&String.to_float/1)
+[c_sum, c_dot, c_primes, c_primes_early] = out |> String.split() |> Enum.map(&String.to_float/1)
 
 ns = fn us -> us * 1000 / n end
 fmt = fn x -> :erlang.float_to_binary(x * 1.0, decimals: 2) end
@@ -116,6 +130,16 @@ row.("count_primes(1M)  defk, yielding      ms", fmt.(t_p))
 row.("count_primes(1M)  defk, yield: false  ms", fmt.(t_pn))
 row.("count_primes(1M)  plain C             ms", fmt.(c_primes))
 row.("safepoint overhead (yielding vs not)", "#{fmt.((t_p / t_pn - 1) * 100)}%")
+
+t_q = Bench.best(3, fn -> K.count_primes_early(pn) end) / 1000
+t_qn = Bench.best(3, fn -> K.count_primes_early_noyield(pn) end) / 1000
+t_qe = Bench.best(3, fn -> Bench.ex_count_primes_early(pn) end) / 1000
+t_qr = Bench.best(3, fn -> Bench.ex_count_primes_rec(pn) end) / 1000
+row.("count_primes_early(1M)  Elixir Enum.all?   ms", fmt.(t_qe))
+row.("count_primes_early(1M)  Elixir recursion   ms", fmt.(t_qr))
+row.("count_primes_early(1M)  defk, yielding     ms", fmt.(t_q))
+row.("count_primes_early(1M)  defk, yield: false ms", fmt.(t_qn))
+row.("count_primes_early(1M)  plain C            ms", fmt.(c_primes_early))
 
 # ---------------------------------------------------------------------------
 h.("3. boundary cost per call (1M calls, compiled loop)")
