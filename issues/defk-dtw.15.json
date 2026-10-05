@@ -9,9 +9,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Per 'State kept between kernel calls' (defk-dtw.9): confirm that ex_data_sketch's Rust NIF also copies the HLL register binary per call (expected, since BEAM binaries are immutable), so the small-size comparison is like for like.",
+      "timestamp": "2026-10-05T20:29:56Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Plan the catalog build for the six target workloads",
   "type": "task",
-  "updated_at": "2026-10-05T19:56:14Z"
+  "updated_at": "2026-10-05T20:29:56Z"
 }
