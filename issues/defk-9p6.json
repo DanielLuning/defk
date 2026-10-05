@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T11:18:39Z",
+  "description": "A growing directory of self-contained use-case scripts (mix_install_examples style: one .exs per use case, runnable with 'elixir examples/\u003cname\u003e.exs'). Each example implements a real use case in pure Elixir and with defk, checks they agree, measures both, and prints a machine-readable DEFK_RESULT line with a verdict. examples/run_all.exs aggregates them into a scoreboard. The catalog must include poor fits too, so the docs can say clearly what defk is good at and what not to use it for.",
+  "id": "defk-9p6",
+  "labels": [],
+  "priority": 1,
+  "status": "open",
+  "title": "Example catalog: where defk is (and is not) the right tool",
+  "type": "epic",
+  "updated_at": "2026-10-05T11:18:39Z"
+}
