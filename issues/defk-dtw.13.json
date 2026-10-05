@@ -11,9 +11,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): [T] is a binary of native-endian T; reads follow the bitstring match (f32 widens to f64 with Elixir's rounding, narrow ints widen to i64); a write that doesn't fit its type raises (a limit; Elixir would wrap or store inf). PCM clipping is an explicit min/max.",
+      "timestamp": "2026-10-05T20:25:40Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "What do narrow element types ([f32], [i16], [i32]) mean in a kernel?",
   "type": "task",
-  "updated_at": "2026-10-05T19:56:14Z"
+  "updated_at": "2026-10-05T20:25:40Z"
 }
