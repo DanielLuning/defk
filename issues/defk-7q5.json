@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-05T13:41:49Z",
@@ -7,8 +7,8 @@
   "id": "defk-7q5",
   "labels": [],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Compile pure-arithmetic cond arms as a select",
   "type": "task",
-  "updated_at": "2026-10-05T13:41:49Z"
+  "updated_at": "2026-10-05T14:07:41Z"
 }
