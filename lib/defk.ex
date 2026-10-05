@@ -1,6 +1,6 @@
 defmodule Defk do
   @moduledoc """
-  PROTOTYPE. `defk` compiles a typed subset of Elixir to a native NIF.
+  `defk` compiles a typed subset of Elixir to a native NIF.
 
       defmodule Stats do
         use Defk
@@ -55,7 +55,7 @@ defmodule Defk do
       @on_load :__defk_load__
       @doc false
       def __defk_load__, do: :erlang.load_nif(unquote(String.to_charlist(lib)), 0)
-      @doc "Generated C source (PROTOTYPE introspection)."
+      @doc "Generated C source."
       def __defk_source__, do: unquote(c_src)
       @doc "Path of the compiled NIF library."
       def __defk_lib__, do: unquote(lib <> ".so")

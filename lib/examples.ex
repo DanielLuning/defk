@@ -1,5 +1,5 @@
 defmodule Examples.Kernels do
-  @moduledoc "PROTOTYPE example kernels, each exercising one defk feature."
+  @moduledoc "Example kernels, each exercising one defk feature."
   use Defk
 
   # boundary cost: smallest possible kernel

@@ -1,5 +1,5 @@
 /*
- * PROTOTYPE — defk runtime. Included once by every generated kernel NIF.
+ * defk runtime. Included once by every generated kernel NIF.
  *
  * Responsibilities:
  *   - packed array views over BEAM binaries (zero-copy in, owned binaries out)

@@ -1,6 +1,6 @@
-# defk — PROTOTYPE
+# defk
 
-> Throwaway code. It answers one question: **can a typed subset of Elixir compile
+> defk explores one question: **can a typed subset of Elixir compile
 > to native code that runs at C speed, with a cheap boundary, while keeping the
 > BEAM's promises (preemption, isolation, cleanup)?**
 
@@ -46,7 +46,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 - Operators: `a[i]`, `out[i] = v` (only on `alloc/2` arrays), `+ - * /`, `div`, `rem`, comparisons, `and`/`or`/`not`.
 - Builtins: `len`, `min`, `max`, `abs`, `float`, `trunc`, `round`, `sqrt`, `exp`, `log`, `sin`, `cos`, `pow` (also as `:math.*`), plus calls to other kernels.
 
-## Design decisions the prototype validated
+## Design decisions the benchmarks validated
 
 1. **Arrays are views over binaries.** Inputs are zero-copy. Outputs are `enif_alloc_binary` buffers handed over with `enif_make_binary`. Unaligned sub-binaries are copied once.
 2. **Elixir semantics where they're cheap:**
@@ -80,7 +80,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 
 ## Known limitations
 
-These are deliberate, to keep the prototype small.
+These are deliberate, to keep defk small for now.
 
 - Kernels called from other kernels can't yield; only the entry kernel's loops yield.
 - No recursion (rejected at compile time, so native stack depth stays bounded).

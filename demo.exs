@@ -1,4 +1,4 @@
-# PROTOTYPE demo: `mix run demo.exs`
+# defk demo: `mix run demo.exs`
 # Answers: does defk get native speed, what does the boundary cost, and does it
 # keep the BEAM promises (preemption, isolation, cleanup)?
 
@@ -53,7 +53,7 @@ row = fn label, value -> IO.puts("  #{String.pad_trailing(label, 44)} #{value}")
 check = fn label, ok -> row.(label, if(ok, do: "ok", else: "\e[31mMISMATCH\e[0m")) end
 close? = fn a, b -> abs(a - b) <= 1.0e-9 * max(1.0, abs(b)) end
 
-IO.puts("defk PROTOTYPE demo  (OTP #{System.otp_release()}, #{System.schedulers_online()} schedulers)")
+IO.puts("defk demo  (OTP #{System.otp_release()}, #{System.schedulers_online()} schedulers)")
 IO.puts("generated C: #{K.__defk_lib__() |> String.replace_suffix(".so", ".c")}")
 
 # ---------------------------------------------------------------------------

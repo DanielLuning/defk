@@ -1,6 +1,6 @@
 defmodule Defk.Build do
   @moduledoc false
-  # PROTOTYPE: compile generated C with the system C compiler, cached by hash.
+  # Compile generated C with the system C compiler, cached by hash.
 
   @priv Path.expand("../../priv", __DIR__)
 

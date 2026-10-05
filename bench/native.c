@@ -1,4 +1,4 @@
-/* PROTOTYPE baseline: the same algorithms as Examples.Kernels in plain C,
+/* Baseline: the same algorithms as Examples.Kernels in plain C,
  * built with the same flags (-O3), no BEAM involved.
  * usage: native N PRIMES_N   -> prints "sum_ns dot_ns primes_ms" */
 #include <math.h>

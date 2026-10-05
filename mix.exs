@@ -1,4 +1,4 @@
-# PROTOTYPE: throwaway exploration of a typed native-kernel subset of Elixir.
+# defk: a typed native-kernel subset of Elixir.
 defmodule Defk.MixProject do
   use Mix.Project
 
