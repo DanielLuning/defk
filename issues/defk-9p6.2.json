@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T11:18:39Z",
+  "description": "CRC32/xxHash-style hashing is a common NIF reason. Blocked on defk lacking band/bor/bxor/bsl/bsr. Compare with :erlang.crc32 (a BIF) to show when the BEAM already has a native answer.",
+  "id": "defk-9p6.2",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 3,
+  "status": "open",
+  "title": "Example: checksum/hash over binaries (needs bitwise ops in defk)",
+  "type": "task",
+  "updated_at": "2026-10-05T11:18:39Z"
+}
