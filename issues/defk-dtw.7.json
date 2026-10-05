@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-dtw.6"
+  ],
   "blocks": [
     "defk-i2e",
     "defk-q1c"
@@ -16,5 +18,5 @@
   "status": "open",
   "title": "What is the one rule a kernel author keeps in their head?",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:44Z"
+  "updated_at": "2026-10-05T18:48:48Z"
 }
