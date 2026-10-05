@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T20:20:29Z",
+  "description": "Implement the compile error format decided in \"What does a good kernel compile error look like?\" (defk-dtw.8; prototype on branch prototype/compile-errors, style D).\n\n- One template for every rejection: Elixir diagnostic frame with file:line:col and a caret under the whole construct, then `why:`, `hint:` (with a rewrite where one exists), and `(defk \u003ccode\u003e: docs/language.md#\u003ccode\u003e)`.\n- Audit all 61 `err!` sites in lib/defk/compiler.ex against it; give each a stable slug code. Fix the weak ones: \"unsupported expression in kernel: ...\" (map and string literals currently report no line and echo `:a` / `\"hello\"`), \"cannot match ...\", \"empty block\".\n- Name the Elixir construct as written; \"not in the kernel subset\" vs \"not supported yet\"; no ticket IDs in messages.\n- Collect every rejection in a module (cap 10), suppressing errors caused by an earlier one.\n- Each code's failing example and suggested rewrite become tests (the rewrite must compile).\n\nDone when every err! site follows the template with a code, the six prototype cases print as style D, and the tests above pass.",
+  "id": "defk-vku",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Adopt the kernel compile error format",
+  "type": "task",
+  "updated_at": "2026-10-05T20:20:29Z"
+}
