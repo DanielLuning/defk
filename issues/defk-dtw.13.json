@@ -19,11 +19,15 @@
     {
       "text": "Note from 'Should kernels offer opt-in wrapping integer arithmetic for hashes?' (defk-dtw.10): u64 and [u64] are decided there; this ticket covers [f32], [i16], [i32] (and any other narrow types).",
       "timestamp": "2026-10-05T20:36:13Z"
+    },
+    {
+      "text": "Resolution (builds on the one rule's array decision in defk-dtw.7):\n- Types added: [i16], [i32], [f32] only (demand-driven: PCM mixing, cosine top-k), beside [u8], [i64], [f64] and the decided [u64]. Other widths (i8, u16, u32) go under 'Where defk could grow'; the unknown-type compile error lists the supported set.\n- Element types only: no narrow scalars. Reads widen as Elixir's bitstring match (i16/i32 -\u003e i64, f32 -\u003e f64 exactly).\n- f32 writes round to nearest as \u003c\u003cv::float-32-native\u003e\u003e does; a value that rounds to +-inf raises (a limit: Elixir stores inf). Underflow to 0.0 and subnormals follow Elixir silently (same result; neither limit nor divergence). Integer writes out of range raise (as decided).\n- Arithmetic is never done in f32; all float arithmetic is f64. The cosine top-k row records the cost against the NIF.\n- inf/NaN bit patterns in input arrays ([f32] and existing [f64]): Elixir mode's match fails, so the kernel must raise; handed to 'Decide policy for inf/NaN inside kernels' (defk-q1c).\n- Native endianness (matches existing types, Elixir mode, Nx binaries); one line in docs/language.md.\n- Callers use plain binaries and documented bitstring forms or Nx; no helper module. A binary whose size isn't a multiple of the element width raises ArgumentError at the call.\n- PCM clipping max(min(v, 32767), -32768) into [i16] must compile with no write check via the existing min/max range facts; a done criterion for the build.\nChecked on OTP 29: \u003c\u003c0.1::float-32\u003e\u003e rounds; \u003c\u003c1.0e40::float-32\u003e\u003e and just-above-fmax store +inf; 1.0e-50 stores 0.0; 1.0e-40 keeps a subnormal; matching inf/NaN bits as float-32 fails.\nBuild handed off as [Add [i16], [i32] and [f32] element types](defk-4ai). Glossary: 'Element type' added to CONTEXT.md.",
+      "timestamp": "2026-10-05T21:08:05Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "What do narrow element types ([f32], [i16], [i32]) mean in a kernel?",
   "type": "task",
-  "updated_at": "2026-10-05T21:03:00Z"
+  "updated_at": "2026-10-05T21:08:05Z"
 }
