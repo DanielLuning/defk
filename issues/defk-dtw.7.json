@@ -6,7 +6,6 @@
   "blocks": [
     "defk-dtw.10",
     "defk-dtw.13",
-    "defk-dtw.14",
     "defk-i2e",
     "defk-q1c"
   ],
@@ -21,5 +20,5 @@
   "status": "open",
   "title": "What is the one rule a kernel author keeps in their head?",
   "type": "task",
-  "updated_at": "2026-10-05T19:56:14Z"
+  "updated_at": "2026-10-05T19:56:20Z"
 }
