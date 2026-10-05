@@ -7,6 +7,12 @@
   "id": "defk-9p6.6",
   "labels": [],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Lowered to P3 by 'Choose the target workload set' (defk-dtw.5): this is now a supporting example and doesn't count towards the verdict.",
+      "timestamp": "2026-10-05T19:56:14Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Optimise the Elixir baseline: rolling_stats",
