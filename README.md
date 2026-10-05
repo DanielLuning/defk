@@ -11,6 +11,14 @@ mix run demo.exs        # correctness, throughput vs Elixir and plain C, boundar
 
 Needs Elixir ≥ 1.18 and a C compiler (`cc`, or set `CC`).
 
+## Real-world example
+
+[`examples/fuzzy_search`](examples/fuzzy_search) is a typo-tolerant search
+service (Levenshtein top-k over 234k words, Plug + Bandit), the kind of code
+teams usually write a NIF for. Under saturating load, defk serves 4.3× the
+requests of pure Elixir while keeping `/health` latency at Elixir levels. An
+equivalent blocking NIF is faster but pushes `/health` p99 to ~80 ms.
+
 ## What it is
 
 ```elixir
