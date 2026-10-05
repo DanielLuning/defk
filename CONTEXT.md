@@ -36,6 +36,10 @@ _Avoid_: wrapping mode, unchecked arithmetic
 The type of each value in a kernel array, which is a binary of native-endian values of that type. Narrow element types (`u8`, `i16`, `i32`, `f32`) exist only inside arrays: reading one gives an `i64` or `f64`, and a write must fit the element type or raise.
 _Avoid_: array type, dtype
 
+**Bitstring accumulator**:
+A kernel local built only by appending integer segments, `acc = <<acc::bitstring, v::size(n)>>`, starting from `<<>>`, and returned to the caller as a bitstring. It is how a kernel produces output whose length depends on the data. Like an array write, a segment value that doesn't fit its width raises.
+_Avoid_: bit buffer, bit writer, growable output
+
 **Elixir mode**:
 A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir. It is never a fallback in production and never a baseline.
 _Avoid_: fallback, interpreter, pure mode
