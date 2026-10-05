@@ -24,11 +24,17 @@ A documented case where a kernel's result differs from what the same code would 
 ## Measurement
 
 **Target workload**:
-A job that people write hand-written NIFs for today, chosen as a yardstick for what the kernel subset must express.
+A job that people write hand-written NIFs for today, reproduced from a named package and measured against that package's Elixir version and its NIF. The target workloads are the yardstick for what the kernel subset must express.
 _Avoid_: use case, benchmark
 
+**Supporting example**:
+A catalog entry that isn't tied to a real NIF package. It illustrates defk but doesn't count towards the verdict.
+
+**Expansion candidate**:
+A job that could become defk territory after research or a language or runtime addition, listed in the verdict but not a target workload.
+
 **Catalog**:
-The set of target workloads, each written in Elixir and as a kernel, checked for agreement and measured end to end.
+The target workloads and supporting examples, each written in Elixir and as a kernel, checked for agreement and measured end to end.
 _Avoid_: examples, benchmark suite
 
 **Baseline**:
