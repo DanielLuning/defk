@@ -9,9 +9,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): the generators must deliberately cover out-of-range array writes, i64 overflow boundaries, inf/NaN-producing operations and aliasing patterns; these tests replace a manual audit of differences.",
+      "timestamp": "2026-10-05T20:25:40Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "How are kernels checked against Elixir mode?",
   "type": "task",
-  "updated_at": "2026-10-05T20:09:53Z"
+  "updated_at": "2026-10-05T20:25:40Z"
 }
