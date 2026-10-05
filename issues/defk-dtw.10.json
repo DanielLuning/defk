@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T18:55:35Z",
+  "description": "## Question\n\nHash and checksum workloads (CRC, HyperLogLog, Bloom, FNV/xxhash-style mixing) rely on wrapping unsigned 64-bit arithmetic, but defk raises ArithmeticError on i64 overflow to keep Elixir's results. Do kernels get an explicit opt-in (e.g. wrapping ops, a u64 type, or Elixir's band(x * y, mask) idiom recognised and compiled to a wrapping multiply), and how does that fit the one rule a kernel author keeps in their head? Source: the NIF survey (docs/research/nif-workloads.md on research/nif-workloads).",
+  "id": "defk-dtw.10",
+  "labels": [],
+  "parent": "defk-dtw",
+  "priority": 2,
+  "status": "open",
+  "title": "Should kernels offer opt-in wrapping integer arithmetic for hashes?",
+  "type": "task",
+  "updated_at": "2026-10-05T18:55:35Z"
+}
