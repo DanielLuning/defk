@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T21:21:32Z",
+  "description": "10 ms chunk / 1 s, N streams. membrane_audio_mix_plugin 0.16.5: baseline ClipPreventingAdder, NIF column NativeAdder (C, built locally by bundlex/unifex; unifex resource state). Reproduce ClipPreventingAdder's job (scale down on overflow, hold samples to the next zero crossing), not hard clipping; the hard-clip Adder has no native twin and is a header mention only. Kernel does the inner sum/scale loop; the held-back queue and scale state stay in Elixir (defk-dtw.9). Call init/mix/flush directly (RawAudio via struct!/2 after Mix.install). Agreement: concatenated mix+flush output byte-identical.\n\nEvidence bar (from defk-dtw.4/defk-dtw.15): script examples/\u003cname\u003e.exs with Mix.install of the pinned anchor package; the anchor's Elixir version is the first baseline and must be optimised further in Elixir before the verdict counts (what was tried listed in the header; baseline: :optimized); realistic size declared in the header before any numbers; workload verdict at the realistic size, other size beside; ~6-point geometric sweep with crossover (smallest size where defk \u003e= 2x, or none), skipped if a large run exceeds ~1 min; NIF timing and responsiveness (max and p99 1 ms tick gap, one scheduler, large size, for Elixir/defk/NIF) via Defk.Bench.report/1; Elixir, defk and NIF outputs must agree (failure fails the script); quiet-machine run_all.exs; row added to examples/README.md.",
+  "id": "defk-9p6.14",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 2,
+  "status": "open",
+  "title": "Target workload: PCM mixing with clip prevention vs Membrane NativeAdder",
+  "type": "task",
+  "updated_at": "2026-10-05T21:21:32Z"
+}
