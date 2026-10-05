@@ -11,13 +11,21 @@ mix run demo.exs        # correctness, throughput vs Elixir and plain C, boundar
 
 Needs Elixir ≥ 1.18 and a C compiler (`cc`, or set `CC`).
 
-## Real-world example
+## Examples: what defk is good at, and what not to use it for
 
-[`examples/fuzzy_search`](examples/fuzzy_search) is a typo-tolerant search
-service (Levenshtein top-k over 234k words, Plug + Bandit), the kind of code
-teams usually write a NIF for. Under saturating load, defk serves 4.3× the
-requests of pure Elixir while keeping `/health` latency at Elixir levels. An
-equivalent blocking NIF is faster but pushes `/health` p99 to ~80 ms.
+[`examples/`](examples) is a growing catalog of real use cases, each written in
+plain Elixir and in defk, checked for agreement and measured end to end.
+`elixir examples/run_all.exs` prints the scoreboard. So far:
+
+- **Good fits:**
+  - rolling sensor statistics: 165×
+  - nearest of 500k locations: 43×
+  - 1080p image blur: 28×
+  - a fuzzy-search web service: 4.3× req/s, and `/health` latency stays at pure-Elixir levels, while a blocking NIF pushes it to ~80 ms p99
+- **Poor fits:**
+  - data that arrives as lists: 4× slower
+  - one kernel call per element: 2× slower
+  - maps and strings: not expressible
 
 ## What it is
 
