@@ -15,11 +15,15 @@
     {
       "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): [T] is a binary of native-endian T; reads follow the bitstring match (f32 widens to f64 with Elixir's rounding, narrow ints widen to i64); a write that doesn't fit its type raises (a limit; Elixir would wrap or store inf). PCM clipping is an explicit min/max.",
       "timestamp": "2026-10-05T20:25:40Z"
+    },
+    {
+      "text": "Note from 'Should kernels offer opt-in wrapping integer arithmetic for hashes?' (defk-dtw.10): u64 and [u64] are decided there; this ticket covers [f32], [i16], [i32] (and any other narrow types).",
+      "timestamp": "2026-10-05T20:36:13Z"
     }
   ],
   "priority": 2,
   "status": "open",
   "title": "What do narrow element types ([f32], [i16], [i32]) mean in a kernel?",
   "type": "task",
-  "updated_at": "2026-10-05T20:25:40Z"
+  "updated_at": "2026-10-05T20:36:13Z"
 }
