@@ -5,11 +5,13 @@
   "created": "2026-10-05T19:56:13Z",
   "description": "## Question\n\nGorilla XOR-float encoding (a target workload, see \"Choose the target workload set\") writes a bitstream whose length depends on the data, and needs f64 \u003c-\u003e i64 bit reinterpretation. Kernels today return fixed-size `alloc`'d arrays. Which form fits defk: a worst-case `alloc` plus a returned bit length, a growable output buffer, a construct mirroring Elixir's `\u003c\u003cx::size(n)\u003e\u003e` building, or none (the workload ends out_of_scope)? What does each cost in the runtime (yield/resume with a partially built output) and in the one rule?",
   "id": "defk-dtw.14",
-  "labels": [],
+  "labels": [
+    "wayfinder:grilling"
+  ],
   "parent": "defk-dtw",
   "priority": 2,
   "status": "open",
   "title": "Can a kernel produce variable-length bit output, and in what form?",
   "type": "task",
-  "updated_at": "2026-10-05T19:56:13Z"
+  "updated_at": "2026-10-05T19:56:14Z"
 }
