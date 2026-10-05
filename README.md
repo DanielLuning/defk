@@ -7,6 +7,7 @@
 ```bash
 mix run demo.exs        # correctness, throughput vs Elixir and plain C, boundary cost,
                         # preemption on one scheduler, failure isolation
+mix test                # resumed kernels match yield: false, incl. a forced yield at every clock read
 ```
 
 Needs Elixir ≥ 1.18 and a C compiler (`cc`, or set `CC`).

@@ -53,6 +53,8 @@ static ErlNifResourceType *defk_frame_rt;
 static _Atomic long defk_stat_frames_live = 0;
 static _Atomic long defk_stat_promotions = 0;
 static _Atomic long defk_stat_yields = 0;
+/* testing: yield at every clock read, so every safepoint's resume path runs */
+static _Atomic int defk_force_yields = 0;
 
 __attribute__((noreturn, cold, format(printf, 3, 4))) static void
 defk_fail(defk_ctx *ctx, int kind, const char *fmt, ...) {
@@ -315,6 +317,7 @@ static void defk_clock_init(defk_clock *c) {
 }
 
 __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c, int64_t budget) {
+  if (atomic_load_explicit(&defk_force_yields, memory_order_relaxed)) return 0;
   ErlNifTime now = enif_monotonic_time(ERL_NIF_USEC);
   ErlNifTime dt = now - c->last;
   c->last = now;
@@ -363,6 +366,12 @@ static ERL_NIF_TERM defk_stats_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
   ERL_NIF_TERM map;
   enif_make_map_from_arrays(env, keys, vals, 3, &map);
   return map;
+}
+
+static ERL_NIF_TERM defk_force_yields_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+  atomic_store(&defk_force_yields, enif_is_identical(argv[0], enif_make_atom(env, "true")));
+  return enif_make_atom(env, "ok");
 }
 
 static int defk_open_rt(ErlNifEnv *env, ErlNifResourceFlags flags) {

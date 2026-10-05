@@ -1086,7 +1086,8 @@ defmodule Defk.Compiler do
     [
       "static ErlNifFunc defk_funcs[] = {\n",
       funcs,
-      "  {\"__defk_stats__\", 0, defk_stats_nif, 0},\n};\n\n",
+      "  {\"__defk_stats__\", 0, defk_stats_nif, 0},\n",
+      "  {\"__defk_force_yields__\", 1, defk_force_yields_nif, 0},\n};\n\n",
       "ERL_NIF_INIT(#{Atom.to_string(module)}, defk_funcs, defk_load, NULL, defk_upgrade, NULL)\n"
     ]
   end

@@ -61,6 +61,8 @@ defmodule Defk do
       def __defk_lib__, do: unquote(lib <> ".so")
       @doc "Runtime counters: frames_live, promotions, yields."
       def __defk_stats__, do: :erlang.nif_error(:defk_not_loaded)
+      @doc "Testing: `true` makes this module's kernels yield at every clock read."
+      def __defk_force_yields__(_on), do: :erlang.nif_error(:defk_not_loaded)
       unquote_splicing(stubs)
     end
   end
