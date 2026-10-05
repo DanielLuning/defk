@@ -1,6 +1,7 @@
-# An `if` value whose arms are pure arithmetic is compiled as a select: both
-# arms are computed, overflow is flagged instead of raised, and only an
-# overflow in the taken arm raises (defk-jp3).
+# An `if` or `cond` value whose arms are pure arithmetic is compiled as a
+# select: every arm is computed, overflow is flagged instead of raised, and
+# only an overflow in the taken arm (or a reached condition) raises
+# (defk-jp3, defk-7q5).
 
 defmodule Defk.SelectTest.K do
   use Defk
@@ -21,6 +22,46 @@ defmodule Defk.SelectTest.K do
 
   defk cmp_arms(c :: bool, x :: i64, y :: i64) :: bool do
     if c, do: x + 1 > y, else: x * 2 < y
+  end
+
+  defk cond_count(n :: i64, step :: i64) :: i64 do
+    for i <- 1..n//1, reduce: 0 do
+      acc ->
+        cond do
+          rem(i, 3) == 0 -> acc + step
+          rem(i, 5) == 0 -> acc * 2
+          true -> acc - 1
+        end
+    end
+  end
+
+  defk cond_square(keep :: bool, x :: i64) :: i64 do
+    cond do
+      keep -> x
+      true -> x * x
+    end
+  end
+
+  # the second condition overflows only when it is reached
+  defk cond_later(c :: bool, x :: i64) :: i64 do
+    cond do
+      c -> x
+      x * x > 0 -> x + 1
+      true -> -x
+    end
+  end
+
+  defk odd?(x :: i64) :: bool do
+    rem(x, 2) == 1
+  end
+
+  # first condition calls a kernel; a later one does too and stays a branch
+  defk cond_calls(x :: i64) :: i64 do
+    cond do
+      odd?(x) -> x * x
+      odd?(x + 1) and x > 0 -> x + 1
+      true -> -x
+    end
   end
 end
 
@@ -47,6 +88,33 @@ defmodule Defk.SelectTest do
     assert_raise ArithmeticError, "i64 overflow in #{@big} * #{@big}", fn -> K.square_unless(false, @big) end
     assert_raise ArithmeticError, "i64 overflow in 0 - #{@min}", fn -> K.next_or_neg(false, @min) end
     assert_raise ArithmeticError, ~r/i64 overflow in -?\d+ \+ \d+/, fn -> K.count_if(10, 9_223_372_036_854_775_000) end
+  end
+
+  test "cond matches Elixir" do
+    expect =
+      Enum.reduce(1..200, 0, fn i, acc ->
+        cond do
+          rem(i, 3) == 0 -> acc + 7
+          rem(i, 5) == 0 -> acc * 2
+          true -> acc - 1
+        end
+      end)
+
+    assert K.cond_count(200, 7) == expect
+    assert K.cond_later(false, 3) == 4 and K.cond_later(false, 0) == 0
+    assert Enum.map([3, 4, 0, -4], &K.cond_calls/1) == [9, 5, 0, 4]
+  end
+
+  test "cond: overflow in an untaken arm or unreached condition does not raise" do
+    assert K.cond_square(true, @big) == @big
+    assert K.cond_later(true, @big) == @big
+    assert K.cond_later(true, @min) == @min
+  end
+
+  test "cond: overflow in the taken arm or a reached condition raises the checked error" do
+    assert_raise ArithmeticError, "i64 overflow in #{@big} * #{@big}", fn -> K.cond_square(false, @big) end
+    assert_raise ArithmeticError, "i64 overflow in #{@big} * #{@big}", fn -> K.cond_later(false, @big) end
+    assert_raise ArithmeticError, ~r/i64 overflow in -?\d+ [+*] \d+/, fn -> K.cond_count(10, 9_223_372_036_854_775_000) end
   end
 
   test "pure arithmetic arms compile to a select" do

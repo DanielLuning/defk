@@ -233,7 +233,7 @@ static inline int64_t defk_mul_i64(defk_ctx *ctx, int64_t a, int64_t b) {
 static inline int64_t defk_neg_i64(defk_ctx *ctx, int64_t a) {
   return defk_sub_i64(ctx, 0, a);
 }
-/* the same, flagging overflow instead of raising (arms of a speculated `if`) */
+/* the same, flagging overflow instead of raising (arms of a speculated `if`/`cond`) */
 static inline int64_t defk_add_i64_s(int *ovf, int64_t a, int64_t b) {
   int64_t r;
   *ovf |= __builtin_add_overflow(a, b, &r);

@@ -365,45 +365,13 @@ defmodule Defk.Compiler do
 
   defp lower_expr({:if, m, [cond, kw]}, env) when is_list(kw) do
     else_ast = Keyword.get(kw, :else) || err!(m, "`if` used as a value needs an else branch")
-    do_ast = Keyword.fetch!(kw, :do)
-    {sc, c} = lower_cond(cond, env, m)
-    {sa, a} = lower_block(do_ast, env)
-    {sb, b} = lower_block(else_ast, env)
-    t = branch_type!([a, b], m)
-    tmp = fresh("if", t)
-
-    if IO.iodata_length([sa, sb]) == 0 and speculate?(do_ast) and speculate?(else_ast) do
-      select(sc, c, {do_ast, a}, {else_ast, b}, t, tmp, env)
-    else
-      branch(sc, c, {sa, a}, {sb, b}, tmp, t)
-    end
+    lower_arms([{cond, Keyword.fetch!(kw, :do)}, {true, else_ast}], "if", m, env)
   end
 
   defp lower_expr({:cond, m, [[do: clauses]]}, env) do
     {last_cond, _} = List.last(clauses) |> clause_parts()
     last_cond == true || err!(m, "`cond` used as a value must end with a `true ->` clause")
-
-    lowered =
-      Enum.map(clauses, fn clause ->
-        {c, body} = clause_parts(clause)
-        {sb, v} = lower_block(body, env)
-        {c, sb, v}
-      end)
-
-    t = branch_type!(Enum.map(lowered, &elem(&1, 2)), m)
-    tmp = fresh("cond", t)
-
-    chain =
-      List.foldr(lowered, [], fn
-        {true, sb, v}, _rest ->
-          [sb, "#{tmp} = #{v.c};\n"]
-
-        {c, sb, v}, rest ->
-          {sc, cc} = lower_cond(c, env, m)
-          [sc, "if (#{cc}) {\n", sb, "#{tmp} = #{v.c};\n} else {\n", rest, "}\n"]
-      end)
-
-    {chain, val(tmp, t, tmp)}
+    lower_arms(Enum.map(clauses, &clause_parts/1), "cond", m, env)
   end
 
   defp lower_expr({:for, m, args}, env) do
@@ -531,35 +499,83 @@ defmodule Defk.Compiler do
     end
   end
 
-  # An `if` value whose arms are pure arithmetic is compiled as a select: both
-  # arms are computed with overflow flags instead of raising, and only an
-  # overflow re-runs the taken arm with the raising checks. A raise inside one
-  # arm would otherwise keep clang from if-converting the branch; it then
-  # threads the branch into the loop that computed the condition, which made
-  # `if prime?(i), do: count + 1, else: count` 1.7x slower than C (defk-jp3).
-  defp select(sc, c, {do_ast, a}, {else_ast, b}, t, tmp, env) do
-    flagged = fn ast, flag -> elem(lower_block(ast, Map.put(env, :ovf, flag)), 1).c end
+  # The clauses of an `if` or `cond` value, the last one `true ->`. Each arm is
+  # {cond_ast, body_ast, {stmts, c} | :else, body_stmts, body_val}.
+  defp lower_arms(clauses, name, m, env) do
+    arms =
+      Enum.map(clauses, fn {c, body} ->
+        cond = if c == true, do: :else, else: lower_cond(c, env, m)
+        {sb, v} = lower_block(body, env)
+        {c, body, cond, sb, v}
+      end)
 
-    if flagged.(do_ast, "_") == a.c and flagged.(else_ast, "_") == b.c do
-      # nothing can raise: clang if-converts the plain branch itself
-      branch(sc, c, {[], a}, {[], b}, tmp, t)
+    t = branch_type!(Enum.map(arms, &elem(&1, 4)), m)
+    tmp = fresh(name, t)
+    code = if select?(arms), do: select(arms, t, tmp, m, env), else: chain(arms, tmp)
+    {code, val(tmp, t, tmp)}
+  end
+
+  # An `if` or `cond` value whose arms (and conditions after the first) are pure
+  # arithmetic is compiled as a select: every arm is computed with overflow
+  # flags instead of raising, and only an overflow replays the clauses with the
+  # raising checks. A raise inside one arm would otherwise keep clang from
+  # if-converting the branch; it then threads the branch into the loop that
+  # computed the condition, which made `if prime?(i), do: count + 1, else:
+  # count` 1.7x slower than C (defk-jp3). The first condition always runs, so
+  # it is evaluated once as written and may call kernels.
+  defp select?([{_, _, {_, _}, _, _} | later] = arms) do
+    {later, [{_, _, :else, _, _}]} = Enum.split(later, -1)
+
+    Enum.all?(arms, fn {_, body, _, sb, _} -> IO.iodata_length(sb) == 0 and speculate?(body) end) and
+      Enum.all?(later, fn
+        {c, _, {sc, _}, _, _} -> IO.iodata_length(sc) == 0 and speculate?(c)
+        _ -> false
+      end)
+  end
+
+  defp select?(_arms), do: false
+
+  defp select([{_, _, {sc, c}, _, _} | later] = arms, t, tmp, m, env) do
+    later = Enum.drop(later, -1)
+
+    flagged = fn flag ->
+      fenv = Map.put(env, :ovf, flag)
+      conds = for {ca, _, _, _, _} <- later, do: elem(lower_cond(ca, fenv, m), 1)
+      {conds, for({_, body, _, _, _} <- arms, do: elem(lower_block(body, fenv), 1).c)}
+    end
+
+    plain_conds = for {_, _, {_, cc}, _, _} <- later, do: cc
+    plain_bodies = for {_, _, _, _, v} <- arms, do: v.c
+
+    if flagged.("_") == {plain_conds, plain_bodies} do
+      # nothing can raise: clang if-converts the plain branches itself
+      chain(arms, tmp)
     else
-      [oa, ob] = for _ <- 1..2, do: fresh("ovf", :bool)
-      fa = %{c: flagged.(do_ast, oa)}
-      fb = %{c: flagged.(else_ast, ob)}
-      cv = fresh("cond", :bool)
-      [ta, tb] = for _ <- 1..2, do: fresh("arm", t)
+      ovf = fresh("ovf", :bool)
+      {fconds, fbodies} = flagged.(ovf)
+      [cv | cvs] = for _ <- [c | fconds], do: fresh("cond", :bool)
+      tvs = for _ <- arms, do: fresh("arm", t)
 
-      {[sc, "#{cv} = #{c};\n#{oa} = 0;\n#{ob} = 0;\n#{ta} = #{fa.c};\n#{tb} = #{fb.c};\n",
-        "#{tmp} = #{cv} ? #{ta} : #{tb};\n",
-        "if (DEFK_UNLIKELY(#{oa} | #{ob})) {\nif (#{cv}) (void)(#{a.c});\nelse (void)(#{b.c});\n}\n"],
-       val(tmp, t, tmp)}
+      [
+        sc,
+        "#{cv} = #{c};\n#{ovf} = 0;\n",
+        Enum.zip_with(cvs, fconds, &"#{&1} = #{&2};\n"),
+        Enum.zip_with(tvs, fbodies, &"#{&1} = #{&2};\n"),
+        "#{tmp} = ",
+        Enum.zip_with([cv | cvs], tvs, &"#{&1} ? #{&2} : "),
+        "#{List.last(tvs)};\n",
+        "if (DEFK_UNLIKELY(#{ovf})) {\n",
+        Enum.zip_with([cv | plain_conds], plain_bodies, &"if (#{&1}) (void)(#{&2});\nelse "),
+        "(void)(#{List.last(plain_bodies)});\n}\n"
+      ]
     end
   end
 
-  defp branch(sc, c, {sa, a}, {sb, b}, tmp, t) do
-    {[sc, "if (#{c}) {\n", sa, "#{tmp} = #{a.c};\n} else {\n", sb, "#{tmp} = #{b.c};\n}\n"],
-     val(tmp, t, tmp)}
+  defp chain(arms, tmp) do
+    List.foldr(arms, [], fn
+      {_, _, :else, sb, v}, _rest -> [sb, "#{tmp} = #{v.c};\n"]
+      {_, _, {sc, c}, sb, v}, rest -> [sc, "if (#{c}) {\n", sb, "#{tmp} = #{v.c};\n} else {\n", rest, "}\n"]
+    end)
   end
 
   defp checked(%{ovf: flag}), do: "_s(&#{flag}"
