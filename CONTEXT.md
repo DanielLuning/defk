@@ -34,5 +34,9 @@ _Avoid_: examples, benchmark suite
 **Baseline**:
 The Elixir solution a kernel is measured against, marked first-pass or optimized. A win over a first-pass baseline is provisional.
 
+**Workload verdict**:
+The outcome for one target workload, measured as defk against an optimized baseline: `good` (defk helps), `marginal`, `poor` or `out_of_scope` (Elixir is the right choice). Comparisons with an existing NIF and responsiveness are reported beside it and never change it.
+_Avoid_: verdict (alone), score
+
 **Verdict**:
-The outcome for one target workload (defk helps, or Elixir is the right choice), and also the written conclusion of the whole effort.
+The written conclusion of the whole effort (`docs/verdict.md`): whether and where defk helps Elixir, and whether it warrants growing into a library.
