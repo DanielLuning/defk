@@ -4,6 +4,7 @@
     "defk-dtw.7"
   ],
   "blocks": [],
+  "closed_at": "2026-10-05T21:08:05Z",
   "created": "2026-10-05T19:56:13Z",
   "description": "## Question\n\nThe cosine top-k workload needs `[f32]` and PCM mixing needs `[i16]`/`[i32]` (see \"Choose the target workload set\"). Elixir has no f32 and no fixed-width integers, so these are divergence questions: when a kernel reads an element, what type does it get (f32 promoted to f64? i16 widened to i64?), what happens on a write that doesn't fit (raise, saturate, wrap: PCM clipping is saturation), is f32 arithmetic ever done in f32, and how does an Elixir caller build and read these arrays? The answer must fit the one rule.",
   "id": "defk-dtw.13",
@@ -26,7 +27,7 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "What do narrow element types ([f32], [i16], [i32]) mean in a kernel?",
   "type": "task",
   "updated_at": "2026-10-05T21:08:05Z"
