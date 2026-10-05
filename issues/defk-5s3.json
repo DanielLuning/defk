@@ -10,11 +10,15 @@
     {
       "text": "Measuring case from defk-88q: dot is now bounds-check free. Yielding 0.79 ns/elem vs yield:false 0.50 vs C 0.49. The safepoint is the whole remaining gap, because it blocks vectorisation.",
       "timestamp": "2026-10-05T11:45:29Z"
+    },
+    {
+      "text": "Landed 7dbb623. Instead of two-copy versioning: a flat loop with \u003c DEFK_STRIP (512) trips left runs unchecked and charges its trips (the enclosing loop checks); longer flat loops run in strips with one weighted safepoint each. Results: dot yielding 0.50 ns/elem = C (was 0.79); image_blur 37-41x (was 26-29x); fuzzy search/4 vs search_blocking/4 1.08-1.09x (was 1.10-1.12x after defk-88q, 1.20x originally). The ~5% target is NOT met. Experiments show only ~2% is the safepoint checks now; the rest is resume labels (~3%) and the spill/return path (~4%), and yields themselves are ~free (5x more yields = same time). Split out as defk-nua. Preemption: demo section 4 yielding gap 3.6 ms; long flat exp() loop on +S 1: 3.5 ms gap at yield:false speed.",
+      "timestamp": "2026-10-05T12:06:03Z"
     }
   ],
   "priority": 1,
   "status": "in_progress",
   "title": "Remove safepoint overhead from short innermost loops (loop versioning)",
   "type": "task",
-  "updated_at": "2026-10-05T11:50:50Z"
+  "updated_at": "2026-10-05T12:06:03Z"
 }
