@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-klw"
+  ],
   "blocks": [],
   "created": "2026-10-05T15:08:11Z",
   "description": "README's yield: false worst tick gap says 867 ms, recent demo runs show 500-570 ms. Several commits (defk-5s3, defk-j3h, defk-jp3, defk-7q5, defk-jaj) changed numbers measured on loaded machines. Re-run demo.exs, bench/*.exs and examples/run_all.exs on a quiet machine and update every number in README.md and examples/README.md. Record load average with the run.",
@@ -10,5 +12,5 @@
   "status": "open",
   "title": "Refresh README results table and demo numbers on a quiet machine",
   "type": "task",
-  "updated_at": "2026-10-05T15:08:11Z"
+  "updated_at": "2026-10-05T15:08:14Z"
 }
