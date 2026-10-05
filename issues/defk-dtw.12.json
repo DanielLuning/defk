@@ -5,7 +5,9 @@
   "created": "2026-10-05T19:31:00Z",
   "description": "## Question\n\nThe verdict's go/no-go rule requires no open safety gap in the runtime contract (memory safety, cleanup on process death, hot code upgrade); performance gaps are acceptable. Classify the open runtime issues (e.g. stats across reloads defk-9qv, frame layout tags defk-ls8, hang-proof resume tests defk-juw, code-size blowup defk-6ag) and any untested promise as safety gap (required for done) or nice to have, and say what evidence closes each safety gap.",
   "id": "defk-dtw.12",
-  "labels": [],
+  "labels": [
+    "wayfinder:grilling"
+  ],
   "parent": "defk-dtw",
   "priority": 2,
   "status": "open",
