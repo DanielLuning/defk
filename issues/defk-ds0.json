@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T21:02:22Z",
+  "description": "Evidence for the verdict's C-compiler stance (defk-dtw.11): build a small app using defk kernels with mix release inside a stock Debian-based Elixir image (e.g. hexpm/elixir on debian, plus build-essential), run a kernel from the release, and record the Dockerfile, the packages that had to be added, and image/build-time cost in the verdict's Runtime contract or Limitations evidence. Done when: the Dockerfile is committed under examples/ or bench/, and the run is logged with the commit.",
+  "id": "defk-ds0",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Record a mix release build in a stock Debian Elixir image",
+  "type": "task",
+  "updated_at": "2026-10-05T21:02:22Z"
+}
