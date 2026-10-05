@@ -15,11 +15,15 @@
     {
       "text": "Per 'Should a kernel body also run as plain Elixir?' (defk-dtw.6): Elixir mode is normative, so its result is the expected one. Decide to match Elixir here, or list the difference as a divergence.",
       "timestamp": "2026-10-05T20:09:53Z"
+    },
+    {
+      "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): inf/NaN inside a kernel is a divergence: Elixir raises ArithmeticError at the operation, so the kernel must raise too. Raising at kernel exit is the same outcome; a candidate mechanism is checking sticky FP exception flags (FE_OVERFLOW/FE_INVALID/FE_DIVBYZERO) at exit. Mind f32 writes: Elixir stores +inf for \u003c\u003c1.0e40::float-32\u003e\u003e, but under the one rule a value that doesn't fit raises.",
+      "timestamp": "2026-10-05T20:25:40Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Decide policy for inf/NaN inside kernels",
   "type": "task",
-  "updated_at": "2026-10-05T20:09:53Z"
+  "updated_at": "2026-10-05T20:25:40Z"
 }
