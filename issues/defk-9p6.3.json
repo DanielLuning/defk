@@ -7,9 +7,15 @@
   "id": "defk-9p6.3",
   "labels": [],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Per 'Choose the target workload set' (defk-dtw.5): dense linear algebra is a permanent exclusion (Nx). This example becomes the verdict's traps entry, not a target workload.",
+      "timestamp": "2026-10-05T19:56:14Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Example: matrix multiply vs Nx (expected: use Nx)",
   "type": "task",
-  "updated_at": "2026-10-05T11:18:39Z"
+  "updated_at": "2026-10-05T19:56:14Z"
 }
