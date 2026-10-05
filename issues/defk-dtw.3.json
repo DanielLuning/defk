@@ -16,11 +16,15 @@
     {
       "text": "Research findings: branch research/predictable-subsets, docs/research/predictable-subsets.md. Summary: Best references list each construct as supported / supported with restrictions / unsupported, and keep a separate page for where they differ from the host language (Numba). Best errors show file:line:col with a caret, say what, why and what to write instead (Nx, Taichi, Cython), and link to a versioned error index with an example and the fix for each error (Futhark). Several references disagree with their compiler (Numba dict comprehensions, Nx recursion that loops forever, Pythran accepting polymorphic variables), so defk should test its reference. Running the same code in the host language (NUMBA_DISABLE_JIT, Cython pure mode, Pythran) gives a debugger and a test oracle but drifts: Numba returned garbage or a wrapped integer where Python raised. Nx's Evaluator avoids the drift by interpreting the same graph. defk could copy: one error template, columns and carets, error codes plus docs/subset.md, a report of fast-path facts, and an opt-in Elixir mode for differential tests.",
       "timestamp": "2026-10-05T19:02:53Z"
+    },
+    {
+      "text": "Resolution: (1) Subset reference: Numba's pattern (each construct supported / supported with restrictions / unsupported, plus a separate page of differences from the host language) fits defk's Divergence term; every system names an escape hatch back to the host (Nx deftransform, Numba objmode). (2) Errors: the best give file:line:col with a caret, plus what was found, why it isn't allowed and what to write instead (Nx, Taichi, Cython); Futhark links stable error codes to an error index. Numba's leak compiler internals. (3) References disagree with their compilers (Numba, Nx defn recursion, Pythran), so defk's reference needs tests. (4) Running the same code in the host language gives a debugger and a test oracle, but the two modes drift (Numba measured: out-of-bounds a[10] returns garbage compiled vs IndexError in Python; 2**62*2**62 returns 0 compiled vs the exact result). Nx's Evaluator avoids drift by interpreting the traced graph. defk keeps Elixir semantics, so its drift would be small, except array aliasing on write. (5) Julia reports fast-path facts rather than enforcing them. Copyable for defk: one error template for the ~60 err! sites, columns and carets, stable error codes linked to docs/language.md, tests for the reference, a per-kernel fast-path report, an opt-in Elixir execution mode for differential tests. Detail: branch research/predictable-subsets, docs/research/predictable-subsets.md.",
+      "timestamp": "2026-10-05T19:03:19Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "How do comparable native subsets keep their rules predictable?",
   "type": "task",
-  "updated_at": "2026-10-05T19:02:53Z"
+  "updated_at": "2026-10-05T19:03:19Z"
 }
