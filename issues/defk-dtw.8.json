@@ -4,6 +4,7 @@
     "defk-dtw.3"
   ],
   "blocks": [],
+  "closed_at": "2026-10-05T20:20:29Z",
   "created": "2026-10-05T18:48:40Z",
   "description": "## Question\n\nPrototype the compile errors for a set of rejected constructs (a map, a string, recursion, an array through an if, an unsupported Enum function, a type mismatch) and react to them: location, why it's rejected, the suggested alternative, and how it links to docs/language.md.",
   "id": "defk-dtw.8",
@@ -18,7 +19,7 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "What does a good kernel compile error look like?",
   "type": "task",
   "updated_at": "2026-10-05T20:20:29Z"
