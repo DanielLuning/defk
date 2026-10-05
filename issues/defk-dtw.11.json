@@ -9,9 +9,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution: a C toolchain at build time is acceptable, stated per audience in the verdict. (a) App developers writing their own kernels: acceptable, same requirement as elixir_make packages (bcrypt_elixir, exqlite); a limit, not a blocker for go/no-go. (b) Hex library authors shipping kernels: the named way out is precompiled artefacts in the cc_precompiler / rustler_precompiled style (built per target in CI, downloaded and checked by hash; defk's hash-keyed build cache fits this), named in the verdict only, nothing built in this map. A bundled compiler (Zigler-style) is rejected; Cranelift JIT (defk-o1w) stays a P4 exploration listed under 'Where defk could grow', not the way out. (c) Livebook users: need Xcode CLT / build-essential, stated in the guide.\n\nEvidence: an actionable missing-compiler error in the agreed error format, plus honouring ERTS_INCLUDE_DIR ([Actionable error when no C compiler is found](defk-lb8)); one recorded mix release build in a stock Debian Elixir image ([Record a mix release build in a stock Debian Elixir image](defk-ds0)).\n\nCross-compilation (Nerves, macOS -\u003e Linux) is out of scope for building; listed under Limitations as untested.\n\nVerdict Limitations gets three lines: C toolchain needed at build time (as elixir_make); library authors would need a precompilation step that doesn't exist yet (cc_precompiler as the model); cross-compiling and untested architectures unverified.\n\nThis settles go/no-go condition (d) in 'What must docs/verdict.md contain to count as done?'.",
+      "timestamp": "2026-10-05T21:02:30Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Is a C compiler at build time acceptable for a defk library?",
   "type": "task",
-  "updated_at": "2026-10-05T20:53:32Z"
+  "updated_at": "2026-10-05T21:02:30Z"
 }
