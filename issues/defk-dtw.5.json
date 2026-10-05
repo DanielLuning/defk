@@ -15,9 +15,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution: six target workloads, one per NIF-survey category. Each reproduces a named package's job and data shape, uses that package's pure-Elixir twin as the baseline, its NIF as the native comparison, and is measured at a small and a large size (crossover reported where cheap):\n1. WebSocket masking: bandit_native vs Bandit ws_mask/2; 125 B frame / 1 MiB.\n2. PCM mixing with clipping, N streams: Membrane NativeAdder vs ClipPreventingAdder; 10 ms chunk / 1 s.\n3. HLL update_many over pre-hashed u64s: ex_data_sketch Rust vs Backend.Pure; 100 / 100k items.\n4. Cosine top-k over f32 embeddings: vettore distances vs plain Elixir and Nx (carries the verdict's Nx row); 1k x 384 / 100k x 384.\n5. Batched Levenshtein, one query vs N candidates (existing fuzzy_search): fuzler / ex_strsim vs our Elixir; 1k / 234k words.\n6. Gorilla XOR-float encoding: gorilla_stream C++ vs its pure encoder; 100 / 1M points.\n\nOrder of trying (guides, does not bind; dependencies only for real technical blockers): string distance (works today) -\u003e masking (bitwise ops, defk-w38) -\u003e cosine top-k ([f32]) -\u003e PCM ([i16]/[i32]; state between calls stays in Elixir for now) -\u003e HLL (waits on opt-in wrapping arithmetic, defk-dtw.10; leading-zero count) -\u003e Gorilla (bit reinterpretation, variable-length bit output). Choosing a workload commits to an attempt: a feature that breaks the one rule leaves it out_of_scope, but nothing that would work well is excluded up front; a workload that turns out to fit can be added any time.\n\nSupporting examples (in the catalog, not counted toward go/no-go): rolling_stats, geo_nearest, image_blur.\nPermanent exclusions: plain CRC32 (:erlang.crc32 BIF), dense linear algebra (Nx; matrix multiply defk-9p6.3 becomes the verdict's traps entry).\nExpansion candidates, listed in a new verdict section \"Where defk could grow\", not built in this map: persistent mutable structures via kernel-owned resources; the scanning half of parsers (delimiter offsets as [i64]); CRC32C and pixel-format conversion; per-pair string distance and tiny calls if call overhead drops; n-body; replacing a wrapper by writing the library itself in defk (e.g. keccak, lz4, base58), with research deciding which libraries are small and loop-shaped enough.",
+      "timestamp": "2026-10-05T19:55:54Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Choose the target workload set",
   "type": "task",
-  "updated_at": "2026-10-05T19:32:37Z"
+  "updated_at": "2026-10-05T19:55:54Z"
 }
