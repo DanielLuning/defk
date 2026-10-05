@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-i2e"
+  ],
   "created": "2026-10-05T18:48:40Z",
   "description": "## Question\n\nState the rule that predicts what is allowed and what it means, e.g. 'Elixir over these types, with Elixir's results, or a compile error', and decide how divergences are handled: removed, made a compile error, or documented in docs/language.md. Existing divergences to place: array aliasing on write, inf/NaN inside kernels, guard errors raising instead of failing the clause.",
   "id": "defk-dtw.7",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "What is the one rule a kernel author keeps in their head?",
   "type": "task",
-  "updated_at": "2026-10-05T18:48:40Z"
+  "updated_at": "2026-10-05T18:48:44Z"
 }

@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-dtw.7"
+  ],
   "blocks": [],
   "created": "2026-10-05T09:49:14Z",
   "description": "b = a then a[i] = x is visible through b: alloc'd arrays are mutable buffers, unlike Elixir's immutable values. Options: forbid aliasing writable arrays, copy-on-write, or a uniqueness check (Perceus-style refcount == 1). Document the choice in README.",
