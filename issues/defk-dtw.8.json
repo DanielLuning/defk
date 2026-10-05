@@ -11,9 +11,15 @@
     "wayfinder:prototype"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Prototype: branch prototype/compile-errors, prototypes/compile_errors_prototype.exs (run: elixir prototypes/compile_errors_prototype.exs [A|B|C|D]). Six rejections (map, string, recursion, array through if, Enum.map, return-type mismatch) in four styles; every suggested rewrite was compiled and run against defk at main. Today's messages for map and string have no line and echo `:a` / `\"hello\"`; Enum.map gives no why or alternative.\n\nResolution (style D):\n- Layout: Elixir's diagnostic frame (error: line, caret block, └─ file:line:col: Mod.fun/arity), then `why:` and `hint:` on their own lines (rewrite indented below the hint), then `(defk \u003ccode\u003e: docs/language.md#\u003ccode\u003e)`.\n- Name the Elixir construct as written (\"Enum.map/2 is not in the kernel subset\", \"maps are not ...\"), caret under the whole construct.\n- Permanent vs planned in words: \"not in the kernel subset\" vs \"not supported yet\"; no ticket IDs in user-facing text (the reference entry says what is planned).\n- Rewrites use the developer's own code where the compiler has it cheaply (return type, array in a branch), a template otherwise. A suggestion must compile: every rewrite in the reference is tested (see \"How are kernels checked against Elixir mode?\").\n- Error codes are readable slugs (unsupported-call, array-in-branch, recursion, ...), doubling as docs/language.md anchors, never renamed.\n- Report every rejection in the module, capped at 10; suppress errors caused by an earlier one.\nBuild handed off as \"Adopt the kernel compile error format\".",
+      "timestamp": "2026-10-05T20:20:29Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "What does a good kernel compile error look like?",
   "type": "task",
-  "updated_at": "2026-10-05T20:11:00Z"
+  "updated_at": "2026-10-05T20:20:29Z"
 }
