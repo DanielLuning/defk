@@ -2,7 +2,8 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [
-    "defk-9p6.13"
+    "defk-9p6.13",
+    "defk-9p6.14"
   ],
   "created": "2026-10-05T21:07:52Z",
   "description": "Decided in defk-dtw.13. Add i16, i32, f32 as array element types (inputs and alloc/2), element types only, no narrow scalars. Reads widen as Elixir's bitstring match: i16/i32 -\u003e i64, f32 -\u003e f64 (exact). Writes: integers raise if out of range; f32 rounds to nearest as \u003c\u003cv::float-32-native\u003e\u003e does, raises if the rounded value is +-inf, underflow to 0.0 / subnormals follow Elixir. All float arithmetic stays f64. Native endianness. An input binary whose byte_size is not a multiple of the element width raises ArgumentError at the call. The unknown-type compile error lists the supported set. Elixir mode gets the same semantics. inf/NaN bit patterns in input arrays follow defk-q1c.\nDone when: the semantics above have tests in both modes (incl. f32 fmax boundary, i16 +-32768 boundaries, bad-size binaries); max(min(v, 32767), -32768) stored into [i16] compiles with no write check (range facts) and vectorises like the hand C; docs/language.md documents the types and the caller-side bitstring forms.",

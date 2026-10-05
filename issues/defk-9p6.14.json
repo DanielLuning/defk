@@ -1,6 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [
+    "defk-4ai",
     "defk-9p6.10"
   ],
   "blocks": [],
@@ -13,5 +14,5 @@
   "status": "open",
   "title": "Target workload: PCM mixing with clip prevention vs Membrane NativeAdder",
   "type": "task",
-  "updated_at": "2026-10-05T21:21:32Z"
+  "updated_at": "2026-10-05T21:21:33Z"
 }
