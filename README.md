@@ -5,9 +5,11 @@
 > BEAM's promises (preemption, isolation, cleanup)?**
 
 ```bash
-mix run demo.exs        # correctness, throughput vs Elixir and plain C, boundary cost,
-                        # preemption on one scheduler, failure isolation
-mix test                # resumed kernels match yield: false, incl. a forced yield at every clock read
+mix run demo.exs              # correctness, throughput vs Elixir and plain C, boundary cost,
+                              # preemption on one scheduler, failure isolation
+mix run bench/tick_gap.exs    # worst scheduler gap: idle vs Elixir vs kernel
+mix run bench/yield_cost.exs  # throughput cost of yielding
+mix test                      # resumed kernels match yield: false, incl. a forced yield at every clock read
 ```
 
 Needs Elixir ≥ 1.18 and a C compiler (`cc`, or set `CC`).
@@ -101,9 +103,10 @@ At `mix compile`, `defk` type-checks the body, emits C
 | dot of 5M f64 via `a[i]` (ns/elem) | 12.2 (list) | 0.50 | 0.50 |
 | count_primes(1M), trial division (ms) | 1490 | 317 | 188 |
 | call overhead (ns/call) | 1.6 | 12 | — |
-| worst 1 ms-ticker gap on one scheduler (ms) | 2.2 (busy Elixir process) | 3.5 (yielding), 939 (`yield: false`) | — |
+| worst 1 ms-ticker gap on one scheduler (ms) | 2.0–2.2 (busy Elixir process) | 2.3–2.5 (yielding), 867 (`yield: false`) | — |
 
 - Safepoint overhead: ~0% (within noise), including branchy nested loops such as the fuzzy_search Levenshtein kernel (20 ms yielding vs 20 ms `yield: false`).
+- A kernel yields after 250 µs of wall time (`DEFK_SLICE_US`). At 1 ms, the limit ERTS allows a NIF, the ticker's worst gap was 3.5 ms. A busy Elixir process yields every few µs. Each yield costs a few µs of scheduler work (mostly its I/O poll): 2–3% on `count_primes`, which yields ~3,300 times a second, and nothing measurable on fuzzy_search. `bench/tick_gap.exs` and `bench/yield_cost.exs` measure both sides.
 - Killing a process mid-kernel frees its frame (`frames_live` 1 → 0).
 
 **Still open:**

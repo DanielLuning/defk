@@ -25,6 +25,7 @@ All three return identical results; `bench/verify.exs` checks this.
 ```bash
 mix deps.get
 NO_SERVER=1 mix run bench/verify.exs      # correctness + single-query timing
+NO_SERVER=1 mix run bench/yield_cost.exs  # yielding vs `yield: false`, query by query
 PORT=4040 mix run --no-halt               # the service
 curl 'localhost:4040/search?q=elixr&backend=defk&k=5'
 
@@ -44,22 +45,23 @@ Measured on an M-series Mac with 12 cores, OTP 29 and Elixir 1.20; two runs agre
 
 | Backend | 1 client p50 | req/s | search p50 | search p99 | health p50 | health p99 |
 |---|---|---|---|---|---|---|
-| `elixir` | 125–136 ms | 67–70 | 342–353 ms | 633–639 ms | 0.3 ms | 4–10 ms |
-| `defk` | 30 ms | 295–300 | 76 ms | 163–167 ms | 3 ms | 10–13 ms |
-| `blocking` | 23 ms | 430 | 54 ms | 113 ms | **34–39 ms** | **78–86 ms** |
+| `elixir` | 124–126 ms | 68–69 | 345–348 ms | 615–633 ms | 0.3 ms | 6–9 ms |
+| `defk` | 21 ms | 426–429 | 54 ms | 115–117 ms | 1.1 ms | 8–10 ms |
+| `blocking` | 22 ms | 433–443 | 52–53 ms | 111–116 ms | **33 ms** | **77–90 ms** |
 
 ### What the numbers say
 
-1. **defk gives 4.3× the throughput of pure Elixir and cuts p99 latency by 3.9×**, from the same code shape. The speedup is smaller than the 10–15× seen on float arrays, because the BEAM JIT handles small-integer DP loops well.
-2. **The blocking NIF is faster still, but it slows every other request.** `/health`, which does nothing, takes a median of 34–39 ms and up to 86 ms at p99. Processes queued on a scheduler that is busy in a NIF wait until the NIF finishes. Even with only 4 clients (8 of 12 cores idle) its `/health` p99 was 26 ms, against 2 ms for defk.
-3. **defk keeps `/health` p99 in the same range as pure Elixir** (10–13 ms against 4–10 ms) while serving 4.3× the traffic. This is the BEAM promise the example exists to test.
-4. **defk was ~30% slower than the blocking build** under load. Measured one query at a time, that gap has closed from ~20% to ~0% (20 ms against 20 ms): bounds checks are now elided (`defk-88q`), the short inner DP loops no longer check a safepoint per cell (`defk-5s3`), and a resumed kernel re-enters its loops through their headers instead of jumping into the middle of them, which had made the loops irreducible for LLVM (`defk-nua`). The yields themselves cost almost nothing (making them 5× more frequent didn't change the time). The load-test table above predates these changes.
+1. **defk gives 6.2× the throughput of pure Elixir and cuts p99 latency by 5.4×**, from the same code shape. The speedup is smaller than the 10–15× seen on float arrays, because the BEAM JIT handles small-integer DP loops well.
+2. **The blocking NIF is barely faster, and it slows every other request.** `/health`, which does nothing, takes a median of 33 ms and up to 90 ms at p99. Processes queued on a scheduler that is busy in a NIF wait until the NIF finishes. In an earlier run with only 4 clients (8 of 12 cores idle), its `/health` p99 was 26 ms, against 2 ms for defk.
+3. **defk keeps `/health` in the same range as pure Elixir** (p99 8–10 ms against 6–9 ms) while serving 6.2× the traffic. This is the BEAM promise the example exists to test.
+4. **defk is within ~2% of the blocking build** under load. One query at a time, the two take the same time (~21 ms). An earlier version of defk was ~30% slower. That gap closed for several reasons: bounds checks are now elided (`defk-88q`), the short inner DP loops no longer check a safepoint per cell (`defk-5s3`), and a resumed kernel re-enters its loops through their headers instead of jumping into the middle of them, which had made the loops irreducible for LLVM (`defk-nua`).
+5. **Yielding more often cost nothing measurable here.** Kernels now yield after 250 µs instead of 1 ms (`defk-j3h`), ~78 yields per query instead of 18. Throughput stayed within run-to-run noise, and defk's `/health` median fell from 3 ms to 1.1 ms. `bench/yield_cost.exs` compares `search/4` with its `yield: false` twin, query by query.
 
 ## Elixir baseline: first pass
 
 The Elixir backend is careful (a precomputed charlist catalog in
 `:persistent_term`, tail-recursive rows, bounded top-k) but not yet
-optimised, so the 4.3× is **provisional**. Not yet tried:
+optimised, so the 6.2× is **provisional**. Not yet tried:
 
 - a tuple or `:array` row instead of rebuilding lists,
 - processing the catalog in parallel chunks per request,

@@ -1016,7 +1016,7 @@ defmodule Defk.Compiler do
 
     sp_macro =
       if yields? do
-        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = DEFK_BUDGET0; return DEFK_YIELD; } }\n" <>
+        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
           "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n#define DEFK_RESUMING DEFK_UNLIKELY(defk_rs)\n"
       else
         @no_yield_macros

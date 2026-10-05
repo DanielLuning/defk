@@ -47,7 +47,7 @@ once and reused.
 | [`rolling_stats.exs`](rolling_stats.exs) | Moving mean/stddev over 1M sensor readings | 149–178× (≈30× on arithmetic alone; the rest is Elixir materialising 2M floats as lists) | first pass: **provisional** |
 | [`geo_nearest.exs`](geo_nearest.exs) | 10 nearest of 500k locations (haversine) | 12–13× | first pass: **provisional** |
 | [`image_blur.exs`](image_blur.exs) | Grayscale + 3×3 box blur on a raw 1080p frame | 37–41× | first pass: **provisional** |
-| [`fuzzy_search/`](fuzzy_search) (app) | Typo-tolerant search service: Levenshtein over 234k words behind Plug + Bandit | 4.3× req/s, 3.9× lower p99; `/health` latency stays at Elixir levels (a blocking NIF pushes it to ~80 ms p99) | first pass: **provisional** |
+| [`fuzzy_search/`](fuzzy_search) (app) | Typo-tolerant search service: Levenshtein over 234k words behind Plug + Bandit | 6.2× req/s, 5.4× lower p99; `/health` latency stays at Elixir levels (a blocking NIF pushes it to ~80–90 ms p99) | first pass: **provisional** |
 
 These numbers will shrink as the Elixir baselines are optimised; that's
 expected and is the point. Each example's header lists what hasn't been

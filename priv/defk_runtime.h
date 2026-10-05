@@ -293,20 +293,37 @@ static inline uint8_t defk_to_u8(defk_ctx *ctx, int64_t v) {
 
 /*
  * Safepoint clock. Loops count back-edges against an adaptive budget so the
- * clock is read every ~100-250us no matter how expensive one iteration is
- * (an outer loop may call a kernel with its own inner loop).
+ * clock is read every DEFK_SLICE_US/10 .. /4 no matter how expensive one
+ * iteration is (an outer loop may call a kernel with its own inner loop).
  * Returns 0 when the kernel should yield, else the next back-edge budget.
+ * A yielding kernel saves c->budget so it resumes at the adapted rate: a
+ * reset would let it run DEFK_BUDGET0 expensive iterations unchecked.
  */
 typedef struct {
   ErlNifTime last;
-  ErlNifTime unreported; /* microseconds not yet charged to the process */
+  ErlNifTime unreported; /* microseconds x 100 not yet charged to the process */
+  int64_t budget;        /* adapted back-edge budget, kept across a yield */
 } defk_clock;
 
 #define DEFK_BUDGET0 256
 
+/*
+ * Wall-clock time charged as one full timeslice (100% of a process's
+ * reductions), so a kernel yields about this often. ERTS allows a NIF ~1ms,
+ * but a busy Elixir process yields every few microseconds, so at 1ms a kernel
+ * delays the other processes on its scheduler ~1.5ms more than Elixir code
+ * would (bench/tick_gap.exs). A yield costs a few microseconds of scheduler
+ * work (mostly its I/O poll), so shorter is slower: 250us keeps the delay
+ * close to Elixir's for <3% on count_primes and no measurable loss on
+ * fuzzy_search (bench/yield_cost.exs).
+ */
+#ifndef DEFK_SLICE_US
+#define DEFK_SLICE_US 250
+#endif
+
 /* Flat inner loops (no nested loop, no kernel call) run up to this many
  * iterations without a safepoint, so the check does not stop vectorisation.
- * Even expensive builtins (exp, pow) keep that far below the ~100us clock period. */
+ * Even expensive builtins (exp, pow) keep that far below the clock period. */
 #ifndef DEFK_STRIP
 #define DEFK_STRIP 512
 #endif
@@ -317,16 +334,18 @@ static void defk_clock_init(defk_clock *c) {
 }
 
 __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c, int64_t budget) {
+  c->budget = budget;
   if (atomic_load_explicit(&defk_force_yields, memory_order_relaxed)) return 0;
   ErlNifTime now = enif_monotonic_time(ERL_NIF_USEC);
   ErlNifTime dt = now - c->last;
   c->last = now;
-  if (dt < 100 && budget < (1 << 24)) budget *= 2;
-  else if (dt > 250 && budget > 16) budget /= 2;
-  c->unreported += dt;
-  long pct = (long)(c->unreported / 10); /* 1000us timeslice == 100% */
+  if (dt < DEFK_SLICE_US / 10 && budget < (1 << 24)) budget *= 2;
+  else if (dt > DEFK_SLICE_US / 4 && budget > 16) budget /= 2;
+  c->budget = budget;
+  c->unreported += dt * 100;
+  long pct = (long)(c->unreported / DEFK_SLICE_US);
   if (pct >= 1) {
-    c->unreported -= pct * 10;
+    c->unreported -= pct * DEFK_SLICE_US;
     if (enif_consume_timeslice(env, pct > 100 ? 100 : (int)pct)) return 0;
   }
   return budget;
