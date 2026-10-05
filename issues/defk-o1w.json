@@ -6,9 +6,15 @@
   "description": "Today kernels are compiled ahead of time with cc -O3 at mix compile. A Rustler NIF embedding Cranelift could JIT kernels at runtime (Livebook, value-specialised kernels, no C toolchain needed on the target). Measure code quality vs the LLVM path on the demo kernels.",
   "id": "defk-o1w",
   "labels": [],
+  "comments": [
+    {
+      "text": "Per 'Is a C compiler at build time acceptable for a defk library?' (defk-dtw.11): not the named way out of the C-toolchain requirement (that is precompiled artefacts); stays an exploration listed under 'Where defk could grow'.",
+      "timestamp": "2026-10-05T21:02:30Z"
+    }
+  ],
   "priority": 4,
   "status": "open",
   "title": "Explore Cranelift JIT backend for runtime-specialised kernels",
   "type": "task",
-  "updated_at": "2026-10-05T09:49:14Z"
+  "updated_at": "2026-10-05T21:02:30Z"
 }
