@@ -6,9 +6,15 @@
   "description": "defk-9vl case guards: an error inside a guard (i64 overflow, rem/div by zero) raises, while Elixir treats a guard error as the guard failing and tries the next clause. Match Elixir: evaluate guards with flagged ops (defk_*_i64_s overflow flags from defk-jp3, plus a flagged rem/div) and treat a flagged error as false. Add tests comparing with Elixir for overflow and rem-by-zero in guards.",
   "id": "defk-7a6",
   "labels": [],
+  "comments": [
+    {
+      "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): a guard error raising instead of failing the clause is a limit (raises where Elixir succeeds): allowed and documented; this ticket stays nice-to-have.",
+      "timestamp": "2026-10-05T20:25:40Z"
+    }
+  ],
   "priority": 4,
   "status": "open",
   "title": "Guard errors should fail the clause, not raise",
   "type": "task",
-  "updated_at": "2026-10-05T15:51:24Z"
+  "updated_at": "2026-10-05T20:25:40Z"
 }
