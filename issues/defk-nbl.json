@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T09:49:14Z",
+  "description": "defk_upgrade takes over the defk_frame resource type (ERL_NIF_RT_TAKEOVER) but is untested. Risk: a frame suspended under the old NIF resumes into the new library's step function with a different frame layout. Test: reload the module while a kernel is mid-yield; decide whether to version frames or refuse the upgrade while frames are live.",
+  "id": "defk-nbl",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Test hot code upgrade with suspended kernel frames",
+  "type": "task",
+  "updated_at": "2026-10-05T09:49:14Z"
+}
