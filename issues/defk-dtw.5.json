@@ -5,7 +5,9 @@
   "created": "2026-10-05T18:48:39Z",
   "description": "## Question\n\nFrom the NIF survey and the Nx boundary, which workloads become the yardstick the kernel subset must express? How many, which categories, which existing catalog entries stay, and which candidates are ruled out (e.g. because Nx or an Erlang BIF already covers them).",
   "id": "defk-dtw.5",
-  "labels": [],
+  "labels": [
+    "wayfinder:grilling"
+  ],
   "parent": "defk-dtw",
   "priority": 2,
   "status": "open",
