@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-05T09:49:14Z",
@@ -7,8 +7,8 @@
   "id": "defk-jp3",
   "labels": [],
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Find why count_primes is 1.7x slower than plain C",
   "type": "bug",
-  "updated_at": "2026-10-05T09:49:14Z"
+  "updated_at": "2026-10-05T13:31:27Z"
 }
