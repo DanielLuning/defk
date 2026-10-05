@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-05T18:48:39Z",
+  "description": "## Question\n\nDefine the shape of the deliverable: its sections, what evidence each claim needs (workload, baseline status, numbers, machine), how 'defk helps' vs 'Elixir is the right choice' is decided per workload, and how the runtime contract and devex are judged. This fixes the done criterion every other ticket works towards.",
+  "id": "defk-dtw.4",
+  "labels": [],
+  "parent": "defk-dtw",
+  "priority": 2,
+  "status": "open",
+  "title": "What must docs/verdict.md contain to count as done?",
+  "type": "task",
+  "updated_at": "2026-10-05T18:48:39Z"
+}
