@@ -13,13 +13,17 @@ The part of Elixir a kernel may use: its types, constructs, convenience construc
 _Avoid_: defk language, DSL
 
 **Runtime contract**:
-What a kernel promises the BEAM while it runs: preemption, isolation, cleanup on process death, and hot code upgrade.
+What a kernel promises the BEAM while it runs: preemption, isolation, cleanup on process death, and hot code upgrade. Its purpose is that a kernel can never starve or crash the BEAM: for any arguments it returns or raises, other processes keep running, and a crashing process takes only itself down. A kernel that can't keep this is worse than a port, however fast it is.
 
 **Convenience construct**:
 An idiomatic Elixir form in the kernel subset that exists because a developer would write it first, and that costs nothing over the equivalent loop.
 
 **The one rule**:
 A kernel is Elixir over numbers and binaries: it gives the result Elixir would, or raises where its types can't hold that result, or doesn't compile. It never gives a different answer.
+
+**Agreement**:
+A kernel and its Elixir mode agree on an input when both return values that are identical (`===`, bit-exact for floats), or both raise the same exception module for the same reason.
+_Avoid_: equivalence, matching results
 
 **Limit**:
 A documented case where a kernel raises or refuses to compile where Elixir would have succeeded, such as i64 overflow. Allowed by the one rule.
@@ -41,7 +45,7 @@ A kernel local built only by appending integer segments, `acc = <<acc::bitstring
 _Avoid_: bit buffer, bit writer, growable output
 
 **Elixir mode**:
-A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir. It is never a fallback in production and never a baseline.
+A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir, with the kernel subset's limits applied (a value that doesn't fit its type raises there too). It is never a fallback in production and never a baseline.
 _Avoid_: fallback, interpreter, pure mode
 
 ## Measurement
