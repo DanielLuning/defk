@@ -23,11 +23,15 @@
     {
       "text": "Per 'What do narrow element types ([f32], [i16], [i32]) mean in a kernel?' (defk-dtw.13): input arrays ([f64] today, [f32] soon) can carry inf/NaN bit patterns. Elixir mode's \u003c\u003cf::float-32/64\u003e\u003e match fails on them, so the kernel must raise too. Sticky FP flags at exit won't catch this: quiet NaN arithmetic sets no flag. Options: check on read, or validate input arrays at entry (one vectorisable pass). Decide here.",
       "timestamp": "2026-10-05T21:08:05Z"
+    },
+    {
+      "text": "Per defk-dtw.16: until decided, inf/NaN cases go in the Defk.Divergences registry (defk-63k); done requires it empty. Floats compare bit-exact, and kernels build with -ffp-contract=off (defk-jlk).",
+      "timestamp": "2026-10-06T07:08:45Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Decide policy for inf/NaN inside kernels",
   "type": "task",
-  "updated_at": "2026-10-05T21:08:05Z"
+  "updated_at": "2026-10-06T07:08:45Z"
 }
