@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-06T08:29:14Z",
+  "description": "## Question\n\nFor each target workload (WebSocket masking, PCM mixing with clip prevention, HLL updates, cosine top-k over f32, batched Levenshtein, Gorilla encoding), sketch a rough kernel the way an Elixir developer writes it first, starting from the anchor package's own Elixir code. The sketch doesn't need to compile against defk today. Collect every convenience construct the sketches reach for (candidates: |\u003e, Enum.sum/max/min over arrays, indexed generators, module attributes as constants, for ... into: an allocated array, multi-clause kernels, \u003c\u003c\u003e\u003e matching on fixed fields, the \u003c\u003cbits::64\u003e\u003e = \u003c\u003cx::float-64\u003e\u003e match form) and decide which are in the kernel subset. A construct is in only if it is what an Elixir developer writes first, costs nothing over the hand loop, and keeps Elixir's meaning; types and bit output are already decided.\n\nOutput: the sketches linked as a prototype asset; per construct in/out with the workloads that need it; one roadmap ticket per accepted construct (each needs an Elixir-mode meaning, agreement tests and a docs/language.md entry). Workload tickets may still add constructs later.",
+  "id": "defk-dtw.18",
+  "labels": [],
+  "parent": "defk-dtw",
+  "priority": 2,
+  "status": "open",
+  "title": "Which convenience constructs do the six target workloads need?",
+  "type": "task",
+  "updated_at": "2026-10-06T08:29:14Z"
+}
