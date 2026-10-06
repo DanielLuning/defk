@@ -156,6 +156,10 @@ The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show
 - [ ] Arrays through `if`/`cond` branches, and returning input arrays (defk-gqk)
 - [ ] `Enum.reduce/3`, and a `find_index` that keeps Elixir semantics without `nil` (defk-nii)
 - [ ] More `case` patterns: `x in [1, 2, 3]` and ranges (defk-gid)
+- [ ] Module attributes as constants (defk-ivt)
+- [ ] Multi-clause kernels with a typed function head (defk-u9c)
+- [ ] Signed integer segments in the bitstring accumulator (defk-dki)
+- [ ] Pass the bitstring accumulator through helper kernels (defk-ooq)
 
 **3. Semantics: behave like Elixir where it matters**
 - [ ] Array value semantics: aliasing on write (defk-i2e)
