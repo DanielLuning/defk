@@ -10,11 +10,15 @@
     {
       "text": "Also hit by examples/rolling_stats.exs (defk-9p6.1): an if returning a tuple ({s1 - old, q1 - old * old} vs {s1, q1}) is rejected ('branches returning tuples are not supported'); rewrote it as a scalar if on the leaving sample. Tuple-valued branches are a natural Elixir idiom inside reduce bodies.",
       "timestamp": "2026-10-05T11:23:52Z"
+    },
+    {
+      "text": "Per 'Decide array value semantics' (defk-i2e): arrays have value semantics with static copy-on-write (defk-auo). When arrays flow through branches, tuples or returned inputs, the uniqueness analysis must follow them, copying conservatively where it can't prove a single live binding.",
+      "timestamp": "2026-10-06T07:51:11Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Allow arrays through if/cond branches and returning input arrays",
   "type": "task",
-  "updated_at": "2026-10-05T11:23:52Z"
+  "updated_at": "2026-10-06T07:51:11Z"
 }
