@@ -4,6 +4,7 @@
     "defk-dtw.7"
   ],
   "blocks": [],
+  "closed_at": "2026-10-06T07:51:12Z",
   "created": "2026-10-05T09:49:14Z",
   "description": "b = a then a[i] = x is visible through b: alloc'd arrays are mutable buffers, unlike Elixir's immutable values. Options: forbid aliasing writable arrays, copy-on-write, or a uniqueness check (Perceus-style refcount == 1). Document the choice in README.",
   "id": "defk-i2e",
@@ -30,7 +31,7 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Decide array value semantics (aliasing on write)",
   "type": "task",
   "updated_at": "2026-10-06T07:51:12Z"
