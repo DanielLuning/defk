@@ -14,7 +14,9 @@
     "defk-u9c",
     "defk-wlu"
   ],
-  "blocks": [],
+  "blocks": [
+    "defk-sgw.5"
+  ],
   "created": "2026-10-06T09:13:19Z",
   "description": "Decided in 'What must docs/verdict.md contain to count as done?' (defk-dtw.4): the devex bar needs a cold test. Run a fresh agent session that gets only README.md, docs/language.md and the error output (no lib/ source, no prior context) and asks it to write a kernel for a job not in the catalog: a count-min sketch update_many over [u64] hashes (NIF survey category 3, expansion-adjacent). Record the full log: every compile error it hit, whether the error's hint got it unstuck, and whether the final kernel agrees with Elixir mode (assert_agrees).\n\nEach error that didn't help is a bug on defk-vku's format or a missing docs/language.md entry: fix or ticket it, then rerun. Done when a run completes the kernel from the docs alone and the log is in docs/verdict.md's Developer experience section.",
   "id": "defk-sgw.3",
@@ -24,5 +26,5 @@
   "status": "open",
   "title": "Devex cold test: a new kernel from the docs alone",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:26Z"
+  "updated_at": "2026-10-06T09:13:28Z"
 }
