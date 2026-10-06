@@ -4,6 +4,7 @@
     "defk-63k",
     "defk-9p6.10",
     "defk-cmr",
+    "defk-ivt",
     "defk-wlu"
   ],
   "blocks": [],
@@ -16,5 +17,5 @@
   "status": "open",
   "title": "Target workload: Gorilla encoding vs gorilla_stream",
   "type": "task",
-  "updated_at": "2026-10-06T07:08:45Z"
+  "updated_at": "2026-10-06T09:08:29Z"
 }
