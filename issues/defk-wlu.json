@@ -11,10 +11,12 @@
   "created": "2026-10-05T21:21:32Z",
   "description": "Decided in defk-dtw.10 (see its resolution for full rules) and defk-dtw.14. u64 scalar and [u64] element type; masked arithmetic: band(expr, 2^k-1) with a compile-time constant mask, + - * bsl band bor bxor bnot nest freely inside and compile to wrapping machine ops; bsr/div/rem only on in-range values; recognition is syntactic, with a compile-error hint to move arithmetic inside band; mixing i64 and u64 outside a mask is a compile error; u64 used as i64 is checked. Defk.Bits: clz/2, ctz/2, popcount/1, rotl/3, rotr/3, f64_to_u64/1 as plain Elixir functions mapped to builtins in kernels. Done when: tests in both modes cover mask boundaries (k=32, 63, 64), FNV-1a/murmur3 against known vectors, the compile-error hint, and Defk.Bits against their Elixir bodies; docs/language.md documents it.",
   "id": "defk-wlu",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "priority": 2,
   "status": "open",
   "title": "Add u64, masked arithmetic and Defk.Bits",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:26Z"
+  "updated_at": "2026-10-06T09:13:53Z"
 }
