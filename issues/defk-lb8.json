@@ -9,10 +9,12 @@
   "created": "2026-10-05T21:02:22Z",
   "description": "Today Defk.Build calls System.cmd($CC or cc) and a missing compiler surfaces as a bare :enoent. Raise a kernel compile error in the agreed format (see defk-vku) that names $CC, says a C toolchain is needed at build time, and gives the per-OS install hint (macOS: xcode-select --install; Debian/Ubuntu: build-essential; Alpine: build-base). Also honour ERTS_INCLUDE_DIR (elixir_make convention) before falling back to the running ERTS's include dir, so cross-builds can point at the target's headers. Decided in defk-dtw.11. Done when: a test with CC pointing at a nonexistent binary asserts the message, and ERTS_INCLUDE_DIR overrides the include path.",
   "id": "defk-lb8",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "priority": 2,
   "status": "open",
   "title": "Actionable error when no C compiler is found",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:28Z"
+  "updated_at": "2026-10-06T09:13:53Z"
 }
