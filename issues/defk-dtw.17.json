@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-06T07:51:22Z",
+  "description": "## Question\n\nShould the devex bar for done include a per-kernel report of what the compiler did to the fast path, in the spirit of Julia's @code_warntype: bounds checks removed or kept, ifs compiled as selects, safepoints placed, copies inserted by copy-on-write ('Decide array value semantics', defk-i2e), and whether the non-finite flag kept a loop vectorisable ('Decide policy for inf/NaN inside kernels', defk-q1c)? If yes: its form (mix task, compile option, annotated source), what it reports, and whether it is part of the cold test.",
+  "id": "defk-dtw.17",
+  "labels": [],
+  "parent": "defk-dtw",
+  "priority": 2,
+  "status": "open",
+  "title": "Does done need a per-kernel fast-path report?",
+  "type": "task",
+  "updated_at": "2026-10-06T07:51:22Z"
+}
