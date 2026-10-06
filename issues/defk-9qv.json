@@ -10,11 +10,15 @@
     {
       "text": "Classified nice to have (not a safety gap, not required for the verdict) by 'Which open runtime issues are safety gaps?' (defk-dtw.12).",
       "timestamp": "2026-10-05T20:49:14Z"
+    },
+    {
+      "text": "Triage (defk-sgw plan): needs-triage. Choice between documenting per-library semantics and adding an aggregate is open; observability only, not required for the verdict.",
+      "timestamp": "2026-10-06T09:13:43Z"
     }
   ],
   "priority": 4,
   "status": "open",
   "title": "Define __defk_stats__ semantics across hot reloads",
   "type": "task",
-  "updated_at": "2026-10-05T20:49:14Z"
+  "updated_at": "2026-10-06T09:13:43Z"
 }
