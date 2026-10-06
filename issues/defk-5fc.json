@@ -7,7 +7,9 @@
   "created": "2026-10-05T20:49:14Z",
   "description": "Write the runtime threat list decided in \"Which open runtime issues are safety gaps?\" (defk-dtw.12) and give every entry a test. The list sits next to the runtime-contract table in docs/verdict.md; a safety gap is any way that code which compiles, called with any arguments, can crash the VM, corrupt memory, leak memory permanently, or break cleanup on process death or hot upgrade.\n\nEntries (each a test):\n- sizes and indices at their extremes (alloc lengths near 2^61/2^63, negative, index -1 and len)\n- a yield with small heap-binary inputs (\u003c= 64 bytes) and a forced GC between steps (reviewed safe: inputs are re-bound from the rescheduled argv on every resume)\n- process killed at a safepoint (frames_live back to 0; already tested)\n- a raise after alloc frees every owned buffer (reviewed safe: defk_finish on the error path)\n- hot upgrade and purge mid-kernel (upgrade_test.exs)\n- concurrent calls of the same kernel from many processes\n\nDone when each entry has a passing test and the list is in the verdict draft.",
   "id": "defk-5fc",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "comments": [
     {
       "text": "Per 'How are kernels checked against Elixir mode?' (defk-dtw.16): hostile-argument generators (wrong types, misaligned/sub-binaries, bad lengths) in defk-63k cover 'any arguments'; the deep run executes in a :peer node so a VM crash is a failing shrunk property. Hardening flags are measured in defk-j5n.",
@@ -18,5 +20,5 @@
   "status": "open",
   "title": "Runtime threat list with a test per entry",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:28Z"
+  "updated_at": "2026-10-06T09:13:53Z"
 }
