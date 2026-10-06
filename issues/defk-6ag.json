@@ -10,11 +10,15 @@
     {
       "text": "Classified nice to have (not a safety gap, not required for the verdict) by 'Which open runtime issues are safety gaps?' (defk-dtw.12).",
       "timestamp": "2026-10-05T20:49:15Z"
+    },
+    {
+      "text": "Triage (defk-sgw plan): needs-triage. The threshold and warn-vs-error choice is undecided. Not required for the verdict ('Which open runtime issues are safety gaps?' ruled it compile-time cost); decide when multi-clause kernels (defk-u9c) and helper kernels make deep call graphs likely.",
+      "timestamp": "2026-10-06T09:13:43Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Guard against code-size blowup from inlined kernel calls",
   "type": "task",
-  "updated_at": "2026-10-05T20:49:15Z"
+  "updated_at": "2026-10-06T09:13:43Z"
 }
