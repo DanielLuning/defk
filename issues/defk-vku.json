@@ -9,9 +9,15 @@
   "description": "Implement the compile error format decided in \"What does a good kernel compile error look like?\" (defk-dtw.8; prototype on branch prototype/compile-errors, style D).\n\n- One template for every rejection: Elixir diagnostic frame with file:line:col and a caret under the whole construct, then `why:`, `hint:` (with a rewrite where one exists), and `(defk \u003ccode\u003e: docs/language.md#\u003ccode\u003e)`.\n- Audit all 61 `err!` sites in lib/defk/compiler.ex against it; give each a stable slug code. Fix the weak ones: \"unsupported expression in kernel: ...\" (map and string literals currently report no line and echo `:a` / `\"hello\"`), \"cannot match ...\", \"empty block\".\n- Name the Elixir construct as written; \"not in the kernel subset\" vs \"not supported yet\"; no ticket IDs in messages.\n- Collect every rejection in a module (cap 10), suppressing errors caused by an earlier one.\n- Each code's failing example and suggested rewrite become tests (the rewrite must compile).\n\nDone when every err! site follows the template with a code, the six prototype cases print as style D, and the tests above pass.",
   "id": "defk-vku",
   "labels": [],
+  "comments": [
+    {
+      "text": "Per 'Which convenience constructs do the six target workloads need?' (defk-dtw.18), these rejected first-write forms get a targeted why/hint: `|\u003e` (write the nested call); Enum.sum/min/max/min_by/min_max over a comprehension or range (write the for ..., reduce: loop); for {x, i} \u003c- Enum.with_index(a) and for ..., into: (index generator + alloc/2 writes); \u003c\u003ca, b, _::16, rest::binary\u003e\u003e = arr fixed-field matches (indexed reads arr[1], or band/bsr on an integer); \u003c\u003cb::64\u003e\u003e = \u003c\u003cx::float-64\u003e\u003e (Defk.Bits.f64_to_u64/1); Enum.min([a, b, c]) / Enum.max([...]) (min(min(a, b), c)); and `(1 \u003c\u003c\u003c n) - 1` with n reaching 64 overflowing i64 (hint: the mask is often redundant when the value already fits n bits, or use masked arithmetic with a constant mask).",
+      "timestamp": "2026-10-06T09:08:29Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Adopt the kernel compile error format",
   "type": "task",
-  "updated_at": "2026-10-06T07:08:45Z"
+  "updated_at": "2026-10-06T09:08:29Z"
 }
