@@ -14,9 +14,15 @@
   "id": "defk-9p6.14",
   "labels": [],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Note from 'Which convenience constructs do the six target workloads need?' (defk-dtw.18): the PCM sketch passed the held-back wave into the kernel only for illustration. This ticket's split stands (queue and scale state in Elixir, per defk-dtw.9); the decision that matters is that a data-dependent output length needs no construct (array + count, binary_part in Elixir).",
+      "timestamp": "2026-10-06T09:13:44Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Target workload: PCM mixing with clip prevention vs Membrane NativeAdder",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:27Z"
+  "updated_at": "2026-10-06T09:13:44Z"
 }
