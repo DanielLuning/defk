@@ -14,11 +14,15 @@
     {
       "text": "Per 'Decide array value semantics' (defk-i2e): arrays have value semantics with static copy-on-write (defk-auo). When arrays flow through branches, tuples or returned inputs, the uniqueness analysis must follow them, copying conservatively where it can't prove a single live binding.",
       "timestamp": "2026-10-06T07:51:11Z"
+    },
+    {
+      "text": "Triage (defk-sgw plan): needs-triage. Two approaches named (track which view a variable refers to, or rebind all aliases on resume) and it interacts with 'Give arrays value semantics' (defk-auo), which copies conservatively once arrays flow through branches. Pick the approach after defk-auo lands; not required for the verdict.",
+      "timestamp": "2026-10-06T09:13:43Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Allow arrays through if/cond branches and returning input arrays",
   "type": "task",
-  "updated_at": "2026-10-06T07:51:11Z"
+  "updated_at": "2026-10-06T09:13:43Z"
 }
