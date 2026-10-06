@@ -3,7 +3,9 @@
   "blocked_by": [
     "defk-cmr"
   ],
-  "blocks": [],
+  "blocks": [
+    "defk-9p6.16"
+  ],
   "created": "2026-10-06T09:08:21Z",
   "description": "A helper kernel may take a `bitstring` accumulator parameter and return it (alone or in a tuple); since kernel calls are inlined it stays the same append-only local. Still append-only; entry kernels still can't take bitstring inputs. Lifts the 'passing to another kernel' restriction from 'Can a kernel produce variable-length bit output, and in what form?' (defk-dtw.14) because Gorilla's multi-clause dod_bits(acc, dod) needs it.\n\nEach accepted convenience construct needs: an Elixir-mode meaning, agreement tests (Defk.Case, both modes), and a docs/language.md entry. Decided in 'Which convenience constructs do the six target workloads need?' (defk-dtw.18); sketches on branch prototype/defk-dtw.18-sketches (prototypes/convenience_sketches.exs).\n\nDone when the Gorilla dod_bits helper compiles and agrees, the accumulator survives a yield inside the inlined helper (forced-yield test), and passing an accumulator to an entry kernel is a compile error.",
   "id": "defk-ooq",
