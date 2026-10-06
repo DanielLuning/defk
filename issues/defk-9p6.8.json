@@ -5,7 +5,9 @@
   "created": "2026-10-05T11:34:31Z",
   "description": "Its 'good' verdict is provisional until the Elixir side is as fast as we can make it. Ideas: Separable blur (horizontal then vertical), three-row binary walking instead of 9 :binary.at/2 reads per pixel, output as iodata. Record alternatives tried; set baseline: :optimized. If Elixir comes within 2x, the verdict becomes marginal and Elixir is the recommendation: record that as a result.",
   "id": "defk-9p6.8",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-9p6",
   "comments": [
     {
@@ -17,5 +19,5 @@
   "status": "open",
   "title": "Optimise the Elixir baseline: image_blur",
   "type": "task",
-  "updated_at": "2026-10-05T19:56:14Z"
+  "updated_at": "2026-10-06T09:13:56Z"
 }
