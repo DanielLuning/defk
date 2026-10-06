@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-sgw.3"
+  ],
   "created": "2026-10-06T07:32:41Z",
   "description": "Decided in 'Decide policy for inf/NaN inside kernels' (defk-q1c). Elixir raises ArithmeticError at any float op that would give inf/NaN; kernels are pure with bounded loops, so raising before the kernel returns gives the same outcome.\n\n- Accumulated software flag: every float op, libm call and [f64]/[f32] write does nf |= !isfinite(r) (branch-free, vectorisable). Select arms keep their own flag; only the taken arm's counts (as integer overflow in selects today). No hardware FP flags (unsound under select/speculation).\n- Checked at exit and at every safepoint -\u003e ArithmeticError, reason :non_finite, message: \"a float operation in fun/N produced inf or NaN (Elixir would raise ArithmeticError at that operation); run the kernel in Elixir mode to find the line\".\n- float-\u003eint conversions (trunc/round/floor/ceil) use the i64 range check written as !(d \u003e= -2^63 \u0026\u0026 d \u003c 2^63), which also rejects NaN (removes C UB).\n- Input array reads: a second flag, nfi |= !isfinite(v) on each element read -\u003e ArgumentError, reason :non_finite_input, naming the argument. Only elements actually read count; no entry validation pass. Elixir mode's read raises the same.\n- Remove 'inf/NaN are allowed inside a kernel' from README Known limitations; nothing about inf/NaN goes in the divergence registry. The f32 write that overflows stays a limit (defk-dtw.13).\n\nShips independently with hand-written tests; move them to assert_agrees when defk-63k lands.\n\nDone when: a test per producing op (overflow, x/0.0, 0.0/0.0, sqrt/log domain, exp/pow overflow) raises; underflow to 0.0/subnormal doesn't; non-finite input bits raise when read and not when unread; a select with an untaken x/0.0 arm doesn't raise; trunc(NaN) raises; cost on dot, cosine and rolling_stats recorded in the README.",
   "id": "defk-i00",
@@ -10,5 +12,5 @@
   "status": "open",
   "title": "Raise on non-finite floats like Elixir",
   "type": "task",
-  "updated_at": "2026-10-06T07:32:41Z"
+  "updated_at": "2026-10-06T09:13:26Z"
 }
