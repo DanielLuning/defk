@@ -2,7 +2,8 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [
-    "defk-9p6.16"
+    "defk-9p6.16",
+    "defk-dki"
   ],
   "created": "2026-10-05T21:14:26Z",
   "description": "Decided in defk-dtw.14. A kernel local of type bitstring (signature name: bitstring) that starts as \u003c\u003c\u003e\u003e and is only appended to: acc = \u003c\u003cacc::bitstring, seg, ...\u003e\u003e with integer segments v::size(n) or v::k (unsigned, big-endian/MSB-first as Elixir's default). Also bit_size/1. It may be returned alone or in a tuple. Not supported: reading/indexing, float or binary segments, starting from an input bitstring, passing to another kernel (each compile error names the construct and hints at the limit).\nSemantics: a segment value that doesn't fit n bits raises (a limit, same as array writes; Elixir truncates); n outside 0..64 raises (a limit). Elixir mode applies the same checks.\nRuntime: a growable native buffer (doubling), kept in the frame across yields, freed on kernel exception and on process death. The NIF returns bytes + bit length; the generated Elixir wrapper makes the bitstring with \u003c\u003cb::bitstring-size(len), _::bitstring\u003e\u003e = bin.\nDone when: tests in both modes cover the fit/width limits, empty output, non-byte-aligned output, an output that grows across forced yields (__defk_force_yields__/1), and cleanup on process kill mid-build; docs/language.md documents the construct and its limits; a Gorilla value-encoder kernel written with it gives bit-identical output to gorilla_stream's Elixir encoder.",
@@ -12,5 +13,5 @@
   "status": "open",
   "title": "Add the bitstring accumulator",
   "type": "task",
-  "updated_at": "2026-10-05T21:21:33Z"
+  "updated_at": "2026-10-06T09:08:29Z"
 }
