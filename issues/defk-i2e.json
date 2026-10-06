@@ -19,11 +19,15 @@
     {
       "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): aliasing on write is a divergence and must be removed (copy on aliased write, or reject the aliasing at compile time). Arrays mean binaries, writes mean rebinding.",
       "timestamp": "2026-10-05T20:25:40Z"
+    },
+    {
+      "text": "Per defk-dtw.16: until decided, aliasing cases go in the Defk.Divergences registry (defk-63k); done requires it empty.",
+      "timestamp": "2026-10-06T07:08:45Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Decide array value semantics (aliasing on write)",
   "type": "task",
-  "updated_at": "2026-10-05T20:25:40Z"
+  "updated_at": "2026-10-06T07:08:45Z"
 }
