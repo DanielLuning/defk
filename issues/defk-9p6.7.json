@@ -5,7 +5,9 @@
   "created": "2026-10-05T11:34:31Z",
   "description": "Its 'good' verdict is provisional until the Elixir side is as fast as we can make it. Ideas: Walk packed binaries with binary matching instead of a tuple list; coarse grid / bounding-box prefilter applied to BOTH sides (it is an algorithmic trick, not a defk feature). Record alternatives tried; set baseline: :optimized. If Elixir comes within 2x, the verdict becomes marginal and Elixir is the recommendation: record that as a result.",
   "id": "defk-9p6.7",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-9p6",
   "comments": [
     {
@@ -17,5 +19,5 @@
   "status": "open",
   "title": "Optimise the Elixir baseline: geo_nearest",
   "type": "task",
-  "updated_at": "2026-10-05T19:56:14Z"
+  "updated_at": "2026-10-06T09:13:56Z"
 }
