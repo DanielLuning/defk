@@ -6,9 +6,15 @@
   "description": "Since defk-9vl kernels have Enum.reduce_while / all? / any?. fuzzy_search's Levenshtein would naturally stop a word once a row's minimum exceeds the current k-th best distance. Add that cutoff to BOTH the defk kernel and the Elixir backend (same algorithm, per AGENTS.md fair comparisons), optimise the Elixir side first, and re-measure. Coordinate with defk-klw (fuzzy_search defk vs blocking re-measure) so the baseline numbers are from a quiet machine.",
   "id": "defk-8i4",
   "labels": [],
+  "comments": [
+    {
+      "text": "Triage (defk-sgw plan): ready-for-agent for the implementation in both backends; the quiet-machine re-measure belongs with defk-klw (ready-for-human).",
+      "timestamp": "2026-10-06T09:13:44Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Fair early-exit Levenshtein cutoff in fuzzy_search",
   "type": "task",
-  "updated_at": "2026-10-05T15:51:24Z"
+  "updated_at": "2026-10-06T09:13:44Z"
 }
