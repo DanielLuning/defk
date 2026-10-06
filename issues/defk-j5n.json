@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-sgw.5"
+  ],
   "created": "2026-10-06T07:08:44Z",
   "description": "Decided in 'How are kernels checked against Elixir mode?' (defk-dtw.16): speed comes from everything that keeps Elixir's answer; protection of the BEAM also uses C's own hardening. Measure -fstack-protector-strong, -D_FORTIFY_SOURCE=2 and -fno-strict-overflow across the catalog; adopt in normal builds if the cost is under 2%, otherwise record the cost and decision. Part of the evidence for the runtime threat list (defk-5fc).\n\nDone when the flags are adopted or rejected with the measurement recorded.",
   "id": "defk-j5n",
@@ -10,5 +12,5 @@
   "status": "open",
   "title": "Measure hardening flags for kernel builds",
   "type": "task",
-  "updated_at": "2026-10-06T07:08:44Z"
+  "updated_at": "2026-10-06T09:13:28Z"
 }
