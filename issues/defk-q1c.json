@@ -27,11 +27,15 @@
     {
       "text": "Per defk-dtw.16: until decided, inf/NaN cases go in the Defk.Divergences registry (defk-63k); done requires it empty. Floats compare bit-exact, and kernels build with -ffp-contract=off (defk-jlk).",
       "timestamp": "2026-10-06T07:08:45Z"
+    },
+    {
+      "text": "Resolution: match Elixir, so no limit and no divergence. Elixir raises ArithmeticError at any float op giving inf/NaN. Kernels are pure with bounded loops, so raising before return is the same outcome; only the line is lost, and Elixir mode recovers it.\n- Mechanism: an accumulated software flag (nf |= !isfinite(r) on every float op, libm call and float array write; branch-free and vectorisable). Select arms keep their own flag. Rejected: a branch on every op (blocks vectorisation; see count_primes 1.7x) and sticky hardware FP flags (unsound: selects compute every arm and clang speculates; FENV_ACCESS costs as much as a branch per op).\n- Checked at exit and at every safepoint. Float to int conversion uses an i64 range check that also rejects NaN.\n- Input bits: checked on read with a second flag, raising ArgumentError with reason :non_finite_input. Only elements read count, matching Elixir mode, whose read raises the same (not MatchError). No entry validation (a divergence when unread, and O(n)).\n- Message has no line and points to Elixir mode.\n- If dot or cosine pay a cost, it is paid and recorded; the one rule isn't negotiable.\nBuild: defk-i00 (independent, hand-written tests first).",
+      "timestamp": "2026-10-06T07:32:42Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Decide policy for inf/NaN inside kernels",
   "type": "task",
-  "updated_at": "2026-10-06T07:09:48Z"
+  "updated_at": "2026-10-06T07:32:42Z"
 }
