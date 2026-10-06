@@ -139,6 +139,14 @@ These are deliberate, to keep defk small for now.
 
 The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show <id>`); ticked items are closed.
 
+**0. Verdict** (plan in `bw show defk-sgw`)
+- [ ] Draft docs/verdict.md with the pre-registered go/no-go rule (defk-sgw.2)
+- [ ] Write docs/language.md, the kernel subset reference (defk-sgw.1)
+- [ ] Devex cold test: a new kernel from the docs alone (defk-sgw.3)
+- [ ] Freeze the workload-results snapshot on a quiet machine (defk-sgw.4)
+- [ ] Write the verdict: guide, runtime contract, devex, limitations (defk-sgw.5)
+- [ ] Final verdict session (defk-sgw.6)
+
 **1. Honest measurement: show where defk helps Elixir**
 - [x] Record the purpose: Elixir first, defk only where it helps (defk-9p6.5)
 - [x] Example catalog with a scoreboard (defk-9p6.1)
