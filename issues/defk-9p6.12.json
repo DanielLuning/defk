@@ -11,11 +11,13 @@
   "created": "2026-10-05T21:21:32Z",
   "description": "125 B frame / 1 MiB. Baseline: Bandit 1.12.5 Bandit.PrimitiveOps.WebSocket.ws_mask/2 (32-bit XOR). NIF column: bandit_native 0.1.2 Bandit.Native.mask/2 (Rust, Jan 2023, byte-at-a-time, normal scheduler, unused by current Bandit; state its age and design). defk kernel packaged as a primitive_ops_module implementing ws_mask/2, the real plug-in point. Agreement: identical bytes.\n\nEvidence bar (from defk-dtw.4/defk-dtw.15): script examples/\u003cname\u003e.exs with Mix.install of the pinned anchor package; the anchor's Elixir version is the first baseline and must be optimised further in Elixir before the verdict counts (what was tried listed in the header; baseline: :optimized); realistic size declared in the header before any numbers; workload verdict at the realistic size, other size beside; ~6-point geometric sweep with crossover (smallest size where defk \u003e= 2x, or none), skipped if a large run exceeds ~1 min; NIF timing and responsiveness (max and p99 1 ms tick gap, one scheduler, large size, for Elixir/defk/NIF) via Defk.Bench.report/1; Elixir, defk and NIF outputs must agree (failure fails the script); quiet-machine run_all.exs; row added to examples/README.md.",
   "id": "defk-9p6.12",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-9p6",
   "priority": 2,
   "status": "open",
   "title": "Target workload: WebSocket masking vs bandit_native",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:27Z"
+  "updated_at": "2026-10-06T09:13:55Z"
 }
