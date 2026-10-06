@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-06T07:08:44Z",
+  "description": "Decided in 'How are kernels checked against Elixir mode?' (defk-dtw.16): a doctest-style extractor over docs/language.md. Fenced blocks with a defk and iex\u003e lines are compiled in both modes and checked against the documented output and for agreement; rejected examples declare an error: code and must fail to compile with that code (format from 'What does a good kernel compile error look like?', build in defk-vku).\n\nBlocked until docs/language.md exists. Done when every example in docs/language.md runs in mix test.",
+  "id": "defk-rhb",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Check docs/language.md examples in both modes",
+  "type": "task",
+  "updated_at": "2026-10-06T07:08:44Z"
+}
