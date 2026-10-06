@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-9p6.15"
+  ],
   "created": "2026-10-06T07:51:11Z",
   "description": "Decided in 'Decide array value semantics (aliasing on write)' (defk-i2e). Today b = a; a[0] = 7; b[0] gives 7 (Elixir: 0), a divergence.\n\n- Static copy-on-write: at an array write, if another binding of the same buffer is live afterwards, copy before writing; otherwise write in place. No runtime refcount. Where uniqueness can't be proven (once arrays flow through branches/tuples, defk-gqk), copy conservatively. A swap {prev, cur} = {cur, prev} copies nothing.\n- Writes to input arrays become legal: the input is copied once into a kernel-owned buffer before its first write; the caller's binary is never mutated (defk-dtw.9). The result can be returned.\n- The write rule, documented in docs/language.md: an array write updates that variable from the write onward, through enclosing loops and branches; no other variable sees it. Elixir mode threads the array out as an accumulator. Rebinding an array variable as a whole inside a loop body and using it after the loop is a compile error (not silently scoped away).\n- Inserted copies are not warned about; they are listed in the per-kernel fast-path report if one is adopted, and explained in docs/language.md.\n- Remove 'Array writes alias' from README Known limitations; replace the read-only-input compile error.\n\nDone when: the snapshot case returns the pre-write value; a swap loop does no copies (checked in generated C); writing to an input leaves the caller's binary unchanged and can be returned; an HLL-style update of an input register array works without a manual alloc+copy; existing catalog kernels gain no copies.",
   "id": "defk-auo",
