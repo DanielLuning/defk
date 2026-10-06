@@ -1,6 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [
+    "defk-63k",
     "defk-9p6.10",
     "defk-w38"
   ],
@@ -14,5 +15,5 @@
   "status": "open",
   "title": "Target workload: WebSocket masking vs bandit_native",
   "type": "task",
-  "updated_at": "2026-10-05T21:21:33Z"
+  "updated_at": "2026-10-06T07:08:45Z"
 }
