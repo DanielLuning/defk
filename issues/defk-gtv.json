@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-sgw.5"
+  ],
   "created": "2026-10-05T20:49:14Z",
   "description": "alloc/2 computes `(size_t)n * sizeof(T)` in priv/defk_runtime.h (DEFK_ALLOC_FN) without an overflow check. alloc(f64, 2^61) wraps to a 0-byte allocation whose array length is 2^61, so bounds checks pass and writes land outside the buffer.\n\nRepro (crashes the VM with SIGBUS, exit status 138, OTP 29 / macOS):\n  defk big(n :: i64, i :: i64) :: f64 do\n    out = alloc(f64, n)\n    out[i] = 1.0\n    out[0]\n  end\n  O.big(2305843009213693952, 100_000_000)\n\nFix: checked multiply; on overflow raise ArgumentError \"alloc/2: length too large\" (a limit under the one rule). Audit every size calculation in the runtime and generated C (unaligned input copies, len, element size x index, enif_alloc_binary sizes) for the same class. Add regression tests at the extremes (2^61, 2^63-1, sizes just above the platform's allocation limit).\n\nDone when the repro raises ArgumentError, the audit is recorded in the commit, and the tests pass. Found by \"Which open runtime issues are safety gaps?\" (defk-dtw.12): this is a safety gap and required for the verdict.",
   "id": "defk-gtv",
@@ -10,5 +12,5 @@
   "status": "open",
   "title": "alloc/2 size overflow crashes the VM",
   "type": "bug",
-  "updated_at": "2026-10-05T20:49:14Z"
+  "updated_at": "2026-10-06T09:13:28Z"
 }
