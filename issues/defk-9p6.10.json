@@ -12,11 +12,13 @@
   "created": "2026-10-05T21:21:32Z",
   "description": "Decided in defk-dtw.15. report/1 takes optional native: (timing + package/version label), responsiveness: (max and p99 1 ms tick gap per side), realistic_size: and sweep: (sizes, times, crossover) keys; DEFK_RESULT JSON carries them so the verdict's workload-results snapshot is generated from run_all.exs output. Move bench/tick_gap.exs's method into a shared helper (one scheduler online, 1 ms ticker, implementation at the large size) so all six scripts measure identically. Done when: an existing example uses each key, run_all.exs prints them, and the snapshot table can be generated from its output.",
   "id": "defk-9p6.10",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-9p6",
   "priority": 2,
   "status": "open",
   "title": "Extend Defk.Bench.report/1 for target workloads",
   "type": "task",
-  "updated_at": "2026-10-05T21:21:33Z"
+  "updated_at": "2026-10-06T09:13:54Z"
 }
