@@ -17,9 +17,15 @@
   "description": "Build the checks decided in 'How are kernels checked against Elixir mode?' (defk-dtw.16).\n\n- Test-only dep: stream_data.\n- Defk.Test.assert_agrees(Mod, :fun, gen): runs native and Elixir mode, compares {:ok, v} with === (bit-exact floats, -0.0 /= 0.0) and {:raise, module, reason} by module plus normalised reason (overflow, index, zero divisor, clause, badarg), not message text.\n- Type-derived generators from each kernel's signature, biased to edges: 0, +-1, i64 min/max +-1, near 2^31/2^53, empty and length-1 arrays, index -1/len/len+1, alloc sizes near 2^61/2^63 and negative, +-0.0, tiny/huge floats, narrow-type boundaries (and u64/[i16]/[i32]/[f32] as they land). Optional per-kernel workload generator for structured inputs.\n- Hostile-argument generators: atoms, bignums, lists, maps, [f64] binaries with length not a multiple of 8, sub-binaries, unaligned, refc vs heap, empty. Only a raise is allowed; Elixir mode raises the same module.\n- Defk.Case: every subset test body runs in both modes automatically. Hand-written subset tests cover aliasing patterns and inf/NaN-producing operations.\n- Defk.Divergences registry: matcher, explanation, ticket per entry; the checker skips matching cases; it generates the divergence page; done for the verdict requires it empty.\n- Cost: default mix test ~100 runs per property, whole suite under ~60s. mix test --only deep: ~10k runs per property, executed in a :peer node so a VM crash is a failing, shrunk property; plus the same suite with kernels built under ASan/UBSan. Deep + sanitizer runs are manual, recorded (seed, date) in the verdict's method section before the results snapshot freezes. No CI setup.\n\nDone when the existing tests run in both modes, every catalog kernel has an assert_agrees property, and the deep and sanitizer runs pass once.",
   "id": "defk-63k",
   "labels": [],
+  "comments": [
+    {
+      "text": "Per 'Decide policy for inf/NaN inside kernels' (defk-q1c): normalised reasons add :non_finite (ArithmeticError, from an op) and :non_finite_input (ArgumentError, a non-finite element read from an input array); no inf/NaN entries in Defk.Divergences. Elixir mode's array read raises ArgumentError on non-finite bits, not MatchError. Build: defk-i00.",
+      "timestamp": "2026-10-06T07:32:42Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Differential agreement checks between kernels and Elixir mode",
   "type": "task",
-  "updated_at": "2026-10-06T07:08:45Z"
+  "updated_at": "2026-10-06T07:32:42Z"
 }
