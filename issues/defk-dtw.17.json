@@ -9,9 +9,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution: no, done doesn't need it. The fast-path report is a tool for the catalog work, not part of the devex bar (which stays 'predict what is allowed', not 'what is fast') and not part of the cold test. It reports defk's own decisions exactly (bounds checks kept/dropped with the missing fact, select vs branch, safepoint placement, inlined calls, copy-on-write copies, non-finite flag sites) and clang's vectorisation through -Rpass remarks under report: :full, shown as 'unknown' when CC is not clang. Form: generated __defk_report__/0 returning data plus Defk.Report.print/1 with margin notes, so catalog tests can assert a hot loop is tight. Built when the first target workload has a gap to explain: [Add a fast-path report for kernels](defk-6cn). The verdict mentions it in Method; Limitations says whether a library would need it. Glossary: Fast-path report (CONTEXT.md).",
+      "timestamp": "2026-10-06T08:26:17Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Does done need a per-kernel fast-path report?",
   "type": "task",
-  "updated_at": "2026-10-06T08:08:36Z"
+  "updated_at": "2026-10-06T08:26:17Z"
 }
