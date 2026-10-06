@@ -9,9 +9,15 @@
     "wayfinder:prototype"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution:\n- Sketches: branch prototype/defk-dtw.18-sketches, prototypes/convenience_sketches.exs (throwaway, never merged). Each starts from the anchor package's Elixir code and tags the constructs it reaches for.\n- In: module attributes as constants (integer/float, inlined; PCM, Gorilla, masks) -\u003e [Module attributes as constants in kernels](defk-ivt); multi-clause kernels with a bodiless typed head and case-style patterns plus guards (Gorilla dod buckets) -\u003e [Multi-clause kernels with a typed function head](defk-u9c); signed segments v::k-signed in the bitstring accumulator, out-of-range raises (Gorilla) -\u003e [Signed integer segments in the bitstring accumulator](defk-dki); the accumulator passed to and returned from helper kernels, still append-only, never an entry input (Gorilla) -\u003e [Pass the bitstring accumulator through helper kernels](defk-ooq). Bitwise operator forms (\u0026\u0026\u0026 \u003e\u003e\u003e ^^^; HLL, Gorilla, masking) were already in [Support bitwise operators in kernels](defk-w38).\n- Out (with a targeted compile-error hint, commented on defk-vku): |\u003e (no sketch used it); Enum.sum/min/max/min_by/min_max (every use was over a slice or expression, never a whole array; the reduce loop is the form); indexed generators and for ... into:; \u003c\u003c\u003e\u003e fixed-field matching (indexed reads instead); \u003c\u003cb::64\u003e\u003e = \u003c\u003cx::float-64\u003e\u003e (Defk.Bits.f64_to_u64/1); Enum.min/max over a list literal (nested min/2).\n- PCM's data-dependent output length needs no construct: return {out, count, held, sign}, caller takes binary_part (zero-copy).\n- A write to a parameter array that is never returned (PCM emit_wave trap) becomes a compile error; commented on [Give arrays value semantics: copy on aliased write](defk-auo).\n- Gorilla's anchor mask (1 \u003c\u003c\u003c len) - 1 overflows i64 at len 64: a limit, hint on defk-vku.\n- Wiring: defk-ivt blocks PCM (defk-9p6.14) and Gorilla (defk-9p6.16); defk-u9c, defk-dki, defk-ooq block Gorilla; defk-cmr blocks defk-dki and defk-ooq. Workload tickets may still add constructs.",
+      "timestamp": "2026-10-06T09:08:41Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Which convenience constructs do the six target workloads need?",
   "type": "task",
-  "updated_at": "2026-10-06T08:30:23Z"
+  "updated_at": "2026-10-06T09:08:41Z"
 }
