@@ -8,9 +8,15 @@
   "description": "Build Elixir mode as decided in 'Should a kernel body also run as plain Elixir?' (defk-dtw.6) and 'How are kernels checked against Elixir mode?' (defk-dtw.16).\n\n- A compile-time transform that generates real Elixir source from each kernel body (no IR interpreter): x[i] reads the packed binary, len/alloc map to binary ops, writes rebind an array threaded through loops and ifs.\n- Limits are applied, so agreement can be exact: i64 range checked after every integer op (ArithmeticError), array writes and narrow element types raise when the value doesn't fit, out-of-range indices raise the same module as the kernel (Enum.OutOfBoundsError), and wrong-typed arguments raise ArgumentError like the kernel.\n- Entry points: generated Mod.__defk_elixir__/2 per kernel; config :defk, mode: :elixir allowed only in :dev/:test (default native); always compiled in :test.\n- yield/timing don't exist in Elixir mode.\n\nDone when every existing test kernel and catalog kernel compiles in Elixir mode, and dbg/IO.inspect work inside a kernel body in Elixir mode.",
   "id": "defk-v5d",
   "labels": [],
+  "comments": [
+    {
+      "text": "Per defk-q1c: Elixir mode's [f64]/[f32] element read raises ArgumentError (reason :non_finite_input) on inf/NaN bits instead of MatchError.",
+      "timestamp": "2026-10-06T07:32:42Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Build Elixir mode",
   "type": "task",
-  "updated_at": "2026-10-06T07:08:44Z"
+  "updated_at": "2026-10-06T07:32:42Z"
 }
