@@ -12,9 +12,15 @@
   "id": "defk-9p6.15",
   "labels": [],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Per defk-i2e: writes to the input register array are legal (copied once before the first write), so update_many can be written as plain regs[i] = ... and return regs. Blocked on defk-auo.",
+      "timestamp": "2026-10-06T07:51:12Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Target workload: HLL update_many vs ex_data_sketch",
   "type": "task",
-  "updated_at": "2026-10-06T07:51:11Z"
+  "updated_at": "2026-10-06T07:51:12Z"
 }
