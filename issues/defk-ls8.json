@@ -5,7 +5,9 @@
   "created": "2026-10-05T15:28:24Z",
   "description": "defk-nbl made each loaded library use its own frame resource type (named after a static's address), so a different library never takes over another's frames and never runs its destructor on a foreign defk_ctx layout. Takeover now only happens for the identical .so. As defence in depth, if that invariant ever changes (shared type name, a separate runtime NIF, etc.), store a layout/version tag (e.g. hash of defk_runtime.h + frame struct size) in each frame and have the destructor and step functions refuse or fail cleanly on a mismatch instead of reading a foreign layout. Low priority while the per-image type holds.",
   "id": "defk-ls8",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "comments": [
     {
       "text": "Classified nice to have (not a safety gap, not required for the verdict) by 'Which open runtime issues are safety gaps?' (defk-dtw.12).",
@@ -16,5 +18,5 @@
   "status": "open",
   "title": "Tag frames with a layout version as defence in depth",
   "type": "task",
-  "updated_at": "2026-10-05T20:49:15Z"
+  "updated_at": "2026-10-06T09:13:57Z"
 }
