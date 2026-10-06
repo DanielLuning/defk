@@ -77,6 +77,10 @@ _Avoid_: examples, benchmark suite
 **Baseline**:
 The Elixir solution a kernel is measured against, marked first-pass or optimized. A win over a first-pass baseline is provisional.
 
+**Fast-path report**:
+For one kernel, what the compiler did to its hot path: which bounds checks stayed, which branches became selects, where safepoints and copies went, and which loops vectorised. A tool for explaining measurements, not part of the kernel subset: a kernel's meaning never depends on it.
+_Avoid_: optimisation report, profile
+
 **Workload verdict**:
 The outcome for one target workload, measured as defk against an optimized baseline: `good` (defk helps), `marginal`, `poor` or `out_of_scope` (Elixir is the right choice). Comparisons with an existing NIF and responsiveness are reported beside it and never change it.
 _Avoid_: verdict (alone), score
