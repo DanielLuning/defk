@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [
     "defk-63k",
+    "defk-jlk",
     "defk-sgw.2"
   ],
   "blocks": [],
@@ -14,5 +15,5 @@
   "status": "open",
   "title": "Freeze the workload-results snapshot on a quiet machine",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:26Z"
+  "updated_at": "2026-10-06T09:13:27Z"
 }
