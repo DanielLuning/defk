@@ -5,10 +5,12 @@
   "created": "2026-10-06T08:26:11Z",
   "description": "Decided in 'Does done need a per-kernel fast-path report?' (defk-dtw.17). A tool for the catalog work, not part of the devex bar or the cold test: it explains why a kernel is slower than expected and lets tests check that a hot loop is as tight as the NIF's. Build it when the first target workload has a gap to explain (likely batched Levenshtein).\n\n- Generated __defk_report__/0 next to __defk_source__/0, returning data: a list of {kernel, line, fact}. Defk.Report.print(Mod) prints the kernel source with margin notes, in the spirit of Julia's @code_warntype.\n- defk's own decisions, always reported, collected during lowering: each array access (bounds check kept or dropped; for a kept one, the missing range fact), each if/cond/case (select or branch, and why not a select), each loop (safepoint per iteration, strips of DEFK_STRIP, or none, and why), inlined kernel calls, copy-on-write copies (once defk-auo lands), non-finite flag sites (once defk-i00 lands).\n- clang's decisions behind use Defk, report: :full: per-loop vectorised or not with the missed reason, from -Rpass=loop-vectorize / -Rpass-missed=loop-vectorize, mapped to kernel lines via #line. When CC is not clang, report 'vectorised: unknown (CC is not clang)'; never guess.\n- Normal builds pay nothing (no extra compiler pass without :full).\n\nDone when: __defk_report__/0 and Defk.Report.print/1 exist; a test asserts dot's hot loop keeps no bounds checks and vectorises under :full with clang; a kept bounds check names its missing fact; docs mention the tool (not in docs/language.md's subset rules).",
   "id": "defk-6cn",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "priority": 3,
   "status": "open",
   "title": "Add a fast-path report for kernels",
   "type": "task",
-  "updated_at": "2026-10-06T08:26:11Z"
+  "updated_at": "2026-10-06T09:13:57Z"
 }
