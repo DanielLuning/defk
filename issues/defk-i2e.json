@@ -23,11 +23,15 @@
     {
       "text": "Per defk-dtw.16: until decided, aliasing cases go in the Defk.Divergences registry (defk-63k); done requires it empty.",
       "timestamp": "2026-10-06T07:08:45Z"
+    },
+    {
+      "text": "Resolution: value semantics, as Elixir.\n- Mechanism: static copy-on-write. At a write whose array has another live binding, copy, else write in place; no runtime refcount (Perceus-style rc kept unbuilt unless conservative copies hurt a target workload). Copy conservatively where uniqueness can't be proven. Swaps copy nothing. Rejected: a compile error (Elixir has no copy/1, and it rejects valid snapshots).\n- Input arrays become writable: copied once before the first write, the caller's binary never mutated (defk-dtw.9 holds). This is how HLL update_many is written naturally.\n- Write rule (the one place the subset defines rather than inherits meaning, since out[i] = v isn't Elixir syntax): an array write updates that variable from the write onward, through enclosing loops and branches; no other variable sees it. Rebinding a whole array inside a loop body and using it after the loop is a compile error. Scalar rebinding keeps Elixir scoping (probe: x = x + i in a for doesn't escape, as in Elixir).\n- Inserted copies: no warning; listed in the fast-path report if adopted, and documented in docs/language.md.\n- Glossary: Array added to CONTEXT.md.\nBuild: defk-auo (blocks the HLL workload).",
+      "timestamp": "2026-10-06T07:51:12Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Decide array value semantics (aliasing on write)",
   "type": "task",
-  "updated_at": "2026-10-06T07:49:24Z"
+  "updated_at": "2026-10-06T07:51:12Z"
 }
