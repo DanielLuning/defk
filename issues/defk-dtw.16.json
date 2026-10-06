@@ -17,11 +17,15 @@
     {
       "text": "Per 'Which open runtime issues are safety gaps?' (defk-dtw.12): the differential tests also run once with kernels built under AddressSanitizer/UBSan, and the generators include huge and negative sizes (alloc lengths near 2^61/2^63; see bug defk-gtv).",
       "timestamp": "2026-10-05T20:49:15Z"
+    },
+    {
+      "text": "Resolution:\n- Elixir mode applies the subset's limits (i64 range after every integer op, writes that don't fit raise, same exception modules as the kernel), so agreement is exact. A missing limit shows up as a disagreement.\n- Agreement: values === (bit-exact floats, -0.0 /= 0.0); raises match on module plus a normalised reason, not message text.\n- Floats: kernels build with -ffp-contract=off, never fast-math; reordering float ops is a divergence. C supplies speed through everything that keeps Elixir's answer (bounds-check removal, integer vectorisation, if-conversion, -O3, restrict) and protection through hardening flags (adopted if under 2%).\n- Inputs: StreamData (test-only). Type-derived, edge-biased generators from each signature, an optional per-kernel workload generator, and hostile-argument generators (wrong types, bad lengths, sub/unaligned/refc/heap binaries) where only a raise is allowed. Aliasing and inf/NaN go in hand-written subset tests.\n- Scope: catalog kernels (assert_agrees), every subset test (Defk.Case runs each test body in both modes), and docs/language.md examples (doctest-style extractor; rejected examples are checked for their error code).\n- Known divergences go in a Defk.Divergences registry that generates the divergence page; done requires it to be empty.\n- Cost: default mix test at about 100 runs per property, suite under about 60s. A manual deep run (about 10k runs in a :peer node, so a VM crash becomes a shrunk failure) plus an ASan/UBSan run, recorded in the verdict's method section. No CI.\n- Never taking down the BEAM is part of the runtime contract's definition (CONTEXT.md) and a done condition: for any arguments a kernel returns or raises, never starves or crashes the VM; otherwise a port is the better choice.\nBuild: defk-v5d (Build Elixir mode) -\u003e defk-63k (Differential agreement checks), which blocks the six catalog workloads; defk-jlk (-ffp-contract=off) blocks defk-63k; defk-rhb (docs/language.md examples); defk-j5n (hardening flags).",
+      "timestamp": "2026-10-06T07:08:58Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "How are kernels checked against Elixir mode?",
   "type": "task",
-  "updated_at": "2026-10-06T06:51:54Z"
+  "updated_at": "2026-10-06T07:08:58Z"
 }
