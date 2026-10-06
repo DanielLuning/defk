@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-06T07:08:44Z",
+  "description": "Clang contracts a*b+c into FMA by default (arm64 especially), which gives float results that differ from Elixir in the last bit: a divergence under the one rule. Decided in 'How are kernels checked against Elixir mode?' (defk-dtw.16): float results must be bit-exact with Elixir mode.\n\nAdd -ffp-contract=off to lib/defk/build.ex; never -ffast-math or reassociation. Float reductions that would need reordering to vectorise stay in order (document as a limit if it costs).\n\nDone when the flag is in the build and a test with an a*b+c kernel matches Elixir bit-exactly on inputs where FMA would differ.",
+  "id": "defk-jlk",
+  "labels": [],
+  "priority": 1,
+  "status": "open",
+  "title": "Build kernels with -ffp-contract=off",
+  "type": "bug",
+  "updated_at": "2026-10-06T07:08:44Z"
+}
