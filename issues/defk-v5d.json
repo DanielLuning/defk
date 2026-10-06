@@ -12,11 +12,15 @@
     {
       "text": "Per defk-q1c: Elixir mode's [f64]/[f32] element read raises ArgumentError (reason :non_finite_input) on inf/NaN bits instead of MatchError.",
       "timestamp": "2026-10-06T07:32:42Z"
+    },
+    {
+      "text": "Per defk-i2e: Elixir mode threads an array written inside a loop or branch out as an accumulator (the subset's write rule); input arrays are plain binaries, so writes to them simply rebind.",
+      "timestamp": "2026-10-06T07:51:11Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Build Elixir mode",
   "type": "task",
-  "updated_at": "2026-10-06T07:32:42Z"
+  "updated_at": "2026-10-06T07:51:11Z"
 }
