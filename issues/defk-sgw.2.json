@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-sgw.4"
+  ],
   "created": "2026-10-06T09:13:19Z",
   "description": "Decided in 'What must docs/verdict.md contain to count as done?' (defk-dtw.4). Create docs/verdict.md with the seven section headings (Conclusion; 'Should I use defk for X?' guide; Workload results; Runtime contract; Developer experience; Limitations; Method) and fill only Method now: the evidence bar per row and the go/no-go rule, verbatim from defk-dtw.4's resolution, committed BEFORE any workload row is filled (the commit date is the pre-registration). Leave the other sections as TODO stubs naming the ticket that fills them.\n\nDone when the file exists on main with Method complete and the go/no-go rule unchanged from defk-dtw.4.",
   "id": "defk-sgw.2",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Draft docs/verdict.md with the pre-registered go/no-go rule",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:19Z"
+  "updated_at": "2026-10-06T09:13:26Z"
 }
