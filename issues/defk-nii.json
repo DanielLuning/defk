@@ -6,9 +6,15 @@
   "description": "After defk-9vl kernels support Enum.reduce_while/3 and Enum.all?/any?/2 over ranges and arrays. Enum.reduce/3 (no halt) is an easy desugar to for reduce. Enum.find_index / Enum.find return nil when nothing matches, and kernels have no nil: decide on a story (e.g. return a sentinel only with an explicit default arg like Enum.find(enum, default, fn), or a {found, idx} tuple, or add a nil-able i64) that keeps Elixir semantics. Done when reduce/3 works and the find_index decision is recorded (implemented or rejected).",
   "id": "defk-nii",
   "labels": [],
+  "comments": [
+    {
+      "text": "Triage (defk-sgw plan): needs-triage. Enum.reduce/3 is agent-ready on its own; the find_index story (no nil) is an undecided design question. Split reduce/3 off if a workload needs it first.",
+      "timestamp": "2026-10-06T09:13:43Z"
+    }
+  ],
   "priority": 4,
   "status": "open",
   "title": "Support Enum.reduce/3 and find_index-style forms",
   "type": "task",
-  "updated_at": "2026-10-05T15:51:24Z"
+  "updated_at": "2026-10-06T09:13:43Z"
 }
