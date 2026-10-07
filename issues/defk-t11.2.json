@@ -5,11 +5,13 @@
   "created": "2026-10-07T14:46:54Z",
   "description": "Review of wave 1 (spec v5d, confirmed by running): native kernels disagree with Elixir mode (which is normative). (1) mixed i64/f64 comparisons convert the integer to double: 9007199254740993 == 9007199254740992.0 is true natively, false in Elixir; i64_max \u003c 9.223372036854776e18 is false natively, true in Elixir. Compare exactly (Erlang compares int vs float by exact value). (2) min/max on signed zeros: min(-0.0, 0.0) is 0.0 natively, -0.0 in Elixir mode (Erlang returns the first argument when they compare equal); max and the other order too. Check Erlang's exact rules in Lab/beam/otp before coding.\n\nDone when tests compare native and __defk_elixir__ on these inputs (incl. ===, \u003c, \u003c=, \u003e, \u003e=, ==, != at 2^53+-1, i64 min/max vs their nearest doubles, NaN-free) and min/max on +-0.0 in both orders, with no measurable cost on the catalog kernels (check dot/geo_nearest generated C still vectorises where it did).",
   "id": "defk-t11.2",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-t11",
   "priority": 1,
   "status": "open",
   "title": "Native comparisons and min/max must agree with Elixir (mixed i64/f64, signed zeros)",
   "type": "bug",
-  "updated_at": "2026-10-07T14:46:54Z"
+  "updated_at": "2026-10-07T14:47:02Z"
 }
