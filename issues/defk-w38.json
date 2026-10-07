@@ -17,11 +17,15 @@
     {
       "text": "Per 'Should kernels offer opt-in wrapping integer arithmetic for hashes?' (defk-dtw.10): scope now also covers masked arithmetic (band(expr, 2^k-1) with + - * bsl band bor bxor bnot inside, computed wrapping; bsr/div/rem only on in-range values; syntactic recognition), the u64 scalar and [u64] element type with its mixing rules, and Defk.Bits (clz, ctz, popcount, rotl, rotr). See the resolution comment on defk-dtw.10.",
       "timestamp": "2026-10-05T20:36:13Z"
+    },
+    {
+      "text": "Per review of wave 1 (defk-vku): when bitwise operators land, add vku's targeted hint for `(1 \u003c\u003c\u003c n) - 1` with n reaching 64 overflowing i64 (hint: the mask is often redundant when the value already fits n bits, or use masked arithmetic with a constant mask), with a test.",
+      "timestamp": "2026-10-07T14:47:02Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Support bitwise operators in kernels",
   "type": "task",
-  "updated_at": "2026-10-07T13:31:13Z"
+  "updated_at": "2026-10-07T14:47:02Z"
 }
