@@ -4,6 +4,7 @@
   "blocks": [
     "defk-9p6.12",
     "defk-9p6.2",
+    "defk-l2g",
     "defk-wlu"
   ],
   "created": "2026-10-05T18:11:36Z",
@@ -22,5 +23,5 @@
   "status": "open",
   "title": "Support bitwise operators in kernels",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:54Z"
+  "updated_at": "2026-10-07T13:31:13Z"
 }
