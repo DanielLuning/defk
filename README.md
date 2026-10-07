@@ -70,6 +70,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 | `defk` macro and stub generation | `lib/defk.ex` |
 | Type checker and C codegen | `lib/defk/compiler.ex` |
 | C build, cached by source hash | `lib/defk/build.ex` |
+| Elixir mode: kernel bodies as plain Elixir | `lib/defk/elixir_mode.ex`, `lib/defk/elixir_mode/ops.ex` |
 | Runtime: arrays, checks, safepoints, frames, exceptions | `priv/defk_runtime.h` |
 | Example kernels | `lib/examples.ex` |
 | Plain C baseline | `bench/native.c` |
@@ -81,6 +82,15 @@ At `mix compile`, `defk` type-checks the body, emits C
 - `case` on an `i64` or `bool`: integer literals, `true`/`false`, `^pinned`, `_` or a variable, each with an optional guard. Used as a value or a statement.
 - Operators: `a[i]`, `out[i] = v` (only on `alloc/2` arrays), `+ - * /`, `div`, `rem`, comparisons, `and`/`or`/`not`.
 - Builtins: `len`, `min`, `max`, `abs`, `float`, `trunc`, `round`, `sqrt`, `exp`, `log`, `sin`, `cos`, `pow` (also as `:math.*`), plus calls to other kernels (inlined).
+
+**Elixir mode** (tests and debugging only): each kernel body is also compiled to
+plain Elixir with the kernel's limits applied, so the two can be checked for
+agreement. `Mod.__defk_elixir__(:fun, args)` runs one call that way;
+`config :defk, mode: :elixir` (only in `:dev`/`:test`) runs every call that
+way, and `Defk.ElixirMode.with_mode/2` switches one process. It is always
+compiled in `:test`. `dbg/1` and `IO.inspect/1,2` work inside a kernel body
+there (native code ignores them), and `Mod.__defk_elixir_source__/0` shows the
+generated code.
 
 ## Design decisions the benchmarks validated
 
