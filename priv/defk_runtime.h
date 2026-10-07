@@ -76,6 +76,24 @@ __attribute__((noreturn, cold)) static void defk_oob(defk_ctx *ctx, int64_t i, i
             (long long)i, (long long)len);
 }
 
+/*
+ * A range loop first..stop//step whose stop is within one step of the i64
+ * limit (step != 0). Raise if its last element is too: stepping past it would
+ * overflow the loop counter (a limit, see range_limit in the compiler).
+ */
+__attribute__((cold, unused)) static void defk_range_limit(defk_ctx *ctx, int64_t first,
+                                                           int64_t stop, int64_t step) {
+  if (step > 0 ? first > stop : first < stop) return; /* empty */
+  uint64_t mag = step > 0 ? (uint64_t)step : -(uint64_t)step;
+  uint64_t span = step > 0 ? (uint64_t)stop - (uint64_t)first : (uint64_t)first - (uint64_t)stop;
+  uint64_t back = span / mag * mag; /* <= span: no wrap */
+  int64_t last = (int64_t)(step > 0 ? (uint64_t)first + back : (uint64_t)first - back);
+  if (step > 0 ? last > INT64_MAX - step : last < INT64_MIN - step)
+    defk_fail(ctx, DEFK_E_ARITH,
+              "range element %lld is within one step of the i64 limit (stepping past it overflows)",
+              (long long)last);
+}
+
 /* a `case` with no matching clause: CaseClauseError, like Elixir */
 __attribute__((noreturn, cold)) static void defk_no_clause(defk_ctx *ctx, int is_bool, int64_t v) {
   ctx->err_index = v;
@@ -132,7 +150,8 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
  * was a 0-byte buffer of length 2^61, and an in-bounds write crashed the VM
  * (defk-gtv). A size under the limit that the allocator cannot provide raises
  * "out of memory" (defk_own). It also bounds every array length below 2^61,
- * which the compiler relies on (range loops over len/1 cannot overflow).
+ * which the compiler relies on (range_limit: a range ending at len/1 cannot
+ * step past the i64 limit).
  */
 #if UINTPTR_MAX > 0xFFFFFFFFu
 #define DEFK_ALLOC_MAX_BYTES ((uint64_t)1 << 60)

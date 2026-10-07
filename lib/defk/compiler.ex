@@ -789,11 +789,11 @@ defmodule Defk.Compiler do
           facts = %{lo: va[:lo], hi: vb[:hi], lb: lb(va), ub: ub(vb)}
           iv = Map.merge(val(i, :i64), facts)
           strip = %{done_at: &"#{i} > #{&1}", remaining: "((uint64_t)#{e} - (uint64_t)#{i}) / #{k}", step: k}
-          {setup, "#{i} > #{e}", "#{i} += #{k};\n", iv, strip}
+          {[setup, range_limit(i, e, k, vb)], "#{i} > #{e}", "#{i} += #{k};\n", iv, strip}
 
         k when is_integer(k) and k < 0 ->
           strip = %{done_at: &"#{i} < #{&1}", remaining: "((uint64_t)#{i} - (uint64_t)#{e}) / #{-k}", step: k}
-          {setup, "#{i} < #{e}", "#{i} -= #{-k};\n", val(i, :i64), strip}
+          {[setup, range_limit(i, e, k, vb)], "#{i} < #{e}", "#{i} -= #{-k};\n", val(i, :i64), strip}
 
         0 ->
           err!(m, "range step cannot be zero")
@@ -812,7 +812,7 @@ defmodule Defk.Compiler do
                "if (#{st} == 0) defk_fail(ctx, DEFK_E_ARG, \"range step cannot be zero\");\n"]
             end
 
-          {[setup, step_setup], "(#{st} > 0 ? #{i} > #{e} : #{i} < #{e})", "#{i} += #{st};\n", val(i, :i64), nil}
+          {[setup, step_setup, range_limit(i, e, st, vb)], "(#{st} > 0 ? #{i} > #{e} : #{i} < #{e})", "#{i} += #{st};\n", val(i, :i64), nil}
       end
 
     env = put_var(env, name, iv)
@@ -822,6 +822,40 @@ defmodule Defk.Compiler do
       strip = strip && Map.merge(strip, %{var: i, stop: e})
       [setup, loop(id, done, strip, flat?, [body, incr])]
     end)
+  end
+
+  # Stepping past the last element of a range that ends within one step of the
+  # i64 limit would overflow i (C UB: in practice i wraps, the exit test never
+  # passes, the loop hangs without a safepoint, and an index proven in range
+  # from i is not). Such a range raises before the loop starts (a limit, even
+  # when a reduce_while halt would end it earlier). The test, one compare,
+  # is dropped when the facts on the end prove it far enough from the limit,
+  # e.g. an end <= len(a) + d with d <= 0: arrays are shorter than 2^61
+  # elements (DEFK_ALLOC_MAX_BYTES, and the largest binary).
+  @i64_min -0x8000000000000000
+  @i64_max 0x7FFFFFFFFFFFFFFF
+  defp range_limit(i, e, k, vb) do
+    near_limit =
+      cond do
+        is_integer(k) and k > 0 ->
+          safe? = (is_integer(vb[:hi]) and vb[:hi] <= @i64_max - k) or
+                    (k <= @i64_max - 2 ** 61 and Enum.any?(ub(vb), fn {_, d} -> d <= 0 end))
+
+          if !safe?, do: "#{e} > INT64_C(#{@i64_max - k})"
+
+        is_integer(k) ->
+          safe? = (is_integer(vb[:lo]) and vb[:lo] >= @i64_min - k) or
+                    Enum.any?(lb(vb), fn {_, d} -> d >= @i64_min - k end)
+
+          if !safe?, do: "#{e} < INT64_C(#{@i64_min - k})"
+
+        true ->
+          "(#{k} > 0 ? #{e} > INT64_MAX - #{k} : #{e} < INT64_MIN - #{k})"
+      end
+
+    if near_limit,
+      do: "if (DEFK_UNLIKELY(#{near_limit})) defk_range_limit(ctx, #{i}, #{e}, #{k});\n",
+      else: []
   end
 
   defp array_loop(name, src, rest, env, inner, m) do
