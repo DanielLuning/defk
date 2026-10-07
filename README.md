@@ -149,6 +149,7 @@ These are deliberate, to keep defk small for now.
 - `case` matches only `i64`/`bool` subjects against literals, variables and pins (no floats, tuples or ranges). An error inside a guard (overflow, `rem` by zero) raises, where Elixir would fail that clause. Kernel calls are rejected in guards, as Elixir rejects them.
 - Array writes alias: `b = a` then `a[i] = x` is visible through `b`.
 - `alloc/2` raises `ArgumentError` for a length over 2^48 bytes ("length too large", the user address space of 64-bit platforms) and for one the allocator cannot provide ("out of memory"). A range whose last element is within one step of the i64 limit (`0..9223372036854775807`) raises `ArithmeticError` before its loop starts, also when a halt would end it earlier: stepping past that element would overflow the loop counter.
+- Float arithmetic is evaluated as written, so results match Elixir bit for bit: kernels build with `-ffp-contract=off` and never `-ffast-math` or reassociation. A float reduction (`acc + a[i] * b[i]`) therefore stays in order and is not vectorised across lanes. Measured with and without the flag (5M elements): `dot` ~0.56 ns/elem, `sum` 0.50-0.53, `mean_var` 3.8-4.3 either way, so the flag costs nothing measurable here (defk-jlk).
 - A kernel survives one reload of its module; a second reload before it finishes purges its code and kills it (standard BEAM old-code semantics).
 - The C compiler runs at compile time on the build machine (no Cranelift JIT path).
 
