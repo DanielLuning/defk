@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-sgw.5"
@@ -11,8 +11,8 @@
     "ready-for-agent"
   ],
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "alloc/2 size overflow crashes the VM",
   "type": "bug",
-  "updated_at": "2026-10-06T09:13:52Z"
+  "updated_at": "2026-10-07T13:15:48Z"
 }
