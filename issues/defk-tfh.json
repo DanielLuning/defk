@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-07T14:04:50Z",
   "created": "2026-10-05T15:51:24Z",
   "description": "defk-9vl added count_primes_early (prime_early? via Enum.all?, ~33 ms at 1M). Demo section 4 and bench/tick_gap.exs only use the full-scan count_primes. Add the early-exit kernel there (scaled n so it runs long enough) to show halting loops keep worst tick gaps in line with other yielding kernels.",
   "id": "defk-tfh",
@@ -9,8 +10,8 @@
     "ready-for-agent"
   ],
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Show count_primes_early in demo section 4 and tick_gap",
   "type": "task",
-  "updated_at": "2026-10-07T13:15:49Z"
+  "updated_at": "2026-10-07T14:04:50Z"
 }
