@@ -4,10 +4,15 @@ defmodule Defk.Build do
 
   @priv Path.expand("../../priv", __DIR__)
 
+  # -ffp-contract=off: never fuse a*b+c into an FMA, whose single rounding
+  # differs from Elixir's in the last bit. Float results must be bit-exact
+  # with Elixir mode, so no -ffast-math or reassociation either (defk-jlk).
+  @cflags ~w(-O3 -ffp-contract=off -std=gnu11 -fPIC -shared -Wall -Wno-unused-label -Wno-unused-variable)
+
   def build!(module, src, file) do
     dir = Path.join(build_root(), "defk")
     File.mkdir_p!(dir)
-    hash = :erlang.md5([src, File.read!(Path.join(@priv, "defk_runtime.h"))]) |> Base.encode16(case: :lower)
+    hash = :erlang.md5([@cflags, src, File.read!(Path.join(@priv, "defk_runtime.h"))]) |> Base.encode16(case: :lower)
     base = Path.join(dir, "#{module}-#{binary_part(hash, 0, 10)}")
 
     unless File.exists?(base <> ".so") do
@@ -15,7 +20,7 @@ defmodule Defk.Build do
       cc = System.get_env("CC", "cc")
 
       args =
-        ~w(-O3 -std=gnu11 -fPIC -shared -Wall -Wno-unused-label -Wno-unused-variable) ++
+        @cflags ++
           ["-I", erts_include(), "-I", @priv, "-o", base <> ".so", base <> ".c"] ++
           if(match?({:unix, :darwin}, :os.type()), do: ~w(-undefined dynamic_lookup), else: [])
 
