@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-07T14:49:42Z",
   "created": "2026-10-07T14:46:54Z",
   "description": "Review of wave 1 (spec defk-jlk): 'Float reductions that would need reordering to vectorise stay in order (document as a limit if it costs)'. jlk measured no cost (dot ~0.56 ns/elem, sum 0.50-0.53, mean_var 3.8-4.3 with and without the flag) but recorded it only in its report. Add a README note: reductions are kept in order (no fast-math/reassociation), measured cost of the flag ~0, and that unordered vectorised float reductions are not done (a limit).",
   "id": "defk-t11.5",
@@ -10,8 +11,8 @@
   ],
   "parent": "defk-t11",
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Record in-order float reduction cost of -ffp-contract=off",
   "type": "task",
-  "updated_at": "2026-10-07T14:47:04Z"
+  "updated_at": "2026-10-07T14:49:42Z"
 }
