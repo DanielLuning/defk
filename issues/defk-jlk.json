@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-63k",
@@ -12,8 +12,8 @@
     "ready-for-agent"
   ],
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Build kernels with -ffp-contract=off",
   "type": "bug",
-  "updated_at": "2026-10-06T09:13:52Z"
+  "updated_at": "2026-10-07T13:15:48Z"
 }
