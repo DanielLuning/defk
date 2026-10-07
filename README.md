@@ -194,7 +194,7 @@ The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show
 - [ ] Checksum/hash over binaries, compared with `:erlang.crc32` (defk-9p6.2, needs defk-w38)
 - [ ] Matrix multiply against Nx (expected verdict: use Nx) (defk-9p6.3)
 - [ ] n-body step with state kept packed between calls (defk-9p6.4)
-- [ ] Fair early-exit cutoff for fuzzy_search's Levenshtein, in both backends (defk-8i4)
+- [x] Fair early-exit cutoff for fuzzy_search's Levenshtein, in both backends (defk-8i4)
 
 **7. Later**
 - [ ] Cranelift JIT backend for kernels specialised at runtime (defk-o1w)
