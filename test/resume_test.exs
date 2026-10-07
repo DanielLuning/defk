@@ -171,6 +171,13 @@ end
 defmodule Defk.ResumeTest do
   use ExUnit.Case, async: false
 
+  # A resume that misses its safepoint raises (defk_lost_resume in the
+  # runtime). This backstop fails any other endless resume loop before it
+  # exhausts memory: each restart re-runs alloc/2 and keeps the binary until
+  # the kernel ends, which got the VM OOM-killed in about 25 s (defk-juw).
+  # The tests take about a second.
+  @moduletag timeout: 10_000
+
   alias Defk.ResumeTest.K
   alias FuzzySearch.Kernels, as: F
 

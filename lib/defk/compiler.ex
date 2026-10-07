@@ -968,7 +968,8 @@ defmodule Defk.Compiler do
     depth = length(here)
 
     for {n, path} <- Enum.sort(sps), length(path) > depth, List.starts_with?(path, here) do
-      clear = if length(path) == depth + 1, do: "defk_rs = 0; ", else: ""
+      # reaching the safepoint's own loop completes the resume (defk_lost_resume)
+      clear = if length(path) == depth + 1, do: "defk_rs = F->resume = 0; ", else: ""
       "case #{n}: #{clear}goto defk_l#{Enum.at(path, depth)};\n"
     end
   end
@@ -1372,7 +1373,7 @@ defmodule Defk.Compiler do
 
     sp_macro =
       if yields? do
-        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
+        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { if (DEFK_UNLIKELY(F->resume)) { defk_lost_resume(ctx, F->resume, N); return DEFK_ERR; } #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
           "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n#define DEFK_RESUMING DEFK_UNLIKELY(defk_rs)\n"
       else
         @no_yield_macros
@@ -1408,6 +1409,7 @@ defmodule Defk.Compiler do
          "#{f} *F;\nERL_NIF_TERM res;\n",
          "enif_get_resource(env, argv[0], defk_frame_rt, (void **)&F);\n",
          "int r = guard_#{k.cid}(env, F, argv + 1, &res);\n",
+         "if (DEFK_UNLIKELY(r == DEFK_DONE && F->resume)) { defk_lost_resume(&F->ctx, F->resume, 0); r = DEFK_ERR; }\n",
          "if (r == DEFK_YIELD) {\natomic_fetch_add(&defk_stat_yields, 1);\n",
          "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc, argv);\n}\n",
          "defk_finish(&F->ctx);\n",

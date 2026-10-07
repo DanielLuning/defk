@@ -30,6 +30,7 @@
 #define DEFK_E_OOB 3
 #define DEFK_E_CASE_I64 4  /* CaseClauseError; the term is err_index */
 #define DEFK_E_CASE_BOOL 5
+#define DEFK_E_RESUME 6    /* a resume missed its safepoint (a defk bug); RuntimeError */
 
 #define DEFK_LIKELY(x) __builtin_expect(!!(x), 1)
 #define DEFK_UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -429,6 +430,27 @@ __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c
 
 /* ---- exceptions ---------------------------------------------------------- */
 
+/*
+ * A resume must reach the safepoint it yielded at before anything else yields
+ * or the kernel returns: the dispatch case that gets there clears F->resume.
+ * A missing or wrong case re-runs the kernel from an earlier point instead,
+ * which silently recomputes, and under forced yields restarts it at every
+ * yield so it never finishes (defk-juw). Generated code checks F->resume only
+ * where it yields and after a resumed run returns, never inside a loop. `at`
+ * is the safepoint that yielded instead, or 0 if the kernel returned.
+ */
+__attribute__((cold, unused)) static void defk_lost_resume(defk_ctx *ctx, int from, int at) {
+  ctx->err = DEFK_E_RESUME;
+  if (at)
+    snprintf(ctx->msg, sizeof ctx->msg,
+             "defk bug: kernel resumed at safepoint %d but yielded at safepoint %d "
+             "without reaching it (missing or wrong resume dispatch)", from, at);
+  else
+    snprintf(ctx->msg, sizeof ctx->msg,
+             "defk bug: kernel resumed at safepoint %d but returned without reaching it "
+             "(missing or wrong resume dispatch)", from);
+}
+
 static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
   if (ctx->err == DEFK_E_CASE_I64 || ctx->err == DEFK_E_CASE_BOOL) {
     ERL_NIF_TERM term = ctx->err == DEFK_E_CASE_I64 ? enif_make_int64(env, ctx->err_index)
@@ -440,9 +462,10 @@ static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
     enif_make_map_from_arrays(env, ks, vs, 3, &exc);
     return enif_raise_exception(env, exc);
   }
-  const char *mod = ctx->err == DEFK_E_ARITH ? "Elixir.ArithmeticError"
-                    : ctx->err == DEFK_E_OOB ? "Elixir.Enum.OutOfBoundsError"
-                                             : "Elixir.ArgumentError";
+  const char *mod = ctx->err == DEFK_E_ARITH    ? "Elixir.ArithmeticError"
+                    : ctx->err == DEFK_E_OOB    ? "Elixir.Enum.OutOfBoundsError"
+                    : ctx->err == DEFK_E_RESUME ? "Elixir.RuntimeError"
+                                                : "Elixir.ArgumentError";
   ERL_NIF_TERM msg;
   size_t n = strlen(ctx->msg);
   memcpy(enif_make_new_binary(env, n, &msg), ctx->msg, n);
