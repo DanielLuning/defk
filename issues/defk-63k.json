@@ -25,11 +25,15 @@
     {
       "text": "Per 'Decide policy for inf/NaN inside kernels' (defk-q1c): normalised reasons add :non_finite (ArithmeticError, from an op) and :non_finite_input (ArgumentError, a non-finite element read from an input array); no inf/NaN entries in Defk.Divergences. Elixir mode's array read raises ArgumentError on non-finite bits, not MatchError. Build: defk-i00.",
       "timestamp": "2026-10-06T07:32:42Z"
+    },
+    {
+      "text": "From defk-v5d (branch defk-v5d/elixir-mode): build assert_agrees on Mod.__defk_elixir__/2 and Defk.Case on Defk.ElixirMode.with_mode/2 (process key :defk_mode); test/elixir_mode_test.exs re-runs existing test bodies under with_mode(:elixir) as a Defk.Case prototype. Divergences found by inspection that generators should target: min/max with +-0.0 (Elixir returns first arg, C second); === on 0.0 vs -0.0 (Elixir false, native true); mixed i64/f64 comparisons above 2^53 (Elixir exact, C as doubles); trunc(-2^63) (native rejects, Elixir mode accepts); which error wins when two operands can both raise (C order unspecified/hoisted, Elixir mode left to right). Alloc cap: Elixir mode raises 'length too large' above 2^48 bytes (a 2^59 binary alloc aborts the VM), defk-gtv native caps at 2^60 and raises ArgumentError 'out of memory' between — same module, different reason; reconcile at landing.",
+      "timestamp": "2026-10-07T13:42:25Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Differential agreement checks between kernels and Elixir mode",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:52Z"
+  "updated_at": "2026-10-07T13:42:25Z"
 }
