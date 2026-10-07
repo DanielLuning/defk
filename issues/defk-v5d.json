@@ -18,11 +18,15 @@
     {
       "text": "Per defk-i2e: Elixir mode threads an array written inside a loop or branch out as an accumulator (the subset's write rule); input arrays are plain binaries, so writes to them simply rebind.",
       "timestamp": "2026-10-06T07:51:11Z"
+    },
+    {
+      "text": "Per defk-gtv (branch defk-gtv/alloc-overflow): two new native limits Elixir mode must apply for agreement: (1) alloc/2 raises ArgumentError 'alloc/2: length too large' when n*elem_size overflows or exceeds 2^60 bytes (DEFK_ALLOC_MAX_BYTES); negative n already raises. (2) A range loop whose last element is within one step of the i64 limit raises ArithmeticError ('range element L is within one step of the i64 limit ...') BEFORE the loop starts, even for reduce_while that would halt early. If v5d lands first, gtv's landing adds these to Elixir mode.",
+      "timestamp": "2026-10-07T13:35:37Z"
     }
   ],
   "priority": 1,
   "status": "in_progress",
   "title": "Build Elixir mode",
   "type": "task",
-  "updated_at": "2026-10-07T13:15:48Z"
+  "updated_at": "2026-10-07T13:35:37Z"
 }
