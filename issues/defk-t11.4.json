@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-07T14:46:54Z",
@@ -10,8 +10,8 @@
   ],
   "parent": "defk-t11",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Test the lost-resume error message",
   "type": "task",
-  "updated_at": "2026-10-07T14:47:02Z"
+  "updated_at": "2026-10-07T14:47:03Z"
 }
