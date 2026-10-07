@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-05T15:51:24Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 4,
-  "status": "open",
+  "status": "in_progress",
   "title": "Show count_primes_early in demo section 4 and tick_gap",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:57Z"
+  "updated_at": "2026-10-07T13:15:49Z"
 }
