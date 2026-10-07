@@ -168,6 +168,23 @@ defmodule Defk.ResumeTest.K do
   end
 end
 
+# Two flat loops in strips, so safepoints 1 and 2 dispatch from the top
+# level. The lost-resume tests break this kernel's dispatch in its C source.
+defmodule Defk.ResumeTest.Lost do
+  use Defk
+
+  defk two_loops(n :: i64) :: i64 do
+    s =
+      for i <- 1..n//1, reduce: 0 do
+        acc -> acc + i
+      end
+
+    for i <- 1..n//1, reduce: s do
+      acc -> acc + 2 * i
+    end
+  end
+end
+
 defmodule Defk.ResumeTest do
   use ExUnit.Case, async: false
 
@@ -257,6 +274,101 @@ defmodule Defk.ResumeTest do
       after
         K.__defk_force_yields__(false)
       end
+    end
+  end
+
+  # A missing or wrong resume dispatch case raises defk_lost_resume's
+  # RuntimeError at once instead of recomputing or never finishing. Defk
+  # never generates such a case, so each test breaks the generated C of
+  # Defk.ResumeTest.Lost and builds it as another module: no test-only
+  # option reaches the compiler.
+  @lost_case "case 2: defk_rs = F->resume = 0; goto defk_l2;\n"
+  @lost_return "*result = enif_make_int64(env, v_acc_7);\n"
+
+  describe "a lost resume raises" do
+    test "when the kernel yields at another safepoint first" do
+      # missing case: the resume at safepoint 2 restarts the kernel, which
+      # yields at safepoint 1 under forced yields
+      lost = lost_mutant(LostMissing, &String.replace(&1, @lost_case, ""))
+
+      assert {:raised, %RuntimeError{message: msg}} = run_lost(lost)
+
+      assert msg =~
+               "defk bug: kernel resumed at safepoint 2 but yielded at safepoint 1 without reaching it"
+    end
+
+    test "when the kernel returns without reaching the safepoint" do
+      # wrong case: the resume at safepoint 2 jumps straight to the return
+      lost =
+        lost_mutant(LostReturn, fn src ->
+          src
+          |> String.replace(@lost_case, "case 2: goto defk_lost_ret;\n")
+          |> String.replace(@lost_return, "defk_lost_ret:;\n" <> @lost_return)
+        end)
+
+      assert {:raised, %RuntimeError{message: msg}} = run_lost(lost)
+      assert msg =~ "defk bug: kernel resumed at safepoint 2 but returned without reaching it"
+    end
+  end
+
+  # Builds Defk.ResumeTest.Lost's C source, changed by `edit`, as the NIF of a
+  # new module `name` with a stub for each NIF, and returns the module and a
+  # function that calls the kernel.
+  defp lost_mutant(name, edit) do
+    src = Defk.ResumeTest.Lost.__defk_source__()
+
+    assert String.contains?(src, @lost_case) and String.contains?(src, @lost_return),
+           "the generated C changed shape; update the lost-resume tests"
+
+    mod = Module.concat(Defk.ResumeTest, name)
+
+    src =
+      src
+      |> edit.()
+      |> String.replace("ERL_NIF_INIT(Elixir.Defk.ResumeTest.Lost,", "ERL_NIF_INIT(#{mod},")
+
+    lib = Defk.Build.build!(mod, src, __ENV__.file)
+    nifs = Regex.scan(~r/\{"(\w+)", (\d+), (\w+), 0\}/, src, capture: :all_but_first)
+
+    stubs =
+      for [f, a, _] <- nifs do
+        args = for i <- 1..String.to_integer(a)//1, do: Macro.var(:"_a#{i}", nil)
+        quote do: def(unquote(String.to_atom(f))(unquote_splicing(args)), do: :erlang.nif_error(:not_loaded))
+      end
+
+    load = quote do: def(__load__(lib), do: :erlang.load_nif(lib, 0))
+    Module.create(mod, [load | stubs], Macro.Env.location(__ENV__))
+    :ok = mod.__load__(String.to_charlist(lib))
+    [kernel] = for [f, "1", "nif_" <> _] <- nifs, do: String.to_atom(f)
+    {mod, &apply(mod, kernel, [&1])}
+  end
+
+  # Runs the broken kernel under forced yields, bounded well below the 10 s
+  # backstop: without the runtime check it never finishes.
+  defp run_lost({mod, kernel}) do
+    mod.__defk_force_yields__(true)
+
+    try do
+      {pid, ref} =
+        spawn_monitor(fn ->
+          exit(
+            try do
+              {:returned, kernel.(10_000)}
+            rescue
+              e -> {:raised, e}
+            end
+          )
+        end)
+
+      receive do
+        {:DOWN, ^ref, :process, ^pid, result} -> result
+      after
+        2_000 ->
+          Process.exit(pid, :kill)
+          flunk("a lost resume did not raise within 2 s")
+      end
+    after
+      mod.__defk_force_yields__(false)
     end
   end
 
