@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-07T14:46:54Z",
+  "description": "Review of wave 1, judgement calls (not fixed): lib/defk/errors.ex (~1145 lines) holds the code registry, diagnostic rendering, source location, AST classification and language facts; compiler.ex keeps ~14 process-dictionary keys as globals (:defk_file/module/lines/diags/broken/ctx/fun travel together into err!/4, never cleared; elixir_mode.ex shares :defk_file); error codes are bare strings checked only by a test; runtime error messages are hand-copied between priv/defk_runtime.h and Defk.ElixirMode.Ops. Decide whether to split errors.ex (registry+rendering vs language facts), carry a compile context struct, and make codes atoms/compile-time checked.",
+  "id": "defk-euu",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Split Defk.Errors and replace compiler process-dictionary globals with a context",
+  "type": "task",
+  "updated_at": "2026-10-07T14:46:54Z"
+}
