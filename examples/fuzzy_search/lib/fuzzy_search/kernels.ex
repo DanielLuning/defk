@@ -24,29 +24,37 @@ defmodule FuzzySearch.Kernels.Template do
               start = offs[c]
               n = offs[c + 1] - start
 
+              # cut-off: once the top k is full, `bound` is the k-th best
+              # distance; a word stops when its row minimum reaches it
+              bound = best_d[worst]
+
               for j <- 0..m//1 do
                 row[j] = j
               end
 
               # two-row DP collapsed into one row; `diag` carries row[i-1][j-1]
-              for i <- 1..n//1 do
-                ch = blob[start + i - 1]
-                diag0 = row[0]
-                row[0] = i
+              cut =
+                Enum.reduce_while(1..n//1, false, fn i, _ ->
+                  ch = blob[start + i - 1]
+                  diag0 = row[0]
+                  row[0] = i
 
-                _ =
-                  for j <- 1..m//1, reduce: diag0 do
-                    diag ->
-                      up = row[j]
-                      cost = if q[j - 1] == ch, do: 0, else: 1
-                      row[j] = min(min(up + 1, row[j - 1] + 1), diag + cost)
-                      up
-                  end
-              end
+                  {_, row_min} =
+                    for j <- 1..m//1, reduce: {diag0, i} do
+                      {diag, mn} ->
+                        up = row[j]
+                        cost = if q[j - 1] == ch, do: 0, else: 1
+                        v = min(min(up + 1, row[j - 1] + 1), diag + cost)
+                        row[j] = v
+                        {up, min(mn, v)}
+                    end
+
+                  if row_min >= bound, do: {:halt, true}, else: {:cont, false}
+                end)
 
               d = row[m]
 
-              if d < best_d[worst] or (d == best_d[worst] and c < best_i[worst]) do
+              if not cut and (d < best_d[worst] or (d == best_d[worst] and c < best_i[worst])) do
                 best_d[worst] = d
                 best_i[worst] = c
 

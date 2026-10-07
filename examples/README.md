@@ -47,7 +47,7 @@ once and reused.
 | [`rolling_stats.exs`](rolling_stats.exs) | Moving mean/stddev over 1M sensor readings | 149–178× (≈30× on arithmetic alone; the rest is Elixir materialising 2M floats as lists) | first pass: **provisional** |
 | [`geo_nearest.exs`](geo_nearest.exs) | 10 nearest of 500k locations (haversine) | 12–13× | first pass: **provisional** |
 | [`image_blur.exs`](image_blur.exs) | Grayscale + 3×3 box blur on a raw 1080p frame | 37–41× | first pass: **provisional** |
-| [`fuzzy_search/`](fuzzy_search) (app) | Typo-tolerant search service: Levenshtein over 234k words behind Plug + Bandit | 6.2× req/s, 5.4× lower p99; `/health` latency stays at Elixir levels (a blocking NIF pushes it to ~80–90 ms p99) | first pass: **provisional** |
+| [`fuzzy_search/`](fuzzy_search) (app) | Typo-tolerant search service: Levenshtein over 234k words behind Plug + Bandit | 4.2× per query with the early cut-off on both sides (noisy-machine numbers, re-measure pending); before the cut-off 6.2× req/s, 5.4× lower p99 under load; `/health` latency stays at Elixir levels (a blocking NIF pushes it to ~80–90 ms p99). Elixir with Myers bit-parallel comes within ~1.3× of the DP kernel; defk can't express it until `defk-w38` | first pass: **provisional** |
 
 These numbers will shrink as the Elixir baselines are optimised; that's
 expected and is the point. Each example's header lists what hasn't been

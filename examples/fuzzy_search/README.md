@@ -14,17 +14,34 @@ backends:
 
 | Backend | What it is |
 |---|---|
-| `elixir` | Pure Elixir: charlist rows built by tail recursion, bounded top-k ([`elixir_backend.ex`](lib/fuzzy_search/elixir_backend.ex)) |
+| `elixir` | Pure Elixir: charlist rows built by tail recursion, early cut-off, bounded top-k ([`elixir_backend.ex`](lib/fuzzy_search/elixir_backend.ex)) |
 | `defk` | The same algorithm as a defk kernel that yields like Elixir code ([`kernels.ex`](lib/fuzzy_search/kernels.ex)) |
 | `blocking` | The identical kernel compiled with `yield: false`. It behaves like a typical hand-written NIF and holds its scheduler until it finishes. |
 
-All three return identical results; `bench/verify.exs` checks this.
+All three return identical results; `bench/verify.exs` and `mix test` check this.
+
+### The algorithm
+
+Classic Levenshtein DP, one row per character of the candidate word, with a
+bounded top-k list and an **early cut-off** (`defk-8i4`): a row's minimum never
+decreases from one row to the next, and the final distance is at least that
+minimum. So once the top k is full, a word stops as soon as its row minimum
+reaches the k-th best distance found so far. Words are scanned in index order
+and ties go to the lower index, so a word that can only tie the k-th best is
+cut too. Results are exactly those of a full scan: `test/fuzzy_search_test.exs`
+compares every backend with one.
+
+Both sides use the same cut-off. The kernel writes it as `Enum.reduce_while`
+over the rows (`{:halt, true}` once the row minimum reaches the bound); the
+Elixir backend as a tail-recursive row loop that returns `:cut`.
 
 ## Run it
 
 ```bash
 mix deps.get
+mix test                                  # every backend vs a full scan
 NO_SERVER=1 mix run bench/verify.exs      # correctness + single-query timing
+NO_SERVER=1 mix run bench/elixir_variants.exs  # the Elixir variants that were tried
 NO_SERVER=1 mix run bench/yield_cost.exs  # yielding vs `yield: false`, query by query
 PORT=4040 mix run --no-halt               # the service
 curl 'localhost:4040/search?q=elixr&backend=defk&k=5'
@@ -38,7 +55,36 @@ the server-side compute time. `GET /health` is a liveness probe.
 
 ## Results
 
+### With the early cut-off (provisional, noisy machine)
+
+> **Provisional.** Measured while other agents were building on the same
+> machine (load average 5–90 during the session). Each number is one of two
+> alternating before/after runs, which agreed within ~5%. The quiet-machine
+> re-measure, including the load test below, belongs to `defk-klw`.
+
+Single query, in-process (`bench/verify.exs`, 40 typo'd queries, k = 10), M-series Mac, 12 cores, OTP 29, Elixir 1.20:
+
+| Backend | before (no cut-off) | after (cut-off) | gain |
+|---|---|---|---|
+| `elixir` | 112 ms | 60 ms | 1.9× |
+| `defk` | 20.4–20.8 ms | 14.1–14.2 ms | 1.5× |
+| `blocking` | 20.6 ms | 13.1–13.7 ms | 1.5× |
+| defk vs Elixir | 5.4× | **4.2×** | |
+
+`bench/yield_cost.exs` (20 queries × 5, interleaved): yielding 12.6–12.8 ms vs
+blocking 12.0–12.4 ms (+4.7–4.9%, 55 yields/query); before the cut-off it was
+20.9–21.4 vs 21.7 ms (−2%, 77 yields/query). Whether that ~5% is real or code
+layout noise (`defk-9vl` saw ±3% from layout alone) is for the quiet re-measure.
+
+The cut-off helps Elixir more than defk. A likely reason (not yet profiled):
+it removes the same DP cells on both sides, but the per-word cost it can't
+remove (row setup, the reduce over rows, the top-k check) is a larger share of
+the kernel's time.
+
+### Before the cut-off: under load
+
 Measured on an M-series Mac with 12 cores, OTP 29 and Elixir 1.20; two runs agreed within a few percent.
+These predate the cut-off and have not been re-run with it.
 
 **Under load:** 24 concurrent clients saturating the server, while a prober hits
 `GET /health` every 5 ms.
@@ -60,19 +106,48 @@ Measured on an M-series Mac with 12 cores, OTP 29 and Elixir 1.20; two runs agre
 ## Elixir baseline: first pass
 
 The Elixir backend is careful (a precomputed charlist catalog in
-`:persistent_term`, tail-recursive rows, bounded top-k) but not yet
-optimised, so the 6.2× is **provisional**. Not yet tried:
+`:persistent_term`, tail-recursive rows, the early cut-off, bounded top-k),
+and its row layout has now been measured against the alternatives. It stays
+**first pass**, so the 4.2× is **provisional**, because a better algorithm
+exists that the kernel can't use yet (Myers, below).
 
-- a tuple or `:array` row instead of rebuilding lists,
-- processing the catalog in parallel chunks per request,
-- the early cut-off below, applied to the Elixir side too.
+What was tried for `defk-8i4` (`bench/elixir_variants.exs`: 20 queries × 3
+rounds, k = 10, each query in a fresh process, catalog in `:persistent_term`;
+median ms/query, noisy machine, the two runs agreed within ~10%):
+
+| Variant | ms/query |
+|---|---|
+| first pass, no cut-off | 124–128 |
+| list rows + cut-off, `Enum.reduce_while` over the word | 66–69 |
+| **list rows + cut-off, tail recursion (shipped)** | **60–62** |
+| = shipped, but words as binaries (`<<ch, rest::binary>>`) | 66–67 |
+| = shipped, tail-recursive catalog walk instead of `Enum.reduce` | 59–62 (same) |
+| = shipped, row minimum via `:lists.min/1` | 69–70 |
+| = shipped, rows as tuples (`elem`, `List.to_tuple`) | 79–82 |
+| = shipped, rows as `:array` | 287–288 |
+| = shipped, rows as `u16` binaries built by appending | 322–330 |
+| = shipped + length pre-filter (`abs(len(w) - len(q)) >= bound`)\* | 53–54 |
+| Myers/Hyyrö bit-parallel distance, no cut-off\* | **18–19** |
+
+\* Not used as the baseline, because the kernel doesn't have the same trick:
+
+- **Myers bit-parallel** replaces each row with a few bitwise operations on one
+  integer (queries up to 58 characters fit a small integer). In Elixir it is
+  **3.3× faster than the shipped DP and within ~1.3× of the defk DP kernel**,
+  which would make this example `marginal`. A defk kernel can't write it until
+  kernels have bitwise operators (`defk-w38`); then both sides should use it
+  and be re-measured. Until then the 4.2× is a DP-vs-DP comparison only.
+- **The length pre-filter** is cheap on both sides; adding it to both is a follow-up.
+
+Not yet tried: processing the catalog in parallel chunks per request (it
+doesn't raise throughput under load, where every scheduler is already busy).
 
 ## Not modelled
 
 Real fuzzy search adds things none of the three backends do:
 
-- an early cut-off (stop a word once its row minimum exceeds the current k-th best),
+- a length pre-filter, or a tighter cut-off bound that adds the remaining length difference to each cell,
 - prefix or n-gram indexes, so most words are never scored,
 - Unicode grapheme handling (this compares ASCII bytes).
 
-Each of these speeds up all backends. The cut-off needs early loop exit in defk (ticket `defk-9vl`).
+Each of these speeds up all backends.

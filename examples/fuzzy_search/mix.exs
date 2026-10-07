@@ -2,7 +2,14 @@ defmodule FuzzySearch.MixProject do
   use Mix.Project
 
   def project do
-    [app: :fuzzy_search, version: "0.1.0", elixir: "~> 1.18", deps: deps()]
+    [
+      app: :fuzzy_search,
+      version: "0.1.0",
+      elixir: "~> 1.18",
+      deps: deps(),
+      # tests load the catalog themselves and need no HTTP server
+      aliases: [test: "test --no-start"]
+    ]
   end
 
   def application do
