@@ -7,7 +7,9 @@
   "created": "2026-10-07T13:31:09Z",
   "description": "Found by defk-8i4 (branch defk-8i4/levenshtein-cutoff, examples/fuzzy_search/bench/elixir_variants.exs): a Myers bit-parallel Levenshtein in plain Elixir runs ~18-19 ms/query vs ~60 ms for the shipped DP+cutoff Elixir backend and ~14 ms for the defk kernel (provisional, busy machine). That would make fuzzy_search 'marginal' rather than 'good'. Per AGENTS.md, give both sides the same algorithm: implement Myers in the defk kernel (needs bitwise operators, defk-w38; words longer than 64 chars need the multi-word variant or a fallback) and make Myers the optimized Elixir baseline (baseline: :optimized). Also try the length pre-filter / tighter bound on both sides.\n\nDone when both backends use Myers with identical results (fuzzy_search tests), the variants table and README verdict are updated, and numbers are flagged provisional until the defk-klw quiet-machine run.",
   "id": "defk-l2g",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 2,
   "status": "open",
   "title": "Myers bit-parallel Levenshtein in both fuzzy_search backends",
