@@ -10,9 +10,15 @@
   "labels": [
     "ready-for-human"
   ],
+  "comments": [
+    {
+      "text": "From defk-8i4 (DP+early cutoff in both backends, provisional busy-machine numbers): elixir 112→60 ms/query, defk 20.6→14.1, blocking 20.6→13.4. Quiet re-measure should also: re-run loadgen (README under-load table predates the cutoff), and check the yielding-vs-blocking cost, which moved from -2% to +4.7-4.9% (~55 yields/query). See also defk-l2g (Myers in plain Elixir ~18 ms).",
+      "timestamp": "2026-10-07T13:31:13Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Re-measure fuzzy_search: defk 27 ms vs 21 ms blocking",
   "type": "bug",
-  "updated_at": "2026-10-06T09:13:58Z"
+  "updated_at": "2026-10-07T13:31:13Z"
 }
