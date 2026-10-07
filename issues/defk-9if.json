@@ -5,10 +5,12 @@
   "created": "2026-10-07T13:23:23Z",
   "description": "Found by defk-ds0: lib/examples.ex sits in the library's lib/, so every app depending on defk also compiles and ships Examples.Kernels (0.36 s C compile, ~75 KB in the release). Move the examples out of lib/ (e.g. test/support or examples/, compiled via elixirc_paths only in :dev/:test) without breaking demo.exs, bench/ and the tests that use them.\n\nDone when a fresh app with a path/hex dep on defk compiles no defk example kernels, and demo.exs, bench/*.exs and mix test still work.",
   "id": "defk-9if",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 3,
   "status": "open",
   "title": "Don't compile defk's example kernels into dependent apps",
   "type": "task",
-  "updated_at": "2026-10-07T13:23:23Z"
+  "updated_at": "2026-10-07T13:23:28Z"
 }
