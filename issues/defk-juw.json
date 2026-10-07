@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-07T14:04:51Z",
   "created": "2026-10-05T15:08:11Z",
   "description": "In defk-jaj the sub-agent checked test/resume_test.exs by deleting each inlined callee's resume entries. Five cases failed cleanly, but removing the entries for the 'weights' callee made the forced-yield test hang. A missing or wrong resume entry should give a clean failure: add a per-test timeout and/or a bound on yields (e.g. resumes without progress) under __defk_force_yields__/1, so a test that would loop forever fails with a clear message.",
   "id": "defk-juw",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Make resume tests fail instead of hang on a resume bug",
   "type": "task",
-  "updated_at": "2026-10-07T13:15:48Z"
+  "updated_at": "2026-10-07T14:04:51Z"
 }
