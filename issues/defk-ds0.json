@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-sgw.5"
@@ -17,8 +17,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Record a mix release build in a stock Debian Elixir image",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:53Z"
+  "updated_at": "2026-10-07T13:15:49Z"
 }
