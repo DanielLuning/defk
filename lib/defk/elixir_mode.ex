@@ -13,6 +13,10 @@ defmodule Defk.ElixirMode do
     * an `[f64]` element read whose bits are inf or NaN raises
       `ArgumentError` (reason `:non_finite_input`, defk-q1c)
     * wrong-typed arguments raise `ArgumentError`, as the kernel does
+    * `alloc/2` over 2^48 bytes raises `ArgumentError` ("length too large"),
+      and from 2^47 bytes ("out of memory"), as the kernel does
+    * a range whose last element is within one step of the i64 limit raises
+      `ArithmeticError` before its loop starts, as the kernel does
     * float operations that would give inf or NaN raise `ArithmeticError`
       at the operation, which plain Elixir already does
 

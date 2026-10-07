@@ -9,9 +9,12 @@ defmodule Defk.ElixirMode.Ops do
 
   @min -0x8000000000000000
   @max 0x7FFFFFFFFFFFFFFF
-  # alloc/2 refuses arrays this large instead of letting the VM abort on a
-  # failed allocation; native raises ArgumentError for such sizes too (defk-gtv)
-  @max_alloc_bytes 0x1000000000000
+  # alloc/2 over DEFK_ALLOC_MAX_BYTES raises "length too large", as native
+  # does (defk-gtv). From 2^47 bytes no platform's allocator serves the
+  # request (native raises "out of memory"), and asking the VM for it aborts
+  # the VM, so Elixir mode raises native's "out of memory" without trying.
+  @max_alloc_bytes 2 ** 48
+  @no_alloc_bytes 2 ** 47
 
   defguardp is_i64(x) when is_integer(x) and x >= @min and x <= @max
 
@@ -46,6 +49,9 @@ defmodule Defk.ElixirMode.Ops do
 
   def alloc(n, _esz) when n < 0, do: raise(ArgumentError, "alloc/2: negative length #{n}")
   def alloc(n, esz) when n * esz > @max_alloc_bytes, do: raise(ArgumentError, "alloc/2: length too large")
+  def alloc(n, esz) when n * esz >= @no_alloc_bytes,
+    do: raise(ArgumentError, "out of memory (allocating #{n * esz} bytes)")
+
   def alloc(n, esz), do: <<0::size(n * esz)-unit(8)>>
 
   def len_f64(a), do: Kernel.div(byte_size(a), 8)
@@ -107,10 +113,23 @@ defmodule Defk.ElixirMode.Ops do
 
   # Every range generator is set up here: `a..b` counts down when a > b, as
   # in Elixir; a zero step raises ArgumentError, as Range does and the kernel
-  # does. (A range-level limit the kernel checks before its loop starts
-  # belongs here.)
+  # does. A range whose last element is within one step of the i64 limit
+  # raises before its loop starts, as the kernel does (defk_range_limit):
+  # the kernel's counter would overflow stepping past it (defk-gtv).
   def range(a, b), do: range(a, b, if(a <= b, do: 1, else: -1))
-  def range(a, b, step), do: a..b//step
+
+  def range(a, b, step) do
+    r = a..b//step
+    n = Range.size(r)
+    last = a + (n - 1) * step
+
+    if n > 0 and ((step > 0 and last > @max - step) or (step < 0 and last < @min - step)) do
+      raise ArithmeticError,
+            "range element #{last} is within one step of the i64 limit (stepping past it overflows)"
+    end
+
+    r
+  end
 
   # ------------------------------------------------------------ arguments --
   # Checked like the kernel's entry: array arguments first, then scalars, each

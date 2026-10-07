@@ -453,13 +453,8 @@ defmodule Defk.ElixirModeTest do
         expect = means ++ stds
         assert Rolling.Kernels.__defk_elixir__(:mean_std, [x, w]) === f64s(expect)
 
-        # Not yet bit-exact natively: clang contracts `q + v * v - old * old`
-        # into fused multiply-adds. Built with -ffp-contract=off (defk-jlk)
-        # the two agree bit for bit (checked by hand with a CC wrapper).
-        native = for <<v::float-64-native <- Rolling.Kernels.mean_std(x, w)>>, do: v
-        # (a standard deviation near 0 is the square root of a cancellation, so
-        # its error is about the square root of the sums' rounding error)
-        assert Enum.zip_with(native, expect, &abs(&1 - &2)) |> Enum.max() < 1.0e-5
+        # bit-exact natively too: kernels build with -ffp-contract=off (defk-jlk)
+        assert Rolling.Kernels.mean_std(x, w) === f64s(expect)
       end
 
       for w <- [0, 5_001, 20_000], do: agree(Rolling.Kernels, :mean_std, [x, w], message: false)
@@ -555,7 +550,7 @@ defmodule Defk.ElixirModeTest do
     end
 
     test "Elixir mode applies the decided semantics where the kernel still diverges" do
-      # the kernel gives these until defk-i00 / defk-auo / defk-gtv land;
+      # the kernel gives these until defk-i00 / defk-auo land;
       # Elixir mode gives the decided result
 
       # value semantics: b is not changed by the write to out (native: 4.0)
@@ -571,11 +566,11 @@ defmodule Defk.ElixirModeTest do
         assert e.message =~ "non-finite float"
         assert K.__defk_elixir__(:read, [bits <> f64s([2.0]), 1]) == 2.0
       end
+    end
 
-      # alloc sizes that would overflow raise instead of taking down the VM
-      for n <- [2_305_843_009_213_693_952, @max] do
-        assert_raise ArgumentError, "alloc/2: length too large", fn -> K.__defk_elixir__(:mk, [1, n]) end
-      end
+    test "alloc/2 sizes past what any allocator serves" do
+      # wrapping n * 8, over 2^48 bytes, exactly 2^48 bytes (out of memory)
+      for n <- [2 ** 61, @max, 2 ** 45 + 1, 2 ** 45, -1], do: agree(K, :mk, [1, n])
     end
   end
 

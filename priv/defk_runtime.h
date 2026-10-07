@@ -145,9 +145,10 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
 }
 
 /*
- * Largest array alloc/2 makes, in bytes: about the largest BEAM binary (ERTS
- * refuses 2^61 - 1 bytes with system_limit), so it could never be returned.
- * The check also keeps n * sizeof(T) from wrapping: unchecked, alloc(f64, 2^61)
+ * Largest array alloc/2 makes, in bytes: 2^48 (256 TiB), the user address
+ * space of 64-bit platforms, so no allocator can serve more. Elixir mode
+ * applies the same limit (Defk.ElixirMode.Ops.alloc/2), where asking the VM
+ * for a binary that large aborts it; the two modes agree on it. The check also keeps n * sizeof(T) from wrapping: unchecked, alloc(f64, 2^61)
  * was a 0-byte buffer of length 2^61, and an in-bounds write crashed the VM
  * (defk-gtv). A size under the limit that the allocator cannot provide raises
  * "out of memory" (defk_own). It also bounds every array length below 2^61,
@@ -155,7 +156,7 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
  * step past the i64 limit).
  */
 #if UINTPTR_MAX > 0xFFFFFFFFu
-#define DEFK_ALLOC_MAX_BYTES ((uint64_t)1 << 60)
+#define DEFK_ALLOC_MAX_BYTES ((uint64_t)1 << 48)
 #else
 #define DEFK_ALLOC_MAX_BYTES ((uint64_t)1 << 29)
 #endif
