@@ -186,7 +186,7 @@ The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show
 - [x] Resume correctness under forced yields (defk-h8a)
 - [x] Hot code upgrade with suspended kernels (defk-nbl)
 - [ ] Resume tests fail instead of hanging on a resume bug (defk-juw)
-- [ ] Show an early-exit kernel in the preemption demo and `tick_gap` (defk-tfh)
+- [x] Show an early-exit kernel in the preemption demo and `tick_gap` (defk-tfh)
 - [ ] `__defk_stats__` semantics across reloads (defk-9qv)
 - [ ] Layout version tag on frames, as defence in depth (defk-ls8)
 

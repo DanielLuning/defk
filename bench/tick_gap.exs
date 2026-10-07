@@ -32,7 +32,9 @@ runs = String.to_integer(List.first(System.argv()) || "5")
 cases = [
   {"idle", fn -> Process.sleep(500) end},
   {"plain Elixir", fn -> TickGap.ex_count_primes(400_000) end},
-  {"yielding kernel", fn -> K.count_primes(2_000_000) end}
+  {"yielding kernel", fn -> K.count_primes(2_000_000) end},
+  # early exit (Enum.all? halts at the first divisor), n scaled to a similar runtime
+  {"early-exit kernel", fn -> K.count_primes_early(6_000_000) end}
 ]
 
 pct = fn l, p -> Enum.at(Enum.sort(l), min(length(l) - 1, trunc(p * length(l)))) end
