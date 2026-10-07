@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-07T13:23:23Z",
+  "description": "Found by defk-ds0 (examples/release_debian on branch defk-ds0/debian-release). Defk.Build writes each kernel .so to _build/\u003cenv\u003e/defk/ and the generated __defk_load__ loads it from that absolute build path. mix release does not copy that directory, so a release boots with on_load_function_failed (cannot open shared object file) and the module is undefined. The ds0 Dockerfile works around it by copying _build/prod/defk to the same absolute path in the runtime image.\n\nFix: write the .so under the owning app's priv/ (as elixir_make packages do) and load it via :code.priv_dir/1 (or Application.app_dir) at load time, so it travels with the release and survives relocation. Keep the content-hash cache behaviour.\n\nDone when the ds0 Dockerfile builds and runs with COPY_SO=0 (no manual copy), a test checks the load path is relative to the app's priv dir, and examples/release_debian/README.md drops the workaround.",
+  "id": "defk-n8f",
+  "labels": [],
+  "priority": 1,
+  "status": "open",
+  "title": "Ship kernel .so files in mix releases",
+  "type": "bug",
+  "updated_at": "2026-10-07T13:23:23Z"
+}
