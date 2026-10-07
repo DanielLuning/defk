@@ -274,6 +274,6 @@ defmodule Defk.ResumeTest do
     """
 
     e = assert_raise CompileError, fn -> Code.compile_string(src) end
-    assert Exception.message(e) =~ "is recursive"
+    assert Exception.message(e) =~ "ping/1 calls itself through pong/1"
   end
 end

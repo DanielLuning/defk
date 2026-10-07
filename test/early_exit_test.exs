@@ -404,30 +404,30 @@ defmodule Defk.EarlyExitTest do
 
     test "reduce_while" do
       assert compile_error("Enum.reduce_while(1..x, 0, fn i, acc -> acc + i end)") =~
-               "must return a literal {:cont, acc} or {:halt, acc} in every branch, got: acc + i"
+               "an Enum.reduce_while/3 fn returns acc + i, not {:cont, acc} or {:halt, acc}"
 
       assert compile_error("Enum.reduce_while(1..x, 0, fn i, acc -> if(i > 2, do: {:halt, acc}) end)") =~
-               "needs an else branch"
+               "(defk reduce-while-tail:"
 
       assert compile_error("Enum.reduce_while(1..x, {0, 0}, fn i, {a, c} -> {:cont, a} end)") =~
-               "has 1 values, accumulator has 2"
+               "{:cont, acc} gives 1 value, the accumulator has 2"
 
       assert compile_error("Enum.reduce_while(1..x, 0, fn i, acc -> {:cont, f} end)") =~
-               "has type f64, expected i64"
+               "the new value of acc f has type f64, expected i64"
 
-      assert compile_error("Enum.reduce_while(1..x, 0, &foo/2)") =~ "usage: Enum.reduce_while"
-      assert compile_error("Enum.all?(1..x, &foo/1)", "bool") =~ "usage: Enum.all?"
-      assert compile_error("Enum.any?(1..x, fn i -> i end)", "bool") =~ "if expects a boolean"
+      assert compile_error("Enum.reduce_while(1..x, 0, &foo/2)") =~ "Enum.reduce_while/3 with &foo/2 is not in the kernel subset"
+      assert compile_error("Enum.all?(1..x, &foo/1)", "bool") =~ "(defk fn-argument:"
+      assert compile_error("Enum.any?(1..x, fn i -> i end)", "bool") =~ "a condition must be a boolean, and i is i64"
     end
 
     test "case" do
-      assert compile_error("case f do\n_ -> 1\nend") =~ "`case` subject must be i64 or bool, got f64"
-      assert compile_error("case x do\n1.0 -> 1\n_ -> 2\nend") =~ "unsupported `case` pattern 1.0"
-      assert compile_error("case x do\n{a, b} -> a\n_ -> 2\nend") =~ "unsupported `case` pattern {a, b}"
-      assert compile_error("case b do\n1 -> 1\n_ -> 2\nend") =~ "pattern 1 can never match a bool"
+      assert compile_error("case f do\n_ -> 1\nend") =~ "case on f, an f64 value, is not in the kernel subset"
+      assert compile_error("case x do\n1.0 -> 1\n_ -> 2\nend") =~ "the case pattern 1.0 is not in the kernel subset"
+      assert compile_error("case x do\n{a, b} -> a\n_ -> 2\nend") =~ "the case pattern {a, b} is not in the kernel subset"
+      assert compile_error("case b do\n1 -> 1\n_ -> 2\nend") =~ "the pattern 1 never matches a bool subject"
       assert compile_error("case x do\ny when bad(y, f, b) > 0 -> 1\n_ -> 2\nend") =~
-               "is not allowed in a `case` guard"
-      assert compile_error("case x do\n1 -> 1\n_ -> 2.0\nend") =~ "branches have different types"
+               "bad(y, f, b) is not allowed in a case guard"
+      assert compile_error("case x do\n1 -> 1\n_ -> 2.0\nend") =~ "the branches of this case have different types: i64, f64"
     end
   end
 end

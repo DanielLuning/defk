@@ -61,6 +61,11 @@ end
 Stats.dot(bin_a, bin_b)   # [f64] = a binary of packed native-endian floats
 ```
 
+A construct outside the kernel subset is a compile error in Elixir's
+diagnostic format, with why it's rejected, a rewrite where one exists, and a
+stable code (`Defk.Errors.codes/0`). Every rejection in the module is reported
+at once, up to 10.
+
 At `mix compile`, `defk` type-checks the body, emits C
 (`_build/dev/defk/*.c`; also `Mod.__defk_source__/0`), builds a NIF with
 `cc -O3`, and generates the Elixir stubs plus `@spec`s.
@@ -69,6 +74,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 |---|---|
 | `defk` macro and stub generation | `lib/defk.ex` |
 | Type checker and C codegen | `lib/defk/compiler.ex` |
+| Compile error codes and format | `lib/defk/errors.ex` |
 | C build, cached by source hash | `lib/defk/build.ex` |
 | Elixir mode: kernel bodies as plain Elixir | `lib/defk/elixir_mode.ex`, `lib/defk/elixir_mode/ops.ex` |
 | Runtime: arrays, checks, safepoints, frames, exceptions | `priv/defk_runtime.h` |
