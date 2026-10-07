@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-07T14:46:54Z",
+  "description": "Two-axis review (standards + spec) of a795978..4702c4e, the 8 tickets landed in wave 1. Children fix the confirmed findings; larger refactors that are judgement calls are filed separately as needs-triage.",
+  "id": "defk-t11",
+  "labels": [],
+  "priority": 1,
+  "status": "open",
+  "title": "Review fixes after wave 1 (defk-tfh..vku)",
+  "type": "epic",
+  "updated_at": "2026-10-07T14:46:54Z"
+}
