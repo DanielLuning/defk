@@ -12,6 +12,7 @@
 
 #include <erl_nif.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <math.h>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -108,20 +109,45 @@ static void defk_frame_dtor(ErlNifEnv *env, void *obj) {
 /* Owned binary: off-heap, stable address across yields and GC. */
 static int defk_own(defk_ctx *ctx, size_t bytes) {
   if (ctx->nowned == ctx->cap) {
+    /* one slot per alloc/2 call, so a loop can grow the table without bound:
+       a failed grow raises and keeps the old table, whose binaries are freed */
+    if (ctx->cap > INT_MAX / 2) defk_fail(ctx, DEFK_E_ARG, "out of memory");
     int ncap = ctx->cap ? ctx->cap * 2 : 4;
-    ctx->owned = enif_realloc(ctx->owned, sizeof(ErlNifBinary) * ncap);
+    ErlNifBinary *grown = enif_realloc(ctx->owned, sizeof(ErlNifBinary) * (size_t)ncap);
+    if (!grown) defk_fail(ctx, DEFK_E_ARG, "out of memory");
+    ctx->owned = grown;
     ctx->cap = ncap;
   }
   ErlNifBinary *b = &ctx->owned[ctx->nowned];
-  if (!enif_alloc_binary(bytes, b)) defk_fail(ctx, DEFK_E_ARG, "out of memory");
+  if (!enif_alloc_binary(bytes, b))
+    defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", bytes);
   memset(b->data, 0, bytes);
   return ctx->nowned++;
 }
 
+/*
+ * Largest array alloc/2 makes, in bytes: about the largest BEAM binary (ERTS
+ * refuses 2^61 - 1 bytes with system_limit), so it could never be returned.
+ * The check also keeps n * sizeof(T) from wrapping: unchecked, alloc(f64, 2^61)
+ * was a 0-byte buffer of length 2^61, and an in-bounds write crashed the VM
+ * (defk-gtv). A size under the limit that the allocator cannot provide raises
+ * "out of memory" (defk_own). It also bounds every array length below 2^61,
+ * which the compiler relies on (range loops over len/1 cannot overflow).
+ */
+#if UINTPTR_MAX > 0xFFFFFFFFu
+#define DEFK_ALLOC_MAX_BYTES ((uint64_t)1 << 60)
+#else
+#define DEFK_ALLOC_MAX_BYTES ((uint64_t)1 << 29)
+#endif
+
 #define DEFK_ALLOC_FN(T, CT)                                                     \
   static inline defk_arr_##T defk_alloc_##T(defk_ctx *ctx, int64_t n) {          \
     if (n < 0) defk_fail(ctx, DEFK_E_ARG, "alloc/2: negative length %lld", (long long)n); \
-    int slot = defk_own(ctx, (size_t)n * sizeof(CT));                            \
+    uint64_t bytes;                                                              \
+    if (DEFK_UNLIKELY(__builtin_mul_overflow((uint64_t)n, (uint64_t)sizeof(CT), &bytes) || \
+                      bytes > DEFK_ALLOC_MAX_BYTES))                             \
+      defk_fail(ctx, DEFK_E_ARG, "alloc/2: length too large");                   \
+    int slot = defk_own(ctx, (size_t)bytes);                                     \
     defk_arr_##T a = {(CT *)ctx->owned[slot].data, n};                           \
     return a;                                                                    \
   }
