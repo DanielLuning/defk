@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-07T14:53:21Z",
   "created": "2026-10-07T14:46:54Z",
   "description": "Review of wave 1 (spec defk-juw): no test triggers defk_lost_resume's RuntimeError; only the 10 s backstop is covered. Add a test that a missing/wrong resume dispatch raises 'defk bug: kernel resumed at safepoint ...' quickly, without adding a production-facing option (e.g. a test-only hook gated on Mix.env/test compile, or compiling a kernel through Defk.Compiler with a test-only flag that drops one dispatch case). Also exercise the 'returned without reaching it' path if feasible.\n\nDone when the test fails if the check is removed from the runtime.",
   "id": "defk-t11.4",
@@ -10,8 +11,8 @@
   ],
   "parent": "defk-t11",
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Test the lost-resume error message",
   "type": "task",
-  "updated_at": "2026-10-07T14:47:03Z"
+  "updated_at": "2026-10-07T14:53:21Z"
 }
