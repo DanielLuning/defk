@@ -10,9 +10,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Breadcrumb from defk-t11.2 (2026-10-08): the window this ticket must close is wider than 'a non-finite returned float'. A kernel can compute a NaN, compare an integer against it, and return a bool - no non-finite float ever reaches the exit check, so nothing raises today. Probe: defk probe(i :: i64) :: {bool,bool,bool,bool} with f = 1.0e308 * 10.0 - 1.0e308 * 10.0 inside returns {false, false, true, true} natively, i.e. 1 \u003e NaN and 1 \u003e= NaN are true, while Elixir cannot even get there: every producer (0.0/0.0, 1.0e308*10.0, sqrt(-1.0), log(0.0), exp(1000.0)) raises ArithmeticError at the op. So the observable divergence is native returning a value where Elixir raises, plus the control flow the wrong 1 \u003e NaN picks before exit. defk_cmp_i64_f64 returns 1 for NaN (documented in priv/defk_runtime.h as 'NaN compares below every integer'), which makes \u003c and \u003c= false as Elixir would but \u003e and \u003e= true; a single int cannot represent unordered, so agreeing on all four needs the codegen to add a guard, not a change to the helper. Spec scope for t11.2 was explicitly NaN-free. Decide here whether the nf flag is checked before any comparison can observe the NaN, or add a Defk.Divergences entry.",
+      "timestamp": "2026-10-08T13:28:08Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Raise on non-finite floats like Elixir",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:52Z"
+  "updated_at": "2026-10-08T13:28:08Z"
 }
