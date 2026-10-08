@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-08T09:49:31Z",
   "created": "2026-10-08T08:20:18Z",
   "description": "The BEAM/NIF interaction surface defk depends on is scattered across README design decisions, priv/defk_runtime.h comments and wayfinder tickets; docs/ has no reference and docs/adr/ does not exist, though docs/agents/domain.md tells agents to read both. Future changes to the runtime, codegen or containment need these facts close.\n\nDeliverables:\n1. docs/adr/0001-state-travels-as-binaries.md — extracted from defk-dtw.9: context (HLL registers, Gorilla encoder state), decision (binaries in, new binary/tuple out; no kernel-owned mutable state), consequences (one rule holds in Elixir mode; copy cost accepted; resources stay the expansion candidate). Source: defk-dtw.9.\n2. docs/adr/0002-c-compiler-at-build-time.md — extracted from defk-dtw.11: context (codegen target choice; Zig/Rust/Odin funnel to LLVM, V via C; stack review defk-dtw.19), decision (C via system cc; elixir_make for apps, precompiled artifacts for libraries; no bundled compiler; Cranelift stays an exploration), consequences (needs cc, cross-compiling is a limitation, C-warning class defk-5dd). Source: defk-dtw.11 + defk-dtw.19.\n3. docs/beam-nifs.md — single reference with sections: (1) execution model: scheduler threads, no preemption/memory protection, erl_nif quotes on crash-is-node-death, dirty schedulers and why defk rejects them, enif_schedule_nif (yield) vs enif_consume_timeslice (return-time accounting only); (2) lifecycles: ErlNifEnv/argv validity, heap binaries moving across yields (rebind per entry), process death -\u003e frame dtor, resource destructor/keep rules; (3) memory constructs table: enif_alloc, enif_alloc_binary/enif_make_binary, enif_make_new_binary, enif_alloc_resource — ownership, good-for/bad-for, defk's stance, plus the four external patterns (arena, resources, yield-state, zero-copy) as the ideas layer; (4) errors: enif_raise_exception, sigsetjmp discipline (README decision 6), release-owned on every error path, nothing unwinds across the boundary; (5) signals and fault containment: crash = node death, OTP contract for NIF-local signals (restore before return, SA_ONSTACK, PR #7174), the defk-7dm spike decision when it lands (placeholder until then), debugging with rr/watchpoints; (6) loading and hot code upgrade: dynlib per source hash, ERTS keeps libs mapped, per-library resource types (README decision 8), purge semantics; (7) when not to use a NIF: erl_nif warnings, ports/processes vs kernels, catalog out_of_scope evidence; (8) sources: erl_nif docs, OTP PRs/source, README decisions, wayfinder IDs.\n4. Discoverability: link the doc from BOTH docs/agents/domain.md (read-before-exploring list) and the README file table.\n\nNote: ADR-0003 (fault containment accept/reject) is created separately when defk-7dm closes; docs/beam-nifs.md section 5 carries a placeholder until then.\n\nDone when: both ADRs exist with sources cited, docs/beam-nifs.md has all eight sections grounded in code references (priv/defk_runtime.h, lib/defk), both links land, mix test passes (docs-only change).",
   "id": "defk-7w2",
@@ -9,8 +10,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "Write docs/beam-nifs.md and seed docs/adr/ with BEAM/NIF facts and decisions",
   "type": "task",
-  "updated_at": "2026-10-08T08:20:32Z"
+  "updated_at": "2026-10-08T09:49:31Z"
 }
