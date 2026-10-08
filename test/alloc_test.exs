@@ -33,6 +33,18 @@ defmodule Defk.AllocTest.K do
     b = alloc(f64, n)
     len(a) + len(b)
   end
+
+  # indices at the extremes: the bounds check casts the index to unsigned, so
+  # -1 and index == len must raise instead of wrapping into the buffer
+  defk at(a :: [i64], i :: i64) :: i64 do
+    a[i]
+  end
+
+  defk put_at(n :: i64, i :: i64) :: i64 do
+    out = alloc(i64, n)
+    out[i] = 7
+    out[i]
+  end
 end
 
 defmodule Defk.AllocTest do
@@ -110,6 +122,59 @@ defmodule Defk.AllocTest do
              "#{f}(#{n})"
     end
   end
+
+  # sizes at their extremes are covered above (lengths just over the limit,
+  # the macOS allocation limit, negative and wrapping lengths); indices are
+  # the other half of the threat entry (defk-5fc)
+  describe "indices at the extremes" do
+    test "index -1 and index == len raise Enum.OutOfBoundsError in both modes" do
+      a = i64s([10, 20, 30, 40])
+
+      for i <- [-1, 4, 5] do
+        assert {:raise, %Enum.OutOfBoundsError{index: ^i}} = both(:at, [a, i])
+        assert {:raise, %Enum.OutOfBoundsError{index: ^i}} = both(:put_at, [4, i])
+      end
+
+      # an empty array: length 0, so every index is out of bounds, 0 included
+      for i <- [-1, 0] do
+        assert {:raise, %Enum.OutOfBoundsError{index: ^i}} = both(:at, [<<>>, i])
+        assert {:raise, %Enum.OutOfBoundsError{index: ^i}} = both(:put_at, [0, i])
+      end
+
+      # the check did not wrap -1 into the last element
+      assert both(:at, [a, 0]) == {:ok, 10}
+      assert both(:at, [a, 3]) == {:ok, 40}
+      assert both(:put_at, [4, 3]) == {:ok, 7}
+      assert %{frames_live: 0} = K.__defk_stats__()
+    end
+
+    test "an index at the i64 extremes raises instead of reaching memory" do
+      a = i64s([10, 20])
+
+      for i <- [@i64_min, @i64_max, 2 ** 61, -(2 ** 61), @i64_min + 1] do
+        msg = "index #{i} out of bounds for array of length 2"
+        assert {:raise, %Enum.OutOfBoundsError{index: ^i} = e} = both(:at, [a, i])
+        assert Exception.message(e) == msg
+        assert {:raise, %Enum.OutOfBoundsError{index: ^i} = e} = both(:put_at, [2, i])
+        assert Exception.message(e) == msg
+      end
+
+      # the VM and the kernel are still healthy afterwards
+      assert K.at(a, 1) == 20
+      assert K.put_at(2, 1) == 7
+      assert %{frames_live: 0} = K.__defk_stats__()
+    end
+  end
+
+  # runs native and Elixir mode and asserts they agree (the one rule), then
+  # returns both outcomes as {:ok, value} or {:raise, exception}
+  defp both(fun, args) do
+    native = outcome(fn -> Defk.ElixirMode.with_mode(:native, fn -> apply(K, fun, args) end) end)
+    assert native == outcome(fn -> K.__defk_elixir__(fun, args) end), "#{fun}#{inspect(args)}"
+    native
+  end
+
+  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
 
   defp outcome(f) do
     {:ok, f.()}
