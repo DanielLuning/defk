@@ -7,7 +7,12 @@ defmodule Defk.Build do
   # -ffp-contract=off: never fuse a*b+c into an FMA, whose single rounding
   # differs from Elixir's in the last bit. Float results must be bit-exact
   # with Elixir mode, so no -ffast-math or reassociation either (defk-jlk).
-  @cflags ~w(-O3 -ffp-contract=off -std=gnu11 -fPIC -shared -Wall -Wno-unused-label -Wno-unused-variable)
+  # Hardening flags (defk-j5n): -fstack-protector-strong, -D_FORTIFY_SOURCE=2,
+  # -fno-strict-overflow. Measured 2026-10-08: 7 interleaved rounds against the
+  # unflagged baseline, best-of per round, sum/dot/count_primes/count_primes_early.
+  # Worst metric: +1.64% (all three combined, count_primes_early); worst per-flag
+  # +1.62% (fno-strict-overflow) — all under the 2% bar. Adopted.
+  @cflags ~w(-O3 -ffp-contract=off -std=gnu11 -fPIC -shared -Wall -Wno-unused-label -Wno-unused-variable -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-strict-overflow)
 
   def build!(module, src, file) do
     dir = Path.join(build_root(), "defk")
