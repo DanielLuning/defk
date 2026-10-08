@@ -14,11 +14,15 @@
     {
       "text": "Per 'How are kernels checked against Elixir mode?' (defk-dtw.16): hostile-argument generators (wrong types, misaligned/sub-binaries, bad lengths) in defk-63k cover 'any arguments'; the deep run executes in a :peer node so a VM crash is a failing shrunk property. Hardening flags are measured in defk-j5n.",
       "timestamp": "2026-10-06T07:08:45Z"
+    },
+    {
+      "text": "Finalized runtime threat list, one test per entry (all green: mix test 156 passed / 18s):\n\n1. Sizes and indices at their extremes -\u003e test/alloc_test.exs: \"lengths just over the limit\", \"just over the macOS allocation limit (mmap tops out under 2^47 bytes)\", \"negative lengths\", \"the ticket's repro raises instead of crashing the VM\", plus new \"index -1 and index == len raise Enum.OutOfBoundsError in both modes\" and \"an index at the i64 extremes raises instead of reaching memory\".\n2. Yield with heap-binary inputs \u003c= 64 bytes and a forced GC between steps -\u003e test/heap_binary_yield_test.exs: \"heap-binary inputs agree with Elixir mode while the kernel yields\" and \"a forced GC between two steps of a yielding kernel keeps the result correct\" (a child churns its heap, starts the yielding kernel, the parent garbage-collects it while it is suspended between steps; the changed {minor_gcs, heap_size} proves the GC landed mid-kernel, and the result must equal Elixir mode).\n3. Process killed at a safepoint, frames_live back to 0 -\u003e test/upgrade_test.exs:131 \"killing a kernel suspended across an upgrade frees its frame in the old library\" (existing, kept: covers the harder case of a frame in the old library).\n4. A raise after alloc frees every owned buffer -\u003e test/raise_cleanup_test.exs: \"a raise after alloc frees every owned buffer\" (stack-frame path with a kernel that never yields, and promoted-frame path under forced yields; :erlang.memory(:binary) must come back down, ~306 MiB would be counted if defk_finish did not run).\n5. Hot upgrade and purge mid-kernel -\u003e test/upgrade_test.exs:96 \"a kernel suspended across an upgrade finishes in the old library\", :117 \"reloading the same library while a kernel is suspended\", :144 \"purging the old code kills the suspended kernel, like any process in old code\" (existing, kept).\n6. Concurrent calls of the same kernel from many processes -\u003e test/concurrent_test.exs: \"many processes calling the same kernel at once all get the right result\" (16 callers, half long enough to yield and promote, half returning within one timeslice, then the same again under forced yields; every result matches the sequential reference and frames_live returns to 0).\n\nNo safety bugs found while writing these; the existing upgrade/kill coverage (3, 5) was sufficient as written.",
+      "timestamp": "2026-10-08T08:59:41Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Runtime threat list with a test per entry",
   "type": "task",
-  "updated_at": "2026-10-08T08:24:16Z"
+  "updated_at": "2026-10-08T08:59:41Z"
 }
