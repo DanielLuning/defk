@@ -78,6 +78,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 | C build, cached by source hash | `lib/defk/build.ex` |
 | Elixir mode: kernel bodies as plain Elixir | `lib/defk/elixir_mode.ex`, `lib/defk/elixir_mode/ops.ex` |
 | Runtime: arrays, checks, safepoints, frames, exceptions | `priv/defk_runtime.h` |
+| BEAM/NIF reference (execution model, lifecycles, errors, upgrade) | `docs/beam-nifs.md` |
 | Example kernels | `lib/examples.ex` |
 | Plain C baseline | `bench/native.c` |
 
