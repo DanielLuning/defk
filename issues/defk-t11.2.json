@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-t11",
+  "comments": [
+    {
+      "text": "Evidence for done-when (2026-10-08, commit afac904, arm64 Apple clang 17).\n\nTests: mix test = 151 passed, incl. 5 in test/comparison_test.exs. agree/2 runs native against __defk_elixir__ over the cross product of ints() (0, +-1, 2^53+-1, 2^53*2+1, i64 min/max +-1, 4611686018427387903/905) and floats() (both signed zeros, their bit-neighbours +-1ulp, 2^53, 2^63, 1e300), for === !== == != \u003c \u003c= \u003e \u003e= in both operand orders, plus the four explicit cases the ticket names. min/max checked on {-0.0,0.0} {0.0,-0.0} {0.0,0.0} {-0.0,-0.0} (both orders) against real Elixir: min(-0.0,0.0)=-0.0, max(-0.0,0.0)=-0.0, min(0.0,-0.0)=0.0, max(0.0,-0.0)=0.0.\n\nErlang rules read in Lab/beam/otp: erts_cmp_compound in erts/emulator/beam/utils.c (int vs float compares exact value, never rounds the int); erlang:min/max in erts/preloaded/src/erlang.erl:12921/12957 return the first argument when the terms compare equal with ==.\n\nCost: compiled every built kernel .c with -Rpass=loop-vectorize under the old and the new defk_runtime.h and diffed the remarks - byte-identical apart from header line numbers. dot (FpContractTest) and geo_nearest vectorise exactly as before (width 2, interleaved 4). geo/dot/rolling/clamp generated C contains 0 uses of defk_feq_exact or defk_cmp_i64_f64, so the codegen change cannot touch them. The new count_below loop (mixed i64\u003cf64 in a loop) does not vectorise - A/B'd by sed-ing the comparison back to (double)x \u003c t: it did not vectorise under the old codegen either (blockers are 'could not determine number of loop iterations' and 'value that could not be identified as reduction is used outside the loop', not the comparison). Isolated micro-test: a plain for-loop with (double)x \u003c t does vectorise while defk_cmp_i64_f64(x,t) \u003c 0 does not (cost model), so mixed compares are scalar when the loop structure allows vectorisation at all - no catalog kernel does this today.",
+      "timestamp": "2026-10-08T13:27:48Z"
+    }
+  ],
   "priority": 1,
   "status": "in_progress",
   "title": "Native comparisons and min/max must agree with Elixir (mixed i64/f64, signed zeros)",
   "type": "bug",
-  "updated_at": "2026-10-07T14:47:03Z"
+  "updated_at": "2026-10-08T13:27:48Z"
 }
