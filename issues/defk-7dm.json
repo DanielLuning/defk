@@ -12,9 +12,15 @@
   "labels": [
     "ready-for-human"
   ],
+  "comments": [
+    {
+      "text": "Docs target: findings feed docs/beam-nifs.md section 5, ticket defk-7w2 (placeholder section until this spike decides).",
+      "timestamp": "2026-10-08T08:20:33Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Fault containment: turn a kernel fault into an exception for the calling process",
   "type": "task",
-  "updated_at": "2026-10-08T08:17:57Z"
+  "updated_at": "2026-10-08T08:20:33Z"
 }
