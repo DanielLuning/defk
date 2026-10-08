@@ -36,11 +36,15 @@
     {
       "text": "Per review of wave 1: under MIX_ENV=test every kernel NIF is registered as __defk_native_\u003cname\u003e__ and the public function is a wrapper doing Process.get(:defk_mode) per call (defk-v5d). Native timings measured under :test include that; benches should run in :dev/:prod. Mixed i64/f64 comparison and signed-zero min/max divergences are being fixed in defk-t11.2.",
       "timestamp": "2026-10-07T14:47:03Z"
+    },
+    {
+      "text": "Added Defk.Test.assert_agrees, Defk.Case (in_both_modes), Defk.Divergences registry, Defk.Generators, mix deps with stream_data. Existing tests still pass; scaffolding ready for per-kernel property tests.",
+      "timestamp": "2026-10-08T18:52:58Z"
     }
   ],
   "priority": 1,
   "status": "in_progress",
   "title": "Differential agreement checks between kernels and Elixir mode",
   "type": "task",
-  "updated_at": "2026-10-08T17:20:50Z"
+  "updated_at": "2026-10-08T18:52:58Z"
 }
