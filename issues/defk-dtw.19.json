@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-08T08:18:21Z",
   "created": "2026-10-08T08:18:00Z",
   "description": "Reopened after an external suggestion to rewrite defk in Zig, Rust, V, Odin or Roc. Resolved: no. The verdict measures performance (already at clang parity - all candidates funnel to the same LLVM optimizer; V compiles via C), BEAM protection (design + threat list + sanitizers, language-neutral; Rust safety stops at unsafe FFI and a NIF is 100% FFI), devex (lives in Elixir on Elixir AST, cannot move), agreement (Elixir mode + differential tests, language-neutral). A rewrite re-proves every measurement, tick-gap number, upgrade test and sanitizer run for zero new verdict evidence. Node-crash isolation comes from prevention-by-construction and evidence (defk-gtv closed, defk-5fc, defk-63k, defk-j5n) plus the fault-containment spike (defk-7dm), not from the implementation language.",
   "id": "defk-dtw.19",
@@ -14,7 +15,7 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "Should defk move to another implementation stack (Zig/Rust/V/Odin/Roc)?",
   "type": "task",
   "updated_at": "2026-10-08T08:18:21Z"
