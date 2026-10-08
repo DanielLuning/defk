@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-08T08:17:45Z",
+  "description": "Hypothesis: install sigaction for SIGSEGV/SIGBUS/SIGILL/SIGFPE around kernel execution; a fault whose PC is inside a loaded defk .so -\u003e siglongjmp to the NIF boundary, release ctx-\u003eowned, raise RuntimeError for the calling process; PC anywhere else -\u003e restore the previous handler and re-raise (node dies as today).\n\nMust answer:\n1. ERTS coexistence: OTP explicitly permits NIF-local signal use during a call if restored before returning (PR #7174); ERTS uses SA_ONSTACK alternate stacks on scheduler threads, so our handler must set SA_ONSTACK too and save/restore the previous sigaction (chain if it was not SIG_DFL).\n2. Install scope: per-call install/restore (matches the documented contract; a window where unrelated faults are not contained is loss-only) vs per-library-load with PC gating. sigaction is process-wide; synchronous faults are delivered to the faulting thread.\n3. Post-fault soundness: kernels never touch the BEAM heap mid-compute (only off-heap binaries in ctx-\u003eowned; terms are made at return), so if the PC is in kernel compute code, raise-for-caller is heap-sound; PC inside enif_*/libc -\u003e re-raise. Residual: a wild write that never faults cannot be contained - document, do not hide.\n4. Prototype + tests: test-only kernel with a deliberate null deref at a controlled point, run in a :peer node - caller gets the exception, node survives, other processes keep running; a fault outside kernel ranges still kills the node (we do not mask unrelated crashes).\n\nScope: POSIX first, Windows as a documented limitation. Reuse the :peer crash-test harness pattern from defk-63k.\n\nDone when: feasibility note + accept/reject decision recorded on this ticket, prototype tests pass in a peer node if accepted. Findings feed docs/beam-nifs.md section 5 and the runtime-contract section of defk-sgw.5.",
+  "id": "defk-7dm",
+  "labels": [],
+  "priority": 1,
+  "status": "open",
+  "title": "Fault containment: turn a kernel fault into an exception for the calling process",
+  "type": "task",
+  "updated_at": "2026-10-08T08:17:45Z"
+}
