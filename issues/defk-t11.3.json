@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-t11",
+  "comments": [
+    {
+      "text": "Done in worktree agent-a9c97e4ac6d4d611c (commit 9a7c307, branch defk-t11.3/error-rewrites). Every dynamic rewrite now compiles or is dropped for the hint only; test/compile_rewrites_test.exs checks all 40 forms by compiling the rejected body, then the rewrite in its place. Two extra fixes while making mix test clean: (a) Elixir mode's statement-position for no longer appends a trailing nil to a non-empty body -- it left a final statement unreturned and warned 'variable x in code block has no effect' on kernels like Enum.each whose rewrite discards the loop's value; (b) Enum.sum over an f64 comprehension now offers reduce: 0 and reduce: 0.0 and picks the first that compiles -- only the float zero works, so compile_errors_test.exs expects reduce: 0.0. Note Defk.UpgradeTest 'suspended across an upgrade' is flaky under load (passes alone), unrelated to this change.",
+      "timestamp": "2026-10-08T14:20:15Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Fix compile-error rewrites and stop hiding internal compiler crashes",
   "type": "bug",
-  "updated_at": "2026-10-07T14:47:03Z"
+  "updated_at": "2026-10-08T14:20:15Z"
 }
