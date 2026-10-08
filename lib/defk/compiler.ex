@@ -12,7 +12,7 @@ defmodule Defk.Compiler do
 
   @scalars [:i64, :f64, :bool]
   @elems [:f64, :i64, :u8]
-  @math1 [:sqrt, :exp, :log, :sin, :cos]
+  @math1 Defk.Builtins.math1()
   # range facts carried by values (see "range facts" below)
   @facts [:lo, :hi, :lb, :ub, :len_lo, :len_lb]
 
@@ -36,10 +36,7 @@ defmodule Defk.Compiler do
       raw_kernels
       |> Enum.with_index()
       |> Enum.flat_map(fn {raw, _} = r ->
-        Process.put(:defk_ctx, raw.head)
-        Process.put(:defk_fun, head_name(raw.head))
-
-        case attempt(fn -> parse_kernel(r) end) do
+        case attempt(head_name(raw.head), raw.head, fn -> parse_kernel(r) end) do
           {:ok, k} -> [k]
           :error -> broken(head_name(raw.head))
         end
@@ -50,8 +47,7 @@ defmodule Defk.Compiler do
         key = {k.name, k.arity}
 
         if key in seen do
-          Process.put(:defk_fun, key)
-          attempt(fn -> err!(k.head, "duplicate-kernel", "#{k.name}/#{k.arity} is defined more than once; multi-clause kernels are not supported yet") end)
+          attempt(key, k.head, fn -> err!(k.head, "duplicate-kernel", "#{k.name}/#{k.arity} is defined more than once; multi-clause kernels are not supported yet") end)
           {[], seen}
         else
           {[k], MapSet.put(seen, key)}
@@ -62,10 +58,7 @@ defmodule Defk.Compiler do
 
     lowered =
       Enum.flat_map(kernels, fn k ->
-        Process.put(:defk_ctx, k.head)
-        Process.put(:defk_fun, {k.name, k.arity})
-
-        case attempt(fn -> lower_kernel(k, sigs) end) do
+        case attempt({k.name, k.arity}, k.head, fn -> lower_kernel(k, sigs) end) do
           {:ok, l} -> [l]
           :error -> []
         end
@@ -116,16 +109,19 @@ defmodule Defk.Compiler do
     throw({:defk_reject, Map.put_new(d, :key, {code, line, col})})
   end
 
-  defp reject!(node, {code, what, opts}), do: err!(node, code, what, opts)
-
   defp record(d) do
     diags = Process.get(:defk_diags)
     unless Enum.any?(diags, &(&1.key == d.key)), do: Process.put(:defk_diags, [d | diags])
   end
 
-  # {:ok, result} | :error (recorded). Once something is recorded, a crash in
-  # code compiled after it is taken as a consequence of it.
-  defp attempt(fun) do
+  # Run `fun` as kernel `key` ({name, arity}, or nil for a head that has
+  # none), with `head` as the statement literals are located in: {:ok,
+  # result}, or :error once a rejection is recorded. Only defk's own
+  # rejections are caught; any other exception is a compiler bug and
+  # propagates with its stacktrace, whatever was rejected before it.
+  defp attempt(key, head, fun) do
+    Process.put(:defk_fun, key)
+    Process.put(:defk_ctx, head)
     {:ok, fun.()}
   catch
     {:defk_reject, d} ->
@@ -134,9 +130,51 @@ defmodule Defk.Compiler do
 
     :defk_poison ->
       :error
+  end
 
-    kind, reason ->
-      if Process.get(:defk_diags) == [], do: :erlang.raise(kind, reason, __STACKTRACE__), else: :error
+  # A construct outside the kernel subset (Defk.Errors.unsupported/2), shown
+  # with the first of its rewrites that compiles here, if any.
+  defp unsupported!(node, {code, what, opts}, env), do: err!(node, code, what, checked_rewrite(opts, env))
+
+  defp checked_rewrite(opts, env) do
+    {candidates, opts} = Keyword.pop(opts, :rewrite)
+
+    case Enum.find(List.wrap(candidates), &compiles?(&1, env)) do
+      nil -> opts
+      rewrite -> Keyword.put(opts, :rewrite, rewrite)
+    end
+  end
+
+  # Whether the statements in `src` compile in `env`; nothing is recorded.
+  defp compiles?(src, env) do
+    case Code.string_to_quoted(src) do
+      {:ok, ast} -> probe(fn -> lower_stmts(ast, env) end) != :error
+      _ -> false
+    end
+  end
+
+  # The type of expression `ast` in `env`, or nil if it doesn't compile.
+  defp type_in(ast, env) do
+    case probe(fn -> lower_expr(ast, env) end) do
+      {:ok, {_, v}} -> v[:t]
+      :error -> nil
+    end
+  end
+
+  # {:ok, result} of `fun`, or :error if it rejected anything; its rejections
+  # are not recorded.
+  defp probe(fun) do
+    diags = Process.put(:defk_diags, [])
+
+    try do
+      result = fun.()
+      if Process.get(:defk_diags) == [], do: {:ok, result}, else: :error
+    catch
+      {:defk_reject, _} -> :error
+      :defk_poison -> :error
+    after
+      Process.put(:defk_diags, diags)
+    end
   end
 
   # Lower statement `e` with `fun`; a rejection is recorded, and the variables
@@ -490,7 +528,7 @@ defmodule Defk.Compiler do
   end
 
   defp lower_stmt({:for, _, args} = ast, env) do
-    case parse_for(args, ast) do
+    case parse_for(args, ast, env) do
       {quals, nil, body} ->
         loops = lower_quals(quals, env, fn env -> elem(lower_stmts(body, env), 0) end)
         {loops, env}
@@ -699,8 +737,8 @@ defmodule Defk.Compiler do
   end
 
   defp lower_expr({:for, _, args} = node, env) do
-    case parse_for(args, node) do
-      {quals, nil, body} -> for_collect!(node, quals, body, "a for without reduce: used as a value is not in the kernel subset")
+    case parse_for(args, node, env) do
+      {quals, nil, body} -> for_collect!(node, quals, body, nil, env, "a for without reduce: used as a value is not in the kernel subset")
       {quals, {:reduce, init}, clauses} -> lower_reduce(quals, init, clauses, env, node)
     end
   end
@@ -797,7 +835,7 @@ defmodule Defk.Compiler do
     do: lower_call(name, args, m, env)
 
   # anything else (a map, a string, a remote call, ...) is outside the subset
-  defp lower_expr(other, _env), do: reject!(other, Defk.Errors.unsupported(other))
+  defp lower_expr(other, env), do: unsupported!(other, Defk.Errors.unsupported(other, &type_in(&1, env)), env)
 
   defp lower_tuple(items, env) do
     {stmts, elems} =
@@ -984,9 +1022,9 @@ defmodule Defk.Compiler do
 
     # a construct outside the subset (a map, |>, unless, ...) is reported
     # before its arguments are compiled
-    with false <- Defk.Errors.builtin?(name) or Map.has_key?(env.sigs, {name, length(args)}),
-         {_, _, _} = r <- Defk.Errors.unsupported_local(node) do
-      reject!(node, r)
+    with false <- Defk.Builtins.builtin?(name) or Map.has_key?(env.sigs, {name, length(args)}),
+         {_, _, _} = r <- Defk.Errors.unsupported_local(node, &type_in(&1, env)) do
+      unsupported!(node, r, env)
     end
 
     {stmts, vals} = Enum.map_reduce(args, [], fn a, acc ->
@@ -1057,7 +1095,7 @@ defmodule Defk.Compiler do
       nil ->
         cond do
           {name, arity} in Process.get(:defk_broken) -> throw(:defk_poison)
-          Defk.Errors.builtin?(name) -> builtin_arguments!(name, vals, node)
+          Defk.Builtins.builtin?(name) -> builtin_arguments!(name, vals, node)
           true -> unknown_function!(name, vals, node, env)
         end
     end
@@ -1191,13 +1229,13 @@ defmodule Defk.Compiler do
   # ---------------------------------------------------------------- loops --
 
   # `node` is the whole for
-  defp parse_for(args, node) do
+  defp parse_for(args, node, env) do
     {kws, quals} = Enum.split_with(args, &(is_list(&1) and Keyword.keyword?(&1)))
     opts = Enum.concat(kws)
 
     for k <- Keyword.keys(opts), k not in [:do, :reduce] do
       if k == :into,
-        do: for_collect!(node, quals, opts[:do], "for ..., into: is not in the kernel subset"),
+        do: for_collect!(node, quals, opts[:do], opts[:into], env, "for ..., into: is not in the kernel subset"),
         else: err!(node, "for-option", "for ..., #{k}: is not in the kernel subset")
     end
 
@@ -2036,18 +2074,15 @@ defmodule Defk.Compiler do
     err!(f, "fn-argument", "#{fun} with #{Macro.to_string(f)} is not in the kernel subset", rewrite)
   end
 
-  # a for that would collect values: `what` says how
-  defp for_collect!(node, quals, body, what) do
+  # a for that would collect values (`into` is its into:, or nil): `what` says how
+  defp for_collect!(node, quals, body, into, env, what) do
     rewrite =
       case quals do
-        [{:<-, _, [x, {a, _, ctx} = src]}] when is_atom(a) and is_atom(ctx) and body != nil ->
-          [rewrite: Defk.Errors.fill_rewrite(src, x, body)]
-
-        _ ->
-          []
+        [{:<-, _, [x, src]}] when body != nil -> Defk.Errors.collect_rewrites(src, x, body, into)
+        _ -> nil
       end
 
-    err!(node, "for-collect", what, rewrite)
+    err!(node, "for-collect", what, checked_rewrite([rewrite: rewrite], env))
   end
 
   defp generator_pattern!({:<-, _, [pat, src]} = gen) do

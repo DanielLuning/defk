@@ -30,7 +30,8 @@ defmodule Defk.Errors do
   # Rejections reported per module; later ones are counted, not shown.
   @cap 10
 
-  @builtins ~w(len div rem float trunc round abs min max sqrt exp log sin cos pow alloc)a
+  @calls Enum.join(Defk.Builtins.all() -- [:alloc], ", ")
+  @math Enum.join(Defk.Builtins.math1(), ", ") <> " and pow"
   @bitwise_ops [:&&&, :|||, :^^^, :<<<, :>>>, :~~~]
   @bitwise_funs [:band, :bor, :bxor, :bnot, :bsl, :bsr]
   @forms "=, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2"
@@ -97,7 +98,7 @@ defmodule Defk.Errors do
       code: "duplicate-kernel",
       kind: :planned,
       summary: "A kernel name and arity is defined once; multi-clause kernels are planned.",
-      why: "each kernel is one native function with one body",
+      why: "a kernel has one head and one body",
       hint: "merge the clauses into one body with case or cond",
       example: "defk f(x :: i64) :: i64 do\n  x\nend\n\ndefk f(x :: i64) :: i64 do\n  x + 1\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  x + 1\nend"
@@ -305,7 +306,7 @@ defmodule Defk.Errors do
       code: "unknown-function",
       kind: :error,
       summary: "A kernel calls builtins and the other kernels in its module.",
-      why: "a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow) and the kernels in this module, which are inlined",
+      why: "a kernel runs as native code: it can call its builtins (#{@calls}) and the kernels in this module, which are inlined",
       hint: "define it as a kernel in this module, or compute it in Elixir and pass the result in",
       example: "defk f(x :: i64) :: i64 do\n  double(x)\nend",
       rewrite: "defk double(x :: i64) :: i64 do\n  x * 2\nend\n\ndefk f(x :: i64) :: i64 do\n  double(x)\nend"
@@ -837,115 +838,134 @@ defmodule Defk.Errors do
   # ------------------------------------------------- constructs not in it --
 
   @doc false
-  # The rejection for a construct outside the kernel subset, from its AST alone:
-  # {code, what, opts}. Used for expressions the compiler has no clause for.
-  def unsupported(node)
+  # The rejection for a construct outside the kernel subset: {code, what,
+  # opts}. Used for expressions the compiler has no clause for. `type_of`
+  # gives the kernel type of an expression where the construct is, or nil.
+  #
+  # A `rewrite:` is one candidate or a list of them, written from the
+  # developer's code; the compiler shows the first one that compiles where the
+  # construct is, and only the hint if none does. A rewrite never names
+  # anything the developer has to fill in.
+  def unsupported(node, type_of \\ fn _ -> nil end)
 
-  def unsupported({:%{}, _, _}), do: map()
-  def unsupported({:%, _, [{:__aliases__, _, parts} | _]}), do: map("structs (%#{Enum.join(parts, ".")}{})")
-  def unsupported({:%, _, _}), do: map("structs")
+  def unsupported({:**, _, [a, b]} = n, type_of) do
+    {"unsupported-expression", "the power operator in #{Macro.to_string(n)} is not in the kernel subset",
+     hint: "use pow/2, which returns a float like :math.pow/2, or multiply for a small integer power",
+     rewrite: power_rewrite(a, b, type_of.(a), type_of.(b))}
+  end
 
-  def unsupported(s) when is_binary(s), do: string()
-  def unsupported({:<>, _, _}), do: string("string concatenation with <>")
-  def unsupported({sigil, _, _}) when sigil in [:sigil_s, :sigil_S], do: string()
+  def unsupported(node, _type_of), do: form(node)
 
-  def unsupported({:<<>>, _, parts} = node) do
+  # Elixir's ** gives an integer for two integers and a float otherwise
+  defp power_rewrite(_a, 0, :i64, :i64), do: "1"
+
+  defp power_rewrite(a, b, :i64, :i64) when is_integer(b) and b in 1..8,
+    do: a |> List.duplicate(b) |> Enum.reduce(&{:*, [], [&2, &1]}) |> Macro.to_string()
+
+  defp power_rewrite(a, b, ta, tb) when ta in [:i64, :f64] and tb in [:i64, :f64] and :f64 in [ta, tb],
+    do: Macro.to_string({:pow, [], [a, b]})
+
+  defp power_rewrite(_a, _b, _ta, _tb), do: nil
+
+  defp form({:%{}, _, _}), do: map()
+  defp form({:%, _, [{:__aliases__, _, parts} | _]}), do: map("structs (%#{Enum.join(parts, ".")}{})")
+  defp form({:%, _, _}), do: map("structs")
+
+  defp form(s) when is_binary(s), do: string()
+  defp form({:<>, _, _}), do: string("string concatenation with <>")
+  defp form({sigil, _, _}) when sigil in [:sigil_s, :sigil_S], do: string()
+
+  defp form({:<<>>, _, parts} = node) do
     if Enum.any?(parts, &string_part?/1),
       do: string(),
       else: {"bitstring-build", "building a bitstring with #{Macro.to_string(node)} is not supported yet", []}
   end
 
-  def unsupported(nil), do: {"unsupported-atom", "nil is not in the kernel subset", []}
-  def unsupported(a) when is_atom(a), do: {"unsupported-atom", "atoms such as #{inspect(a)} are not in the kernel subset", []}
+  defp form(nil), do: {"unsupported-atom", "nil is not in the kernel subset", []}
+  defp form(a) when is_atom(a), do: {"unsupported-atom", "atoms such as #{inspect(a)} are not in the kernel subset", []}
 
-  def unsupported(list) when is_list(list), do: {"unsupported-list", "lists such as #{Macro.to_string(list)} are not in the kernel subset", []}
-  def unsupported({op, _, _}) when op in [:++, :--], do: {"unsupported-list", "list operator #{op} is not in the kernel subset", []}
+  defp form(list) when is_list(list), do: {"unsupported-list", "lists such as #{Macro.to_string(list)} are not in the kernel subset", []}
+  defp form({op, _, _}) when op in [:++, :--], do: {"unsupported-list", "list operator #{op} is not in the kernel subset", []}
 
-  def unsupported({:fn, _, _}), do: {"unsupported-fn", "anonymous functions are not in the kernel subset", []}
-  def unsupported({:&, _, _} = n), do: {"unsupported-fn", "the capture #{Macro.to_string(n)} is not in the kernel subset", []}
+  defp form({:fn, _, _}), do: {"unsupported-fn", "anonymous functions are not in the kernel subset", []}
+  defp form({:&, _, _} = n), do: {"unsupported-fn", "the capture #{Macro.to_string(n)} is not in the kernel subset", []}
 
-  def unsupported({:|>, _, [_, _]} = node) do
+  defp form({:|>, _, [_, _]} = node) do
     {"pipe", "the pipe operator |> is not in the kernel subset", rewrite: Macro.to_string(unpipe(node))}
   end
 
-  def unsupported({:@, _, [{name, _, ctx}]}) when is_atom(name) and is_atom(ctx) do
+  defp form({:@, _, [{name, _, ctx}]}) when is_atom(name) and is_atom(ctx) do
     {"module-attribute", "module attributes such as @#{name} are not supported yet", []}
   end
 
-  def unsupported({op, _, args}) when op in @bitwise_ops or (op in @bitwise_funs and is_list(args)) do
+  defp form({op, _, args}) when op in @bitwise_ops or (op in @bitwise_funs and is_list(args)) do
     {"bitwise", "the bitwise #{if op in @bitwise_ops, do: "operator #{op}", else: "function #{op}/#{length(args)}"} is not supported yet", []}
   end
 
-  def unsupported({{:., _, [{:__aliases__, _, [:Bitwise]}, f]}, _, args}) do
+  defp form({{:., _, [{:__aliases__, _, [:Bitwise]}, f]}, _, args}) do
     {"bitwise", "Bitwise.#{f}/#{length(args)} is not supported yet", []}
   end
 
   # map.field
-  def unsupported({{:., _, [{v, _, ctx}, field]}, m, []}) when is_atom(v) and is_atom(ctx) and is_atom(field) do
+  defp form({{:., _, [{v, _, ctx}, field]}, m, []}) when is_atom(v) and is_atom(ctx) and is_atom(field) do
     if m[:no_parens], do: map("field access #{v}.#{field} (maps and structs)"), else: call_rejection(nil, field, [], nil)
   end
 
-  def unsupported({{:., _, [mod, fun]}, _, args} = node) when is_atom(fun) and is_list(args) do
+  defp form({{:., _, [mod, fun]}, _, args} = node) when is_atom(fun) and is_list(args) do
     call_rejection(module_name(mod), fun, args, node)
   end
 
-  def unsupported({range, _, _} = n) when range in [:.., :..//],
+  defp form({range, _, _} = n) when range in [:.., :..//],
     do: {"unsupported-expression", "the range #{Macro.to_string(n)} as a value is not in the kernel subset",
          hint: "use the range as the generator of a for, Enum.reduce_while/3, Enum.all?/2 or Enum.any?/2"}
 
-  def unsupported({:in, _, [x, list]} = n) when is_list(list) and list != [] do
+  defp form({:in, _, [x, list]} = n) when is_list(list) and list != [] do
     rewrite = list |> Enum.map(&{:==, [], [x, &1]}) |> Enum.reduce(&{:or, [], [&2, &1]}) |> Macro.to_string()
     {"unsupported-expression", "#{Macro.to_string(n)} is not in the kernel subset", hint: "compare with each value", rewrite: rewrite}
   end
 
-  def unsupported({:**, _, [a, b]} = n) do
-    {"unsupported-expression", "the power operator in #{Macro.to_string(n)} is not in the kernel subset",
-     hint: "use pow/2, which returns a float like :math.pow/2, or multiply for a small integer power",
-     rewrite: Macro.to_string({:pow, [], [a, b]})}
-  end
-
-  def unsupported({:=, _, _} = n) do
+  defp form({:=, _, _} = n) do
     {"unsupported-expression", "the match #{Macro.to_string(n)} used as a value is not in the kernel subset",
      hint: "bind it on its own line, then use the variable"}
   end
 
-  def unsupported({:unless, _, [c, kw]}) when is_list(kw) do
+  defp form({:unless, _, [c, kw]}) when is_list(kw) do
     rewrite = Macro.to_string({:if, [], [{:not, [], [c]}, kw]})
     {"unsupported-construct", "unless is not in the kernel subset", hint: "write if not", rewrite: rewrite}
   end
 
-  def unsupported({name, _, args}) when name in [:raise, :reraise, :throw, :exit] and is_list(args) do
+  defp form({name, _, args}) when name in [:raise, :reraise, :throw, :exit] and is_list(args) do
     {"unsupported-construct", "#{name} is not in the kernel subset",
      why: "a kernel raises only Elixir's own errors (an i64 overflow, an index out of range, ...), where Elixir would raise them",
      hint: "check the arguments in Elixir before the call"}
   end
 
-  def unsupported({name, _, args}) when name in [:with, :try, :receive, :send, :spawn, :quote, :unquote, :import, :alias, :require, :def, :defp, :defk, :__block__] and is_list(args) do
+  defp form({name, _, args}) when name in [:with, :try, :receive, :send, :spawn, :quote, :unquote, :import, :alias, :require, :def, :defp, :defk, :__block__] and is_list(args) do
     {"unsupported-construct", "#{name} is not in the kernel subset", []}
   end
 
-  def unsupported({name, _, args} = node) when is_atom(name) and is_list(args) do
+  defp form({name, _, args} = node) when is_atom(name) and is_list(args) do
     case local_hint(name, args) do
       nil -> {"unsupported-expression", "#{Macro.to_string(node)} is not in the kernel subset", []}
       found -> found
     end
   end
 
-  def unsupported(node), do: {"unsupported-expression", "#{Macro.to_string(node)} is not in the kernel subset", []}
+  defp form(node), do: {"unsupported-expression", "#{Macro.to_string(node)} is not in the kernel subset", []}
 
   @doc false
   # A local call to `name` that isn't a builtin or a kernel: a construct
   # outside the subset, checked before its arguments are compiled.
-  def unsupported_local({name, _, args} = node) do
+  def unsupported_local({name, _, args} = node, type_of) do
     cond do
       name in [:%{}, :%, :<<>>, :<>, :++, :--, :fn, :&, :|>, :@, :.., :..//, :in, :**, :=, :unless] ->
-        unsupported(node)
+        unsupported(node, type_of)
 
       name in @bitwise_ops or name in @bitwise_funs ->
-        unsupported(node)
+        unsupported(node, type_of)
 
       name in [:raise, :reraise, :throw, :exit, :with, :try, :receive, :send, :spawn, :quote, :unquote, :import, :alias, :require, :def, :defp, :defk] ->
-        unsupported(node)
+        unsupported(node, type_of)
 
       String.starts_with?(Atom.to_string(name), "sigil_") ->
         if name in [:sigil_s, :sigil_S], do: string(), else: {"unsupported-expression", "sigil ~#{String.trim_leading(Atom.to_string(name), "sigil_")} is not in the kernel subset", []}
@@ -954,9 +974,6 @@ defmodule Defk.Errors do
         local_hint(name, args)
     end
   end
-
-  @doc false
-  def builtin?(name), do: name in @builtins
 
   # Elixir functions a developer reaches for that have a builtin form
   defp local_hint(name, [a]) when name in [:length, :byte_size, :tuple_size] do
@@ -1007,29 +1024,16 @@ defmodule Defk.Errors do
   defp call_rejection("Enum", :map, [src, {:fn, _, [{:->, _, [[x], body]}]}], _node) do
     {"unsupported-call", "Enum.map/2 is not in the kernel subset",
      why: "Enum.map/2 builds a list, and kernels have no lists",
-     hint: "allocate the output array and fill it in a for loop", rewrite: fill_rewrite(src, x, body)}
+     hint: "allocate the output array and fill it in a for loop", rewrite: fill_rewrites(src, x, body)}
   end
 
-  defp call_rejection("Enum", fun, [arg], _node) when fun in [:sum, :product] do
-    {op, zero} = if fun == :sum, do: {:+, 0}, else: {:*, 1}
-
-    {quals, body} =
-      case arg do
-        {:for, _, for_args} ->
-          {kw, quals} = Enum.split_with(for_args, &(is_list(&1) and Keyword.keyword?(&1)))
-          {quals, Keyword.get(Enum.concat(kw), :do)}
-
-        src ->
-          {[{:<-, [], [{:x, [], nil}, src]}], {:x, [], nil}}
-      end
-
-    head = "for #{Enum.map_join(quals, ", ", &Macro.to_string/1)}, reduce: #{zero} do"
-    step = Macro.to_string({op, [], [{:acc, [], nil}, body]})
+  defp call_rejection("Enum", fun, [src], _node) when fun in [:sum, :product] do
+    zero = if fun == :sum, do: 0, else: 1
 
     {"unsupported-call", "Enum.#{fun}/1 is not in the kernel subset",
      why: "Enum.#{fun}/1 takes a list or a range; #{@list_why} the for ..., reduce: loop is the form a kernel compiles",
      hint: "write the for ..., reduce: loop (start from #{zero}.0 if the values are floats)",
-     rewrite: "#{head}\n  acc -> #{step}\nend"}
+     rewrite: fold_rewrites(src, if(fun == :sum, do: :+, else: :*), zero)}
   end
 
   defp call_rejection("Enum", fun, [list], _node) when fun in [:min, :max] and is_list(list) and length(list) >= 2 do
@@ -1040,15 +1044,10 @@ defmodule Defk.Errors do
   end
 
   defp call_rejection("Enum", fun, [src], _node) when fun in [:min, :max] do
-    {a, i} = array_and_index(src)
-
     rewrite =
-      case src do
-        {v, _, ctx} when is_atom(v) and is_atom(ctx) ->
-          "for #{i} <- 1..(len(#{a}) - 1)//1, reduce: #{a}[0] do\n  acc -> #{fun}(acc, #{a}[#{i}])\nend"
-
-        _ ->
-          "for x <- #{Macro.to_string(src)}, reduce: first do\n  acc -> #{fun}(acc, x)\nend"
+      if var?(src) do
+        [i, acc] = fresh_names(~w(i acc), [src])
+        "for #{i} <- 1..(len(#{s(src)}) - 1)//1, reduce: #{s(src)}[0] do\n  #{acc} -> #{fun}(#{acc}, #{s(index(src, i))})\nend"
       end
 
     {"unsupported-call", "Enum.#{fun}/1 is not in the kernel subset",
@@ -1058,40 +1057,33 @@ defmodule Defk.Errors do
   end
 
   defp call_rejection("Enum", fun, args, _node) when fun in [:min_by, :max_by, :min_max] do
-    rewrite =
-      case fun do
-        :min_max -> "for i <- 1..(len(a) - 1)//1, reduce: {a[0], a[0]} do\n  {lo, hi} -> {min(lo, a[i]), max(hi, a[i])}\nend"
-        _ -> "for i <- 1..(len(a) - 1)//1, reduce: {0, key(a[0])} do\n  {best, k} -> if key(a[i]) #{if fun == :min_by, do: "<", else: ">"} k, do: {i, key(a[i])}, else: {best, k}\nend"
-      end
-
     {"unsupported-call", "Enum.#{fun}/#{length(args)} is not in the kernel subset",
      why: "Enum.#{fun}/#{length(args)} takes a list or a range; #{@list_why} the for ..., reduce: loop is the form a kernel compiles",
-     hint: "#{@loop}, with a tuple accumulator", rewrite: rewrite}
+     hint: "#{@loop}, with a tuple accumulator", rewrite: extreme_rewrite(fun, args)}
   end
 
-  defp call_rejection("Enum", :with_index, [src | _], _node) do
-    {a, i} = array_and_index(src)
+  defp call_rejection("Enum", :with_index, [src | _] = args, _node) do
+    a = if var?(src), do: s(src), else: "a"
 
-    {"unsupported-call", "Enum.with_index/#{1} is not in the kernel subset",
+    {"unsupported-call", "Enum.with_index/#{length(args)} is not in the kernel subset",
      why: "Enum.with_index builds a list of tuples, and a kernel has no lists",
-     hint: "walk the index and read the element", rewrite: "for #{i} <- 0..(len(#{a}) - 1)//1 do\n  x = #{a}[#{i}]\n  ...\nend"}
+     hint: "walk the index with i <- 0..(len(#{a}) - 1)//1 and read #{a}[i]"}
   end
 
   defp call_rejection("Enum", :reduce, [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}], _node) do
-    rewrite = "for #{Macro.to_string(x)} <- #{Macro.to_string(src)}, reduce: #{Macro.to_string(init)} do\n  #{Macro.to_string(acc)} -> #{Macro.to_string(body)}\nend"
+    rewrite = "for #{s(x)} <- #{s(src)}, reduce: #{s(init)} do\n  #{s(acc)} -> #{s(body)}\nend"
     {"enum-reduce", "Enum.reduce/3 is not supported yet", rewrite: rewrite}
   end
 
   defp call_rejection("Enum", :reduce, args, _node),
-    do: {"enum-reduce", "Enum.reduce/#{length(args)} is not supported yet", rewrite: "for x <- src, reduce: init do\n  acc -> ...\nend"}
+    do: {"enum-reduce", "Enum.reduce/#{length(args)} is not supported yet", []}
 
   defp call_rejection("Enum", fun, args, _node) when fun in [:find, :find_index, :find_value] do
-    {"enum-find", "Enum.#{fun}/#{length(args)} is not supported yet",
-     rewrite: "Enum.reduce_while(0..(len(a) - 1)//1, -1, fn i, _ ->\n  if found?(a[i]), do: {:halt, i}, else: {:cont, -1}\nend)"}
+    {"enum-find", "Enum.#{fun}/#{length(args)} is not supported yet", rewrite: find_index_rewrite(fun, args)}
   end
 
   defp call_rejection("Enum", :count, [src, {:fn, _, [{:->, _, [[x], pred]}]}], _node) do
-    rewrite = "for #{Macro.to_string(x)} <- #{Macro.to_string(src)}, #{Macro.to_string(pred)}, reduce: 0 do\n  acc -> acc + 1\nend"
+    rewrite = "for #{s(x)} <- #{s(src)}, #{s(pred)}, reduce: 0 do\n  acc -> acc + 1\nend"
 
     {"unsupported-call", "Enum.count/2 is not in the kernel subset",
      why: "Enum.count/2 takes a list or a range; #{@list_why} the for ..., reduce: loop with a filter is the form a kernel compiles",
@@ -1099,7 +1091,7 @@ defmodule Defk.Errors do
   end
 
   defp call_rejection("Enum", :each, [src, {:fn, _, [{:->, _, [[x], body]}]}], _node) do
-    rewrite = "for #{Macro.to_string(x)} <- #{Macro.to_string(src)} do\n  #{Macro.to_string(body)}\nend"
+    rewrite = "for #{s(x)} <- #{s(src)} do\n  #{s(body)}\nend"
     {"unsupported-call", "Enum.each/2 is not in the kernel subset", why: "a for loop is the form a kernel compiles", hint: "write the for loop", rewrite: rewrite}
   end
 
@@ -1111,7 +1103,7 @@ defmodule Defk.Errors do
 
   defp call_rejection(":math", fun, args, _node) do
     {"unsupported-call", ":math.#{fun}/#{length(args)} is not in the kernel subset",
-     why: "a kernel's math builtins are sqrt, exp, log, sin, cos and pow (also as :math.sqrt/1 and so on)",
+     why: "a kernel's math builtins are #{@math} (also as :math.sqrt/1 and so on)",
      hint: "compute it from those, or in Elixir"}
   end
 
@@ -1119,20 +1111,151 @@ defmodule Defk.Errors do
     {"unsupported-call", "#{mod}.#{fun}/#{length(args)} is not in the kernel subset", []}
   end
 
-  @doc false
-  # Filling an alloc/2 array `out` with `body` for each element `x` of `src`, the
-  # loop Enum.map/2 or a collecting for stands for.
-  def fill_rewrite(src, x, body) do
-    {a, i} = array_and_index(src)
-    m = [from_brackets: true]
-    elem = {{:., m, [Access, :get]}, m, [{String.to_atom(a), [], nil}, {String.to_atom(i), [], nil}]}
+  # ------------------------------------------------------------- rewrites --
 
-    "out = alloc(f64, len(#{a}))\n\nfor #{i} <- 0..(len(#{a}) - 1)//1 do\n  out[#{i}] = #{Macro.to_string(subst(body, x, elem))}\nend\n\nout"
+  # Enum.sum/product over a comprehension, an array or a range as a
+  # for ..., reduce: loop, from an integer zero or a float one
+  defp fold_rewrites(src, op, zero) do
+    {quals, body} =
+      case src do
+        {:for, _, args} ->
+          {kw, quals} = Enum.split_with(args, &(is_list(&1) and Keyword.keyword?(&1)))
+          kw = Enum.concat(kw)
+          if Keyword.keys(kw) == [:do], do: {quals, kw[:do]}, else: {nil, nil}
+
+        src ->
+          [x] = fresh_names(~w(x), [src])
+          {[{:<-, [], [var(x), src]}], var(x)}
+      end
+
+    if quals do
+      [acc] = fresh_names(~w(acc), [quals, body])
+      head = "for #{Enum.map_join(quals, ", ", &s/1)}, reduce: "
+      step = s({op, [], [var(acc), body]})
+      for z <- [zero, zero * 1.0], do: "#{head}#{z} do\n  #{acc} -> #{step}\nend"
+    end
   end
 
-  # the array a generator walks, and an index name
-  defp array_and_index({v, _, ctx}) when is_atom(v) and is_atom(ctx), do: {Atom.to_string(v), "i"}
-  defp array_and_index(_), do: {"a", "i"}
+  # Enum.min_max/1, min_by/2 and max_by/2 over an array variable, from its
+  # first element; the comparison is strict, so the first extreme element
+  # wins, as in Elixir
+  defp extreme_rewrite(:min_max, [src]) do
+    if var?(src) do
+      [i, lo, hi] = fresh_names(~w(i lo hi), [src])
+      ai = s(index(src, i))
+      "for #{i} <- 1..(len(#{s(src)}) - 1)//1, reduce: {#{s(src)}[0], #{s(src)}[0]} do\n  {#{lo}, #{hi}} -> {min(#{lo}, #{ai}), max(#{hi}, #{ai})}\nend"
+    end
+  end
+
+  defp extreme_rewrite(fun, [src, {:fn, _, [{:->, _, [[x], key]}]}]) when fun in [:min_by, :max_by] do
+    if var?(src) do
+      [i, best, k, ki, better] = fresh_names(~w(i best k ki better), [src, key])
+      key_at = &s(subst(key, x, index(src, &1)))
+      cmp = if fun == :min_by, do: "<", else: ">"
+
+      # (each element gets its own if: an if gives a number, not a tuple)
+      """
+      {#{best}, _} =
+        for #{i} <- 1..(len(#{s(src)}) - 1)//1, reduce: {#{s(src)}[0], #{key_at.(0)}} do
+          {#{best}, #{k}} ->
+            #{ki} = #{key_at.(i)}
+            #{better} = #{ki} #{cmp} #{k}
+            {if(#{better}, do: #{s(index(src, i))}, else: #{best}), if(#{better}, do: #{ki}, else: #{k})}
+        end
+
+      #{best}\
+      """
+    end
+  end
+
+  defp extreme_rewrite(_fun, _args), do: nil
+
+  # Enum.find_index/2 over an array variable as Enum.reduce_while/3, with -1
+  # for not found
+  defp find_index_rewrite(:find_index, [src, {:fn, _, [{:->, _, [[x], pred]}]}]) do
+    if var?(src) do
+      [i] = fresh_names(~w(i), [src, pred])
+
+      "Enum.reduce_while(0..(len(#{s(src)}) - 1)//1, -1, fn #{i}, _ ->\n  if #{s(subst(pred, x, index(src, i)))}, do: {:halt, #{i}}, else: {:cont, -1}\nend)"
+    end
+  end
+
+  defp find_index_rewrite(_fun, _args), do: nil
+
+  @doc false
+  # Filling a new array with `body` for each element `x` of the array variable
+  # `src`: the loop Enum.map/2 or a collecting for stands for. One candidate
+  # per element type, or nil when `src` is not an array variable.
+  def fill_rewrites(src, x, body, elems \\ [:i64, :f64]) do
+    if var?(src) do
+      [i, out] = fresh_names(~w(i out), [src, body])
+      v = s(subst(body, x, index(src, i)))
+      n = "len(#{s(src)})"
+
+      for e <- elems,
+          do: "#{out} = alloc(#{e}, #{n})\n\nfor #{i} <- 0..(#{n} - 1)//1 do\n  #{out}[#{i}] = #{v}\nend\n\n#{out}"
+    end
+  end
+
+  @doc false
+  # The rewrites of a collecting `for x <- src, into: into, do: body` (into is
+  # nil without into:). `into: <<>>` with one native-endian segment per
+  # element is an array of that element type; other into: have none.
+  def collect_rewrites(src, x, body, nil), do: fill_rewrites(src, x, body)
+
+  def collect_rewrites(src, x, {:<<>>, _, [seg]}, {:<<>>, _, []}) do
+    case segment(seg) do
+      {v, e} -> fill_rewrites(src, x, v, [e])
+      nil -> nil
+    end
+  end
+
+  def collect_rewrites(_src, _x, _body, _into), do: nil
+
+  # {value, element type} of a binary segment with an array's layout
+  defp segment({:"::", _, [v, spec]}) do
+    parts = spec_parts(spec)
+    size = Enum.find_value(parts, fn n when is_integer(n) -> n; {:size, n} -> n; _ -> nil end)
+    names = for p <- parts, is_atom(p), do: p
+
+    cond do
+      :float in names -> if size in [nil, 64] and names -- [:float, :native] == [] and :native in names, do: {v, :f64}
+      size == 64 -> if names -- [:integer, :signed, :unsigned, :native] == [] and :native in names, do: {v, :i64}
+      size in [nil, 8] -> if names -- [:integer, :unsigned, :big, :little, :native] == [], do: {v, :u8}
+      true -> nil
+    end
+  end
+
+  defp segment(v), do: {v, :u8}
+
+  defp spec_parts({:-, _, [a, b]}), do: spec_parts(a) ++ spec_parts(b)
+  defp spec_parts({:size, _, [n]}) when is_integer(n), do: [{:size, n}]
+  defp spec_parts({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: [name]
+  defp spec_parts(n) when is_integer(n), do: [n]
+  defp spec_parts(_), do: [:unknown]
+
+  defp s(ast), do: Macro.to_string(ast)
+  defp var(name), do: {String.to_atom(name), [], nil}
+
+  defp var?({v, _, ctx}) when is_atom(v) and is_atom(ctx), do: true
+  defp var?(_), do: false
+
+  # a[i] for the array variable `a` and an index name or literal
+  defp index(a, i) do
+    m = [from_brackets: true]
+    {{:., m, [Access, :get]}, m, [a, if(is_integer(i), do: i, else: var(i))]}
+  end
+
+  # `bases`, each renamed (i2, i3, ...) if a variable in `asts` has its name
+  defp fresh_names(bases, asts) do
+    {_, used} =
+      Macro.prewalk(asts, MapSet.new(), fn
+        {n, _, ctx} = v, acc when is_atom(n) and is_atom(ctx) -> {v, MapSet.put(acc, Atom.to_string(n))}
+        other, acc -> {other, acc}
+      end)
+
+    Enum.map(bases, fn b -> Enum.find([b | Enum.map(2..9, &"#{b}#{&1}")], &(&1 not in used)) end)
+  end
 
   defp subst(ast, {x, _, ctx}, with) when is_atom(x) and is_atom(ctx) do
     Macro.prewalk(ast, fn
