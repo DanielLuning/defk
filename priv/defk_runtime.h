@@ -340,8 +340,37 @@ static inline int64_t defk_trunc(defk_ctx *ctx, double a) {
 static inline int64_t defk_round(defk_ctx *ctx, double a) { return defk_trunc(ctx, round(a)); }
 static inline int64_t defk_min_i64(int64_t a, int64_t b) { return a < b ? a : b; }
 static inline int64_t defk_max_i64(int64_t a, int64_t b) { return a > b ? a : b; }
-static inline double defk_min_f64(double a, double b) { return a < b ? a : b; }
-static inline double defk_max_f64(double a, double b) { return a > b ? a : b; }
+/* Erlang's min/max return the first argument when the two compare equal
+ * (erlang:min(A, B) when A > B -> B; min(A, _) -> A), so min(-0.0, 0.0) is
+ * -0.0 and min(0.0, -0.0) is 0.0.
+ * A plain select, so loops over min/max still vectorise; x86 does each in one
+ * minsd/maxsd. On arm64 max(x, 0.0) no longer folds to fmaxnm, which gives
+ * 0.0 for -0.0 where Elixir gives -0.0. */
+static inline double defk_min_f64(double a, double b) { return a > b ? b : a; }
+static inline double defk_max_f64(double a, double b) { return a < b ? b : a; }
+
+/* ---- comparisons Elixir's way -------------------------------------------- */
+
+/* -1, 0 or 1 as the exact value of i is below, equal to or above f, as Erlang
+ * compares an integer with a float (erts_cmp_compound in erts utils.c): never
+ * by rounding i to a double, which would make 2^53 + 1 == 2^53 + 0.0.
+ * Kernel floats are never NaN; one would compare below every integer. */
+static inline int defk_cmp_i64_f64(int64_t i, double f) {
+  if (f >= 0x1p63) return -1;           /* above every i64 */
+  if (!(f >= -0x1p63)) return 1;        /* below every i64 (or NaN) */
+  int64_t t = (int64_t)f;               /* f's integer part, exact here */
+  if (i != t) return i < t ? -1 : 1;
+  double frac = f - (double)t;          /* exact: t is f truncated */
+  return frac > 0.0 ? -1 : frac < 0.0 ? 1 : 0;
+}
+
+/* === on two floats: Erlang's exact equality tells -0.0 from 0.0 */
+static inline int defk_feq_exact(double a, double b) {
+  uint64_t x, y;
+  __builtin_memcpy(&x, &a, 8);
+  __builtin_memcpy(&y, &b, 8);
+  return x == y;
+}
 
 /* ---- bounds-checked element access --------------------------------------- */
 

@@ -735,11 +735,20 @@ defmodule Defk.Compiler do
         op in [:===, :!==] and va.t != vb.t and numeric?(va) and numeric?(vb) ->
           if op == :===, do: "0", else: "1"
 
+        # exact equality tells -0.0 from 0.0, as Erlang's =:= does
+        op in [:===, :!==] and va.t == :f64 and vb.t == :f64 ->
+          if op == :===, do: "defk_feq_exact(#{va.c}, #{vb.c})", else: "(!defk_feq_exact(#{va.c}, #{vb.c}))"
+
         numeric?(va) and numeric?(vb) and va.t == vb.t ->
           "(#{va.c} #{cop(op)} #{vb.c})"
 
-        numeric?(va) and numeric?(vb) ->
-          "(#{to_f(va)} #{cop(op)} #{to_f(vb)})"
+        # i64 against f64 by exact value, as Erlang compares them: a OP b is
+        # cmp(a, b) OP 0, and cmp(f, i) = -cmp(i, f)
+        va.t == :i64 and vb.t == :f64 ->
+          "(defk_cmp_i64_f64(#{va.c}, #{vb.c}) #{cop(op)} 0)"
+
+        va.t == :f64 and vb.t == :i64 ->
+          "(0 #{cop(op)} defk_cmp_i64_f64(#{vb.c}, #{va.c}))"
 
         true ->
           err!(node, "operand-type", "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
