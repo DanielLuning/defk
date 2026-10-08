@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-08T14:20:22Z",
   "created": "2026-10-07T14:46:54Z",
   "description": "Review of wave 1 (spec + standards, defk-vku): (1) generated rewrites must compile ('A suggestion must compile'): the Enum.min_by/max_by rewrite (errors.ex ~1060) uses an undefined key(...) and tracks the index while min_by returns the element; Enum.min/max over a non-variable source uses an undefined 'first'; find_index uses 'found?'. Make each either compile (test it) or drop the rewrite and keep only the hint. (2) attempt/1 turns ANY crash into :error after the first rejection, hiding internal compiler bugs: only catch defk's own rejection, re-raise anything else. (3) errors.ex 'why' says 'native function', a term CONTEXT.md avoids. (4) Smells worth fixing now: the builtin list lives in three places (Errors @builtins, compiler @math1, elixir_mode builtin/... guard): make one source; compile/4 repeats the Process.put(:defk_ctx/:defk_fun)+attempt shape three times: one helper; reject!/2 is a middle man over err!/4.\n\nDone when a test compiles every dynamically generated rewrite form, an injected internal crash in a later kernel surfaces, and mix test passes.",
   "id": "defk-t11.3",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Fix compile-error rewrites and stop hiding internal compiler crashes",
   "type": "bug",
-  "updated_at": "2026-10-08T14:20:15Z"
+  "updated_at": "2026-10-08T14:20:22Z"
 }
