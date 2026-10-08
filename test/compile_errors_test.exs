@@ -260,10 +260,11 @@ defmodule Defk.CompileErrorsTest do
       assert rewrite(msg) == "sqrt(abs(a[0]))"
     end
 
-    test "Enum.sum over a comprehension gets the reduce loop" do
+    test "Enum.sum over a comprehension gets the reduce loop that compiles" do
       msg = rejection("Enum.sum(for y <- a, y > 0.0, do: y * y)")
       assert whats(msg) == ["Enum.sum/1 is not in the kernel subset"]
-      assert rewrite(msg) == "for y <- a, y > 0.0, reduce: 0 do\n  acc -> acc + y * y\nend"
+      # both zeros are offered; the integer one would change acc's type mid-reduce
+      assert rewrite(msg) == "for y <- a, y > 0.0, reduce: 0.0 do\n  acc -> acc + y * y\nend"
     end
 
     test "Enum.max over an array gets the reduce loop from the first element" do

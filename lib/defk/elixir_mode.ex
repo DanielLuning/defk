@@ -39,6 +39,7 @@ defmodule Defk.ElixirMode do
   alias Defk.ElixirMode.Ops, warn: false
 
   @pdict :defk_mode
+  @math1 Defk.Builtins.math1()
 
   @doc """
   Runs `fun` with this process's kernel calls in `mode` (`:native` or
@@ -384,7 +385,7 @@ defmodule Defk.ElixirMode do
   defp builtin(:abs, [a], [:i64], m), do: {call(:abs, [a], m), :i64}
   defp builtin(:abs, [a], [:f64], m), do: {remote(Kernel, :abs, [a], m), :f64}
   defp builtin(f, [a, b], [t, t], m) when f in [:min, :max] and t in [:i64, :f64], do: {remote(Kernel, f, [a, b], m), t}
-  defp builtin(f, [a], [_], m) when f in [:sqrt, :exp, :log, :sin, :cos], do: {remote(:math, f, [a], m), :f64}
+  defp builtin(f, [a], [_], m) when f in @math1, do: {remote(:math, f, [a], m), :f64}
   defp builtin(:pow, [a, b], [_, _], m), do: {remote(:math, :pow, [a, b], m), :f64}
   defp builtin(_, _, _, _), do: nil
 
@@ -679,8 +680,12 @@ defmodule Defk.ElixirMode do
   defp qual_q({:gen, x, src}), do: {:<-, [generated: true], [x, src]}
   defp qual_q({:filter, q}), do: q
 
+  # a for whose value is discarded: its body is statements only, and Elixir
+  # already ignores the loop's value. A trailing nil pads an empty body; on a
+  # non-empty one it would leave a final statement unreturned and warn.
   defp for_direct(nil, levels, {stmts, nil, nil}, nil, m) do
-    {{:for, gm(m), Enum.map(levels, &qual_q/1) ++ [[do: block(stmts ++ [nil])]]}, nil}
+    body = if stmts == [], do: [nil], else: stmts
+    {{:for, gm(m), Enum.map(levels, &qual_q/1) ++ [[do: block(body)]]}, nil}
   end
 
   defp for_direct({iq, it}, levels, {stmts, last, bt}, acc, m) do
