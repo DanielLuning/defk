@@ -10,9 +10,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Measurement 2026-10-08 (M-series Mac, Apple clang 17, macOS 26.7.1): 7 interleaved rounds (4 + 3) against the unflagged baseline, variant order rotated each round, best-of per round, per README harness conventions (sum/dot best-of-7 over 5M f64; count_primes(_early) best-of-3 over 1M). Deltas merged across both runs (min of mins):\n\n  variant                    sum       dot      primes     early     worst\n  +fstack-protector-strong  +0.42%    +0.98%    +0.40%    +0.41%    +0.98%\n  +_FORTIFY_SOURCE=2        +0.17%    +0.16%    -0.24%    -0.26%    +0.17%\n  +fno-strict-overflow      +0.72%    -0.13%    +0.23%    +1.62%    +1.62%\n  all three                 +0.72%    +0.33%    +0.59%    +1.64%    +1.64%\n\nNoise band: README documents +/-3% code-layout noise (defk-wnu); the round-1 fortify dot outlier (+2.65% in the first 4 rounds) disappeared in rounds 5-7 (+0.16%), confirming layout noise not a flag effect.\n\nDecision: ADOPT all three (worst metric +1.64% \u003c 2% bar). lib/defk/build.ex @cflags updated with a comment citing this measurement; mix test 156 passed with the flags active. Note: an earlier session left a contradictory edit claiming fno-strict-overflow rejected at +2.4%/+4.3% — not reproduced by this interleaved measurement; discarded.",
+      "timestamp": "2026-10-08T10:22:26Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Measure hardening flags for kernel builds",
   "type": "task",
-  "updated_at": "2026-10-08T08:24:30Z"
+  "updated_at": "2026-10-08T10:22:26Z"
 }
