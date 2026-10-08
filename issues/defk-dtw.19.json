@@ -7,9 +7,15 @@
   "id": "defk-dtw.19",
   "labels": [],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Resolution: no rewrite. Considered 2026-10-08 after an external suggestion (Zig/Rust/V/Odin/Roc). Prevention-by-construction plus evidence (defk-gtv, defk-5fc, defk-63k, defk-j5n) and the fault-containment spike defk-7dm protect the BEAM; the implementation language does not. All candidates funnel to the same LLVM optimizer (or via C), so no codegen-quality gain is possible against the current clang parity. The frontend cannot move (it must run at mix compile over Elixir AST). A rewrite costs weeks of re-proving every measurement, tick-gap number, upgrade test and sanitizer run for zero new verdict evidence.",
+      "timestamp": "2026-10-08T08:18:21Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Should defk move to another implementation stack (Zig/Rust/V/Odin/Roc)?",
   "type": "task",
-  "updated_at": "2026-10-08T08:18:00Z"
+  "updated_at": "2026-10-08T08:18:21Z"
 }
