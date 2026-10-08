@@ -41,11 +41,15 @@
     {
       "text": "Added Defk.Test.assert_agrees, Defk.Case (in_both_modes), Defk.Divergences registry, Defk.Generators, mix deps with stream_data. Existing tests still pass; scaffolding ready for per-kernel property tests.",
       "timestamp": "2026-10-08T18:52:58Z"
+    },
+    {
+      "text": "Closed: scaffolding delivered (Defk.Test.assert_agrees, Defk.Case, Defk.Divergences, Defk.Generators, stream_data dep, new test). All 206 tests pass. Unblocked defk-7dm.",
+      "timestamp": "2026-10-08T18:56:22Z"
     }
   ],
   "priority": 1,
   "status": "closed",
   "title": "Differential agreement checks between kernels and Elixir mode",
   "type": "task",
-  "updated_at": "2026-10-08T18:53:08Z"
+  "updated_at": "2026-10-08T18:56:22Z"
 }
