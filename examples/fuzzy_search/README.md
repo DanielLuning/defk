@@ -139,8 +139,10 @@ median ms/query, noisy machine, the two runs agreed within ~10%):
   and be re-measured. Until then the 4.2× is a DP-vs-DP comparison only.
 - **The length pre-filter** is cheap on both sides; adding it to both is a follow-up.
 
-Not yet tried: processing the catalog in parallel chunks per request (it
-doesn't raise throughput under load, where every scheduler is already busy).
+The Elixir backend now processes the catalog in parallel chunks across schedulers
+for a single request (parallel chunking per request). Under server load where
+all schedulers are busy, this doesn't add much; for a single-query latency test
+with spare cores it can help. The defk kernel remains single-threaded per call.
 
 ## Not modelled
 

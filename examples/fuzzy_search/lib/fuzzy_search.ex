@@ -21,7 +21,7 @@ defmodule FuzzySearch do
 
     pairs =
       case backend do
-        :elixir -> ElixirBackend.search(query, k)
+        :elixir -> ElixirBackend.search(query, k, parallel: false)
         :defk -> kernel(&Kernels.search/4, query, k)
         :blocking -> kernel(&Kernels.search_blocking/4, query, k)
       end

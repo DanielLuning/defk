@@ -355,7 +355,7 @@ variants = [
   {"9 = 2, tail-recursive catalog walk", &Variants.tail_scan/2},
   {"10 = 2 + length pre-filter*", &Variants.length_filter/2},
   {"7 Myers bit-parallel*", &Variants.myers/2},
-  {"  ElixirBackend (shipped)", &FuzzySearch.ElixirBackend.search/2}
+  {"  ElixirBackend (shipped)", fn q, k -> FuzzySearch.ElixirBackend.search(q, k, parallel: false) end}
 ]
 
 :rand.seed(:exsss, {1, 2, 3})

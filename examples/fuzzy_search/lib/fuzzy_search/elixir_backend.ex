@@ -23,7 +23,12 @@ defmodule FuzzySearch.ElixirBackend do
   @inf 1_000_000_000
 
   @doc "Returns up to `k` `{index, distance}` pairs, best first (ties: lower index)."
-  def search(query, k) do
+  def search(query, k, opts \\ []) do
+    parallel = Keyword.get(opts, :parallel, true)
+    search_impl(query, k, parallel)
+  end
+
+  defp search_impl(query, k, false) do
     q = String.to_charlist(query)
     row0 = Enum.to_list(0..length(q))
     words = Catalog.get().charlists
@@ -34,6 +39,61 @@ defmodule FuzzySearch.ElixirBackend do
           :cut -> acc
           d -> insert(d, i, top, count, k, bound)
         end
+      end)
+
+    Enum.map(top, fn {d, i} -> {i, d} end)
+  end
+
+  defp search_impl(query, k, true) do
+    q = String.to_charlist(query)
+    row0 = Enum.to_list(0..length(q))
+    words = Catalog.get().charlists
+    n = tuple_size(words)
+    sched = System.schedulers_online()
+
+    # Split catalog into chunks processed in parallel
+    chunk_size = div(n + sched - 1, sched)
+
+    results =
+      0..(sched - 1)
+      |> Task.async_stream(
+        fn idx ->
+          start = idx * chunk_size
+          stop = min((idx + 1) * chunk_size - 1, n - 1)
+          if start > stop do
+            {[], 0, @inf}
+          else
+            Enum.reduce(start..stop//1, {[], 0, @inf}, fn i, {top, count, bound} = acc ->
+              case distance(elem(words, i), q, row0, 1, bound) do
+                :cut -> acc
+                d -> insert(d, i, top, count, k, bound)
+              end
+            end)
+          end
+        end,
+        max_concurrency: sched,
+        ordered: false
+      )
+      |> Enum.map(fn {:ok, res} -> res end)
+
+    # Merge all chunk results, keeping k best
+    {top, _, _} =
+      Enum.reduce(results, {[], 0, @inf}, fn {ctop, _ccount, _cbound}, {top, count, bound} ->
+        # Merge ctop into top
+        Enum.reduce(ctop, {top, count, bound}, fn {d, i}, {top, count, bound} ->
+          if count < k do
+            top = :lists.merge([{d, i}], top)
+            count = count + 1
+            {top, count, if(count == k, do: elem(List.last(top), 0), else: @inf)}
+          else
+            if d < bound do
+              top = :lists.merge([{d, i}], :lists.droplast(top))
+              {top, count, elem(List.last(top), 0)}
+            else
+              {top, count, bound}
+            end
+          end
+        end)
       end)
 
     Enum.map(top, fn {d, i} -> {i, d} end)
