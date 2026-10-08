@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [
     "defk-5fc",
+    "defk-7dm",
     "defk-ds0",
     "defk-gtv",
     "defk-j5n",
@@ -29,5 +30,5 @@
   "status": "open",
   "title": "Write the verdict: guide, runtime contract, devex, limitations",
   "type": "task",
-  "updated_at": "2026-10-07T14:47:02Z"
+  "updated_at": "2026-10-08T08:17:57Z"
 }
