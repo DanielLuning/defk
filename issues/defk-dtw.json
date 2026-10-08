@@ -8,9 +8,15 @@
   "labels": [
     "wayfinder:map"
   ],
+  "comments": [
+    {
+      "text": "Breadcrumb — external stack review (2026-10-08): a reviewer who had not seen defk recommended Zig/Rust/V/Odin/Roc. Evaluated against the four verdict dimensions and rejected (defk-dtw.19). Relevant facts for future changes: Zig/Rust/Odin compile via LLVM, V via C, so codegen quality cannot improve on current clang parity; erl_nif.h documents 'a native function that crashes will crash the whole VM' in every language; Rust safety stops at unsafe FFI; the Elixir frontend (macro, type checker, error format, Elixir mode) cannot move off Elixir AST at mix compile. The genuine alternative stack question is a codegen backend (defk-o1w, Cranelift), already scoped as exploration only per defk-dtw.11.",
+      "timestamp": "2026-10-08T08:19:07Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Wayfinder: roadmap to a defk verdict (kernel subset, runtime contract, devex)",
   "type": "epic",
-  "updated_at": "2026-10-08T08:18:57Z"
+  "updated_at": "2026-10-08T08:19:07Z"
 }
