@@ -45,11 +45,15 @@
     {
       "text": "Closed: scaffolding delivered (Defk.Test.assert_agrees, Defk.Case, Defk.Divergences, Defk.Generators, stream_data dep, new test). All 206 tests pass. Unblocked defk-7dm.",
       "timestamp": "2026-10-08T18:56:22Z"
+    },
+    {
+      "text": "Review 2026-10-09: closed with the scaffolding only; the 'Done when' (an assert_agrees property per catalog kernel) is unmet. Follow-up: defk-ne6 (properties), defk-813 (Divergences registry stub). The trunc(-2^63) divergence noted here on 2026-10-07 is filed as defk-9xh.",
+      "timestamp": "2026-10-09T17:10:48Z"
     }
   ],
   "priority": 1,
   "status": "closed",
   "title": "Differential agreement checks between kernels and Elixir mode",
   "type": "task",
-  "updated_at": "2026-10-08T18:56:22Z"
+  "updated_at": "2026-10-09T17:10:48Z"
 }
