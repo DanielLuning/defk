@@ -49,6 +49,7 @@ once and reused.
 | [`image_blur.exs`](image_blur.exs) | Grayscale + 3×3 box blur on a raw 1080p frame | 37–41× | first pass: **provisional** |
 | [`fft.exs`](fft.exs) | Radix-2 FFT of a 2^20-point signal; direct convolution of 2 s of 48 kHz audio with a 64-tap FIR | FFT 63–91× (62× at n = 4096); convolution 28–38×; bit-exact with Elixir. Nx `binary` backend is slower than pure Elixir here; EXLA not measured | optimised (4 FFT variants, 2 convolution variants) |
 | [`fuzzy_search/`](fuzzy_search) (app) | Typo-tolerant search service: Levenshtein over 234k words behind Plug + Bandit | 4.2× per query with the early cut-off on both sides (noisy-machine numbers, re-measure pending); before the cut-off 6.2× req/s, 5.4× lower p99 under load; `/health` latency stays at Elixir levels (a blocking NIF pushes it to ~80–90 ms p99). Elixir with Myers bit-parallel comes within ~1.3× of the DP kernel; defk can't express it until `defk-w38` | first pass: **provisional** |
+| [`image_ops.exs`](image_ops.exs) | Bilinear resize 1080p to 480x270, RGB to YUV420, Floyd-Steinberg dither on raw 1080p frames (the script reports three verdicts; `run_all` shows the resize one) | resize ~12×, YUV420 14–18×, dither 21–26×; bit-exact with Elixir. libvips (SIMD) not compared; expected to win resize | optimised (3, 3 and 2 variants) |
 
 These numbers will shrink as the Elixir baselines are optimised; that's
 expected and is the point. Each example's header lists what hasn't been

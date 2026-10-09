@@ -41,6 +41,7 @@ So far:
   - 1080p image blur
   - FFT and convolution over audio-sized f64 signals (63–91× an optimised Elixir baseline)
   - a fuzzy-search web service, where `/health` latency stays at Elixir levels while a blocking NIF pushes it to ~80 ms p99
+  - 1080p image resize, YUV420 conversion and Floyd-Steinberg dithering on raw frames (12–26× an optimised Elixir baseline, bit-exact; libvips not compared)
 - **Where Elixir is the right choice:**
   - data that arrives as lists (defk ≈3× slower)
   - one kernel call per element (defk ≈2.5× slower)
