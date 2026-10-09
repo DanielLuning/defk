@@ -1,4 +1,4 @@
-# poor_per_pair_distance: Levenshtein distance for 50k pairs of short strings
+# per_pair_distance: Levenshtein distance for 50k pairs of short strings
 #
 # The trap (expected, and not found): ex_strsim's API shape, one NIF call per
 # string pair inside Enum.map, should lose the advantage to call overhead, as
@@ -7,7 +7,7 @@
 # call, far more than the ~0.1-0.2 us boundary. The kernel per pair is 3.4x
 # faster than optimised Elixir at 8-16 bytes (3.2-3.4x). Expected verdict: good.
 #
-#   elixir examples/poor_per_pair_distance.exs
+#   elixir examples/per_pair_distance.exs
 #
 # Where the crossover is (length sweep below, 10k pairs): at 4-byte strings
 # (16 cells) the per-pair kernel is only 1.1-1.2x ahead, so below about 8 bytes
@@ -18,8 +18,7 @@
 # costs more in Elixir than the per-pair calls do (18 ms batched vs 13 ms per
 # pair), so a batched kernel only pays when the strings already live packed
 # (as in examples/fuzzy_search, one blob and offsets kept in :persistent_term;
-# the last column of the sweep: 4.2-4.6x at 4 bytes). The file keeps its poor_ name from the ticket;
-# the name is the one thing that is not what the measurement says.
+# the last column of the sweep: 4.2-4.6x at 4 bytes).# the name is the one thing that is not what the measurement says.
 #
 # Elixir baseline: optimised. A tail-recursive two-row version over the
 # strings' bytes: the row is a list, each cell built from the previous row's
@@ -193,7 +192,7 @@ IO.puts(
 )
 
 Defk.Bench.report(
-  name: "poor_per_pair_distance",
+  name: "per_pair_distance",
   expected: :good,
   baseline: :optimized,
   elixir: elixir_pairs,
