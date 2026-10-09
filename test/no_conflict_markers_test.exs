@@ -21,13 +21,13 @@ defmodule Defk.NoConflictMarkersTest do
     offenders =
       out
       |> String.split("\n", trim: true)
-      |> Enum.filter(&File.regular?/1)
       |> Enum.filter(fn path ->
-        path
-        |> File.stream!()
-        |> Enum.any?(
-          &(String.starts_with?(&1, "<<<<<<< ") or String.starts_with?(&1, ">>>>>>> "))
-        )
+        File.regular?(path) and
+          path
+          |> File.stream!()
+          |> Enum.any?(
+            &(String.starts_with?(&1, "<<<<<<< ") or String.starts_with?(&1, ">>>>>>> "))
+          )
       end)
 
     assert offenders == [], "conflict markers in: #{Enum.join(offenders, ", ")}"
