@@ -641,20 +641,25 @@ defmodule Defk.ElixirModeTest do
     end
 
     test "Elixir mode applies the decided semantics where the kernel still diverges" do
-      # the kernel gives these until defk-i00 / defk-auo land;
-      # Elixir mode gives the decided result
+      # the kernel gives this until defk-auo lands; Elixir mode gives the decided result
 
       # value semantics: b is not changed by the write to out (native: 4.0)
       assert K.__defk_elixir__(:snapshot, [2.0]) == 2.0
-      # inf inside a kernel raises at the operation (native: 1)
+    end
+
+    test "inf or NaN raises at the operation or the read, in both modes (defk-i00)" do
+      # inf inside a kernel raises at the operation, also when never returned
+      agree(K, :inf_inside, [10.0], message: false)
       assert_raise ArithmeticError, fn -> K.__defk_elixir__(:inf_inside, [10.0]) end
-      # non-finite input bits raise ArgumentError when read (native: ArithmeticError at return)
+      # non-finite input bits raise ArgumentError when read, and only when read
       nan = <<0x7FF8000000000001::64-native>>
       inf = <<0x7FF0000000000000::64-native>>
 
       for bits <- [nan, inf] do
+        agree(K, :sum, [f64s([1.0]) <> bits])
         e = assert_raise ArgumentError, fn -> K.__defk_elixir__(:sum, [f64s([1.0]) <> bits]) end
         assert e.message =~ "non-finite float"
+        agree(K, :read, [bits <> f64s([2.0]), 1])
         assert K.__defk_elixir__(:read, [bits <> f64s([2.0]), 1]) == 2.0
       end
     end

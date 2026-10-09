@@ -12,6 +12,7 @@ defmodule Defk.Compiler do
 
   @scalars [:i64, :f64, :bool]
   @elems [:f64, :i64, :u8]
+  @float_ops %{+: "fadd", -: "fsub", *: "fmul"}
   @math1 Defk.Builtins.math1()
   # range facts carried by values (see "range facts" below)
   @facts [:lo, :hi, :lb, :ub, :len_lo, :len_lb]
@@ -844,11 +845,29 @@ defmodule Defk.Compiler do
     {:arr, e} = a.t
 
     get =
-      if in_bounds?(a, i),
-        do: "(#{a.c}).data[#{i.c}]",
-        else: "defk_get_#{e}(ctx, #{a.c}, #{i.c})"
+      cond do
+        # an f64 from an input array may hold inf or NaN bits: the read raises
+        # (defk-i00); an alloc/2 array holds only what the kernel wrote
+        e == :f64 and not a.owned and in_bounds?(a, i) ->
+          "defk_in_f64(ctx, (#{a.c}).data[#{i.c}], #{i.c})"
 
-    {[sa, si], if(e == :u8, do: u8_val("((int64_t)#{get})"), else: val(get, e))}
+        e == :f64 and not a.owned ->
+          "defk_get_in_f64(ctx, #{a.c}, #{i.c})"
+
+        in_bounds?(a, i) ->
+          "(#{a.c}).data[#{i.c}]"
+
+        true ->
+          "defk_get_#{e}(ctx, #{a.c}, #{i.c})"
+      end
+
+    v = if e == :u8, do: u8_val("((int64_t)#{get})"), else: val(get, e)
+
+    # an in-range read cannot fail but by its inf/NaN check, which a float
+    # expression may defer to its own check (float_tree)
+    raw = if e == :u8, do: "((int64_t)(#{a.c}).data[#{i.c}])", else: "(#{a.c}).data[#{i.c}]"
+    v = if in_bounds?(a, i), do: Map.put(v, :pure_read, raw), else: v
+    {[sa, si], v}
   end
 
   defp lower_expr({:if, _, [cond, kw]} = node, env) when is_list(kw) do
@@ -915,38 +934,8 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp lower_expr({op, _, [a, b]}, env) when op in [:+, :-, :*, :/] do
-    {sa, va} = lower_expr(a, env)
-    {sb, vb} = lower_expr(b, env)
-    numeric!(va, a, op)
-    numeric!(vb, b, op)
-
-    v =
-      case {op, va.t, vb.t} do
-        {:/, _, _} ->
-          val("defk_fdiv(ctx, #{to_f(va)}, #{to_f(vb)})", :f64)
-
-        {:+, :i64, :i64} ->
-          Map.merge(
-            val("defk_add_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
-            add_facts(va, vb)
-          )
-
-        {:-, :i64, :i64} ->
-          Map.merge(
-            val("defk_sub_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
-            sub_facts(va, vb)
-          )
-
-        {:*, :i64, :i64} ->
-          val("defk_mul_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64)
-
-        _ ->
-          val("(#{to_f(va)} #{op} #{to_f(vb)})", :f64)
-      end
-
-    {[sa, sb], v}
-  end
+  defp lower_expr({op, _, [a, b]} = node, env) when op in [:+, :-, :*, :/],
+    do: float_tree(node, env) || lower_arith(op, a, b, env)
 
   defp lower_expr({op, _, [a, b]} = node, env)
        when op in [:==, :!=, :===, :!==, :<, :>, :<=, :>=] do
@@ -1009,6 +998,157 @@ defmodule Defk.Compiler do
   # anything else (a map, a string, a remote call, ...) is outside the subset
   defp lower_expr(other, env),
     do: unsupported!(other, Defk.Errors.unsupported(other, &type_in(&1, env)), env)
+
+  # + - * / one operation at a time: i64 checked for overflow, f64 for a
+  # result that is inf or NaN (defk-i00); see float_tree for the common case
+  defp lower_arith(op, a, b, env) do
+    {sa, va} = lower_expr(a, env)
+    {sb, vb} = lower_expr(b, env)
+    numeric!(va, a, op)
+    numeric!(vb, b, op)
+
+    v =
+      case {op, va.t, vb.t} do
+        {:/, _, _} ->
+          val("defk_fdiv#{checked(env)}, #{to_f(va)}, #{to_f(vb)})", :f64)
+
+        {:+, :i64, :i64} ->
+          Map.merge(
+            val("defk_add_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
+            add_facts(va, vb)
+          )
+
+        {:-, :i64, :i64} ->
+          Map.merge(
+            val("defk_sub_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
+            sub_facts(va, vb)
+          )
+
+        {:*, :i64, :i64} ->
+          val("defk_mul_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64)
+
+        # a float result that is inf or NaN raises, as in Elixir (defk-i00)
+        _ ->
+          val("defk_#{@float_ops[op]}#{checked(env)}, #{to_f(va)}, #{to_f(vb)})", :f64)
+      end
+
+    {[sa, sb], v}
+  end
+
+  # A float expression of + - * / whose operands are pure (variables,
+  # literals, in-range reads) is computed with plain C operators and checked
+  # once: + - * give inf or NaN whenever an operand is inf or NaN, so the
+  # result shows whether any operation or input read on the way made one. Only
+  # x / inf hides one (it gives 0.0), so a divisor that may be non-finite is
+  # checked too. On a failed check the expression is replayed one operation at
+  # a time, in Elixir's order, with the raising checks: it raises where Elixir
+  # would, with the same error (defk-i00). One check per expression instead of
+  # one per operation and read is most of the cost of matching Elixir in
+  # float loops. Inside a speculated select (env.ovf) and over any other
+  # operand, each operation is checked on its own (lower_arith).
+  defp float_tree(_node, %{ovf: _}), do: nil
+
+  defp float_tree(node, env) do
+    {:op, fast, replay, r, divisors} = ftree(node, env)
+    f = ftmp()
+    bad = Enum.map_join([f | divisors], " | ", &"!DEFK_FINITE(#{&1})")
+
+    c =
+      "({ double #{f} = #{fast}; if (DEFK_UNLIKELY(#{bad})) { #{replay}(void)#{r}; " <>
+        "defk_nonfinite_lost(ctx); } #{f}; })"
+
+    {[], val(c, :f64)}
+  catch
+    :impure -> nil
+  end
+
+  # {:leaf, type, fast_c, replay_c, finite?} for a pure operand, or
+  # {:op, fast_c, replay_stmts, replay_var, divisors} for a float operation
+  defp ftree({op, _, [a, b]}, env) when op in [:+, :-, :*, :/] do
+    ta = ftree(a, env)
+    tb = ftree(b, env)
+    # i64 + - * may overflow: not pure
+    op == :/ or ftype(ta) == :f64 or ftype(tb) == :f64 or throw(:impure)
+    {fa, ra, sa, da} = fparts(ta)
+    {fb, rb, sb, db} = fparts(tb)
+    t = ftmp()
+    fop = Map.get(@float_ops, op, "fdiv")
+    # x / inf is 0.0: check a divisor that may be inf or NaN itself
+    dd = if op == :/ and not finite?(tb), do: [fb], else: []
+
+    {:op, "(#{fa} #{op} #{fb})", [sa, sb, "double #{t} = defk_#{fop}(ctx, #{ra}, #{rb});\n"], t,
+     da ++ db ++ dd}
+  end
+
+  defp ftree({:-, _, [a]}, env) do
+    case ftree(a, env) do
+      {:leaf, :f64, fast, replay, fin?} -> {:leaf, :f64, "(-#{fast})", "(-#{replay})", fin?}
+      {:op, fast, replay, r, ds} -> {:op, "(-#{fast})", replay, "(-#{r})", ds}
+      _ -> throw(:impure)
+    end
+  end
+
+  defp ftree(x, _env) when is_float(x) do
+    c = :erlang.float_to_binary(x, [:short])
+    {:leaf, :f64, c, c, true}
+  end
+
+  defp ftree(x, env) when is_integer(x) or (is_tuple(x) and tuple_size(x) == 3) do
+    {s, v} = pure_operand(x, env)
+    IO.iodata_length(s) == 0 || throw(:impure)
+
+    case v do
+      %{t: t, pure_read: raw} when t in [:i64, :f64] ->
+        {:leaf, t, raw, v.c, t == :i64 or raw == v.c}
+
+      %{t: t} when t in [:i64, :f64] ->
+        {:leaf, t, v.c, v.c, true}
+
+      _ ->
+        throw(:impure)
+    end
+  end
+
+  defp ftree(_x, _env), do: throw(:impure)
+
+  # a variable, literal or in-range read; anything else may raise
+  defp pure_operand({name, _, ctx} = x, env) when is_atom(name) and is_atom(ctx),
+    do: lower_expr(x, env)
+
+  defp pure_operand({{:., _, [Access, :get]}, _, [_, idx]} = x, env) do
+    pure_index?(idx) || throw(:impure)
+    {s, v} = lower_expr(x, env)
+    if Map.has_key?(v, :pure_read), do: {s, v}, else: throw(:impure)
+  end
+
+  defp pure_operand(n, env) when is_integer(n), do: lower_expr(n, env)
+  defp pure_operand(_x, _env), do: throw(:impure)
+
+  # an index whose computation cannot raise (once proved in range)
+  defp pure_index?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: true
+  defp pure_index?(n) when is_integer(n), do: true
+  defp pure_index?(_), do: false
+
+  defp ftype({:leaf, t, _, _, _}), do: t
+  defp ftype({:op, _, _, _, _}), do: :f64
+
+  defp finite?({:leaf, _, _, _, fin?}), do: fin?
+  defp finite?(_), do: false
+
+  # {fast_c, replay value, replay statements, divisors}, as f64. A checked
+  # read is replayed as its own statement, so it raises in Elixir's order.
+  defp fparts({:leaf, :i64, fast, _, _}), do: {"((double)#{fast})", "((double)#{fast})", [], []}
+  defp fparts({:leaf, :f64, fast, fast, _}), do: {fast, fast, [], []}
+
+  defp fparts({:leaf, :f64, fast, replay, _}) do
+    t = ftmp()
+    {fast, t, ["double #{t} = #{replay};\n"], []}
+  end
+
+  defp fparts({:op, fast, replay, r, ds}), do: {fast, r, replay, ds}
+
+  # a C local of a float_tree check, scoped to its statement expression
+  defp ftmp, do: "f_#{Process.put(:defk_n, Process.get(:defk_n) + 1) + 1}"
 
   defp lower_tuple(items, env) do
     {stmts, elems} =
@@ -1189,7 +1329,8 @@ defmodule Defk.Compiler do
   defp checked(%{ovf: flag}), do: "_s(&#{flag}"
   defp checked(_env), do: "(ctx"
 
-  # pure expressions that can only fail by i64 overflow: safe to evaluate untaken
+  # pure expressions that can only fail by i64 overflow or a non-finite float
+  # result: safe to evaluate untaken, with the failure flagged
   defp speculate?({:__block__, _, [e]}), do: speculate?(e)
   defp speculate?(x) when is_number(x) or is_boolean(x), do: true
   defp speculate?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: true
@@ -1199,6 +1340,7 @@ defmodule Defk.Compiler do
               :+,
               :-,
               :*,
+              :/,
               :==,
               :!=,
               :===,
@@ -1312,14 +1454,14 @@ defmodule Defk.Compiler do
 
   defp builtin(f, [a], node, _) when f in @math1 do
     numeric!(a, arg(node, 0), "#{f}/1")
-    c = if f in [:sqrt, :log], do: "defk_#{f}(ctx, #{to_f(a)})", else: "#{f}(#{to_f(a)})"
+    c = if f in [:sqrt, :log, :exp], do: "defk_#{f}(ctx, #{to_f(a)})", else: "#{f}(#{to_f(a)})"
     val(c, :f64)
   end
 
   defp builtin(:pow, [a, b], node, _) do
     numeric!(a, arg(node, 0), "pow/2")
     numeric!(b, arg(node, 1), "pow/2")
-    val("pow(#{to_f(a)}, #{to_f(b)})", :f64)
+    val("defk_pow(ctx, #{to_f(a)}, #{to_f(b)})", :f64)
   end
 
   defp builtin(name, vals, node, env) do
@@ -1707,7 +1849,9 @@ defmodule Defk.Compiler do
     # index is in range by construction: no bounds check
     in_loop(fn id ->
       {body, flat?} = lower_quals_tracked(rest, env, inner)
-      body = ["#{x} = #{arr}.data[#{k}];\n", body, "#{k} += 1;\n"]
+      read = "#{arr}.data[#{k}]"
+      read = if e == :f64 and not a.owned, do: "defk_in_f64(ctx, #{read}, #{k})", else: read
+      body = ["#{x} = #{read};\n", body, "#{k} += 1;\n"]
 
       strip = %{
         done_at: &"#{k} > #{&1}",

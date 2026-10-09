@@ -117,9 +117,9 @@ defmodule Defk.Generators do
 
   @doc """
   An f64 with magnitude at most `max_abs` (uniform, any magnitude up to it,
-  or an edge value within it): for kernels whose arithmetic would otherwise
-  overflow to inf, which the kernel and Elixir mode treat differently until
-  defk-i00 lands.
+  or an edge value within it): for kernels whose arithmetic would mostly
+  overflow to inf on any f64 (both modes raise, defk-i00), so that their
+  computed values are compared too.
   """
   def f64(max_abs) when is_float(max_abs) do
     frequency([
