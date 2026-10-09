@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-09T22:10:21Z",
   "created": "2026-10-09T21:07:13Z",
   "description": "defk-i00 (merged 2026-10-09) makes every float operation raise on an inf/NaN result, as Elixir does, with one predictable branch per operation (or per expression tree). Measured cost (bench/float_checks.exs, shared machine): dot +24%, cosine +17%, rolling mean_std +23%, and scale (`out[i] = a[i] * k`) +87-91%, because a branch per element stops clang from vectorising the flat loop. The checks are correct and stay; this ticket recovers the speed.\n\nDesign: inside a flat strip (the loop body that runs up to DEFK_STRIP trips without a safepoint, see README design decision 3 and `loop/5` in the compiler), accumulate a branchless flag instead of branching: `nf |= (r != r) | (fabs(r) \u003e DBL_MAX)` as an integer OR (clang vectorises an OR-reduction of compare masks alongside the arithmetic; verify in the assembly), with no call and no branch in the strip. Test the flag once at the strip's end, where the safepoint already is. On failure, replay the strip from its start state with the raising per-operation forms, so the exception is raised at the first failing operation in program order, exactly as now. The replay needs the strip's start state: the loop counter and the accumulators (a few registers; the frame spill mechanism already names every live local), snapshotted at strip entry into locals (not the frame); array writes in the strip are idempotent (same values rewritten), so replaying them is safe, and reads of input arrays are pure. A non-flat loop keeps the current per-operation checks. Input reads: the isfinite test on `a[i]` can join the same flag.\n\nMeasure with bench/float_checks.exs (interleaved rounds against DEFK_NO_FLOAT_CHECKS) and record in README Known limitations next to the current numbers. Target: scale within 10% of the unchecked loop, dot/mean_std within 5%.\n\nCorrectness: test/non_finite_test.exs already fixes the raise order; add cases where the failing op is mid-strip after writes (the replay must produce the same exception and leave the output array as Elixir mode's would have before raising: the array is never returned on raise, so only the exception matters), under forced yields (a yield between strips must not lose the flag or the snapshot), and with the agreement properties.\n\nDone when: the four benchmark kernels meet the targets, all existing non-finite tests and properties pass, and the README numbers are updated.",
   "id": "defk-6tt",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Recover the vectorised fast path under non-finite float checks: branchless per-strip flag with replay",
   "type": "task",
-  "updated_at": "2026-10-09T22:02:11Z"
+  "updated_at": "2026-10-09T22:10:21Z"
 }
