@@ -40,6 +40,8 @@ defmodule Defk.ElixirMode do
 
   @pdict :defk_mode
   @math1 Defk.Builtins.math1()
+  @bitwise Defk.Builtins.bitwise()
+  @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
 
   @doc """
   Runs `fun` with this process's kernel calls in `mode` (`:native` or
@@ -374,8 +376,27 @@ defmodule Defk.ElixirMode do
 
   defp expr({{:., _, [:math, fun]}, m, args}, env), do: fun_call(fun, args, m, env)
 
+  # band(a, b), a &&& b, Bitwise.band(a, b) and :erlang.band(a, b) (the
+  # compiler accepted only i64 operands): qualified Bitwise calls, so the
+  # generated code needs no import, and Ops for the shifts' i64 limit
+  defp expr({op, m, args}, env) when op in @bitwise_names and is_list(args) do
+    f = Defk.Builtins.bitwise_fun(op)
+
+    if length(args) == Defk.Builtins.bitwise_arity(f),
+      do: bitwise(f, args, m, env),
+      else: fun_call(op, args, m, env)
+  end
+
+  defp expr({{:., _, [_mod, f]}, m, args}, env) when f in @bitwise, do: bitwise(f, args, m, env)
+
   defp expr({name, m, args}, env) when is_atom(name) and is_list(args),
     do: fun_call(name, args, m, env)
+
+  defp bitwise(f, args, m, env) do
+    {pre, qs, _} = operands(args, env)
+    q = if f in [:bsl, :bsr], do: call(f, qs, m), else: remote(Bitwise, f, qs, m)
+    {with_pre(pre, q), :i64}
+  end
 
   defp tuple_expr(items, env) do
     {pre, qs, ts} = operands(items, env)

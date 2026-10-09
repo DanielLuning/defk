@@ -94,7 +94,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 - Constructs: `=`, `if`/`else`, `cond`, `case`, `for` with ranges, array generators, filters and `reduce:` (including tuple accumulators).
 - Early exit: `Enum.reduce_while(enumerable, acc, fn x, acc -> {:cont, acc} | {:halt, acc} end)`, and `Enum.all?/2` / `Enum.any?/2` with a `fn`. The enumerable is a range or an array, as in a `for` generator.
 - `case` on an `i64` or `bool`: integer literals, `true`/`false`, `^pinned`, `_` or a variable, each with an optional guard. Used as a value or a statement.
-- Operators: `a[i]`, `out[i] = v` (only on `alloc/2` arrays), `+ - * /`, `div`, `rem`, comparisons, `and`/`or`/`not`.
+- Operators: `a[i]`, `out[i] = v` (only on `alloc/2` arrays), `+ - * /`, `div`, `rem`, comparisons, `and`/`or`/`not`, and bitwise on `i64`: `band`/`bor`/`bxor`/`bnot`/`bsl`/`bsr` (also as `&&& ||| ^^^ ~~~ <<< >>>` or `Bitwise.band/2` and so on, no `import Bitwise` needed).
 - Builtins: `len`, `min`, `max`, `abs`, `float`, `trunc`, `round`, `sqrt`, `exp`, `log`, `sin`, `cos`, `pow` (also as `:math.*`), plus calls to other kernels (inlined).
 
 **Elixir mode** (tests and debugging only): each kernel body is also compiled to
@@ -158,6 +158,7 @@ These are deliberate, to keep defk small for now.
 - Array writes alias: `b = a` then `a[i] = x` is visible through `b`.
 - `alloc/2` raises `ArgumentError` for a length over 2^48 bytes ("length too large", the user address space of 64-bit platforms) and for one the allocator cannot provide ("out of memory"). A range whose last element is within one step of the i64 limit (`0..9223372036854775807`) raises `ArithmeticError` before its loop starts, also when a halt would end it earlier: stepping past that element would overflow the loop counter.
 - Float arithmetic is evaluated as written, so results match Elixir bit for bit: kernels build with `-ffp-contract=off` and never `-ffast-math` or reassociation. A float reduction (`acc + a[i] * b[i]`) therefore stays in order and is not vectorised across lanes. Measured with and without the flag (5M elements): `dot` ~0.56 ns/elem, `sum` 0.50-0.53, `mean_var` 3.8-4.3 either way, so the flag costs nothing measurable here (defk-jlk). libm calls (sin, cos, exp, log, pow, sqrt) are not fused or substituted either (`-fno-builtin`: no sincos, no `pow(x, 2.0)` to `x*x`), so they match `:math` bit for bit (defk-6g6).
+- `bsl`/`<<<` (and `bsr` by a negative shift) raises `ArithmeticError` when the exact result does not fit in i64, where Elixir would return a bignum; there is no wrapping shift yet (masked arithmetic, defk-n4r.2).
 - A kernel survives one reload of its module; a second reload before it finishes purges its code and kills it (standard BEAM old-code semantics).
 - The C compiler runs at compile time on the build machine (no Cranelift JIT path).
 

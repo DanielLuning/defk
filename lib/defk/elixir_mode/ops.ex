@@ -37,6 +37,28 @@ defmodule Defk.ElixirMode.Ops do
   def trunc(f), do: check(Kernel.trunc(f), "trunc/1: #{inspect(f)} does not fit in i64")
   def round(f), do: check(Kernel.round(f), "round/1: #{inspect(f)} does not fit in i64")
 
+  # Bitwise.bsl/bsr with the i64 limit: the exact result, or ArithmeticError
+  # where it leaves i64, as the kernel does (defk_bsl_i64). A shift past 63
+  # is decided without Bitwise, which would build a huge bignum or raise
+  # SystemLimitError for one.
+  def bsl(a, n), do: shifted(shift(:bsl, a, n), "bsl", a, n)
+  def bsr(a, n), do: shifted(shift(:bsr, a, n), "bsr", a, n)
+
+  @doc false
+  # bsl/bsr(a, n) on i64 values as Elixir computes them, or :overflow when
+  # the exact result does not fit in i64 (also used by the compiler)
+  def shift(:bsr, a, n), do: shift(:bsl, a, -n)
+  def shift(:bsl, a, n) when n >= 64, do: if(a == 0, do: 0, else: :overflow)
+  def shift(:bsl, a, n) when n <= -64, do: if(a < 0, do: -1, else: 0)
+
+  def shift(:bsl, a, n) do
+    r = Bitwise.bsl(a, n)
+    if is_i64(r), do: r, else: :overflow
+  end
+
+  defp shifted(:overflow, f, a, n), do: raise(ArithmeticError, "i64 overflow in #{f}(#{a}, #{n})")
+  defp shifted(r, _f, _a, _n), do: r
+
   defp fit(r, _a, _op, _b) when is_i64(r), do: r
   defp fit(_r, a, op, b), do: raise(ArithmeticError, "i64 overflow in #{a} #{op} #{b}")
 
