@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T22:03:22Z",
+  "description": "With value semantics (defk-auo, merged 2026-10-10) rebinding an array variable inside a loop body and reading it after the loop is a compile error (array-rebind-in-loop), as Elixir scoping dictates. The Elixir way to carry a value through a loop is the reduce accumulator, and the subset rejects array accumulators (array-accumulator). So the helper pattern every table-building kernel needs, `{slots, n} = insert(slots, arena, stats, ...)` inside the per-line loop with the tables read afterwards (1BRC defk-n4r.6, the CDCL kernel defk-52v.15, LZ4 encode defk-52v.13, HLL defk-9p6.15), has no legal spelling today: the only way is to write every table update inline in the loop body that allocated the tables.\n\nAllow owned arrays (from alloc/2, or a copied input) as reduce accumulators, alone or as tuple elements: `for line \u003c- ..., reduce: {slots, arena, stats, n} do {slots, arena, stats, n} -\u003e ... {slots2, arena2, stats2, n2} end` and the same in `Enum.reduce_while`. Semantics: the accumulator array is threaded in place (the loop body's writes go to the same buffer; the value returned by the body is the (possibly rebound) array), which value semantics permits because no other binding is live across the iteration (the liveness scan must verify that: a body that aliases the accumulator array to another name read in a later iteration forces a copy, as in defk-auo). Elixir mode: already threads arrays through blocks; the reduce form is plain Elixir. Helper calls returning the array (the dtw.18 rule) compose with this: `{slots, n} = insert(slots, ...)` inside the reduce body rebinds the accumulator for the next iteration, which is exactly Elixir.\n\nTests: both modes via assert_agrees and properties: a histogram built through a reduce accumulator, a two-array accumulator updated by an inlined helper, the alias-in-body case copying once, the accumulator array returned after the loop, resume under forced yields (the accumulator array views are rebuilt per entry like any owned array), and the generated C of the 1BRC-shaped loop showing no defk_copy_ calls. Docs: docs/language.md sections 5, 6, 7; retire or re-word array-accumulator (grep links).\n\nDone when: a kernel that threads two alloc'd tables through a loop with an inlined helper compiles with no copies and agrees with Elixir mode, and defk-n4r.6 can be written.",
+  "id": "defk-n4r.10",
+  "labels": [],
+  "parent": "defk-n4r",
+  "priority": 1,
+  "status": "open",
+  "title": "Array accumulators in for ... reduce: and Enum.reduce_while: thread an owned array through a loop in place",
+  "type": "task",
+  "updated_at": "2026-10-09T22:03:22Z"
+}
