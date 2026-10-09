@@ -16,11 +16,15 @@
     {
       "text": "Per 'Which convenience constructs do the six target workloads need?' (defk-dtw.18): a write to a parameter array inside a helper kernel that is never returned (e.g. emit_wave(vals, from, to, out, at) writing out[...] and returning only an index) is valid Elixir that does nothing under value semantics. Make it a compile error: 'write to `out` is never returned; return the array', with the rewrite returning {out, at}. A devex check, not a construct.",
       "timestamp": "2026-10-06T09:08:29Z"
+    },
+    {
+      "text": "defk-n4r.4 (writable array parameters in helper kernels) proposes a  marker in kernel heads; its Elixir-mode threading is the same mechanism value semantics needs. Decide the two together.",
+      "timestamp": "2026-10-09T18:40:55Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Give arrays value semantics: copy on aliased write",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:54Z"
+  "updated_at": "2026-10-09T18:40:55Z"
 }
