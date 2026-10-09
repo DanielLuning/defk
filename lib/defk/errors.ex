@@ -700,7 +700,7 @@ defmodule Defk.Errors do
       code: "unsupported-construct",
       kind: :subset,
       summary:
-        "A kernel uses the Elixir forms #{@forms}; others such as unless, with, try, receive and raise are not in the kernel subset.",
+        "A kernel uses the Elixir forms #{@forms}; others such as unless, with, try, receive and throw are not in the kernel subset.",
       why: "a kernel uses a fixed set of Elixir forms: #{@forms}",
       hint: "write it with those forms",
       example: "defk f(x :: i64) :: i64 do\n  unless x > 0, do: 0, else: x\nend",
@@ -773,6 +773,47 @@ defmodule Defk.Errors do
       hint: "build it in Elixir and pass it as a [u8] parameter, or use a module attribute",
       example: "defk f(i :: i64) :: i64 do\n  t = <<1, 2, 300>>\n  t[i]\nend",
       rewrite: "defk f(i :: i64) :: i64 do\n  t = <<1, 2, 44>>\n  t[i]\nend"
+    },
+    # -- raise
+    %{
+      code: "raise-value",
+      kind: :error,
+      summary:
+        "`raise` in a kernel is a statement: it cannot be a value, the last expression of a kernel or of a branch that gives one.",
+      why:
+        "a kernel's values are numbers, booleans, tuples and arrays; a raise has no value to give, so it goes where a statement goes",
+      hint:
+        "raise is a statement; put it before the value: `if not ok, do: raise(...)` on its own line, then the value",
+      example:
+        "defk f(x :: i64) :: i64 do\n  if x >= 0, do: x * 2, else: raise(ArgumentError, \"x must not be negative\")\nend",
+      rewrite:
+        "defk f(x :: i64) :: i64 do\n  if x < 0, do: raise(ArgumentError, \"x must not be negative\")\n  x * 2\nend"
+    },
+    %{
+      code: "raise-message",
+      kind: :subset,
+      summary:
+        "A kernel's `raise` message is a string literal: no interpolation or computed value.",
+      why:
+        "the message is a C string in the kernel's static storage, so it is known when the kernel compiles; formatting a value would need a BEAM binary",
+      hint:
+        "a kernel raises with a literal message: put the value in Elixir, before or after the call",
+      example:
+        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(ArgumentError, \"bad length \#{n}\")\n  n\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(ArgumentError, \"length must be positive\")\n  n\nend"
+    },
+    %{
+      code: "raise-module",
+      kind: :subset,
+      summary: "A kernel raises ArgumentError, ArithmeticError or RuntimeError.",
+      why:
+        "the runtime builds the exception natively, for the modules whose only field is the message",
+      hint: "use ArgumentError, ArithmeticError or RuntimeError",
+      example:
+        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(KeyError, \"no such key\")\n  n\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(ArgumentError, \"no such key\")\n  n\nend"
     }
   ]
 
@@ -1221,11 +1262,11 @@ defmodule Defk.Errors do
      hint: "write if not", rewrite: rewrite}
   end
 
-  defp form({name, _, args}) when name in [:raise, :reraise, :throw, :exit] and is_list(args) do
+  defp form({name, _, args}) when name in [:reraise, :throw, :exit] and is_list(args) do
     {"unsupported-construct", "#{name} is not in the kernel subset",
      why:
-       "a kernel raises only Elixir's own errors (an i64 overflow, an index out of range, ...), where Elixir would raise them",
-     hint: "check the arguments in Elixir before the call"}
+       "a kernel raises Elixir's own errors where Elixir would, and its own with raise Module, \"message\" (Module ArgumentError, ArithmeticError or RuntimeError)",
+     hint: "use raise, or check the arguments in Elixir before the call"}
   end
 
   defp form({name, _, args})
@@ -1287,7 +1328,6 @@ defmodule Defk.Errors do
         unsupported(node, type_of)
 
       name in [
-        :raise,
         :reraise,
         :throw,
         :exit,

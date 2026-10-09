@@ -27,8 +27,7 @@
 #                    at the end. 1920x1080 RGB -> 480x270.
 #   rgb_to_yuv420    BT.601 studio swing, integer coefficients, planar Y then
 #                    U then V, chroma from the rounded 2x2 average of RGB.
-#                    Even w and h are required (else ArgumentError through a
-#                    negative alloc length, as in fft.exs, until `raise`).
+#                    Even w and h are required (else ArgumentError).
 #   dither_fs        Floyd-Steinberg to 0/255, errors truncated with div/2 by
 #                    16, a two-row [i64] error buffer allocated in the kernel.
 #                    Left-to-right scan on every row (serpentine is not done).
@@ -72,8 +71,10 @@ defmodule ImageOps.Kernels do
 
   defk resize_bilinear(px :: [u8], w :: i64, h :: i64, ch :: i64, out_w :: i64, out_h :: i64) ::
          [u8] do
-    ok = w > 1 and h > 1 and out_w > 1 and out_h > 1 and ch > 0 and len(px) == w * h * ch
-    out = alloc(u8, if(ok, do: out_w * out_h * ch, else: -1))
+    if not (w > 1 and h > 1 and out_w > 1 and out_h > 1 and ch > 0 and len(px) == w * h * ch),
+      do: raise(ArgumentError, "resize_bilinear: sizes must be > 1 and px w * h * ch bytes")
+
+    out = alloc(u8, out_w * out_h * ch)
 
     # per output column: first source byte offset of the pixel, and the 16.16 fraction
     xo = alloc(i64, out_w)
@@ -109,10 +110,12 @@ defmodule ImageOps.Kernels do
   # BT.601: Y = ((66R + 129G + 25B + 128) >> 8) + 16, U and V likewise (+128),
   # with the negative terms offset so div/2 floors like >>.
   defk rgb_to_yuv420(px :: [u8], w :: i64, h :: i64) :: [u8] do
-    ok = w > 0 and h > 0 and rem(w, 2) == 0 and rem(h, 2) == 0 and len(px) == w * h * 3
+    if not (w > 0 and h > 0 and rem(w, 2) == 0 and rem(h, 2) == 0 and len(px) == w * h * 3),
+      do: raise(ArgumentError, "rgb_to_yuv420: w and h must be even and px w * h * 3 bytes")
+
     cw = div(w, 2)
     ch = div(h, 2)
-    out = alloc(u8, if(ok, do: w * h + 2 * cw * ch, else: -1))
+    out = alloc(u8, w * h + 2 * cw * ch)
 
     for p <- 0..(w * h - 1)//1 do
       out[p] =
@@ -137,8 +140,10 @@ defmodule ImageOps.Kernels do
   # Floyd-Steinberg, left to right on every row. err holds two rows of w + 2
   # entries (one pad each side): row y % 2 is the current row, the other the next.
   defk dither_fs(gray :: [u8], w :: i64, h :: i64) :: [u8] do
-    ok = w > 0 and h > 0 and len(gray) == w * h
-    out = alloc(u8, if(ok, do: w * h, else: -1))
+    if not (w > 0 and h > 0 and len(gray) == w * h),
+      do: raise(ArgumentError, "dither_fs: w and h must be positive and gray w * h bytes")
+
+    out = alloc(u8, w * h)
     err = alloc(i64, 2 * (w + 2))
 
     for y <- 0..(h - 1)//1 do

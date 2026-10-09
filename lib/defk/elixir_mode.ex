@@ -216,7 +216,21 @@ defmodule Defk.ElixirMode do
     end
   end
 
+  # a kernel's raise (the compiler checked its form): the raise itself
+  defp stmt({:raise, _, args} = node, env) when is_list(args) do
+    q =
+      case Defk.Raise.parse!(node, &raise_form!/4) do
+        {mod, nil} -> quote(do: Kernel.raise(unquote(mod)))
+        {mod, msg} -> quote(do: Kernel.raise(unquote(mod), unquote(msg)))
+      end
+
+    {q, env}
+  end
+
   defp stmt(e, env), do: {elem(expr(e, env), 0), env}
+
+  defp raise_form!(_node, code, what, _opts),
+    do: raise(ArgumentError, "defk: #{code}: #{what} reached Elixir mode")
 
   defp bind({name, _, ctx}, q, t, env) when is_atom(name) and is_atom(ctx) do
     if underscore?(name),

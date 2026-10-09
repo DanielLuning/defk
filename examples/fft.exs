@@ -78,10 +78,9 @@ defmodule FFT.Kernels do
         if p * 2 <= n, do: {:cont, {p * 2, b + 1}}, else: {:halt, {p, b}}
       end)
 
-    # A kernel has no `raise` yet: a negative alloc length is how it raises
-    # ArgumentError ("alloc/2: negative length -1") for a bad length. The
-    # discarded value is still evaluated, as in Elixir.
-    _ = alloc(f64, if(p == n and len(im) == n, do: 0, else: -1))
+    if p != n or len(im) != n,
+      do: raise(ArgumentError, "fft: re and im must have the same power-of-two length")
+
     ore = alloc(f64, n)
     oim = alloc(f64, n)
 
@@ -454,7 +453,7 @@ end
 
 true =
   match?(
-    {:error, %ArgumentError{}},
+    {:error, %ArgumentError{message: "fft: re and im must have the same power-of-two length"}},
     try do
       {:ok, FFT.Kernels.fft(bad, bad)}
     rescue
