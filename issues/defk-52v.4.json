@@ -5,11 +5,13 @@
   "created": "2026-10-09T19:47:33Z",
   "description": "Tier 1, small. Geohash encode is bit interleaving of two binary searches (needs bsl/bor); decode is the inverse. The Hex `geohash` package is pure Elixir, and some apps wrap a Rust geohash crate for bulk encoding (geo pipelines encode millions of points). CRC16 (CCITT/Modbus) and CRC64 (ECMA/XZ) appear in device protocols and archive formats; `crc` on Hex is pure Elixir with a generated table, `crc32cer` covers only CRC32C.\n\nKernels: `geohash_encode(lat :: [f64], lon :: [f64], precision :: i64) :: [u8]` writing fixed-width hashes into one buffer (precision bytes each), `geohash_decode(hashes :: [u8], precision :: i64) :: {[f64], [f64]}` returning centre coordinates; `crc16(bytes, poly :: i64, init :: i64)` and `crc64(bytes)` table-driven with the table built in the kernel (works today) or as a module attribute.\n\nElixir baselines: the `geohash` and `crc` packages, :optimized after checking their implementations; :erlang.crc32 reported beside as the BIF ceiling for the CRC family.\n\nExpected verdict: good for batches of 100k points and MB-sized CRCs; poor for a single geohash per call (the per-call lesson; report both).\n\nNeeds: defk-w38, defk-ivt (base32 alphabet, polynomial constants).\n\nDone when: agreement with the two packages holds on random inputs, verdicts measured for batch and single-call shapes, README rows added.",
   "id": "defk-52v.4",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-52v",
   "priority": 3,
   "status": "open",
   "title": "Geohash batch encode/decode and CRC16/CRC64 vs geohash, crc packages",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:33Z"
+  "updated_at": "2026-10-09T19:47:35Z"
 }
