@@ -839,14 +839,24 @@ defmodule Defk.Compiler do
   # literal: a binary is a read-only [u8] in static storage, as an input array
   defp lower_expr({:@, _, [{name, _, ctx}]} = node, _env) when is_atom(name) and is_atom(ctx) do
     case Defk.Attributes.of(node) do
-      {:ok, b} when is_binary(b) ->
-        view = "((defk_arr_u8){(uint8_t *)#{c_bytes(b)}, #{byte_size(b)}})"
-        {[], Map.put(val(view, {:arr, :u8}), :len_lo, byte_size(b))}
-
-      _ ->
-        attribute!(node)
+      {:ok, b} when is_binary(b) -> {[], static_u8(b)}
+      _ -> attribute!(node)
     end
   end
+
+  # a binary literal, `"abc"` or `<<1, 2, 3>>`: the same static read-only [u8]
+  # as a binary attribute (defk-n4r.5)
+  defp lower_expr({:<<>>, _, _} = node, _env) do
+    case Defk.BinaryLiteral.bytes(node) do
+      {:ok, b} ->
+        {[], static_u8(b)}
+
+      {:error, why, opts} ->
+        err!(node, "binary-literal", Defk.BinaryLiteral.message(node, why), opts)
+    end
+  end
+
+  defp lower_expr(b, _env) when is_binary(b), do: {[], static_u8(b)}
 
   defp lower_expr({:__block__, _, _} = b, env), do: lower_block(b, env)
 
@@ -2955,6 +2965,12 @@ defmodule Defk.Compiler do
   # ------------------------------------------------------ more rejections --
 
   # The bytes of `b` as a C string literal of octal escapes, 64 bytes a line.
+  # a read-only [u8] view over a static C string; its length is a known fact
+  defp static_u8(b) do
+    view = "((defk_arr_u8){(uint8_t *)#{c_bytes(b)}, #{byte_size(b)}})"
+    Map.put(val(view, {:arr, :u8}), :len_lo, byte_size(b))
+  end
+
   defp c_bytes(""), do: ~s("")
 
   defp c_bytes(b) do
