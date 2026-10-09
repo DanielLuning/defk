@@ -10,9 +10,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-52v",
+  "comments": [
+    {
+      "text": "Two divergences found while building this: defk-6g6 (sincos fusion) and defk-776 (a _-bound expression is never evaluated). The example carries workarounds for both; revert them when the bugs close.",
+      "timestamp": "2026-10-09T20:15:55Z"
+    }
+  ],
   "priority": 3,
   "status": "closed",
   "title": "FFT, convolution and resampling over [f64] vs Nx and pure Elixir",
   "type": "task",
-  "updated_at": "2026-10-09T20:15:54Z"
+  "updated_at": "2026-10-09T20:15:55Z"
 }
