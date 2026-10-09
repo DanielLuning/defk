@@ -39,11 +39,8 @@
 #
 # Agreement: the kernel and all four Elixir variants are bit-exact (===) at
 # n = 8, 4096 and 2^20; the check still uses a tolerance (|x - y| <= 1e-9 x
-# the largest magnitude), as the ticket asks. Bit-exactness needed one
-# workaround: with cos(a) and sin(a) in the same kernel loop, clang fuses
-# them into Darwin's __sincos_stret, whose sin differs from :math.sin in the
-# last bit for some arguments (7 of 2048 twiddles at n = 4096, 2380 at 2^20),
-# a divergence from Elixir mode. The kernel computes them in two loops.
+# the largest magnitude), as the ticket asks. Bit-exactness relies on libm
+# calls never being fused into a platform sincos (defk-6g6).
 #
 # Convolution (direct, full, out[k] = sum_j a[k - j] * b[j] with j ascending):
 # 96,000 samples (2 s at 48 kHz) through a 64-tap FIR filter, bit-exact:
@@ -99,15 +96,9 @@ defmodule FFT.Kernels do
     twr = alloc(f64, h)
     twi = alloc(f64, h)
 
-    # Two loops on purpose: with cos(a) and sin(a) in one loop, clang fuses
-    # them into Darwin's __sincos_stret, whose sin differs from libm's sin
-    # (and :math.sin) in the last bit for some arguments (7 of 2048 at
-    # n = 4096). Separate loops keep separate cos and sin calls.
+    # libm calls are never fused (defk-6g6), so cos and sin share a loop
     for k <- 0..(h - 1)//1 do
       twr[k] = cos(-2.0 * 3.141592653589793 * k / n)
-    end
-
-    for k <- 0..(h - 1)//1 do
       twi[k] = sin(-2.0 * 3.141592653589793 * k / n)
     end
 
