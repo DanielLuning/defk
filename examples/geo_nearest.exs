@@ -23,7 +23,8 @@ defmodule Geo.Kernels do
   use Defk
 
   # indices of the k smallest haversine `a` values
-  defk nearest(lat :: [f64], lon :: [f64], coslat :: [f64], qlat :: f64, qlon :: f64, k :: i64) :: [i64] do
+  defk nearest(lat :: [f64], lon :: [f64], coslat :: [f64], qlat :: f64, qlon :: f64, k :: i64) ::
+         [i64] do
     best_a = alloc(f64, k)
     best_i = alloc(i64, k)
     cq = cos(qlat)
@@ -72,9 +73,14 @@ defmodule Geo.Elixir do
         a = sdlat * sdlat + cq * coslat * sdlon * sdlon
 
         cond do
-          count < k -> {i + 1, count + 1, :lists.merge([{a, i}], top)}
-          a < elem(List.last(top), 0) -> {i + 1, count, :lists.merge([{a, i}], Enum.drop(top, -1))}
-          true -> {i + 1, count, top}
+          count < k ->
+            {i + 1, count + 1, :lists.merge([{a, i}], top)}
+
+          a < elem(List.last(top), 0) ->
+            {i + 1, count, :lists.merge([{a, i}], Enum.drop(top, -1))}
+
+          true ->
+            {i + 1, count, top}
         end
       end)
 
@@ -96,7 +102,11 @@ index = fn ->
 end
 
 :persistent_term.put(:geo_points, index.())
-pack = fn f -> for p <- :persistent_term.get(:geo_points), into: <<>>, do: <<f.(p)::float-64-native>> end
+
+pack = fn f ->
+  for p <- :persistent_term.get(:geo_points), into: <<>>, do: <<f.(p)::float-64-native>>
+end
+
 :persistent_term.put(:geo_packed, {pack.(&elem(&1, 0)), pack.(&elem(&1, 1)), pack.(&elem(&1, 2))})
 {qlat, qlon} = {rad.(59.3293), rad.(18.0686)}
 

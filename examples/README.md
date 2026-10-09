@@ -50,6 +50,8 @@ once and reused.
 | [`fft.exs`](fft.exs) | Radix-2 FFT of a 2^20-point signal; direct convolution of 2 s of 48 kHz audio with a 64-tap FIR | FFT 63–91× (62× at n = 4096); convolution 28–38×; bit-exact with Elixir. Nx `binary` backend is slower than pure Elixir here; EXLA not measured | optimised (4 FFT variants, 2 convolution variants) |
 | [`fuzzy_search/`](fuzzy_search) (app) | Typo-tolerant search service: Levenshtein over 234k words behind Plug + Bandit | 4.2× per query with the early cut-off on both sides (noisy-machine numbers, re-measure pending); before the cut-off 6.2× req/s, 5.4× lower p99 under load; `/health` latency stays at Elixir levels (a blocking NIF pushes it to ~80–90 ms p99). Elixir with Myers bit-parallel comes within ~1.3× of the DP kernel; defk can't express it until `defk-w38` | first pass: **provisional** |
 | [`image_ops.exs`](image_ops.exs) | Bilinear resize 1080p to 480x270, RGB to YUV420, Floyd-Steinberg dither on raw 1080p frames (the script reports three verdicts; `run_all` shows the resize one) | resize ~12×, YUV420 14–18×, dither 21–26×; bit-exact with Elixir. libvips (SIMD) not compared; expected to win resize | optimised (3, 3 and 2 variants) |
+| [`sort_u64_keys.exs`](sort_u64_keys.exs) | Sort 1M random i64 keys that arrive as a packed binary (heapsort kernel vs decode + `:lists.sort`) | `sort_packed` 4.3–5.3× when the result stays packed; `sort_to_list` 2.3–2.7× when the caller needs a list (decode cost included). The script prints two `DEFK_RESULT` lines; `run_all.exs` reads the first (`sort_packed`) and the script checks the second itself | optimised (`:lists.sort`, `Enum.sort`) |
+| [`per_pair_distance.exs`](per_pair_distance.exs) | Levenshtein for 50k short string pairs, one kernel call per pair (ex_strsim's API shape) | 3.2–3.4× at 8–16 bytes; 1.1–1.2× at 4 bytes (stay in Elixir below ~8 bytes). Expected poor, measured good: a quadratic DP outweighs the call cost. Batching from a *list of pairs* is slower than per-pair (packing); batching pays only from an already-packed blob (4.2–4.6× at 4 bytes). | optimised |
 
 These numbers will shrink as the Elixir baselines are optimised; that's
 expected and is the point. Each example's header lists what hasn't been
@@ -62,6 +64,7 @@ tried yet.
 | [`poor_list_data.exs`](poor_list_data.exs) | Data arrives as a list (Ecto rows, JSON); packing it costs more than Elixir's whole `Enum.sum` | 0.35–0.37× (≈3× slower) | optimised |
 | [`poor_tiny_calls.exs`](poor_tiny_calls.exs) | One kernel call per element inside `Enum.map`; the call overhead exceeds the work | 0.38–0.43× | optimised |
 | [`out_of_scope_word_count.exs`](out_of_scope_word_count.exs) | Strings in, a map out; kernels can't build BEAM terms, and the compiler refuses | not expressible | n/a |
+| [`poor_substring_search.exs`](poor_substring_search.exs) | Find a 64-byte needle in a 16 MB binary with a Horspool kernel; `:binary.match/2` is already Boyer-Moore in C (multi-pattern: `:binary.matches/2` with a compiled pattern) | 1.03–1.11× (marginal; found and absent alike, 7 GB/s each side) | optimised |
 
 Also not what defk is for (no script needed):
 
