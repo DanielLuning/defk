@@ -48,11 +48,15 @@
     {
       "text": "Also blocks the from-scratch epic defk-52v (keccak, blake, lz4/snappy, geohash/crc, the builtins ticket, inflate, argon2id). The count is now about twenty tickets.",
       "timestamp": "2026-10-09T19:47:44Z"
+    },
+    {
+      "text": "Merged 2026-10-09 (a90829f). docs/language.md entry to add once defk-sgw.1 lands: \"### Bitwise operators. On i64: band(a, b), bor, bxor, bnot(a), bsl(a, n), bsr(a, n), also written a \u0026\u0026\u0026 b, |||, ^^^, ~~~a, \u003c\u003c\u003c, \u003e\u003e\u003e, or Bitwise.band(a, b); no import Bitwise is needed. band/bor/bxor/bnot are two-complement; bsl/bsr shift exactly: a negative shift goes the other way, bsr fills with the sign (a shift of 64 or more gives 0 or -1), and bsl raises ArithmeticError when the exact result does not fit in i64 (a limit). Operands must be i64 (operand-type otherwise). band with a constant mask lets table[band(h, 255)] skip its bounds check. Elixir 1.20 deprecates ~~~ and ^^^; prefer bnot/1 and bxor/2.\" Retired code: bitwise (never reused); new code: shift-overflow.",
+      "timestamp": "2026-10-09T20:58:53Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Support bitwise operators in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T20:47:49Z"
+  "updated_at": "2026-10-09T20:58:53Z"
 }
