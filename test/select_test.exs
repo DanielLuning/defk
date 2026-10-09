@@ -74,7 +74,9 @@ defmodule Defk.SelectTest do
   @min -9_223_372_036_854_775_808
 
   test "matches Elixir" do
-    expect = Enum.reduce(1..10_000, 0, fn i, acc -> if rem(i, 3) == 0, do: acc + 7, else: acc - 1 end)
+    expect =
+      Enum.reduce(1..10_000, 0, fn i, acc -> if rem(i, 3) == 0, do: acc + 7, else: acc - 1 end)
+
     assert K.count_if(10_000, 7) == expect
     assert K.cmp_arms(true, 3, 3) and not K.cmp_arms(false, 3, 3)
   end
@@ -85,9 +87,17 @@ defmodule Defk.SelectTest do
   end
 
   test "overflow in the taken arm raises the checked error" do
-    assert_raise ArithmeticError, "i64 overflow in #{@big} * #{@big}", fn -> K.square_unless(false, @big) end
-    assert_raise ArithmeticError, "i64 overflow in 0 - #{@min}", fn -> K.next_or_neg(false, @min) end
-    assert_raise ArithmeticError, ~r/i64 overflow in -?\d+ \+ \d+/, fn -> K.count_if(10, 9_223_372_036_854_775_000) end
+    assert_raise ArithmeticError, "i64 overflow in #{@big} * #{@big}", fn ->
+      K.square_unless(false, @big)
+    end
+
+    assert_raise ArithmeticError, "i64 overflow in 0 - #{@min}", fn ->
+      K.next_or_neg(false, @min)
+    end
+
+    assert_raise ArithmeticError, ~r/i64 overflow in -?\d+ \+ \d+/, fn ->
+      K.count_if(10, 9_223_372_036_854_775_000)
+    end
   end
 
   test "cond matches Elixir" do
@@ -112,9 +122,17 @@ defmodule Defk.SelectTest do
   end
 
   test "cond: overflow in the taken arm or a reached condition raises the checked error" do
-    assert_raise ArithmeticError, "i64 overflow in #{@big} * #{@big}", fn -> K.cond_square(false, @big) end
-    assert_raise ArithmeticError, "i64 overflow in #{@big} * #{@big}", fn -> K.cond_later(false, @big) end
-    assert_raise ArithmeticError, ~r/i64 overflow in -?\d+ [+*] \d+/, fn -> K.cond_count(10, 9_223_372_036_854_775_000) end
+    assert_raise ArithmeticError, "i64 overflow in #{@big} * #{@big}", fn ->
+      K.cond_square(false, @big)
+    end
+
+    assert_raise ArithmeticError, "i64 overflow in #{@big} * #{@big}", fn ->
+      K.cond_later(false, @big)
+    end
+
+    assert_raise ArithmeticError, ~r/i64 overflow in -?\d+ [+*] \d+/, fn ->
+      K.cond_count(10, 9_223_372_036_854_775_000)
+    end
   end
 
   test "pure arithmetic arms compile to a select" do

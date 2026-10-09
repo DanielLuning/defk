@@ -87,16 +87,23 @@ defmodule Defk.ResumeTest.Shapes do
         for r <- 1..reps//1, reduce: 0 do
           acc ->
             w = weights(a, r)
-            kept = for x <- a, keep?(x), reduce: 0 do
-              z -> rem(z + x * r, 1_000_000_007)
-            end
+
+            kept =
+              for x <- a, keep?(x), reduce: 0 do
+                z -> rem(z + x * r, 1_000_000_007)
+              end
 
             bonus = if r > 1 and dot_mod(a, w) > 7, do: 1, else: 0
-            tail = for i <- 0..chain(rem(r, 3) + 1, r)//1, reduce: 0 do
-              z -> z + i
-            end
 
-            rem(acc + dot_mod(a, w) + kept + bonus + tail + chain(min(len(a), 2500), r), 1_000_000_007)
+            tail =
+              for i <- 0..chain(rem(r, 3) + 1, r)//1, reduce: 0 do
+                z -> z + i
+              end
+
+            rem(
+              acc + dot_mod(a, w) + kept + bonus + tail + chain(min(len(a), 2500), r),
+              1_000_000_007
+            )
         end
       end
 
@@ -204,7 +211,10 @@ defmodule Defk.ResumeTest do
   # synthetic catalog in the fuzzy_search layout: one blob plus an offset table
   defp catalog(n) do
     :rand.seed(:exsss, {7, 8, 9})
-    words = for _ <- 1..n, do: for(_ <- 1..Enum.random(3..12), into: "", do: <<Enum.random(?a..?z)>>)
+
+    words =
+      for _ <- 1..n, do: for(_ <- 1..Enum.random(3..12), into: "", do: <<Enum.random(?a..?z)>>)
+
     {offs, total} = Enum.map_reduce(words, 0, fn w, at -> {at, at + byte_size(w)} end)
     {IO.iodata_to_binary(words), i64s(offs ++ [total])}
   end
@@ -333,7 +343,11 @@ defmodule Defk.ResumeTest do
     stubs =
       for [f, a, _] <- nifs do
         args = for i <- 1..String.to_integer(a)//1, do: Macro.var(:"_a#{i}", nil)
-        quote do: def(unquote(String.to_atom(f))(unquote_splicing(args)), do: :erlang.nif_error(:not_loaded))
+
+        quote do:
+                def(unquote(String.to_atom(f))(unquote_splicing(args)),
+                  do: :erlang.nif_error(:not_loaded)
+                )
       end
 
     load = quote do: def(__load__(lib), do: :erlang.load_nif(lib, 0))

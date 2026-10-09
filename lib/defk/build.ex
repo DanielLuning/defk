@@ -17,7 +17,11 @@ defmodule Defk.Build do
   def build!(module, src, file) do
     dir = Path.join(build_root(), "defk")
     File.mkdir_p!(dir)
-    hash = :erlang.md5([@cflags, src, File.read!(Path.join(@priv, "defk_runtime.h"))]) |> Base.encode16(case: :lower)
+
+    hash =
+      :erlang.md5([@cflags, src, File.read!(Path.join(@priv, "defk_runtime.h"))])
+      |> Base.encode16(case: :lower)
+
     base = Path.join(dir, "#{module}-#{binary_part(hash, 0, 10)}")
 
     unless File.exists?(base <> ".so") do
@@ -30,8 +34,14 @@ defmodule Defk.Build do
           if(match?({:unix, :darwin}, :os.type()), do: ~w(-undefined dynamic_lookup), else: [])
 
       case System.cmd(cc, args, stderr_to_stdout: true) do
-        {_, 0} -> :ok
-        {out, _} -> raise CompileError, file: file, line: 0, description: "defk: C compilation failed (#{base}.c):\n" <> out
+        {_, 0} ->
+          :ok
+
+        {out, _} ->
+          raise CompileError,
+            file: file,
+            line: 0,
+            description: "defk: C compilation failed (#{base}.c):\n" <> out
       end
     end
 
@@ -39,7 +49,9 @@ defmodule Defk.Build do
   end
 
   defp build_root do
-    if Code.ensure_loaded?(Mix.Project) and Mix.Project.get(), do: Mix.Project.build_path(), else: System.tmp_dir!()
+    if Code.ensure_loaded?(Mix.Project) and Mix.Project.get(),
+      do: Mix.Project.build_path(),
+      else: System.tmp_dir!()
   end
 
   defp erts_include do

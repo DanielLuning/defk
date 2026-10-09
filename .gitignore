@@ -2,5 +2,6 @@
 /deps/
 /.elixir_ls/
 /.ast-bro/
+/.claude/
 erl_crash.dump
 *.ez

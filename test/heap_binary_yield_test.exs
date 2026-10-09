@@ -53,8 +53,10 @@ defmodule Defk.HeapBinaryYieldTest do
     a = i64s([1, 2, 3, 4])
     b = <<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16>>
     c = f64s([0.5, 1.5, 2.5])
+
     assert byte_size(a) <= 64 and byte_size(b) <= 64 and byte_size(c) <= 64,
            "the inputs must stay heap binaries"
+
     {a, b, c}
   end
 
@@ -139,8 +141,12 @@ defmodule Defk.HeapBinaryYieldTest do
 
   defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + @timeout) do
     cond do
-      f.() -> :ok
-      System.monotonic_time(:millisecond) > deadline -> flunk("timed out")
+      f.() ->
+        :ok
+
+      System.monotonic_time(:millisecond) > deadline ->
+        flunk("timed out")
+
       true ->
         Process.sleep(1)
         wait_until(f, deadline)

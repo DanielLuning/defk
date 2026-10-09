@@ -47,7 +47,14 @@ defmodule Defk.Compiler do
         key = {k.name, k.arity}
 
         if key in seen do
-          attempt(key, k.head, fn -> err!(k.head, "duplicate-kernel", "#{k.name}/#{k.arity} is defined more than once; multi-clause kernels are not supported yet") end)
+          attempt(key, k.head, fn ->
+            err!(
+              k.head,
+              "duplicate-kernel",
+              "#{k.name}/#{k.arity} is defined more than once; multi-clause kernels are not supported yet"
+            )
+          end)
+
           {[], seen}
         else
           {[k], MapSet.put(seen, key)}
@@ -91,7 +98,8 @@ defmodule Defk.Compiler do
   # place (an inlined kernel repeats its callee's) is dropped.
 
   defp err!(node, code, what, opts \\ []) do
-    {line, col, width, text} = Defk.Errors.locate(node, Process.get(:defk_ctx), Process.get(:defk_lines))
+    {line, col, width, text} =
+      Defk.Errors.locate(node, Process.get(:defk_ctx), Process.get(:defk_lines))
 
     d =
       Map.merge(Map.new(opts), %{
@@ -134,7 +142,8 @@ defmodule Defk.Compiler do
 
   # A construct outside the kernel subset (Defk.Errors.unsupported/2), shown
   # with the first of its rewrites that compiles here, if any.
-  defp unsupported!(node, {code, what, opts}, env), do: err!(node, code, what, checked_rewrite(opts, env))
+  defp unsupported!(node, {code, what, opts}, env),
+    do: err!(node, code, what, checked_rewrite(opts, env))
 
   defp checked_rewrite(opts, env) do
     {candidates, opts} = Keyword.pop(opts, :rewrite)
@@ -234,15 +243,29 @@ defmodule Defk.Compiler do
   defp parse_kernel({%{head: head, opts: opts, body: body}, idx}) do
     {call, ret_ast} =
       case head do
-        {:"::", _, [call, ret]} -> {call, ret}
-        _ -> err!(head, "kernel-head", "the kernel head #{Macro.to_string(head)} has no return type", rewrite: "#{Macro.to_string(head)} :: i64")
+        {:"::", _, [call, ret]} ->
+          {call, ret}
+
+        _ ->
+          err!(head, "kernel-head", "the kernel head #{Macro.to_string(head)} has no return type",
+            rewrite: "#{Macro.to_string(head)} :: i64"
+          )
       end
 
     {name, params} =
       case call do
-        {name, _, args} when is_atom(name) and is_list(args) -> {name, args}
-        {name, _, ctx} when is_atom(name) and is_atom(ctx) -> {name, []}
-        _ -> err!(call, "kernel-head", "#{Macro.to_string(call)} is not a kernel name and parameter list")
+        {name, _, args} when is_atom(name) and is_list(args) ->
+          {name, args}
+
+        {name, _, ctx} when is_atom(name) and is_atom(ctx) ->
+          {name, []}
+
+        _ ->
+          err!(
+            call,
+            "kernel-head",
+            "#{Macro.to_string(call)} is not a kernel name and parameter list"
+          )
       end
 
     params =
@@ -252,8 +275,18 @@ defmodule Defk.Compiler do
 
           if match?({:tuple, _}, ty) do
             {:tuple, ts} = ty
-            split = ts |> Enum.with_index() |> Enum.map_join(", ", fn {t, i} -> "#{p}#{i} :: #{fmt(t)}" end)
-            err!(param, "tuple-parameter", "tuple parameters such as #{p} :: #{fmt(ty)} are not in the kernel subset", rewrite: split)
+
+            split =
+              ts
+              |> Enum.with_index()
+              |> Enum.map_join(", ", fn {t, i} -> "#{p}#{i} :: #{fmt(t)}" end)
+
+            err!(
+              param,
+              "tuple-parameter",
+              "tuple parameters such as #{p} :: #{fmt(ty)} are not in the kernel subset",
+              rewrite: split
+            )
           end
 
           {p, ty}
@@ -262,7 +295,11 @@ defmodule Defk.Compiler do
           err!(other, "untyped-parameter", "parameter #{p} has no type", rewrite: "#{p} :: i64")
 
         other ->
-          err!(other, "untyped-parameter", "#{Macro.to_string(other)} is not a parameter `name :: type`")
+          err!(
+            other,
+            "untyped-parameter",
+            "#{Macro.to_string(other)} is not a parameter `name :: type`"
+          )
       end)
 
     for k <- Keyword.keys(opts), k != :yield do
@@ -291,13 +328,28 @@ defmodule Defk.Compiler do
 
   defp parse_type(t, at) do
     node = if positioned?(t), do: t, else: at
-    instead = %{integer: "i64", float: "f64", boolean: "bool", number: "f64", binary: "[u8]", bitstring: "[u8]", pos_integer: "i64", non_neg_integer: "i64"}
+
+    instead = %{
+      integer: "i64",
+      float: "f64",
+      boolean: "bool",
+      number: "f64",
+      binary: "[u8]",
+      bitstring: "[u8]",
+      pos_integer: "i64",
+      non_neg_integer: "i64"
+    }
 
     hint =
       case t do
-        {n, _, ctx} when is_atom(n) and is_atom(ctx) and is_map_key(instead, n) -> [hint: "the kernel type for #{n} is #{instead[n]}"]
-        [{n, _, ctx}] when is_atom(n) and is_atom(ctx) -> [hint: "array element types are f64, i64 and u8"]
-        _ -> []
+        {n, _, ctx} when is_atom(n) and is_atom(ctx) and is_map_key(instead, n) ->
+          [hint: "the kernel type for #{n} is #{instead[n]}"]
+
+        [{n, _, ctx}] when is_atom(n) and is_atom(ctx) ->
+          [hint: "array element types are f64, i64 and u8"]
+
+        _ ->
+          []
       end
 
     err!(node, "unknown-type", "#{Macro.to_string(t)} is not a kernel type", hint)
@@ -346,7 +398,7 @@ defmodule Defk.Compiler do
 
         vals =
           Enum.zip_with([elems, rts, items], fn [v, rt, item] ->
-            match?({:arr, _}, rt) and not v.owned && return_input_array!(item, k)
+            (match?({:arr, _}, rt) and not v.owned) && return_input_array!(item, k)
             coerce!(v, rt, item, "#{k.name}/#{k.arity} returns", k.ret).c
           end)
 
@@ -362,8 +414,11 @@ defmodule Defk.Compiler do
   end
 
   defp return_input_array!(at, k) do
-    err!(at, "return-input-array",
-      "#{k.name}/#{k.arity} returns #{Macro.to_string(at)}, an array it didn't create with alloc/2; returning an input array is not supported yet")
+    err!(
+      at,
+      "return-input-array",
+      "#{k.name}/#{k.arity} returns #{Macro.to_string(at)}, an array it didn't create with alloc/2; returning an input array is not supported yet"
+    )
   end
 
   # `v` as type `t` (an i64 widens to f64). `what` names the position, e.g.
@@ -374,7 +429,13 @@ defmodule Defk.Compiler do
 
   defp coerce!(v, t, at, what, nil) do
     subject = Enum.join([what | describe(at)], " ")
-    err!(at, "type-mismatch", "#{subject} has type #{fmt(v.t)}, expected #{fmt(t)}", convert_hint(v.t, t, at))
+
+    err!(
+      at,
+      "type-mismatch",
+      "#{subject} has type #{fmt(v.t)}, expected #{fmt(t)}",
+      convert_hint(v.t, t, at)
+    )
   end
 
   defp coerce!(v, t, at, what, _ret) do
@@ -384,21 +445,35 @@ defmodule Defk.Compiler do
         h -> Keyword.update!(h, :rewrite, &"#{&1}    # or declare :: #{fmt(v.t)}")
       end
 
-    why = if {v.t, t} == {:f64, :i64}, do: [why: "defk never converts a float to an integer implicitly"], else: []
+    why =
+      if {v.t, t} == {:f64, :i64},
+        do: [why: "defk never converts a float to an integer implicitly"],
+        else: []
+
     err!(at, "return-type", "#{what} #{fmt(v.t)} but is declared :: #{fmt(t)}", hint ++ why)
   end
 
   # the explicit conversion from type `from` to `to`, applied to `at`
   defp convert_hint(:f64, :i64, at),
-    do: [hint: "convert explicitly with trunc/1 or round/1", rewrite: "trunc(#{Macro.to_string(at)})"]
+    do: [
+      hint: "convert explicitly with trunc/1 or round/1",
+      rewrite: "trunc(#{Macro.to_string(at)})"
+    ]
 
   defp convert_hint(:bool, t, at) when t in [:i64, :f64] do
     {one, zero} = if t == :i64, do: {"1", "0"}, else: {"1.0", "0.0"}
-    [hint: "booleans are not numbers; choose the number with if", rewrite: "if #{Macro.to_string(at)}, do: #{one}, else: #{zero}"]
+
+    [
+      hint: "booleans are not numbers; choose the number with if",
+      rewrite: "if #{Macro.to_string(at)}, do: #{one}, else: #{zero}"
+    ]
   end
 
   defp convert_hint(t, :bool, at) when t in [:i64, :f64],
-    do: [hint: "compare it to get a boolean", rewrite: "#{Macro.to_string(at)} != #{if t == :i64, do: "0", else: "0.0"}"]
+    do: [
+      hint: "compare it to get a boolean",
+      rewrite: "#{Macro.to_string(at)} != #{if t == :i64, do: "0", else: "0.0"}"
+    ]
 
   defp convert_hint(_from, _to, _at), do: []
 
@@ -413,7 +488,11 @@ defmodule Defk.Compiler do
   # ------------------------------------------------------------- blocks ----
 
   defp exprs({:__block__, _, []} = b) do
-    err!(if(positioned?(b), do: b, else: Process.get(:defk_ctx)), "empty-block", "this block is empty")
+    err!(
+      if(positioned?(b), do: b, else: Process.get(:defk_ctx)),
+      "empty-block",
+      "this block is empty"
+    )
   end
 
   defp exprs({:__block__, _, es}), do: es
@@ -423,8 +502,12 @@ defmodule Defk.Compiler do
   defp lower_block(ast, env), do: do_block(exprs(ast), env)
 
   defp do_block([{:=, _, [{{:., _, [Access, :get]}, _, [arr, _]}, _]} = last], _env) do
-    err!(last, "write-as-value", "the array write #{Macro.to_string(last)} ends a block that needs a value",
-      rewrite: "#{Macro.to_string(last)}\n#{Macro.to_string(arr)}")
+    err!(
+      last,
+      "write-as-value",
+      "the array write #{Macro.to_string(last)} ends a block that needs a value",
+      rewrite: "#{Macro.to_string(last)}\n#{Macro.to_string(arr)}"
+    )
   end
 
   defp do_block([{:=, _, [lhs, rhs]} = last], env) do
@@ -476,9 +559,12 @@ defmodule Defk.Compiler do
     match?({:arr, _}, a.t) || not_an_array!(target, arr, a)
 
     a.owned ||
-      err!(target, "read-only-array",
+      err!(
+        target,
+        "read-only-array",
         "writing to #{Macro.to_string(arr)}, an array the kernel didn't create with alloc/2, is not supported yet",
-        rewrite: copy_rewrite(arr, a.t) <> "\n" <> Macro.to_string(write))
+        rewrite: copy_rewrite(arr, a.t) <> "\n" <> Macro.to_string(write)
+      )
 
     {si, i} = lower_expr(idx, env)
     i = coerce!(i, :i64, idx, "array index")
@@ -558,8 +644,12 @@ defmodule Defk.Compiler do
         names = ts |> Enum.with_index() |> Enum.map_join(", ", fn {_, i} -> "#{name}#{i}" end)
         rhs = with {:=, _, [_, rhs]} <- match, do: Macro.to_string(rhs)
 
-        err!(var, "tuple-binding", "binding the tuple #{fmt(v.t)} to the variable #{name} is not in the kernel subset",
-          rewrite: "{#{names}} = #{rhs}")
+        err!(
+          var,
+          "tuple-binding",
+          "binding the tuple #{fmt(v.t)} to the variable #{name} is not in the kernel subset",
+          rewrite: "{#{names}} = #{rhs}"
+        )
 
       # arrays are references: alias the binding instead of copying the view
       match?({:arr, _}, v.t) and v[:var] != nil ->
@@ -576,7 +666,11 @@ defmodule Defk.Compiler do
     pats = tuple_items(pat) || unsupported_pattern!(pat, v, match)
 
     if length(pats) != length(elems) do
-      err!(pat, "tuple-size", "the pattern #{Macro.to_string(pat)} has #{length(pats)} elements, the tuple #{fmt(v.t)} has #{length(elems)}")
+      err!(
+        pat,
+        "tuple-size",
+        "the pattern #{Macro.to_string(pat)} has #{length(pats)} elements, the tuple #{fmt(v.t)} has #{length(elems)}"
+      )
     end
 
     Enum.zip(pats, elems)
@@ -593,24 +687,45 @@ defmodule Defk.Compiler do
   defp unsupported_pattern!(pat, v, _match) do
     rewrite =
       case v do
-        %{elems: elems} when is_list(pat) and length(pat) == length(elems) -> [rewrite: Macro.to_string(List.to_tuple(pat)) <> " = ..."]
-        _ -> []
+        %{elems: elems} when is_list(pat) and length(pat) == length(elems) ->
+          [rewrite: Macro.to_string(List.to_tuple(pat)) <> " = ..."]
+
+        _ ->
+          []
       end
 
-    err!(pat, "unsupported-pattern", "the pattern #{Macro.to_string(pat)} is not in the kernel subset", rewrite)
+    err!(
+      pat,
+      "unsupported-pattern",
+      "the pattern #{Macro.to_string(pat)} is not in the kernel subset",
+      rewrite
+    )
   end
 
   # `<<...>> = bin`: rejected before `bin` is compiled, so the pattern is what's reported
   defp bitstring_match!({:=, _, [{:<<>>, _, segs} = pat, rhs]}) do
-    float_bits? = match?({:<<>>, _, [{:"::", _, [_, {:-, _, [{:float, _, _}, _]}]}]}, rhs) or
-                    match?({:<<>>, _, [{:"::", _, [_, {:float, _, _}]}]}, rhs)
+    float_bits? =
+      match?({:<<>>, _, [{:"::", _, [_, {:-, _, [{:float, _, _}, _]}]}]}, rhs) or
+        match?({:<<>>, _, [{:"::", _, [_, {:float, _, _}]}]}, rhs)
 
     if float_bits? do
-      err!(pat, "bitstring-match", "reading a float's bits with #{Macro.to_string(pat)} = #{Macro.to_string(rhs)} is not in the kernel subset",
-        why: "a kernel has no bitstrings", hint: "do it in Elixir before the call; a builtin for it, Defk.Bits.f64_to_u64/1, is planned")
+      err!(
+        pat,
+        "bitstring-match",
+        "reading a float's bits with #{Macro.to_string(pat)} = #{Macro.to_string(rhs)} is not in the kernel subset",
+        why: "a kernel has no bitstrings",
+        hint:
+          "do it in Elixir before the call; a builtin for it, Defk.Bits.f64_to_u64/1, is planned"
+      )
     else
       arr = Macro.to_string(rhs)
-      err!(pat, "bitstring-match", "the binary pattern #{Macro.to_string(pat)} is not in the kernel subset", byte_fields(segs, arr))
+
+      err!(
+        pat,
+        "bitstring-match",
+        "the binary pattern #{Macro.to_string(pat)} is not in the kernel subset",
+        byte_fields(segs, arr)
+      )
     end
   end
 
@@ -622,12 +737,21 @@ defmodule Defk.Compiler do
           {:"::", _, [_, {t, _, _}]} when t in [:binary, :bytes, :bitstring, :bits] ->
             {:halt, {acc, off}}
 
-          {:"::", _, [{n, _, ctx}, size]} when is_atom(n) and is_atom(ctx) and is_integer(size) and rem(size, 8) == 0 ->
-            line = if String.starts_with?(Atom.to_string(n), "_"), do: nil, else: "# #{n}: bytes #{off}..#{off + div(size, 8) - 1} of #{arr}"
+          {:"::", _, [{n, _, ctx}, size]}
+          when is_atom(n) and is_atom(ctx) and is_integer(size) and rem(size, 8) == 0 ->
+            line =
+              if String.starts_with?(Atom.to_string(n), "_"),
+                do: nil,
+                else: "# #{n}: bytes #{off}..#{off + div(size, 8) - 1} of #{arr}"
+
             {:cont, {[line | acc], off + div(size, 8)}}
 
           {n, _, ctx} when is_atom(n) and is_atom(ctx) ->
-            line = if String.starts_with?(Atom.to_string(n), "_"), do: nil, else: "#{n} = #{arr}[#{off}]"
+            line =
+              if String.starts_with?(Atom.to_string(n), "_"),
+                do: nil,
+                else: "#{n} = #{arr}[#{off}]"
+
             {:cont, {[line | acc], off + 1}}
 
           _ ->
@@ -636,8 +760,14 @@ defmodule Defk.Compiler do
       end)
 
     case lines do
-      :unknown -> []
-      lines -> lines |> Enum.reject(&is_nil/1) |> Enum.reverse() |> then(&if(&1 == [], do: [], else: [rewrite: Enum.join(&1, "\n")]))
+      :unknown ->
+        []
+
+      lines ->
+        lines
+        |> Enum.reject(&is_nil/1)
+        |> Enum.reverse()
+        |> then(&if(&1 == [], do: [], else: [rewrite: Enum.join(&1, "\n")]))
     end
   end
 
@@ -654,11 +784,16 @@ defmodule Defk.Compiler do
 
   defp lower_expr(n, _env) when is_integer(n) do
     n in -0x8000000000000000..0x7FFFFFFFFFFFFFFF ||
-      err!(n, "integer-literal", "the integer literal #{n} does not fit in i64", rewrite: "#{n * 1.0}")
+      err!(n, "integer-literal", "the integer literal #{n} does not fit in i64",
+        rewrite: "#{n * 1.0}"
+      )
+
     {[], Map.merge(val("INT64_C(#{n})", :i64), %{lo: n, hi: n})}
   end
 
-  defp lower_expr(f, _env) when is_float(f), do: {[], val(:erlang.float_to_binary(f, [:short]), :f64)}
+  defp lower_expr(f, _env) when is_float(f),
+    do: {[], val(:erlang.float_to_binary(f, [:short]), :f64)}
+
   defp lower_expr(true, _env), do: {[], val("1", :bool)}
   defp lower_expr(false, _env), do: {[], val("0", :bool)}
 
@@ -694,7 +829,10 @@ defmodule Defk.Compiler do
   end
 
   defp lower_expr({:if, _, [cond, kw]} = node, env) when is_list(kw) do
-    else_ast = Keyword.get(kw, :else) || err!(node, "if-without-else", "this if is used as a value but has no else branch")
+    else_ast =
+      Keyword.get(kw, :else) ||
+        err!(node, "if-without-else", "this if is used as a value but has no else branch")
+
     lower_arms([{cond, Keyword.fetch!(kw, :do)}, {true, else_ast}], "if", node, env)
   end
 
@@ -714,13 +852,17 @@ defmodule Defk.Compiler do
 
   defp lower_expr({{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m, args} = node, env) do
     case args do
-      [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}] -> lower_reduce_while(src, init, x, acc, body, env, m)
-      _ -> fn_argument!(node, "Enum.reduce_while/3", [:x, :acc])
+      [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}] ->
+        lower_reduce_while(src, init, x, acc, body, env, m)
+
+      _ ->
+        fn_argument!(node, "Enum.reduce_while/3", [:x, :acc])
     end
   end
 
   # Enum.all?/any? with a predicate fn are reduce_while with a bool accumulator
-  defp lower_expr({{:., _, [{:__aliases__, _, [:Enum]}, f]}, m, args} = node, env) when f in [:all?, :any?] do
+  defp lower_expr({{:., _, [{:__aliases__, _, [:Enum]}, f]}, m, args} = node, env)
+       when f in [:all?, :any?] do
     {src, x, pred} =
       case args do
         [src, {:fn, _, [{:->, _, [[x], pred]}]}] -> {src, x, pred}
@@ -738,8 +880,18 @@ defmodule Defk.Compiler do
 
   defp lower_expr({:for, _, args} = node, env) do
     case parse_for(args, node, env) do
-      {quals, nil, body} -> for_collect!(node, quals, body, nil, env, "a for without reduce: used as a value is not in the kernel subset")
-      {quals, {:reduce, init}, clauses} -> lower_reduce(quals, init, clauses, env, node)
+      {quals, nil, body} ->
+        for_collect!(
+          node,
+          quals,
+          body,
+          nil,
+          env,
+          "a for without reduce: used as a value is not in the kernel subset"
+        )
+
+      {quals, {:reduce, init}, clauses} ->
+        lower_reduce(quals, init, clauses, env, node)
     end
   end
 
@@ -751,17 +903,33 @@ defmodule Defk.Compiler do
 
     v =
       case {op, va.t, vb.t} do
-        {:/, _, _} -> val("defk_fdiv(ctx, #{to_f(va)}, #{to_f(vb)})", :f64)
-        {:+, :i64, :i64} -> Map.merge(val("defk_add_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64), add_facts(va, vb))
-        {:-, :i64, :i64} -> Map.merge(val("defk_sub_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64), sub_facts(va, vb))
-        {:*, :i64, :i64} -> val("defk_mul_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64)
-        _ -> val("(#{to_f(va)} #{op} #{to_f(vb)})", :f64)
+        {:/, _, _} ->
+          val("defk_fdiv(ctx, #{to_f(va)}, #{to_f(vb)})", :f64)
+
+        {:+, :i64, :i64} ->
+          Map.merge(
+            val("defk_add_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
+            add_facts(va, vb)
+          )
+
+        {:-, :i64, :i64} ->
+          Map.merge(
+            val("defk_sub_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
+            sub_facts(va, vb)
+          )
+
+        {:*, :i64, :i64} ->
+          val("defk_mul_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64)
+
+        _ ->
+          val("(#{to_f(va)} #{op} #{to_f(vb)})", :f64)
       end
 
     {[sa, sb], v}
   end
 
-  defp lower_expr({op, _, [a, b]} = node, env) when op in [:==, :!=, :===, :!==, :<, :>, :<=, :>=] do
+  defp lower_expr({op, _, [a, b]} = node, env)
+       when op in [:==, :!=, :===, :!==, :<, :>, :<=, :>=] do
     {sa, va} = lower_expr(a, env)
     {sb, vb} = lower_expr(b, env)
 
@@ -775,7 +943,9 @@ defmodule Defk.Compiler do
 
         # exact equality tells -0.0 from 0.0, as Erlang's =:= does
         op in [:===, :!==] and va.t == :f64 and vb.t == :f64 ->
-          if op == :===, do: "defk_feq_exact(#{va.c}, #{vb.c})", else: "(!defk_feq_exact(#{va.c}, #{vb.c}))"
+          if op == :===,
+            do: "defk_feq_exact(#{va.c}, #{vb.c})",
+            else: "(!defk_feq_exact(#{va.c}, #{vb.c}))"
 
         numeric?(va) and numeric?(vb) and va.t == vb.t ->
           "(#{va.c} #{cop(op)} #{vb.c})"
@@ -789,8 +959,12 @@ defmodule Defk.Compiler do
           "(0 #{cop(op)} defk_cmp_i64_f64(#{vb.c}, #{va.c}))"
 
         true ->
-          err!(node, "operand-type", "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
-            hint: "compare two numbers or two booleans")
+          err!(
+            node,
+            "operand-type",
+            "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
+            hint: "compare two numbers or two booleans"
+          )
       end
 
     {[sa, sb], val(c, :bool)}
@@ -809,7 +983,9 @@ defmodule Defk.Compiler do
       # right side needs statements: keep short-circuit semantics explicitly
       tmp = fresh("sc", :bool)
       test = if cop == "&&", do: tmp, else: "!#{tmp}"
-      {[sa, "#{tmp} = #{va.c};\nif (#{test}) {\n", sb, "#{tmp} = #{vb.c};\n}\n"], val(tmp, :bool, tmp)}
+
+      {[sa, "#{tmp} = #{va.c};\nif (#{test}) {\n", sb, "#{tmp} = #{vb.c};\n}\n"],
+       val(tmp, :bool, tmp)}
     end
   end
 
@@ -834,7 +1010,9 @@ defmodule Defk.Compiler do
 
   # dbg/IO.inspect are for Elixir mode (Defk.ElixirMode); native code ignores them
   defp lower_expr({:dbg, _, [x | _]}, env), do: lower_expr(x, env)
-  defp lower_expr({{:., _, [{:__aliases__, _, [:IO]}, :inspect]}, _, [x | _]}, env), do: lower_expr(x, env)
+
+  defp lower_expr({{:., _, [{:__aliases__, _, [:IO]}, :inspect]}, _, [x | _]}, env),
+    do: lower_expr(x, env)
 
   # :math.sqrt(x) etc. map onto the builtins
   defp lower_expr({{:., _, [:math, fun]}, m, args}, env) when fun in [:pow | @math1],
@@ -844,13 +1022,21 @@ defmodule Defk.Compiler do
     do: lower_call(name, args, m, env)
 
   # anything else (a map, a string, a remote call, ...) is outside the subset
-  defp lower_expr(other, env), do: unsupported!(other, Defk.Errors.unsupported(other, &type_in(&1, env)), env)
+  defp lower_expr(other, env),
+    do: unsupported!(other, Defk.Errors.unsupported(other, &type_in(&1, env)), env)
 
   defp lower_tuple(items, env) do
     {stmts, elems} =
       Enum.map_reduce(items, [], fn item, acc ->
         {s, v} = lower_expr(item, env)
-        match?(%{elems: _}, v) && err!(item, "nested-tuple", "nested tuples such as #{Macro.to_string(item)} are not in the kernel subset")
+
+        match?(%{elems: _}, v) &&
+          err!(
+            item,
+            "nested-tuple",
+            "nested tuples such as #{Macro.to_string(item)} are not in the kernel subset"
+          )
+
         {s, [v | acc]}
       end)
 
@@ -870,19 +1056,29 @@ defmodule Defk.Compiler do
   defp branch_type!(vals, name, node) do
     case Enum.uniq_by(vals, & &1.t) do
       [%{t: {:tuple, _} = t} | _] ->
-        err!(node, "branch-tuple", "this #{name} gives the tuple #{fmt(t)}; tuples from an #{name} are not in the kernel subset")
+        err!(
+          node,
+          "branch-tuple",
+          "this #{name} gives the tuple #{fmt(t)}; tuples from an #{name} are not in the kernel subset"
+        )
 
       [%{t: {:arr, _} = t} | _] ->
         rewrite =
           case node do
-            {:if, _, [c, [do: {a, _, x}, else: {b, _, y}]]} when is_atom(a) and is_atom(x) and is_atom(b) and is_atom(y) ->
+            {:if, _, [c, [do: {a, _, x}, else: {b, _, y}]]}
+            when is_atom(a) and is_atom(x) and is_atom(b) and is_atom(y) ->
               [rewrite: "if #{Macro.to_string(c)}, do: #{a}[0], else: #{b}[0]"]
 
             _ ->
               []
           end
 
-        err!(node, "array-in-branch", "this #{name} gives an array (#{fmt(t)}); arrays from an #{name} are not supported yet", rewrite)
+        err!(
+          node,
+          "array-in-branch",
+          "this #{name} gives an array (#{fmt(t)}); arrays from an #{name} are not supported yet",
+          rewrite
+        )
 
       [%{t: t}] ->
         t
@@ -892,10 +1088,18 @@ defmodule Defk.Compiler do
 
         hint =
           if Enum.sort(ts) == [:f64, :i64],
-            do: [hint: "convert the i64 branch to f64 with float/1, or the f64 branch to i64 with trunc/1 or round/1"],
+            do: [
+              hint:
+                "convert the i64 branch to f64 with float/1, or the f64 branch to i64 with trunc/1 or round/1"
+            ],
             else: []
 
-        err!(node, "branch-types", "the branches of this #{name} have different types: #{Enum.map_join(ts, ", ", &fmt/1)}", hint)
+        err!(
+          node,
+          "branch-types",
+          "the branches of this #{name} have different types: #{Enum.map_join(ts, ", ", &fmt/1)}",
+          hint
+        )
     end
   end
 
@@ -933,7 +1137,9 @@ defmodule Defk.Compiler do
   defp select?([{_, _, {_, _}, _, _} | later] = arms) do
     case Enum.split(later, -1) do
       {later, [{_, _, :else, _, _}]} ->
-        Enum.all?(arms, fn {_, body, _, sb, _} -> IO.iodata_length(sb) == 0 and speculate?(body) end) and
+        Enum.all?(arms, fn {_, body, _, sb, _} ->
+          IO.iodata_length(sb) == 0 and speculate?(body)
+        end) and
           Enum.all?(later, fn
             {c, _, {sc, _}, _, _} -> IO.iodata_length(sc) == 0 and speculate?(c)
             _ -> false
@@ -984,9 +1190,14 @@ defmodule Defk.Compiler do
 
   defp chain(arms, tmp) do
     List.foldr(arms, [], fn
-      {_, _, :else, sb, v}, _rest -> [sb, "#{tmp} = #{v.c};\n"]
-      {_, _, :nomatch, s, _}, _rest -> s
-      {_, _, {sc, c}, sb, v}, rest -> [sc, "if (#{c}) {\n", sb, "#{tmp} = #{v.c};\n} else {\n", rest, "}\n"]
+      {_, _, :else, sb, v}, _rest ->
+        [sb, "#{tmp} = #{v.c};\n"]
+
+      {_, _, :nomatch, s, _}, _rest ->
+        s
+
+      {_, _, {sc, c}, sb, v}, rest ->
+        [sc, "if (#{c}) {\n", sb, "#{tmp} = #{v.c};\n} else {\n", rest, "}\n"]
     end)
   end
 
@@ -998,8 +1209,27 @@ defmodule Defk.Compiler do
   defp speculate?(x) when is_number(x) or is_boolean(x), do: true
   defp speculate?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: true
 
-  defp speculate?({op, _, args}) when op in [:+, :-, :*, :==, :!=, :===, :!==, :<, :>, :<=, :>=, :and, :or, :&&, :||, :not, :!],
-    do: Enum.all?(args, &speculate?/1)
+  defp speculate?({op, _, args})
+       when op in [
+              :+,
+              :-,
+              :*,
+              :==,
+              :!=,
+              :===,
+              :!==,
+              :<,
+              :>,
+              :<=,
+              :>=,
+              :and,
+              :or,
+              :&&,
+              :||,
+              :not,
+              :!
+            ],
+       do: Enum.all?(args, &speculate?/1)
 
   defp speculate?(_), do: false
 
@@ -1023,7 +1253,11 @@ defmodule Defk.Compiler do
       end
 
     rewrite = with [n] <- args, do: "alloc(f64, #{Macro.to_string(n)})"
-    err!(node, "alloc-form", what, hint: "write alloc(f64 | i64 | u8, length)", rewrite: if(is_binary(rewrite), do: rewrite))
+
+    err!(node, "alloc-form", what,
+      hint: "write alloc(f64 | i64 | u8, length)",
+      rewrite: if(is_binary(rewrite), do: rewrite)
+    )
   end
 
   defp lower_call(name, args, m, env) do
@@ -1036,16 +1270,21 @@ defmodule Defk.Compiler do
       unsupported!(node, r, env)
     end
 
-    {stmts, vals} = Enum.map_reduce(args, [], fn a, acc ->
-      {s, v} = lower_expr(a, env)
-      {s, [v | acc]}
-    end)
+    {stmts, vals} =
+      Enum.map_reduce(args, [], fn a, acc ->
+        {s, v} = lower_expr(a, env)
+        {s, [v | acc]}
+      end)
 
     vals = Enum.reverse(vals)
 
     for {%{elems: _}, a} <- Enum.zip(vals, args) do
-      err!(a, "tuple-argument", "passing the tuple #{Macro.to_string(a)} to #{name}/#{length(args)} is not in the kernel subset",
-        rewrite: Macro.to_string({name, [], Enum.flat_map(args, &(tuple_items(&1) || [&1]))}))
+      err!(
+        a,
+        "tuple-argument",
+        "passing the tuple #{Macro.to_string(a)} to #{name}/#{length(args)} is not in the kernel subset",
+        rewrite: Macro.to_string({name, [], Enum.flat_map(args, &(tuple_items(&1) || [&1]))})
+      )
     end
 
     # a builtin is an expression; an inlined kernel call also has statements
@@ -1065,7 +1304,14 @@ defmodule Defk.Compiler do
 
   defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:div, :rem],
     do: val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
-  defp builtin(:float, [a], node, _), do: (numeric!(a, arg(node, 0), "float/1"); val(to_f(a), :f64))
+
+  defp builtin(:float, [a], node, _),
+    do:
+      (
+        numeric!(a, arg(node, 0), "float/1")
+        val(to_f(a), :f64)
+      )
+
   defp builtin(:trunc, [%{t: :i64} = a], _, _), do: a
   defp builtin(:trunc, [%{t: :f64} = a], _, _), do: val("defk_trunc(ctx, #{a.c})", :i64)
   defp builtin(:round, [%{t: :i64} = a], _, _), do: a
@@ -1097,7 +1343,11 @@ defmodule Defk.Compiler do
     case Map.get(env.sigs, {name, arity}) do
       %{} = k ->
         match?({:tuple, _}, k.ret) &&
-          err!(node, "tuple-return-call", "#{name}/#{arity} returns the tuple #{fmt(k.ret)}, and calling it from a kernel is not in the kernel subset")
+          err!(
+            node,
+            "tuple-return-call",
+            "#{name}/#{arity} returns the tuple #{fmt(k.ret)}, and calling it from a kernel is not in the kernel subset"
+          )
 
         inline(k, vals, node, env)
 
@@ -1139,12 +1389,23 @@ defmodule Defk.Compiler do
     fix =
       cond do
         name in [:div, :rem] and length(ts) == 2 and Enum.all?(ts, &(&1 in [:i64, :f64])) ->
-          conv = Enum.zip_with(args, ts, fn a, t -> if t == :f64, do: {:trunc, [], [a]}, else: a end)
-          [hint: "convert the f64 arguments with trunc/1 or round/1, or use / for float division", rewrite: Macro.to_string({name, [], conv})]
+          conv =
+            Enum.zip_with(args, ts, fn a, t -> if t == :f64, do: {:trunc, [], [a]}, else: a end)
+
+          [
+            hint:
+              "convert the f64 arguments with trunc/1 or round/1, or use / for float division",
+            rewrite: Macro.to_string({name, [], conv})
+          ]
 
         name in [:min, :max] and Enum.sort(ts) == [:f64, :i64] ->
-          conv = Enum.zip_with(args, ts, fn a, t -> if t == :i64, do: {:float, [], [a]}, else: a end)
-          [hint: "convert the i64 argument with float/1", rewrite: Macro.to_string({name, [], conv})]
+          conv =
+            Enum.zip_with(args, ts, fn a, t -> if t == :i64, do: {:float, [], [a]}, else: a end)
+
+          [
+            hint: "convert the i64 argument with float/1",
+            rewrite: Macro.to_string({name, [], conv})
+          ]
 
         true ->
           []
@@ -1159,8 +1420,11 @@ defmodule Defk.Compiler do
 
     what =
       case others do
-        [] -> "undefined function #{name}/#{arity}"
-        _ -> "undefined function #{name}/#{arity}; this module has the kernel #{Enum.join(others, " and ")}"
+        [] ->
+          "undefined function #{name}/#{arity}"
+
+        _ ->
+          "undefined function #{name}/#{arity}; this module has the kernel #{Enum.join(others, " and ")}"
       end
 
     err!(node, "unknown-function", what)
@@ -1188,7 +1452,9 @@ defmodule Defk.Compiler do
           {[], {p, %{v | owned: false}}}
         else
           c = fresh(p, t)
-          {"#{c} = #{v.c};\n", {p, Map.merge(Map.take(v, @facts), %{c: c, t: t, owned: false, var: c})}}
+
+          {"#{c} = #{v.c};\n",
+           {p, Map.merge(Map.take(v, @facts), %{c: c, t: t, owned: false, var: c})}}
         end
       end)
       |> Enum.unzip()
@@ -1231,8 +1497,10 @@ defmodule Defk.Compiler do
     what = "#{name}/#{arity} calls itself#{via}, and recursion is not in the kernel subset"
 
     err!(node, "recursion", what,
-      hint: "write the recursion as a loop: for ..., reduce: for a fold, Enum.reduce_while/3 to stop early",
-      key: {:recursion, MapSet.new([key | cycle])})
+      hint:
+        "write the recursion as a loop: for ..., reduce: for a fold, Enum.reduce_while/3 to stop early",
+      key: {:recursion, MapSet.new([key | cycle])}
+    )
   end
 
   # ---------------------------------------------------------------- loops --
@@ -1244,20 +1512,40 @@ defmodule Defk.Compiler do
 
     for k <- Keyword.keys(opts), k not in [:do, :reduce] do
       if k == :into,
-        do: for_collect!(node, quals, opts[:do], opts[:into], env, "for ..., into: is not in the kernel subset"),
+        do:
+          for_collect!(
+            node,
+            quals,
+            opts[:do],
+            opts[:into],
+            env,
+            "for ..., into: is not in the kernel subset"
+          ),
         else: err!(node, "for-option", "for ..., #{k}: is not in the kernel subset")
     end
 
     case quals do
-      [{:<-, _, _} | _] -> :ok
-      [{:<<>>, _, [{:<-, _, [x, bin]}]} = gen | _] ->
-        err!(gen, "generator-pattern", "the bitstring generator #{Macro.to_string(gen)} is not in the kernel subset",
-          hint: "walk the bytes as a [u8] array", rewrite: "#{Macro.to_string(x)} <- #{Macro.to_string(bin)}")
+      [{:<-, _, _} | _] ->
+        :ok
 
-      _ -> err!(node, "for-form", "this for has no generator")
+      [{:<<>>, _, [{:<-, _, [x, bin]}]} = gen | _] ->
+        err!(
+          gen,
+          "generator-pattern",
+          "the bitstring generator #{Macro.to_string(gen)} is not in the kernel subset",
+          hint: "walk the bytes as a [u8] array",
+          rewrite: "#{Macro.to_string(x)} <- #{Macro.to_string(bin)}"
+        )
+
+      _ ->
+        err!(node, "for-form", "this for has no generator")
     end
 
-    body = Keyword.get(opts, :do) || err!(node, "for-form", "this for has no do block", hint: "write the loop body in a do block")
+    body =
+      Keyword.get(opts, :do) ||
+        err!(node, "for-form", "this for has no do block",
+          hint: "write the loop body in a do block"
+        )
 
     case Keyword.fetch(opts, :reduce) do
       {:ok, init} -> {quals, {:reduce, init}, body}
@@ -1303,16 +1591,29 @@ defmodule Defk.Compiler do
           # counting up from a to b: in the body a <= i <= b
           facts = %{lo: va[:lo], hi: vb[:hi], lb: lb(va), ub: ub(vb)}
           iv = Map.merge(val(i, :i64), facts)
-          strip = %{done_at: &"#{i} > #{&1}", remaining: "((uint64_t)#{e} - (uint64_t)#{i}) / #{k}", step: k}
+
+          strip = %{
+            done_at: &"#{i} > #{&1}",
+            remaining: "((uint64_t)#{e} - (uint64_t)#{i}) / #{k}",
+            step: k
+          }
+
           {[setup, range_limit(i, e, k, vb)], "#{i} > #{e}", "#{i} += #{k};\n", iv, strip}
 
         k when is_integer(k) and k < 0 ->
-          strip = %{done_at: &"#{i} < #{&1}", remaining: "((uint64_t)#{i} - (uint64_t)#{e}) / #{-k}", step: k}
-          {[setup, range_limit(i, e, k, vb)], "#{i} < #{e}", "#{i} -= #{-k};\n", val(i, :i64), strip}
+          strip = %{
+            done_at: &"#{i} < #{&1}",
+            remaining: "((uint64_t)#{i} - (uint64_t)#{e}) / #{-k}",
+            step: k
+          }
+
+          {[setup, range_limit(i, e, k, vb)], "#{i} < #{e}", "#{i} -= #{-k};\n", val(i, :i64),
+           strip}
 
         0 ->
           err!(range, "range-step", "the range #{Macro.to_string(range)} has step 0",
-            rewrite: Macro.to_string({:..//, [], [a, b, 1]}))
+            rewrite: Macro.to_string({:..//, [], [a, b, 1]})
+          )
 
         nil ->
           st = fresh("step", :i64)
@@ -1324,11 +1625,16 @@ defmodule Defk.Compiler do
             else
               {ss, vs} = lower_expr(step, env)
               vs = coerce!(vs, :i64, step, "range step")
-              [ss, "#{st} = #{vs.c};\n",
-               "if (#{st} == 0) defk_fail(ctx, DEFK_E_ARG, \"range step cannot be zero\");\n"]
+
+              [
+                ss,
+                "#{st} = #{vs.c};\n",
+                "if (#{st} == 0) defk_fail(ctx, DEFK_E_ARG, \"range step cannot be zero\");\n"
+              ]
             end
 
-          {[setup, step_setup, range_limit(i, e, st, vb)], "(#{st} > 0 ? #{i} > #{e} : #{i} < #{e})", "#{i} += #{st};\n", val(i, :i64), nil}
+          {[setup, step_setup, range_limit(i, e, st, vb)],
+           "(#{st} > 0 ? #{i} > #{e} : #{i} < #{e})", "#{i} += #{st};\n", val(i, :i64), nil}
       end
 
     env = put_var(env, name, iv)
@@ -1354,14 +1660,16 @@ defmodule Defk.Compiler do
     near_limit =
       cond do
         is_integer(k) and k > 0 ->
-          safe? = (is_integer(vb[:hi]) and vb[:hi] <= @i64_max - k) or
-                    (k <= @i64_max - 2 ** 61 and Enum.any?(ub(vb), fn {_, d} -> d <= 0 end))
+          safe? =
+            (is_integer(vb[:hi]) and vb[:hi] <= @i64_max - k) or
+              (k <= @i64_max - 2 ** 61 and Enum.any?(ub(vb), fn {_, d} -> d <= 0 end))
 
           if !safe?, do: "#{e} > INT64_C(#{@i64_max - k})"
 
         is_integer(k) ->
-          safe? = (is_integer(vb[:lo]) and vb[:lo] >= @i64_min - k) or
-                    Enum.any?(lb(vb), fn {_, d} -> d >= @i64_min - k end)
+          safe? =
+            (is_integer(vb[:lo]) and vb[:lo] >= @i64_min - k) or
+              Enum.any?(lb(vb), fn {_, d} -> d >= @i64_min - k end)
 
           if !safe?, do: "#{e} < INT64_C(#{@i64_min - k})"
 
@@ -1378,8 +1686,12 @@ defmodule Defk.Compiler do
     {s, a} = lower_expr(src, env)
 
     match?({:arr, _}, a.t) ||
-      err!(src, "generator-source", "#{Macro.to_string(src)} is #{fmt(a.t)}, not a range or an array",
-        if(a.t == :i64, do: [rewrite: "#{name} <- 0..(#{Macro.to_string(src)} - 1)//1"], else: []))
+      err!(
+        src,
+        "generator-source",
+        "#{Macro.to_string(src)} is #{fmt(a.t)}, not a range or an array",
+        if(a.t == :i64, do: [rewrite: "#{name} <- 0..(#{Macro.to_string(src)} - 1)//1"], else: [])
+      )
 
     {:arr, e} = a.t
 
@@ -1401,7 +1713,15 @@ defmodule Defk.Compiler do
     in_loop(fn id ->
       {body, flat?} = lower_quals_tracked(rest, env, inner)
       body = ["#{x} = #{arr}.data[#{k}];\n", body, "#{k} += 1;\n"]
-      strip = %{done_at: &"#{k} > #{&1}", remaining: "(uint64_t)(#{arr}.len - #{k} - 1)", step: 1, var: k, stop: "#{arr}.len - 1"}
+
+      strip = %{
+        done_at: &"#{k} > #{&1}",
+        remaining: "(uint64_t)(#{arr}.len - #{k} - 1)",
+        step: 1,
+        var: k,
+        stop: "#{arr}.len - 1"
+      }
+
       [s, "#{k} = 0;\n", loop(id, "#{k} >= #{arr}.len", strip, flat?, body)]
     end)
   end
@@ -1443,15 +1763,24 @@ defmodule Defk.Compiler do
     %{var: i, stop: e, step: k} = strip
 
     # no overflow: taken only when the strip ends before the loop's last index
-    strip_stop = "(int64_t)((uint64_t)#{i} + (uint64_t)(DEFK_STRIP - 1) * (uint64_t)INT64_C(#{k}))"
+    strip_stop =
+      "(int64_t)((uint64_t)#{i} + (uint64_t)(DEFK_STRIP - 1) * (uint64_t)INT64_C(#{k}))"
 
-    ["#{r} = #{strip.remaining};\nif (DEFK_SHORT(#{r})) {\n",
-     if(flat == :exits, do: "DEFK_TICKS(#{r} + 1)\n", else: []),
-     "while (!(#{done})) {\n", body, "}\n",
-     if(flat == :exits, do: [], else: "DEFK_TICKS(#{r} + 1)\n"),
-     "} else {\n",
-     "defk_l#{id}:;\nwhile (!(#{done})) {\n#{se} = #{strip.remaining} < DEFK_STRIP ? #{e} : #{strip_stop};\n",
-     "while (!(#{strip.done_at.(se)})) {\n", body, "}\n", safepoint("DEFK_STRIP"), "}\n}\n"]
+    [
+      "#{r} = #{strip.remaining};\nif (DEFK_SHORT(#{r})) {\n",
+      if(flat == :exits, do: "DEFK_TICKS(#{r} + 1)\n", else: []),
+      "while (!(#{done})) {\n",
+      body,
+      "}\n",
+      if(flat == :exits, do: [], else: "DEFK_TICKS(#{r} + 1)\n"),
+      "} else {\n",
+      "defk_l#{id}:;\nwhile (!(#{done})) {\n#{se} = #{strip.remaining} < DEFK_STRIP ? #{e} : #{strip_stop};\n",
+      "while (!(#{strip.done_at.(se)})) {\n",
+      body,
+      "}\n",
+      safepoint("DEFK_STRIP"),
+      "}\n}\n"
+    ]
   end
 
   defp loop(id, done, _strip, _flat?, body),
@@ -1497,9 +1826,18 @@ defmodule Defk.Compiler do
   defp lower_reduce(quals, init_ast, clauses, env, node) do
     {pat, body} =
       case clauses do
-        [{:->, _, [[pat], body]}] -> {pat, body}
-        [_, _ | _] -> err!(node, "reduce-clauses", "this for ..., reduce: has #{length(clauses)} clauses; more than one is not in the kernel subset")
-        _ -> err!(node, "reduce-clauses", "this for ..., reduce: has no `acc -> body` clause")
+        [{:->, _, [[pat], body]}] ->
+          {pat, body}
+
+        [_, _ | _] ->
+          err!(
+            node,
+            "reduce-clauses",
+            "this for ..., reduce: has #{length(clauses)} clauses; more than one is not in the kernel subset"
+          )
+
+        _ ->
+          err!(node, "reduce-clauses", "this for ..., reduce: has no `acc -> body` clause")
       end
 
     {si, accs} = reduce_accs(pat, init_ast, "the reduce: value", env)
@@ -1531,10 +1869,12 @@ defmodule Defk.Compiler do
     leaf = fn tag, v_ast, env ->
       {s, v} = lower_expr(v_ast, env)
       assign = assign_accs(accs, v, v_ast, "{:#{tag}, acc}")
+
       if tag == :halt do
         Process.put({:defk_halted, id}, true)
         Process.put(:defk_halts_emitted, Process.get(:defk_halts_emitted, 0) + 1)
       end
+
       [s, assign, if(tag == :halt, do: "goto #{label};\n", else: [])]
     end
 
@@ -1551,18 +1891,32 @@ defmodule Defk.Compiler do
     pats = if is_tuple(pat) and tuple_items(pat), do: tuple_items(pat), else: [pat]
 
     length(pats) == length(inits) ||
-      err!(init_ast, "accumulator-shape",
-        "the accumulator #{Macro.to_string(pat)} has #{length(pats)} element#{if length(pats) == 1, do: "", else: "s"}, #{what} #{Macro.to_string(init_ast)} has #{length(inits)}")
+      err!(
+        init_ast,
+        "accumulator-shape",
+        "the accumulator #{Macro.to_string(pat)} has #{length(pats)} element#{if length(pats) == 1, do: "", else: "s"}, #{what} #{Macro.to_string(init_ast)} has #{length(inits)}"
+      )
 
     accs =
       Enum.zip_with(pats, inits, fn p, v ->
         match?({:arr, _}, v.t) &&
-          err!(init_ast, "array-accumulator", "the array accumulator #{Macro.to_string(init_ast)} is not in the kernel subset")
+          err!(
+            init_ast,
+            "array-accumulator",
+            "the array accumulator #{Macro.to_string(init_ast)} is not in the kernel subset"
+          )
 
         name =
           case p do
-            {n, _, ctx} when is_atom(n) and is_atom(ctx) -> n
-            _ -> err!(p, "accumulator-pattern", "the accumulator pattern #{Macro.to_string(p)} is not in the kernel subset")
+            {n, _, ctx} when is_atom(n) and is_atom(ctx) ->
+              n
+
+            _ ->
+              err!(
+                p,
+                "accumulator-pattern",
+                "the accumulator pattern #{Macro.to_string(p)} is not in the kernel subset"
+              )
           end
 
         {name, fresh(name, v.t), v}
@@ -1573,7 +1927,9 @@ defmodule Defk.Compiler do
 
   defp acc_env(accs, env) do
     Enum.reduce(accs, env, fn {name, c, v}, e ->
-      if String.starts_with?(Atom.to_string(name), "_"), do: e, else: put_var(e, name, val(c, v.t))
+      if String.starts_with?(Atom.to_string(name), "_"),
+        do: e,
+        else: put_var(e, name, val(c, v.t))
     end)
   end
 
@@ -1582,7 +1938,11 @@ defmodule Defk.Compiler do
     results = Map.get(res, :elems, [res])
 
     length(results) == length(accs) ||
-      err!(at, "accumulator-shape", "#{what} gives #{length(results)} value#{if length(results) == 1, do: "", else: "s"}, the accumulator has #{length(accs)}")
+      err!(
+        at,
+        "accumulator-shape",
+        "#{what} gives #{length(results)} value#{if length(results) == 1, do: "", else: "s"}, the accumulator has #{length(accs)}"
+      )
 
     items = tuple_items(at) || List.duplicate(at, length(accs))
 
@@ -1599,15 +1959,20 @@ defmodule Defk.Compiler do
         # compute all new values before assigning (they may read each other)
         tmps = Enum.map(accs, fn {name, _, v} -> fresh("#{name}_next", v.t) end)
 
-        [Enum.zip_with(tmps, outs, &"#{&1} = #{&2.c};\n"),
-         Enum.zip_with(accs, tmps, fn {_, c, _}, t -> "#{c} = #{t};\n" end)]
+        [
+          Enum.zip_with(tmps, outs, &"#{&1} = #{&2.c};\n"),
+          Enum.zip_with(accs, tmps, fn {_, c, _}, t -> "#{c} = #{t};\n" end)
+        ]
     end
   end
 
   defp acc_result([{_, c, v}]), do: val(c, v.t, c)
 
   defp acc_result(accs),
-    do: %{t: {:tuple, Enum.map(accs, &elem(&1, 2).t)}, elems: Enum.map(accs, fn {_, c, v} -> val(c, v.t, c) end)}
+    do: %{
+      t: {:tuple, Enum.map(accs, &elem(&1, 2).t)},
+      elems: Enum.map(accs, fn {_, c, v} -> val(c, v.t, c) end)
+    }
 
   # The body of a reduce_while fn: statements, then a tail that is a literal
   # {:cont, acc} or {:halt, acc}, or an if/cond/case whose branches end in one.
@@ -1625,8 +1990,12 @@ defmodule Defk.Compiler do
   defp tail_expr({:if, _, [c, kw]} = node, env, leaf) when is_list(kw) do
     else_ast =
       Keyword.get(kw, :else) ||
-        err!(node, "reduce-while-tail", "this if ends an Enum.reduce_while/3 fn but has no else branch",
-          hint: "add an else branch that returns {:cont, acc} or {:halt, acc}")
+        err!(
+          node,
+          "reduce-while-tail",
+          "this if ends an Enum.reduce_while/3 fn but has no else branch",
+          hint: "add an else branch that returns {:cont, acc} or {:halt, acc}"
+        )
 
     branch_chain([{c, Keyword.fetch!(kw, :do)}, {true, else_ast}], env, &lower_tail(&1, &2, leaf))
   end
@@ -1643,8 +2012,12 @@ defmodule Defk.Compiler do
   end
 
   defp tail_expr(other, _env, _leaf) do
-    err!(other, "reduce-while-tail", "an Enum.reduce_while/3 fn returns #{Macro.to_string(other)}, not {:cont, acc} or {:halt, acc}",
-      rewrite: "{:cont, #{Macro.to_string(other)}}")
+    err!(
+      other,
+      "reduce-while-tail",
+      "an Enum.reduce_while/3 fn returns #{Macro.to_string(other)}, not {:cont, acc} or {:halt, acc}",
+      rewrite: "{:cont, #{Macro.to_string(other)}}"
+    )
   end
 
   # An if/else chain over [{cond_ast | true, body_ast} | {:nomatch, stmts}],
@@ -1675,32 +2048,54 @@ defmodule Defk.Compiler do
   # unreachable and dropped. Returns {stmts, arms, env with the subject bound}.
   # `node` is the case
   defp case_arms(subject, clauses, node, env) do
-    is_list(clauses) and Enum.all?(clauses, &match?({:->, _, [_, _]}, &1)) || case_form!(node)
+    (is_list(clauses) and Enum.all?(clauses, &match?({:->, _, [_, _]}, &1))) || case_form!(node)
     {ss, sv} = lower_expr(subject, env)
 
     sv.t in [:i64, :bool] ||
-      err!(subject, "case-subject", "case on #{Macro.to_string(subject)}, #{if sv[:elems], do: "a tuple", else: "an #{fmt(sv.t)} value"}, is not in the kernel subset")
+      err!(
+        subject,
+        "case-subject",
+        "case on #{Macro.to_string(subject)}, #{if sv[:elems], do: "a tuple", else: "an #{fmt(sv.t)} value"}, is not in the kernel subset"
+      )
 
     c = fresh("case", sv.t)
     # a name no Elixir variable can have, bound to the subject evaluated once
     name = :"defk case #{c}"
-    env = put_var(env, name, Map.merge(Map.take(sv, @facts), %{c: c, t: sv.t, owned: false, var: c}))
+
+    env =
+      put_var(env, name, Map.merge(Map.take(sv, @facts), %{c: c, t: sv.t, owned: false, var: c}))
+
     subj = {name, [], nil}
 
     {arms, exhaustive?} =
       Enum.reduce_while(clauses, {[], MapSet.new()}, fn clause, {arms, seen} ->
         {pat, guard, body, cm} =
           case clause do
-            {:->, cm, [[{:when, _, [pat, guard]}], body]} -> {pat, guard, body, cm}
-            {:->, cm, [[pat], body]} -> {pat, nil, body, cm}
-            {:->, _, [pats, _]} = cl -> err!(cl, "case-pattern", "a case clause with #{length(pats)} patterns is not in the kernel subset")
+            {:->, cm, [[{:when, _, [pat, guard]}], body]} ->
+              {pat, guard, body, cm}
+
+            {:->, cm, [[pat], body]} ->
+              {pat, nil, body, cm}
+
+            {:->, _, [pats, _]} = cl ->
+              err!(
+                cl,
+                "case-pattern",
+                "a case clause with #{length(pats)} patterns is not in the kernel subset"
+              )
           end
 
         {test, rename} = case_pattern(pat, sv.t, subj, cm)
         guard = guard && rename.(guard_safe!(guard))
         body = rename.(body)
-        seen = if guard == nil and match?({:lit, _, _}, test), do: MapSet.put(seen, elem(test, 1)), else: seen
-        always? = guard == nil and (test == :any or MapSet.equal?(seen, MapSet.new([true, false])))
+
+        seen =
+          if guard == nil and match?({:lit, _, _}, test),
+            do: MapSet.put(seen, elem(test, 1)),
+            else: seen
+
+        always? =
+          guard == nil and (test == :any or MapSet.equal?(seen, MapSet.new([true, false])))
 
         cond_ast =
           cond do
@@ -1745,10 +2140,18 @@ defmodule Defk.Compiler do
           else: {:any, &rename_var(&1, v, subj)}
 
       {p, _} when is_integer(p) or is_boolean(p) ->
-        err!(p, "case-pattern-type", "the pattern #{inspect(p)} never matches a #{fmt(t)} subject")
+        err!(
+          p,
+          "case-pattern-type",
+          "the pattern #{inspect(p)} never matches a #{fmt(t)} subject"
+        )
 
       {p, _} ->
-        err!(p, "case-pattern", "the case pattern #{Macro.to_string(p)} is not in the kernel subset")
+        err!(
+          p,
+          "case-pattern",
+          "the case pattern #{Macro.to_string(p)} is not in the kernel subset"
+        )
     end
   end
 
@@ -1764,8 +2167,30 @@ defmodule Defk.Compiler do
   # Elixir allows only guard-safe expressions in guards: no kernel calls,
   # indexing or `&&`. An error in a defk guard (overflow, rem by zero) raises,
   # where Elixir would fail the clause.
-  @guard_ops [:+, :-, :*, :/, :==, :!=, :===, :!==, :<, :>, :<=, :>=, :and, :or, :not,
-              :div, :rem, :abs, :trunc, :round, :min, :max]
+  @guard_ops [
+    :+,
+    :-,
+    :*,
+    :/,
+    :==,
+    :!=,
+    :===,
+    :!==,
+    :<,
+    :>,
+    :<=,
+    :>=,
+    :and,
+    :or,
+    :not,
+    :div,
+    :rem,
+    :abs,
+    :trunc,
+    :round,
+    :min,
+    :max
+  ]
 
   defp guard_safe!(guard) do
     case guard do
@@ -1779,8 +2204,19 @@ defmodule Defk.Compiler do
         Enum.each(args, &guard_safe!/1)
 
       {:in, _, [x, list]} = other when is_list(list) and list != [] ->
-        rewrite = list |> Enum.map(&{:==, [], [x, &1]}) |> Enum.reduce(&{:or, [], [&2, &1]}) |> Macro.to_string()
-        err!(other, "case-guard", "#{Macro.to_string(other)} in a case guard is not supported yet", hint: "compare with each value", rewrite: rewrite)
+        rewrite =
+          list
+          |> Enum.map(&{:==, [], [x, &1]})
+          |> Enum.reduce(&{:or, [], [&2, &1]})
+          |> Macro.to_string()
+
+        err!(
+          other,
+          "case-guard",
+          "#{Macro.to_string(other)} in a case guard is not supported yet",
+          hint: "compare with each value",
+          rewrite: rewrite
+        )
 
       other ->
         err!(other, "case-guard", "#{Macro.to_string(other)} is not allowed in a case guard")
@@ -1884,7 +2320,10 @@ defmodule Defk.Compiler do
     f = "frame_#{k.cid}"
     arrays = for {{p, {:arr, _}}, i} <- Enum.with_index(k.params), do: {p, i}
     scalars = for {{p, t}, i} <- Enum.with_index(k.params), t in @scalars, do: {p, t, i}
-    saved = Enum.map(scalars, fn {p, _, _} -> "p_#{sanitize(p)}" end) ++ Enum.map(k.decls, &elem(&1, 0))
+
+    saved =
+      Enum.map(scalars, fn {p, _, _} -> "p_#{sanitize(p)}" end) ++ Enum.map(k.decls, &elem(&1, 0))
+
     yields? = k.yield and k.sp_count > 0
 
     fields =
@@ -1908,8 +2347,11 @@ defmodule Defk.Compiler do
 
     result =
       case k.ret_vals do
-        [{c, t}] -> to_term(c, t)
-        many -> "enif_make_tuple(env, #{length(many)}#{Enum.map(many, fn {c, t} -> ", " <> to_term(c, t) end)})"
+        [{c, t}] ->
+          to_term(c, t)
+
+        many ->
+          "enif_make_tuple(env, #{length(many)}#{Enum.map(many, fn {c, t} -> ", " <> to_term(c, t) end)})"
       end
 
     sp_macro =
@@ -1928,33 +2370,46 @@ defmodule Defk.Compiler do
       # noinline: keep the kernel body out of the setjmp frame below
       "static __attribute__((noinline)) int run_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n",
       "defk_ctx *ctx = &F->ctx;\n",
-      if(yields?, do: "int defk_rs = F->resume;\nint64_t defk_ticks = 0;\nint64_t defk_budget = defk_rs ? F->budget : DEFK_BUDGET0;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk);\n", else: ""),
+      if(yields?,
+        do:
+          "int defk_rs = F->resume;\nint64_t defk_ticks = 0;\nint64_t defk_budget = defk_rs ? F->budget : DEFK_BUDGET0;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk);\n",
+        else: ""
+      ),
       Enum.map(k.params, fn {p, t} -> "#{ctype(t)} p_#{sanitize(p)} = {0};\n" end),
       decl_locals(k),
       bind,
       if yields? do
-        ["if (defk_rs) {\n", Enum.map(saved, &"#{&1} = F->#{&1};\n"),
-         "switch (defk_rs) {\n", resume_cases(k.sps, []), "}\n}\n"]
+        [
+          "if (defk_rs) {\n",
+          Enum.map(saved, &"#{&1} = F->#{&1};\n"),
+          "switch (defk_rs) {\n",
+          resume_cases(k.sps, []),
+          "}\n}\n"
+        ]
       else
         ""
       end,
       decode,
       sp_macro,
       k.stmts,
-      "*result = #{result};\nreturn DEFK_DONE;\n", @undef_macros, "}\n\n",
+      "*result = #{result};\nreturn DEFK_DONE;\n",
+      @undef_macros,
+      "}\n\n",
       # setjmp lives in a separate frame so it does not pessimise the kernel body
       "static __attribute__((noinline)) int guard_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n",
       "if (sigsetjmp(F->ctx.jb, 0)) return DEFK_ERR;\nreturn run_#{k.cid}(env, F, argv, result);\n}\n\n",
       if yields? do
-        ["static ERL_NIF_TERM step_#{k.cid}(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {\n",
-         "#{f} *F;\nERL_NIF_TERM res;\n",
-         "enif_get_resource(env, argv[0], defk_frame_rt, (void **)&F);\n",
-         "int r = guard_#{k.cid}(env, F, argv + 1, &res);\n",
-         "if (DEFK_UNLIKELY(r == DEFK_DONE && F->resume)) { defk_lost_resume(&F->ctx, F->resume, 0); r = DEFK_ERR; }\n",
-         "if (r == DEFK_YIELD) {\natomic_fetch_add(&defk_stat_yields, 1);\n",
-         "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc, argv);\n}\n",
-         "defk_finish(&F->ctx);\n",
-         "return r == DEFK_ERR ? defk_raise(env, &F->ctx) : res;\n}\n\n"]
+        [
+          "static ERL_NIF_TERM step_#{k.cid}(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {\n",
+          "#{f} *F;\nERL_NIF_TERM res;\n",
+          "enif_get_resource(env, argv[0], defk_frame_rt, (void **)&F);\n",
+          "int r = guard_#{k.cid}(env, F, argv + 1, &res);\n",
+          "if (DEFK_UNLIKELY(r == DEFK_DONE && F->resume)) { defk_lost_resume(&F->ctx, F->resume, 0); r = DEFK_ERR; }\n",
+          "if (r == DEFK_YIELD) {\natomic_fetch_add(&defk_stat_yields, 1);\n",
+          "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc, argv);\n}\n",
+          "defk_finish(&F->ctx);\n",
+          "return r == DEFK_ERR ? defk_raise(env, &F->ctx) : res;\n}\n\n"
+        ]
       else
         ""
       end,
@@ -1964,12 +2419,14 @@ defmodule Defk.Compiler do
       "local.resume = 0;\nmemset(local.copy, 0, sizeof local.copy);\n",
       "int r = guard_#{k.cid}(env, &local, argv, &res);\n",
       if yields? do
-        ["if (r == DEFK_YIELD) {\n",
-         "ERL_NIF_TERM args2[#{k.arity + 1}];\n",
-         "defk_promote(env, &local, sizeof local, &args2[0]);\n",
-         "memcpy(args2 + 1, argv, sizeof(ERL_NIF_TERM) * argc);\n",
-         "atomic_fetch_add(&defk_stat_yields, 1);\n",
-         "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc + 1, args2);\n}\n"]
+        [
+          "if (r == DEFK_YIELD) {\n",
+          "ERL_NIF_TERM args2[#{k.arity + 1}];\n",
+          "defk_promote(env, &local, sizeof local, &args2[0]);\n",
+          "memcpy(args2 + 1, argv, sizeof(ERL_NIF_TERM) * argc);\n",
+          "atomic_fetch_add(&defk_stat_yields, 1);\n",
+          "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc + 1, args2);\n}\n"
+        ]
       else
         ""
       end,
@@ -2023,14 +2480,24 @@ defmodule Defk.Compiler do
   # `at` is the operand's expression; `op` names what takes it
   defp numeric!(v, at, op) do
     numeric?(v) ||
-      err!(at, "operand-type", "#{op} takes numbers, and #{Macro.to_string(at)} is #{type_name(v)}", convert_hint(v.t, :i64, at))
+      err!(
+        at,
+        "operand-type",
+        "#{op} takes numbers, and #{Macro.to_string(at)} is #{type_name(v)}",
+        convert_hint(v.t, :i64, at)
+      )
   end
 
   defp bool!(v, at, op) do
     takes = if is_binary(op), do: "#{op} must be a boolean", else: "#{op} takes booleans"
 
     v.t == :bool ||
-      err!(at, "operand-type", "#{takes}, and #{Macro.to_string(at)} is #{type_name(v)}", convert_hint(v.t, :bool, at))
+      err!(
+        at,
+        "operand-type",
+        "#{takes}, and #{Macro.to_string(at)} is #{type_name(v)}",
+        convert_hint(v.t, :bool, at)
+      )
   end
 
   defp type_name(%{elems: _, t: t}), do: "a tuple #{fmt(t)}"
@@ -2039,17 +2506,26 @@ defmodule Defk.Compiler do
   # ------------------------------------------------------ more rejections --
 
   defp not_an_array!(node, arr, a) do
-    err!(node, "not-an-array", "#{Macro.to_string(node)} indexes #{Macro.to_string(arr)}, which is #{type_name(a)}, not an array")
+    err!(
+      node,
+      "not-an-array",
+      "#{Macro.to_string(node)} indexes #{Macro.to_string(arr)}, which is #{type_name(a)}, not an array"
+    )
   end
 
   # copying input array `arr` into a writable array from alloc/2
   defp copy_rewrite(arr, {:arr, e}) do
     a = Macro.to_string(arr)
+
     "#{a}_copy = alloc(#{e}, len(#{a}))\n\nfor i <- 0..(len(#{a}) - 1)//1 do\n  #{a}_copy[i] = #{a}[i]\nend\n"
   end
 
   defp cond_without_true!(node) do
-    err!(node, "cond-without-true", "this cond is used as a value but has no `true ->` clause at the end")
+    err!(
+      node,
+      "cond-without-true",
+      "this cond is used as a value but has no `true ->` clause at the end"
+    )
   end
 
   defp case_form!(node) do
@@ -2064,7 +2540,8 @@ defmodule Defk.Compiler do
 
     rewrite =
       case f do
-        {:&, _, [{:/, _, [{name, _, ctx}, n]}]} when is_atom(name) and is_atom(ctx) and n == length(params) ->
+        {:&, _, [{:/, _, [{name, _, ctx}, n]}]}
+        when is_atom(name) and is_atom(ctx) and n == length(params) ->
           [rewrite: Macro.to_string({:fn, [], [{:->, [], [vars, {name, [], vars}]}]})]
 
         {:&, _, [body]} ->
@@ -2080,7 +2557,12 @@ defmodule Defk.Compiler do
           []
       end
 
-    err!(f, "fn-argument", "#{fun} with #{Macro.to_string(f)} is not in the kernel subset", rewrite)
+    err!(
+      f,
+      "fn-argument",
+      "#{fun} with #{Macro.to_string(f)} is not in the kernel subset",
+      rewrite
+    )
   end
 
   # a for that would collect values (`into` is its into:, or nil): `what` says how
@@ -2100,9 +2582,11 @@ defmodule Defk.Compiler do
         {{x, i}, {{:., _, [{:__aliases__, _, [:Enum]}, :with_index]}, _, [arr]}} ->
           a = Macro.to_string(arr)
 
-          {[hint: "walk the index and read #{Macro.to_string(x)} = #{a}[#{Macro.to_string(i)}] in the body",
-            rewrite: "#{Macro.to_string(i)} <- 0..(len(#{a}) - 1)//1"],
-           "the generator #{Macro.to_string(gen)} is not in the kernel subset"}
+          {[
+             hint:
+               "walk the index and read #{Macro.to_string(x)} = #{a}[#{Macro.to_string(i)}] in the body",
+             rewrite: "#{Macro.to_string(i)} <- 0..(len(#{a}) - 1)//1"
+           ], "the generator #{Macro.to_string(gen)} is not in the kernel subset"}
 
         _ ->
           {[], "the generator pattern #{Macro.to_string(pat)} is not in the kernel subset"}

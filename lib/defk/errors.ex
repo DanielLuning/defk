@@ -32,7 +32,7 @@ defmodule Defk.Errors do
 
   @calls Enum.join(Defk.Builtins.all() -- [:alloc], ", ")
   @math Enum.join(Defk.Builtins.math1(), ", ") <> " and pow"
-  @bitwise_ops [:&&&, :|||, :^^^, :<<<, :>>>, :~~~]
+  @bitwise_ops [:&&&, :|||, :"^^^", :<<<, :>>>, :"~~~"]
   @bitwise_funs [:band, :bor, :bxor, :bnot, :bsl, :bsr]
   @forms "=, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2"
 
@@ -44,7 +44,8 @@ defmodule Defk.Errors do
       code: "kernel-head",
       kind: :error,
       summary: "A kernel head is `name(arg :: type, ...) :: return_type`.",
-      why: "a kernel's parameter and return types are part of its definition: defk compiles to native code before anything runs",
+      why:
+        "a kernel's parameter and return types are part of its definition: defk compiles to native code before anything runs",
       hint: "declare the return type after the parameter list",
       example: "defk f(x :: i64) do\n  x\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  x\nend"
@@ -61,7 +62,8 @@ defmodule Defk.Errors do
     %{
       code: "unknown-type",
       kind: :error,
-      summary: "Kernel types are i64, f64, bool, [f64], [i64], [u8] and tuples of them for results.",
+      summary:
+        "Kernel types are i64, f64, bool, [f64], [i64], [u8] and tuples of them for results.",
       why: "a kernel works on native numbers and packed arrays, and these are the types it has",
       hint: "use i64, f64, bool, [f64], [i64] or [u8] (a tuple of them for a result)",
       example: "defk f(x :: integer) :: integer do\n  x\nend",
@@ -70,8 +72,10 @@ defmodule Defk.Errors do
     %{
       code: "tuple-parameter",
       kind: :subset,
-      summary: "Tuples are only for returning several values; a kernel takes its inputs as separate parameters.",
-      why: "a tuple is a BEAM term; a kernel keeps each element in a register and takes them as separate arguments",
+      summary:
+        "Tuples are only for returning several values; a kernel takes its inputs as separate parameters.",
+      why:
+        "a tuple is a BEAM term; a kernel keeps each element in a register and takes them as separate arguments",
       hint: "pass the elements as separate parameters",
       example: "defk f(p :: {i64, i64}) :: i64 do\n  {a, b} = p\n  a + b\nend",
       rewrite: "defk f(a :: i64, b :: i64) :: i64 do\n  a + b\nend"
@@ -109,7 +113,8 @@ defmodule Defk.Errors do
       code: "return-type",
       kind: :error,
       summary: "The value a kernel returns has its declared return type.",
-      why: "defk never converts a value to another type implicitly; only i64 widens to f64, as in arithmetic",
+      why:
+        "defk never converts a value to another type implicitly; only i64 widens to f64, as in arithmetic",
       hint: "convert explicitly, or change the declared return type",
       example: "defk f(x :: i64, y :: f64) :: i64 do\n  x + y\nend",
       rewrite: "defk f(x :: i64, y :: f64) :: i64 do\n  trunc(x + y)\nend"
@@ -117,8 +122,10 @@ defmodule Defk.Errors do
     %{
       code: "return-input-array",
       kind: :planned,
-      summary: "A returned array is one the kernel created with alloc/2; returning an input array is planned.",
-      why: "a kernel returns arrays it allocated itself; handing an input array back to the caller is planned",
+      summary:
+        "A returned array is one the kernel created with alloc/2; returning an input array is planned.",
+      why:
+        "a kernel returns arrays it allocated itself; handing an input array back to the caller is planned",
       hint: "copy it into an array from alloc/2 and return that",
       example: "defk f(a :: [f64]) :: [f64] do\n  a\nend",
       rewrite:
@@ -130,23 +137,28 @@ defmodule Defk.Errors do
       summary: "Every block in a kernel has a value, its last expression.",
       why: "in Elixir an empty block is nil, and a kernel has no nil",
       hint: "write the value the block should have",
-      example: "defk f(x :: i64) :: i64 do\n  y =\n    if x > 0 do\n    else\n      1\n    end\n\n  y\nend",
+      example:
+        "defk f(x :: i64) :: i64 do\n  y =\n    if x > 0 do\n    else\n      1\n    end\n\n  y\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  y = if x > 0, do: 0, else: 1\n  y\nend"
     },
     %{
       code: "write-as-value",
       kind: :error,
-      summary: "An array write `out[i] = v` is a statement and cannot end a block that needs a value.",
-      why: "a kernel writes the array in place, so the write has no value, and the last expression of a block is the block's value",
+      summary:
+        "An array write `out[i] = v` is a statement and cannot end a block that needs a value.",
+      why:
+        "a kernel writes the array in place, so the write has no value, and the last expression of a block is the block's value",
       hint: "end the block with the value it should have",
       example: "defk f(n :: i64) :: [f64] do\n  out = alloc(f64, 1)\n  out[0] = float(n)\nend",
-      rewrite: "defk f(n :: i64) :: [f64] do\n  out = alloc(f64, 1)\n  out[0] = float(n)\n  out\nend"
+      rewrite:
+        "defk f(n :: i64) :: [f64] do\n  out = alloc(f64, 1)\n  out[0] = float(n)\n  out\nend"
     },
     %{
       code: "if-without-else",
       kind: :error,
       summary: "An `if` used as a value has an else branch.",
-      why: "in Elixir an if without else is nil when the condition is false, and a kernel has no nil",
+      why:
+        "in Elixir an if without else is nil when the condition is false, and a kernel has no nil",
       hint: "add an else branch",
       example: "defk f(x :: i64) :: i64 do\n  y = if x > 0, do: 1\n  y\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  y = if x > 0, do: 1, else: 0\n  y\nend"
@@ -154,11 +166,14 @@ defmodule Defk.Errors do
     %{
       code: "cond-without-true",
       kind: :error,
-      summary: "A `cond` used as a value (or ending an Enum.reduce_while fn) ends with a `true ->` clause.",
+      summary:
+        "A `cond` used as a value (or ending an Enum.reduce_while fn) ends with a `true ->` clause.",
       why: "every path through a kernel has a value, so the last clause must always match",
       hint: "end the cond with a `true ->` clause",
-      example: "defk f(x :: i64) :: i64 do\n  cond do\n    x > 0 -> 1\n    x < 0 -> -1\n  end\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  cond do\n    x > 0 -> 1\n    x < 0 -> -1\n    true -> 0\n  end\nend"
+      example:
+        "defk f(x :: i64) :: i64 do\n  cond do\n    x > 0 -> 1\n    x < 0 -> -1\n  end\nend",
+      rewrite:
+        "defk f(x :: i64) :: i64 do\n  cond do\n    x > 0 -> 1\n    x < 0 -> -1\n    true -> 0\n  end\nend"
     },
     %{
       code: "branch-types",
@@ -173,19 +188,25 @@ defmodule Defk.Errors do
       code: "branch-tuple",
       kind: :subset,
       summary: "An if, cond or case used as a value gives a number or a boolean, not a tuple.",
-      why: "a kernel keeps a tuple's elements in separate registers, so each branch value is a single number or boolean",
+      why:
+        "a kernel keeps a tuple's elements in separate registers, so each branch value is a single number or boolean",
       hint: "compute each element with its own if",
-      example: "defk f(x :: i64) :: i64 do\n  {a, b} = if x > 0, do: {1, 2}, else: {3, 4}\n  a + b\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  a = if x > 0, do: 1, else: 3\n  b = if x > 0, do: 2, else: 4\n  a + b\nend"
+      example:
+        "defk f(x :: i64) :: i64 do\n  {a, b} = if x > 0, do: {1, 2}, else: {3, 4}\n  a + b\nend",
+      rewrite:
+        "defk f(x :: i64) :: i64 do\n  a = if x > 0, do: 1, else: 3\n  b = if x > 0, do: 2, else: 4\n  a + b\nend"
     },
     %{
       code: "array-in-branch",
       kind: :planned,
-      summary: "An if, cond or case used as a value gives a number or a boolean; arrays through branches are planned.",
+      summary:
+        "An if, cond or case used as a value gives a number or a boolean; arrays through branches are planned.",
       why: "an if/cond/case may give numbers or booleans, not arrays yet",
       hint: "do the array work inside each branch",
-      example: "defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do\n  c = if p, do: a, else: b\n  c[0]\nend",
-      rewrite: "defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do\n  if p, do: a[0], else: b[0]\nend"
+      example:
+        "defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do\n  c = if p, do: a, else: b\n  c[0]\nend",
+      rewrite:
+        "defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do\n  if p, do: a[0], else: b[0]\nend"
     },
 
     # -- variables and patterns
@@ -193,7 +214,8 @@ defmodule Defk.Errors do
       code: "undefined-variable",
       kind: :error,
       summary: "A variable is bound before it is used.",
-      why: "variables are bound by =, parameters, generators and accumulators, and a binding inside if, case or for stays inside it, as in Elixir",
+      why:
+        "variables are bound by =, parameters, generators and accumulators, and a binding inside if, case or for stays inside it, as in Elixir",
       hint: "bind it before this point, or pass it in as a parameter",
       example: "defk f(x :: i64) :: i64 do\n  x + y\nend",
       rewrite: "defk f(x :: i64, y :: i64) :: i64 do\n  x + y\nend"
@@ -202,7 +224,8 @@ defmodule Defk.Errors do
       code: "module-attribute",
       kind: :planned,
       summary: "Module attributes as constants are planned.",
-      why: "a kernel body is compiled on its own, and reading module attributes as constants is planned",
+      why:
+        "a kernel body is compiled on its own, and reading module attributes as constants is planned",
       hint: "write the value as a literal for now",
       example: "@scale 3\n\ndefk f(x :: i64) :: i64 do\n  x * @scale\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  x * 3\nend"
@@ -211,7 +234,8 @@ defmodule Defk.Errors do
       code: "tuple-binding",
       kind: :subset,
       summary: "A tuple is taken apart where it is bound: `{a, b} = ...`.",
-      why: "a kernel keeps a tuple's elements in separate registers, so a tuple can't be held in one variable",
+      why:
+        "a kernel keeps a tuple's elements in separate registers, so a tuple can't be held in one variable",
       hint: "destructure it",
       example: "defk f(x :: i64) :: i64 do\n  t = {x, x + 1}\n  x\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  {a, b} = {x, x + 1}\n  a + b\nend"
@@ -229,7 +253,8 @@ defmodule Defk.Errors do
       code: "unsupported-pattern",
       kind: :subset,
       summary: "`=` binds a variable or a tuple of variables.",
-      why: "any other pattern needs a match that can fail, and a kernel only matches in case clauses",
+      why:
+        "any other pattern needs a match that can fail, and a kernel only matches in case clauses",
       hint: "bind variables, and test values with if or case",
       example: "defk f(x :: i64) :: i64 do\n  [a, b] = {x, x + 1}\n  a + b\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  {a, b} = {x, x + 1}\n  a + b\nend"
@@ -237,10 +262,12 @@ defmodule Defk.Errors do
     %{
       code: "bitstring-match",
       kind: :subset,
-      summary: "Binary patterns `<<...>> = bin` are not in the kernel subset; read array elements by index.",
+      summary:
+        "Binary patterns `<<...>> = bin` are not in the kernel subset; read array elements by index.",
       why: "a kernel sees a binary as an array of elements, which it reads by index",
       hint: "read the fields by index",
-      example: "defk f(arr :: [u8]) :: i64 do\n  <<a, b, _::16, _rest::binary>> = arr\n  a + b\nend",
+      example:
+        "defk f(arr :: [u8]) :: i64 do\n  <<a, b, _::16, _rest::binary>> = arr\n  a + b\nend",
       rewrite: "defk f(arr :: [u8]) :: i64 do\n  a = arr[0]\n  b = arr[1]\n  a + b\nend"
     },
     %{
@@ -257,7 +284,8 @@ defmodule Defk.Errors do
     %{
       code: "type-mismatch",
       kind: :error,
-      summary: "A value has the type its position needs (an index or length is i64, a stored value has the element type, ...).",
+      summary:
+        "A value has the type its position needs (an index or length is i64, a stored value has the element type, ...).",
       why: "defk never converts a value to another type implicitly; only i64 widens to f64",
       hint: "convert explicitly",
       example: "defk f(a :: [f64], i :: f64) :: f64 do\n  a[i]\nend",
@@ -266,7 +294,8 @@ defmodule Defk.Errors do
     %{
       code: "operand-type",
       kind: :error,
-      summary: "Arithmetic takes numbers, and/or/not take booleans, comparisons take two numbers or two booleans.",
+      summary:
+        "Arithmetic takes numbers, and/or/not take booleans, comparisons take two numbers or two booleans.",
       why: "booleans are not numbers in Elixir, and defk keeps that",
       hint: "turn the value into the type the operator takes",
       example: "defk f(x :: i64, b :: bool) :: i64 do\n  x + b\nend",
@@ -284,8 +313,10 @@ defmodule Defk.Errors do
     %{
       code: "read-only-array",
       kind: :planned,
-      summary: "Only arrays created with alloc/2 are written; writing to an input array is planned.",
-      why: "an input array is the caller's binary, and a kernel never changes a value the caller holds",
+      summary:
+        "Only arrays created with alloc/2 are written; writing to an input array is planned.",
+      why:
+        "an input array is the caller's binary, and a kernel never changes a value the caller holds",
       hint: "copy it into an array from alloc/2 and write that",
       example: "defk f(a :: [f64]) :: [f64] do\n  a[0] = 1.0\n  a\nend",
       rewrite:
@@ -306,10 +337,13 @@ defmodule Defk.Errors do
       code: "unknown-function",
       kind: :error,
       summary: "A kernel calls builtins and the other kernels in its module.",
-      why: "a kernel runs as native code: it can call its builtins (#{@calls}) and the kernels in this module, which are inlined",
-      hint: "define it as a kernel in this module, or compute it in Elixir and pass the result in",
+      why:
+        "a kernel runs as native code: it can call its builtins (#{@calls}) and the kernels in this module, which are inlined",
+      hint:
+        "define it as a kernel in this module, or compute it in Elixir and pass the result in",
       example: "defk f(x :: i64) :: i64 do\n  double(x)\nend",
-      rewrite: "defk double(x :: i64) :: i64 do\n  x * 2\nend\n\ndefk f(x :: i64) :: i64 do\n  double(x)\nend"
+      rewrite:
+        "defk double(x :: i64) :: i64 do\n  x * 2\nend\n\ndefk f(x :: i64) :: i64 do\n  double(x)\nend"
     },
     %{
       code: "builtin-arguments",
@@ -333,16 +367,20 @@ defmodule Defk.Errors do
       code: "tuple-argument",
       kind: :subset,
       summary: "Tuples are not passed as arguments.",
-      why: "a kernel keeps a tuple's elements in separate registers and passes them as separate arguments",
+      why:
+        "a kernel keeps a tuple's elements in separate registers and passes them as separate arguments",
       hint: "pass the elements as separate arguments",
-      example: "defk g(a :: i64, b :: i64) :: i64 do\n  a + b\nend\n\ndefk f(x :: i64) :: i64 do\n  g({x, x})\nend",
-      rewrite: "defk g(a :: i64, b :: i64) :: i64 do\n  a + b\nend\n\ndefk f(x :: i64) :: i64 do\n  g(x, x)\nend"
+      example:
+        "defk g(a :: i64, b :: i64) :: i64 do\n  a + b\nend\n\ndefk f(x :: i64) :: i64 do\n  g({x, x})\nend",
+      rewrite:
+        "defk g(a :: i64, b :: i64) :: i64 do\n  a + b\nend\n\ndefk f(x :: i64) :: i64 do\n  g(x, x)\nend"
     },
     %{
       code: "tuple-return-call",
       kind: :subset,
       summary: "A kernel that returns a tuple is called from Elixir only.",
-      why: "a kernel's tuple result becomes a BEAM tuple, and inside a kernel a tuple can't be held as one value",
+      why:
+        "a kernel's tuple result becomes a BEAM tuple, and inside a kernel a tuple can't be held as one value",
       hint: "split it into kernels that return one value each",
       example:
         "defk g(x :: i64) :: {i64, i64} do\n  {x, x + 1}\nend\n\ndefk f(x :: i64) :: i64 do\n  {a, b} = g(x)\n  a + b\nend",
@@ -352,16 +390,20 @@ defmodule Defk.Errors do
     %{
       code: "recursion",
       kind: :subset,
-      summary: "A kernel can't call itself, directly or through other kernels; write the recursion as a loop.",
-      why: "kernel calls are inlined into the caller, so a kernel can't call itself, directly or through another kernel",
+      summary:
+        "A kernel can't call itself, directly or through other kernels; write the recursion as a loop.",
+      why:
+        "kernel calls are inlined into the caller, so a kernel can't call itself, directly or through another kernel",
       hint: "write the recursion as a loop",
       example: "defk f(x :: i64) :: i64 do\n  if x == 0, do: 0, else: x + f(x - 1)\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  for i <- 1..x//1, reduce: 0 do\n    acc -> acc + i\n  end\nend"
+      rewrite:
+        "defk f(x :: i64) :: i64 do\n  for i <- 1..x//1, reduce: 0 do\n    acc -> acc + i\n  end\nend"
     },
     %{
       code: "unsupported-call",
       kind: :subset,
-      summary: "Calls into other modules are not in the kernel subset, except Enum.reduce_while/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.",
+      summary:
+        "Calls into other modules are not in the kernel subset, except Enum.reduce_while/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.",
       why: "a kernel runs as native code and can't call Elixir functions",
       hint: "compute it in Elixir before or after the call and pass the result in",
       example: "defk f(a :: [f64]) :: [f64] do\n  Enum.map(a, fn x -> x * 2.0 end)\nend",
@@ -374,23 +416,29 @@ defmodule Defk.Errors do
       summary: "Enum.reduce/3 is planned; write the same fold as `for ..., reduce:`.",
       why: "Enum.reduce/3 is planned; `for ..., reduce:` is the same fold",
       hint: "write it as a for ..., reduce: loop",
-      example: "defk f(a :: [f64]) :: f64 do\n  Enum.reduce(a, 0.0, fn x, acc -> acc + x end)\nend",
-      rewrite: "defk f(a :: [f64]) :: f64 do\n  for x <- a, reduce: 0.0 do\n    acc -> acc + x\n  end\nend"
+      example:
+        "defk f(a :: [f64]) :: f64 do\n  Enum.reduce(a, 0.0, fn x, acc -> acc + x end)\nend",
+      rewrite:
+        "defk f(a :: [f64]) :: f64 do\n  for x <- a, reduce: 0.0 do\n    acc -> acc + x\n  end\nend"
     },
     %{
       code: "enum-find",
       kind: :planned,
-      summary: "Enum.find/2 and Enum.find_index/2 are planned; stop early with Enum.reduce_while/3.",
-      why: "Enum.find/2 and Enum.find_index/2 return nil when nothing is found, a kernel has no nil, and a form that keeps their meaning is planned",
+      summary:
+        "Enum.find/2 and Enum.find_index/2 are planned; stop early with Enum.reduce_while/3.",
+      why:
+        "Enum.find/2 and Enum.find_index/2 return nil when nothing is found, a kernel has no nil, and a form that keeps their meaning is planned",
       hint: "stop at the first match with Enum.reduce_while/3 and a value that means not found",
-      example: "defk f(a :: [f64], t :: f64) :: i64 do\n  Enum.find_index(a, fn x -> x > t end)\nend",
+      example:
+        "defk f(a :: [f64], t :: f64) :: i64 do\n  Enum.find_index(a, fn x -> x > t end)\nend",
       rewrite:
         "defk f(a :: [f64], t :: f64) :: i64 do\n  Enum.reduce_while(0..(len(a) - 1)//1, -1, fn i, _ ->\n    if a[i] > t, do: {:halt, i}, else: {:cont, -1}\n  end)\nend"
     },
     %{
       code: "fn-argument",
       kind: :subset,
-      summary: "Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.",
+      summary:
+        "Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.",
       why: "the fn is inlined as the loop body, so it must be written out where it is passed",
       hint: "write the function as a literal fn",
       example: "defk f(x :: i64) :: bool do\n  Enum.all?(1..x//1, &(&1 > 0))\nend",
@@ -399,17 +447,22 @@ defmodule Defk.Errors do
     %{
       code: "reduce-while-tail",
       kind: :error,
-      summary: "Every branch of an Enum.reduce_while/3 fn ends in a literal {:cont, acc} or {:halt, acc}.",
-      why: "a kernel compiles {:cont, acc} to the next iteration and {:halt, acc} to a jump out of the loop, so each must be written where the fn returns",
+      summary:
+        "Every branch of an Enum.reduce_while/3 fn ends in a literal {:cont, acc} or {:halt, acc}.",
+      why:
+        "a kernel compiles {:cont, acc} to the next iteration and {:halt, acc} to a jump out of the loop, so each must be written where the fn returns",
       hint: "return {:cont, acc} or {:halt, acc} from every branch",
-      example: "defk f(x :: i64) :: i64 do\n  Enum.reduce_while(1..x//1, 0, fn i, acc -> acc + i end)\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  Enum.reduce_while(1..x//1, 0, fn i, acc -> {:cont, acc + i} end)\nend"
+      example:
+        "defk f(x :: i64) :: i64 do\n  Enum.reduce_while(1..x//1, 0, fn i, acc -> acc + i end)\nend",
+      rewrite:
+        "defk f(x :: i64) :: i64 do\n  Enum.reduce_while(1..x//1, 0, fn i, acc -> {:cont, acc + i} end)\nend"
     },
     %{
       code: "pipe",
       kind: :subset,
       summary: "The pipe operator |> is not in the kernel subset; write the nested call.",
-      why: "kernels keep to the forms of a numeric loop, and a pipe there is a nested call written another way",
+      why:
+        "kernels keep to the forms of a numeric loop, and a pipe there is a nested call written another way",
       hint: "write the nested call",
       example: "defk f(x :: f64) :: f64 do\n  x |> abs() |> sqrt()\nend",
       rewrite: "defk f(x :: f64) :: f64 do\n  sqrt(abs(x))\nend"
@@ -428,8 +481,10 @@ defmodule Defk.Errors do
     %{
       code: "for-collect",
       kind: :subset,
-      summary: "A `for` collects nothing: without reduce: it is a statement, and into: is not in the kernel subset.",
-      why: "a for without reduce: builds a list in Elixir (into: another collection), and a kernel has no lists",
+      summary:
+        "A `for` collects nothing: without reduce: it is a statement, and into: is not in the kernel subset.",
+      why:
+        "a for without reduce: builds a list in Elixir (into: another collection), and a kernel has no lists",
       hint: "allocate the output array and write it in the loop",
       example: "defk f(a :: [f64]) :: [f64] do\n  for x <- a, do: x * 2.0\nend",
       rewrite:
@@ -441,8 +496,10 @@ defmodule Defk.Errors do
       summary: "`for` takes `reduce:` and `do`; other options are not in the kernel subset.",
       why: "uniq: needs a set of the values seen, a BEAM term a kernel doesn't have",
       hint: "remove the option",
-      example: "defk f(a :: [f64]) :: f64 do\n  for x <- a, uniq: true, reduce: 0.0 do\n    acc -> acc + x\n  end\nend",
-      rewrite: "defk f(a :: [f64]) :: f64 do\n  for x <- a, reduce: 0.0 do\n    acc -> acc + x\n  end\nend"
+      example:
+        "defk f(a :: [f64]) :: f64 do\n  for x <- a, uniq: true, reduce: 0.0 do\n    acc -> acc + x\n  end\nend",
+      rewrite:
+        "defk f(a :: [f64]) :: f64 do\n  for x <- a, reduce: 0.0 do\n    acc -> acc + x\n  end\nend"
     },
     %{
       code: "for-form",
@@ -450,8 +507,10 @@ defmodule Defk.Errors do
       summary: "A `for` starts with a generator and has a do block.",
       why: "a for loops over its first generator",
       hint: "start the for with a generator such as i <- 0..(n - 1)//1",
-      example: "defk f(x :: i64) :: i64 do\n  for x > 0, reduce: 0 do\n    acc -> acc + 1\n  end\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  for i <- 1..x//1, i > 0, reduce: 0 do\n    acc -> acc + 1\n  end\nend"
+      example:
+        "defk f(x :: i64) :: i64 do\n  for x > 0, reduce: 0 do\n    acc -> acc + 1\n  end\nend",
+      rewrite:
+        "defk f(x :: i64) :: i64 do\n  for i <- 1..x//1, i > 0, reduce: 0 do\n    acc -> acc + 1\n  end\nend"
     },
     %{
       code: "generator-pattern",
@@ -459,8 +518,10 @@ defmodule Defk.Errors do
       summary: "A generator binds one variable: `x <- array` or `i <- range`.",
       why: "a generator walks a range or an array, one value per iteration",
       hint: "bind a single variable",
-      example: "defk f(a :: [f64]) :: f64 do\n  for {x, i} <- Enum.with_index(a), reduce: 0.0 do\n    acc -> acc + x * i\n  end\nend",
-      rewrite: "defk f(a :: [f64]) :: f64 do\n  for i <- 0..(len(a) - 1)//1, reduce: 0.0 do\n    acc -> acc + a[i] * i\n  end\nend"
+      example:
+        "defk f(a :: [f64]) :: f64 do\n  for {x, i} <- Enum.with_index(a), reduce: 0.0 do\n    acc -> acc + x * i\n  end\nend",
+      rewrite:
+        "defk f(a :: [f64]) :: f64 do\n  for i <- 0..(len(a) - 1)//1, reduce: 0.0 do\n    acc -> acc + a[i] * i\n  end\nend"
     },
     %{
       code: "generator-source",
@@ -468,8 +529,10 @@ defmodule Defk.Errors do
       summary: "A generator walks a range or an array.",
       why: "a for or Enum.reduce_while/all?/any? walks a range a..b//step or an array",
       hint: "walk a range",
-      example: "defk f(n :: i64) :: i64 do\n  for i <- n, reduce: 0 do\n    acc -> acc + i\n  end\nend",
-      rewrite: "defk f(n :: i64) :: i64 do\n  for i <- 0..(n - 1)//1, reduce: 0 do\n    acc -> acc + i\n  end\nend"
+      example:
+        "defk f(n :: i64) :: i64 do\n  for i <- n, reduce: 0 do\n    acc -> acc + i\n  end\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  for i <- 0..(n - 1)//1, reduce: 0 do\n    acc -> acc + i\n  end\nend"
     },
     %{
       code: "range-step",
@@ -477,45 +540,60 @@ defmodule Defk.Errors do
       summary: "A range step is never zero.",
       why: "Elixir raises ArgumentError for a range with step 0",
       hint: "step by 1 (or -1 to count down)",
-      example: "defk f(n :: i64) :: i64 do\n  for i <- 0..n//0, reduce: 0 do\n    acc -> acc + i\n  end\nend",
-      rewrite: "defk f(n :: i64) :: i64 do\n  for i <- 0..n//1, reduce: 0 do\n    acc -> acc + i\n  end\nend"
+      example:
+        "defk f(n :: i64) :: i64 do\n  for i <- 0..n//0, reduce: 0 do\n    acc -> acc + i\n  end\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  for i <- 0..n//1, reduce: 0 do\n    acc -> acc + i\n  end\nend"
     },
     %{
       code: "reduce-clauses",
       kind: :subset,
       summary: "`for ..., reduce:` has exactly one `acc -> body` clause.",
-      why: "a kernel binds the accumulator to a variable; choosing between clauses by pattern is not in the kernel subset",
+      why:
+        "a kernel binds the accumulator to a variable; choosing between clauses by pattern is not in the kernel subset",
       hint: "use one clause and branch inside it",
-      example: "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    0 -> i\n    acc -> acc + i\n  end\nend",
-      rewrite: "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    acc -> if acc == 0, do: i, else: acc + i\n  end\nend"
+      example:
+        "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    0 -> i\n    acc -> acc + i\n  end\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    acc -> if acc == 0, do: i, else: acc + i\n  end\nend"
     },
     %{
       code: "accumulator-shape",
       kind: :error,
-      summary: "An accumulator pattern, its initial value and each new value have the same number of elements.",
-      why: "each accumulator element is its own variable, so every value of it has the same elements",
+      summary:
+        "An accumulator pattern, its initial value and each new value have the same number of elements.",
+      why:
+        "each accumulator element is its own variable, so every value of it has the same elements",
       hint: "give the initial value and every new value one element per accumulator variable",
-      example: "defk f(n :: i64) :: i64 do\n  {s, c} =\n    for i <- 1..n//1, reduce: {0, 0} do\n      {s, c} -> {s + i}\n    end\n\n  s + c\nend",
-      rewrite: "defk f(n :: i64) :: i64 do\n  {s, c} =\n    for i <- 1..n//1, reduce: {0, 0} do\n      {s, c} -> {s + i, c + 1}\n    end\n\n  s + c\nend"
+      example:
+        "defk f(n :: i64) :: i64 do\n  {s, c} =\n    for i <- 1..n//1, reduce: {0, 0} do\n      {s, c} -> {s + i}\n    end\n\n  s + c\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  {s, c} =\n    for i <- 1..n//1, reduce: {0, 0} do\n      {s, c} -> {s + i, c + 1}\n    end\n\n  s + c\nend"
     },
     %{
       code: "accumulator-pattern",
       kind: :subset,
       summary: "An accumulator is a variable or a tuple of variables.",
-      why: "a kernel keeps each accumulator element in its own variable; patterns that test values are not in the kernel subset",
+      why:
+        "a kernel keeps each accumulator element in its own variable; patterns that test values are not in the kernel subset",
       hint: "bind a variable and test the value inside the body",
-      example: "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    acc when acc < 100 -> acc + i\n  end\nend",
-      rewrite: "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    acc -> if acc < 100, do: acc + i, else: acc\n  end\nend"
+      example:
+        "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    acc when acc < 100 -> acc + i\n  end\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    acc -> if acc < 100, do: acc + i, else: acc\n  end\nend"
     },
     %{
       code: "array-accumulator",
       kind: :subset,
-      summary: "Arrays are not accumulators; allocate the array before the loop and write it in the body.",
-      why: "an accumulator is a number or a boolean (or a tuple of them); an array is written in place",
+      summary:
+        "Arrays are not accumulators; allocate the array before the loop and write it in the body.",
+      why:
+        "an accumulator is a number or a boolean (or a tuple of them); an array is written in place",
       hint: "allocate the array before the loop and write it in the body",
       example:
         "defk f(n :: i64) :: [f64] do\n  for i <- 0..(n - 1)//1, reduce: alloc(f64, n) do\n    out -> out\n  end\nend",
-      rewrite: "defk f(n :: i64) :: [f64] do\n  out = alloc(f64, n)\n\n  for i <- 0..(n - 1)//1 do\n    out[i] = float(i)\n  end\n\n  out\nend"
+      rewrite:
+        "defk f(n :: i64) :: [f64] do\n  out = alloc(f64, n)\n\n  for i <- 0..(n - 1)//1 do\n    out[i] = float(i)\n  end\n\n  out\nend"
     },
 
     # -- case
@@ -532,19 +610,24 @@ defmodule Defk.Errors do
       code: "case-subject",
       kind: :subset,
       summary: "`case` matches an i64 or a bool.",
-      why: "a case clause matches integer literals, true/false, pins and variables; a float has no exact literal match worth keeping, and other values are not in the kernel subset",
+      why:
+        "a case clause matches integer literals, true/false, pins and variables; a float has no exact literal match worth keeping, and other values are not in the kernel subset",
       hint: "compare with cond",
       example: "defk f(x :: f64) :: i64 do\n  case x do\n    0.0 -> 0\n    _ -> 1\n  end\nend",
-      rewrite: "defk f(x :: f64) :: i64 do\n  cond do\n    x == 0.0 -> 0\n    true -> 1\n  end\nend"
+      rewrite:
+        "defk f(x :: f64) :: i64 do\n  cond do\n    x == 0.0 -> 0\n    true -> 1\n  end\nend"
     },
     %{
       code: "case-pattern",
       kind: :subset,
-      summary: "A case pattern is an integer literal, true/false, ^var, _ or a variable, with an optional guard.",
+      summary:
+        "A case pattern is an integer literal, true/false, ^var, _ or a variable, with an optional guard.",
       why: "a kernel matches its i64 or bool subject against single values",
       hint: "use one of those patterns, or a guard",
-      example: "defk f(x :: i64) :: i64 do\n  case x do\n    {a, b} -> a + b\n    _ -> 0\n  end\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  case x do\n    n when n > 0 -> n\n    _ -> 0\n  end\nend"
+      example:
+        "defk f(x :: i64) :: i64 do\n  case x do\n    {a, b} -> a + b\n    _ -> 0\n  end\nend",
+      rewrite:
+        "defk f(x :: i64) :: i64 do\n  case x do\n    n when n > 0 -> n\n    _ -> 0\n  end\nend"
     },
     %{
       code: "case-pattern-type",
@@ -558,8 +641,10 @@ defmodule Defk.Errors do
     %{
       code: "case-guard",
       kind: :error,
-      summary: "A case guard uses guard-safe expressions: variables, literals, arithmetic, comparisons, and/or/not, div, rem, abs, trunc, round, min and max.",
-      why: "Elixir allows only guard-safe expressions in guards, and kernel calls and indexing are not guard-safe",
+      summary:
+        "A case guard uses guard-safe expressions: variables, literals, arithmetic, comparisons, and/or/not, div, rem, abs, trunc, round, min and max.",
+      why:
+        "Elixir allows only guard-safe expressions in guards, and kernel calls and indexing are not guard-safe",
       hint: "compute the value before the case, and use the variable in the guard",
       example:
         "defk g(x :: i64) :: i64 do\n  x * 2\nend\n\ndefk f(x :: i64) :: i64 do\n  case x do\n    n when g(n) > 4 -> 1\n    _ -> 0\n  end\nend",
@@ -572,7 +657,8 @@ defmodule Defk.Errors do
       code: "unsupported-map",
       kind: :subset,
       summary: "Maps and structs are not in the kernel subset.",
-      why: "a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read",
+      why:
+        "a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read",
       hint: "pass the values as separate arguments, or pack them into an array before the call",
       example: "defk f(x :: i64) :: i64 do\n  m = %{a: x}\n  x\nend",
       rewrite: "defk f(a :: i64) :: i64 do\n  a\nend"
@@ -582,7 +668,8 @@ defmodule Defk.Errors do
       kind: :subset,
       summary: "Strings are not in the kernel subset; a kernel sees bytes as a [u8] array.",
       why: "kernels see bytes, not text: there are no UTF-8 or grapheme operations",
-      hint: "pass the bytes as a [u8] argument, and do text work in Elixir before or after the call",
+      hint:
+        "pass the bytes as a [u8] argument, and do text work in Elixir before or after the call",
       example: "defk f(x :: i64) :: i64 do\n  s = \"hello\"\n  x\nend",
       rewrite: "defk f(s :: [u8]) :: i64 do\n  s[0]\nend"
     },
@@ -600,18 +687,21 @@ defmodule Defk.Errors do
       kind: :subset,
       summary: "Lists are not in the kernel subset; a kernel takes packed arrays.",
       why: "a list is a linked BEAM term; a kernel works on packed arrays",
-      hint: "pass the values as an array, a binary such as `for x <- list, into: <<>>, do: <<x::float-native-64>>`",
+      hint:
+        "pass the values as an array, a binary such as `for x <- list, into: <<>>, do: <<x::float-native-64>>`",
       example: "defk f(x :: i64) :: i64 do\n  xs = [x, x + 1]\n  x\nend",
       rewrite: "defk f(xs :: [i64]) :: i64 do\n  xs[0] + xs[1]\nend"
     },
     %{
       code: "unsupported-fn",
       kind: :subset,
-      summary: "Anonymous functions are not values in a kernel; define another kernel and call it.",
+      summary:
+        "Anonymous functions are not values in a kernel; define another kernel and call it.",
       why: "a kernel inlines the kernels it calls; a function value would need a BEAM closure",
       hint: "define the function as a kernel in this module and call it",
       example: "defk f(x :: i64) :: i64 do\n  g = fn y -> y * 2 end\n  x\nend",
-      rewrite: "defk g(y :: i64) :: i64 do\n  y * 2\nend\n\ndefk f(x :: i64) :: i64 do\n  g(x)\nend"
+      rewrite:
+        "defk g(y :: i64) :: i64 do\n  y * 2\nend\n\ndefk f(x :: i64) :: i64 do\n  g(x)\nend"
     },
     %{
       code: "bitstring-build",
@@ -625,7 +715,8 @@ defmodule Defk.Errors do
     %{
       code: "unsupported-construct",
       kind: :subset,
-      summary: "A kernel uses the Elixir forms #{@forms}; others such as unless, with, try, receive and raise are not in the kernel subset.",
+      summary:
+        "A kernel uses the Elixir forms #{@forms}; others such as unless, with, try, receive and raise are not in the kernel subset.",
       why: "a kernel uses a fixed set of Elixir forms: #{@forms}",
       hint: "write it with those forms",
       example: "defk f(x :: i64) :: i64 do\n  unless x > 0, do: 0, else: x\nend",
@@ -635,10 +726,12 @@ defmodule Defk.Errors do
       code: "unsupported-expression",
       kind: :subset,
       summary: "Any other expression is not in the kernel subset.",
-      why: "a kernel uses a fixed set of Elixir forms: #{@forms}, over numbers, booleans, tuples and arrays",
+      why:
+        "a kernel uses a fixed set of Elixir forms: #{@forms}, over numbers, booleans, tuples and arrays",
       hint: "write it with those forms, or compute it in Elixir and pass the result in",
       example: "defk f(x :: i64) :: i64 do\n  r = 1..x\n  x\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  for i <- 1..x//1, reduce: 0 do\n    acc -> acc + i\n  end\nend"
+      rewrite:
+        "defk f(x :: i64) :: i64 do\n  for i <- 1..x//1, reduce: 0 do\n    acc -> acc + i\n  end\nend"
     }
   ]
 
@@ -661,7 +754,10 @@ defmodule Defk.Errors do
     diags = Enum.sort_by(diags, &{&1.line, &1.col})
     {shown, rest} = Enum.split(diags, @cap)
     n = length(diags)
-    head = "cannot compile #{inspect(module)}: #{n} kernel compile error#{if n == 1, do: "", else: "s"}"
+
+    head =
+      "cannot compile #{inspect(module)}: #{n} kernel compile error#{if n == 1, do: "", else: "s"}"
+
     more = if rest == [], do: [], else: ["#{length(rest)} more not shown; fix these first"]
 
     %CompileError{
@@ -684,7 +780,10 @@ defmodule Defk.Errors do
         rw -> "#{hint}:\n\n" <> (rw |> String.split("\n") |> Enum.map_join("\n", &indent/1))
       end
 
-    Enum.join([frame(d), "", "why: #{why}", "hint: #{hint}", "(defk #{d.code}: #{docs(d.code)})"], "\n")
+    Enum.join(
+      [frame(d), "", "why: #{why}", "hint: #{hint}", "(defk #{d.code}: #{docs(d.code)})"],
+      "\n"
+    )
   end
 
   defp indent(""), do: ""
@@ -703,7 +802,14 @@ defmodule Defk.Errors do
         caret = String.duplicate(" ", d.col - 1) <> String.duplicate("^", max(d.width, 1))
 
         Enum.join(
-          ["error: #{d.what}", "#{pad} │", "#{d.line} │#{text}", "#{pad} │#{caret}", "#{pad} │", "#{pad} └─ #{loc}#{fun}"],
+          [
+            "error: #{d.what}",
+            "#{pad} │",
+            "#{d.line} │#{text}",
+            "#{pad} │#{caret}",
+            "#{pad} │",
+            "#{pad} └─ #{loc}#{fun}"
+          ],
           "\n"
         )
     end
@@ -750,7 +856,10 @@ defmodule Defk.Errors do
   defp line_only(_), do: nil
 
   defp source_line(nil, _), do: nil
-  defp source_line(lines, line) when line >= 1 and line <= tuple_size(lines), do: elem(lines, line - 1)
+
+  defp source_line(lines, line) when line >= 1 and line <= tuple_size(lines),
+    do: elem(lines, line - 1)
+
   defp source_line(_, _), do: nil
 
   defp place(lines, line, nil, _node), do: {line, nil, 1, nil} |> with_text(lines)
@@ -829,8 +938,12 @@ defmodule Defk.Errors do
       {pre, rest} = String.split_at(text, from)
 
       case :binary.match(rest, needle) do
-        {pos, _} -> {l, String.length(pre) + String.length(binary_part(rest, 0, pos)) + 1, String.length(needle), text}
-        :nomatch -> nil
+        {pos, _} ->
+          {l, String.length(pre) + String.length(binary_part(rest, 0, pos)) + 1,
+           String.length(needle), text}
+
+        :nomatch ->
+          nil
       end
     end)
   end
@@ -849,8 +962,10 @@ defmodule Defk.Errors do
   def unsupported(node, type_of \\ fn _ -> nil end)
 
   def unsupported({:**, _, [a, b]} = n, type_of) do
-    {"unsupported-expression", "the power operator in #{Macro.to_string(n)} is not in the kernel subset",
-     hint: "use pow/2, which returns a float like :math.pow/2, or multiply for a small integer power",
+    {"unsupported-expression",
+     "the power operator in #{Macro.to_string(n)} is not in the kernel subset",
+     hint:
+       "use pow/2, which returns a float like :math.pow/2, or multiply for a small integer power",
      rewrite: power_rewrite(a, b, type_of.(a), type_of.(b))}
   end
 
@@ -862,13 +977,17 @@ defmodule Defk.Errors do
   defp power_rewrite(a, b, :i64, :i64) when is_integer(b) and b in 1..8,
     do: a |> List.duplicate(b) |> Enum.reduce(&{:*, [], [&2, &1]}) |> Macro.to_string()
 
-  defp power_rewrite(a, b, ta, tb) when ta in [:i64, :f64] and tb in [:i64, :f64] and :f64 in [ta, tb],
-    do: Macro.to_string({:pow, [], [a, b]})
+  defp power_rewrite(a, b, ta, tb)
+       when ta in [:i64, :f64] and tb in [:i64, :f64] and :f64 in [ta, tb],
+       do: Macro.to_string({:pow, [], [a, b]})
 
   defp power_rewrite(_a, _b, _ta, _tb), do: nil
 
   defp form({:%{}, _, _}), do: map()
-  defp form({:%, _, [{:__aliases__, _, parts} | _]}), do: map("structs (%#{Enum.join(parts, ".")}{})")
+
+  defp form({:%, _, [{:__aliases__, _, parts} | _]}),
+    do: map("structs (%#{Enum.join(parts, ".")}{})")
+
   defp form({:%, _, _}), do: map("structs")
 
   defp form(s) when is_binary(s), do: string()
@@ -878,20 +997,33 @@ defmodule Defk.Errors do
   defp form({:<<>>, _, parts} = node) do
     if Enum.any?(parts, &string_part?/1),
       do: string(),
-      else: {"bitstring-build", "building a bitstring with #{Macro.to_string(node)} is not supported yet", []}
+      else:
+        {"bitstring-build",
+         "building a bitstring with #{Macro.to_string(node)} is not supported yet", []}
   end
 
   defp form(nil), do: {"unsupported-atom", "nil is not in the kernel subset", []}
-  defp form(a) when is_atom(a), do: {"unsupported-atom", "atoms such as #{inspect(a)} are not in the kernel subset", []}
 
-  defp form(list) when is_list(list), do: {"unsupported-list", "lists such as #{Macro.to_string(list)} are not in the kernel subset", []}
-  defp form({op, _, _}) when op in [:++, :--], do: {"unsupported-list", "list operator #{op} is not in the kernel subset", []}
+  defp form(a) when is_atom(a),
+    do: {"unsupported-atom", "atoms such as #{inspect(a)} are not in the kernel subset", []}
 
-  defp form({:fn, _, _}), do: {"unsupported-fn", "anonymous functions are not in the kernel subset", []}
-  defp form({:&, _, _} = n), do: {"unsupported-fn", "the capture #{Macro.to_string(n)} is not in the kernel subset", []}
+  defp form(list) when is_list(list),
+    do:
+      {"unsupported-list", "lists such as #{Macro.to_string(list)} are not in the kernel subset",
+       []}
+
+  defp form({op, _, _}) when op in [:++, :--],
+    do: {"unsupported-list", "list operator #{op} is not in the kernel subset", []}
+
+  defp form({:fn, _, _}),
+    do: {"unsupported-fn", "anonymous functions are not in the kernel subset", []}
+
+  defp form({:&, _, _} = n),
+    do: {"unsupported-fn", "the capture #{Macro.to_string(n)} is not in the kernel subset", []}
 
   defp form({:|>, _, [_, _]} = node) do
-    {"pipe", "the pipe operator |> is not in the kernel subset", rewrite: Macro.to_string(unpipe(node))}
+    {"pipe", "the pipe operator |> is not in the kernel subset",
+     rewrite: Macro.to_string(unpipe(node))}
   end
 
   defp form({:@, _, [{name, _, ctx}]}) when is_atom(name) and is_atom(ctx) do
@@ -899,7 +1031,9 @@ defmodule Defk.Errors do
   end
 
   defp form({op, _, args}) when op in @bitwise_ops or (op in @bitwise_funs and is_list(args)) do
-    {"bitwise", "the bitwise #{if op in @bitwise_ops, do: "operator #{op}", else: "function #{op}/#{length(args)}"} is not supported yet", []}
+    {"bitwise",
+     "the bitwise #{if op in @bitwise_ops, do: "operator #{op}", else: "function #{op}/#{length(args)}"} is not supported yet",
+     []}
   end
 
   defp form({{:., _, [{:__aliases__, _, [:Bitwise]}, f]}, _, args}) do
@@ -907,8 +1041,11 @@ defmodule Defk.Errors do
   end
 
   # map.field
-  defp form({{:., _, [{v, _, ctx}, field]}, m, []}) when is_atom(v) and is_atom(ctx) and is_atom(field) do
-    if m[:no_parens], do: map("field access #{v}.#{field} (maps and structs)"), else: call_rejection(nil, field, [], nil)
+  defp form({{:., _, [{v, _, ctx}, field]}, m, []})
+       when is_atom(v) and is_atom(ctx) and is_atom(field) do
+    if m[:no_parens],
+      do: map("field access #{v}.#{field} (maps and structs)"),
+      else: call_rejection(nil, field, [], nil)
   end
 
   defp form({{:., _, [mod, fun]}, _, args} = node) when is_atom(fun) and is_list(args) do
@@ -916,59 +1053,132 @@ defmodule Defk.Errors do
   end
 
   defp form({range, _, _} = n) when range in [:.., :..//],
-    do: {"unsupported-expression", "the range #{Macro.to_string(n)} as a value is not in the kernel subset",
-         hint: "use the range as the generator of a for, Enum.reduce_while/3, Enum.all?/2 or Enum.any?/2"}
+    do:
+      {"unsupported-expression",
+       "the range #{Macro.to_string(n)} as a value is not in the kernel subset",
+       hint:
+         "use the range as the generator of a for, Enum.reduce_while/3, Enum.all?/2 or Enum.any?/2"}
 
   defp form({:in, _, [x, list]} = n) when is_list(list) and list != [] do
-    rewrite = list |> Enum.map(&{:==, [], [x, &1]}) |> Enum.reduce(&{:or, [], [&2, &1]}) |> Macro.to_string()
-    {"unsupported-expression", "#{Macro.to_string(n)} is not in the kernel subset", hint: "compare with each value", rewrite: rewrite}
+    rewrite =
+      list
+      |> Enum.map(&{:==, [], [x, &1]})
+      |> Enum.reduce(&{:or, [], [&2, &1]})
+      |> Macro.to_string()
+
+    {"unsupported-expression", "#{Macro.to_string(n)} is not in the kernel subset",
+     hint: "compare with each value", rewrite: rewrite}
   end
 
   defp form({:=, _, _} = n) do
-    {"unsupported-expression", "the match #{Macro.to_string(n)} used as a value is not in the kernel subset",
+    {"unsupported-expression",
+     "the match #{Macro.to_string(n)} used as a value is not in the kernel subset",
      hint: "bind it on its own line, then use the variable"}
   end
 
   defp form({:unless, _, [c, kw]}) when is_list(kw) do
     rewrite = Macro.to_string({:if, [], [{:not, [], [c]}, kw]})
-    {"unsupported-construct", "unless is not in the kernel subset", hint: "write if not", rewrite: rewrite}
+
+    {"unsupported-construct", "unless is not in the kernel subset",
+     hint: "write if not", rewrite: rewrite}
   end
 
   defp form({name, _, args}) when name in [:raise, :reraise, :throw, :exit] and is_list(args) do
     {"unsupported-construct", "#{name} is not in the kernel subset",
-     why: "a kernel raises only Elixir's own errors (an i64 overflow, an index out of range, ...), where Elixir would raise them",
+     why:
+       "a kernel raises only Elixir's own errors (an i64 overflow, an index out of range, ...), where Elixir would raise them",
      hint: "check the arguments in Elixir before the call"}
   end
 
-  defp form({name, _, args}) when name in [:with, :try, :receive, :send, :spawn, :quote, :unquote, :import, :alias, :require, :def, :defp, :defk, :__block__] and is_list(args) do
+  defp form({name, _, args})
+       when name in [
+              :with,
+              :try,
+              :receive,
+              :send,
+              :spawn,
+              :quote,
+              :unquote,
+              :import,
+              :alias,
+              :require,
+              :def,
+              :defp,
+              :defk,
+              :__block__
+            ] and is_list(args) do
     {"unsupported-construct", "#{name} is not in the kernel subset", []}
   end
 
   defp form({name, _, args} = node) when is_atom(name) and is_list(args) do
     case local_hint(name, args) do
-      nil -> {"unsupported-expression", "#{Macro.to_string(node)} is not in the kernel subset", []}
-      found -> found
+      nil ->
+        {"unsupported-expression", "#{Macro.to_string(node)} is not in the kernel subset", []}
+
+      found ->
+        found
     end
   end
 
-  defp form(node), do: {"unsupported-expression", "#{Macro.to_string(node)} is not in the kernel subset", []}
+  defp form(node),
+    do: {"unsupported-expression", "#{Macro.to_string(node)} is not in the kernel subset", []}
 
   @doc false
   # A local call to `name` that isn't a builtin or a kernel: a construct
   # outside the subset, checked before its arguments are compiled.
   def unsupported_local({name, _, args} = node, type_of) do
     cond do
-      name in [:%{}, :%, :<<>>, :<>, :++, :--, :fn, :&, :|>, :@, :.., :..//, :in, :**, :=, :unless] ->
+      name in [
+        :%{},
+        :%,
+        :<<>>,
+        :<>,
+        :++,
+        :--,
+        :fn,
+        :&,
+        :|>,
+        :@,
+        :..,
+        :..//,
+        :in,
+        :**,
+        :=,
+        :unless
+      ] ->
         unsupported(node, type_of)
 
       name in @bitwise_ops or name in @bitwise_funs ->
         unsupported(node, type_of)
 
-      name in [:raise, :reraise, :throw, :exit, :with, :try, :receive, :send, :spawn, :quote, :unquote, :import, :alias, :require, :def, :defp, :defk] ->
+      name in [
+        :raise,
+        :reraise,
+        :throw,
+        :exit,
+        :with,
+        :try,
+        :receive,
+        :send,
+        :spawn,
+        :quote,
+        :unquote,
+        :import,
+        :alias,
+        :require,
+        :def,
+        :defp,
+        :defk
+      ] ->
         unsupported(node, type_of)
 
       String.starts_with?(Atom.to_string(name), "sigil_") ->
-        if name in [:sigil_s, :sigil_S], do: string(), else: {"unsupported-expression", "sigil ~#{String.trim_leading(Atom.to_string(name), "sigil_")} is not in the kernel subset", []}
+        if name in [:sigil_s, :sigil_S],
+          do: string(),
+          else:
+            {"unsupported-expression",
+             "sigil ~#{String.trim_leading(Atom.to_string(name), "sigil_")} is not in the kernel subset",
+             []}
 
       true ->
         local_hint(name, args)
@@ -978,19 +1188,26 @@ defmodule Defk.Errors do
   # Elixir functions a developer reaches for that have a builtin form
   defp local_hint(name, [a]) when name in [:length, :byte_size, :tuple_size] do
     {"unknown-function", "#{name}/1 is not in the kernel subset",
-     why: "the length of a kernel array is len/1", hint: "use len/1", rewrite: Macro.to_string({:len, [], [a]})}
+     why: "the length of a kernel array is len/1",
+     hint: "use len/1",
+     rewrite: Macro.to_string({:len, [], [a]})}
   end
 
   defp local_hint(:elem, [_t, i]) do
     {"unknown-function", "elem/2 is not in the kernel subset",
      why: "a kernel takes a tuple apart where it is bound",
-     hint: "destructure the tuple where it is bound, e.g. {a, b} = ..., and use element #{Macro.to_string(i)} by name"}
+     hint:
+       "destructure the tuple where it is bound, e.g. {a, b} = ..., and use element #{Macro.to_string(i)} by name"}
   end
 
   defp local_hint(_name, _args), do: nil
 
   defp map(what \\ "maps"), do: {"unsupported-map", "#{what} are not in the kernel subset", []}
-  defp string(what \\ "string literals"), do: {"unsupported-string", "#{what} #{if what =~ "literals", do: "are", else: "is"} not in the kernel subset", []}
+
+  defp string(what \\ "string literals"),
+    do:
+      {"unsupported-string",
+       "#{what} #{if what =~ "literals", do: "are", else: "is"} not in the kernel subset", []}
 
   defp string_part?(s) when is_binary(s), do: true
   defp string_part?({:"::", _, [{{:., _, [Kernel, :to_string]}, _, _}, _]}), do: true
@@ -1019,47 +1236,59 @@ defmodule Defk.Errors do
   @loop "write the for loop it stands for"
 
   defp call_rejection(nil, fun, args, _node),
-    do: {"unsupported-expression", "#{fun}/#{length(args)} called on a value is not in the kernel subset", []}
+    do:
+      {"unsupported-expression",
+       "#{fun}/#{length(args)} called on a value is not in the kernel subset", []}
 
   defp call_rejection("Enum", :map, [src, {:fn, _, [{:->, _, [[x], body]}]}], _node) do
     {"unsupported-call", "Enum.map/2 is not in the kernel subset",
      why: "Enum.map/2 builds a list, and kernels have no lists",
-     hint: "allocate the output array and fill it in a for loop", rewrite: fill_rewrites(src, x, body)}
+     hint: "allocate the output array and fill it in a for loop",
+     rewrite: fill_rewrites(src, x, body)}
   end
 
   defp call_rejection("Enum", fun, [src], _node) when fun in [:sum, :product] do
     zero = if fun == :sum, do: 0, else: 1
 
     {"unsupported-call", "Enum.#{fun}/1 is not in the kernel subset",
-     why: "Enum.#{fun}/1 takes a list or a range; #{@list_why} the for ..., reduce: loop is the form a kernel compiles",
+     why:
+       "Enum.#{fun}/1 takes a list or a range; #{@list_why} the for ..., reduce: loop is the form a kernel compiles",
      hint: "write the for ..., reduce: loop (start from #{zero}.0 if the values are floats)",
      rewrite: fold_rewrites(src, if(fun == :sum, do: :+, else: :*), zero)}
   end
 
-  defp call_rejection("Enum", fun, [list], _node) when fun in [:min, :max] and is_list(list) and length(list) >= 2 do
+  defp call_rejection("Enum", fun, [list], _node)
+       when fun in [:min, :max] and is_list(list) and length(list) >= 2 do
     rewrite = list |> Enum.reduce(&{fun, [], [&2, &1]}) |> Macro.to_string()
 
     {"unsupported-call", "Enum.#{fun}/1 over a list is not in the kernel subset",
-     why: "#{String.trim_trailing(@list_why, ", and")}; #{fun}/2 is a builtin", hint: "nest #{fun}/2", rewrite: rewrite}
+     why: "#{String.trim_trailing(@list_why, ", and")}; #{fun}/2 is a builtin",
+     hint: "nest #{fun}/2",
+     rewrite: rewrite}
   end
 
   defp call_rejection("Enum", fun, [src], _node) when fun in [:min, :max] do
     rewrite =
       if var?(src) do
         [i, acc] = fresh_names(~w(i acc), [src])
+
         "for #{i} <- 1..(len(#{s(src)}) - 1)//1, reduce: #{s(src)}[0] do\n  #{acc} -> #{fun}(#{acc}, #{s(index(src, i))})\nend"
       end
 
     {"unsupported-call", "Enum.#{fun}/1 is not in the kernel subset",
-     why: "Enum.#{fun}/1 takes a list or a range; #{@list_why} the for ..., reduce: loop is the form a kernel compiles",
-     hint: "#{@loop}, starting from the first element (Enum.#{fun}/1 raises on an empty list; decide what an empty array gives)",
+     why:
+       "Enum.#{fun}/1 takes a list or a range; #{@list_why} the for ..., reduce: loop is the form a kernel compiles",
+     hint:
+       "#{@loop}, starting from the first element (Enum.#{fun}/1 raises on an empty list; decide what an empty array gives)",
      rewrite: rewrite}
   end
 
   defp call_rejection("Enum", fun, args, _node) when fun in [:min_by, :max_by, :min_max] do
     {"unsupported-call", "Enum.#{fun}/#{length(args)} is not in the kernel subset",
-     why: "Enum.#{fun}/#{length(args)} takes a list or a range; #{@list_why} the for ..., reduce: loop is the form a kernel compiles",
-     hint: "#{@loop}, with a tuple accumulator", rewrite: extreme_rewrite(fun, args)}
+     why:
+       "Enum.#{fun}/#{length(args)} takes a list or a range; #{@list_why} the for ..., reduce: loop is the form a kernel compiles",
+     hint: "#{@loop}, with a tuple accumulator",
+     rewrite: extreme_rewrite(fun, args)}
   end
 
   defp call_rejection("Enum", :with_index, [src | _] = args, _node) do
@@ -1079,25 +1308,31 @@ defmodule Defk.Errors do
     do: {"enum-reduce", "Enum.reduce/#{length(args)} is not supported yet", []}
 
   defp call_rejection("Enum", fun, args, _node) when fun in [:find, :find_index, :find_value] do
-    {"enum-find", "Enum.#{fun}/#{length(args)} is not supported yet", rewrite: find_index_rewrite(fun, args)}
+    {"enum-find", "Enum.#{fun}/#{length(args)} is not supported yet",
+     rewrite: find_index_rewrite(fun, args)}
   end
 
   defp call_rejection("Enum", :count, [src, {:fn, _, [{:->, _, [[x], pred]}]}], _node) do
     rewrite = "for #{s(x)} <- #{s(src)}, #{s(pred)}, reduce: 0 do\n  acc -> acc + 1\nend"
 
     {"unsupported-call", "Enum.count/2 is not in the kernel subset",
-     why: "Enum.count/2 takes a list or a range; #{@list_why} the for ..., reduce: loop with a filter is the form a kernel compiles",
-     hint: "count with a filtered for ..., reduce: loop", rewrite: rewrite}
+     why:
+       "Enum.count/2 takes a list or a range; #{@list_why} the for ..., reduce: loop with a filter is the form a kernel compiles",
+     hint: "count with a filtered for ..., reduce: loop",
+     rewrite: rewrite}
   end
 
   defp call_rejection("Enum", :each, [src, {:fn, _, [{:->, _, [[x], body]}]}], _node) do
     rewrite = "for #{s(x)} <- #{s(src)} do\n  #{s(body)}\nend"
-    {"unsupported-call", "Enum.each/2 is not in the kernel subset", why: "a for loop is the form a kernel compiles", hint: "write the for loop", rewrite: rewrite}
+
+    {"unsupported-call", "Enum.each/2 is not in the kernel subset",
+     why: "a for loop is the form a kernel compiles", hint: "write the for loop", rewrite: rewrite}
   end
 
   defp call_rejection("Enum", fun, args, _node) do
     {"unsupported-call", "Enum.#{fun}/#{length(args)} is not in the kernel subset",
-     why: "Enum functions take and build lists, and a kernel has none; Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2 are the ones that compile, to loops",
+     why:
+       "Enum functions take and build lists, and a kernel has none; Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2 are the ones that compile, to loops",
      hint: "write it as a for loop over the array or range"}
   end
 
@@ -1143,11 +1378,13 @@ defmodule Defk.Errors do
     if var?(src) do
       [i, lo, hi] = fresh_names(~w(i lo hi), [src])
       ai = s(index(src, i))
+
       "for #{i} <- 1..(len(#{s(src)}) - 1)//1, reduce: {#{s(src)}[0], #{s(src)}[0]} do\n  {#{lo}, #{hi}} -> {min(#{lo}, #{ai}), max(#{hi}, #{ai})}\nend"
     end
   end
 
-  defp extreme_rewrite(fun, [src, {:fn, _, [{:->, _, [[x], key]}]}]) when fun in [:min_by, :max_by] do
+  defp extreme_rewrite(fun, [src, {:fn, _, [{:->, _, [[x], key]}]}])
+       when fun in [:min_by, :max_by] do
     if var?(src) do
       [i, best, k, ki, better] = fresh_names(~w(i best k ki better), [src, key])
       key_at = &s(subst(key, x, index(src, &1)))
@@ -1193,7 +1430,8 @@ defmodule Defk.Errors do
       n = "len(#{s(src)})"
 
       for e <- elems,
-          do: "#{out} = alloc(#{e}, #{n})\n\nfor #{i} <- 0..(#{n} - 1)//1 do\n  #{out}[#{i}] = #{v}\nend\n\n#{out}"
+          do:
+            "#{out} = alloc(#{e}, #{n})\n\nfor #{i} <- 0..(#{n} - 1)//1 do\n  #{out}[#{i}] = #{v}\nend\n\n#{out}"
     end
   end
 
@@ -1215,14 +1453,30 @@ defmodule Defk.Errors do
   # {value, element type} of a binary segment with an array's layout
   defp segment({:"::", _, [v, spec]}) do
     parts = spec_parts(spec)
-    size = Enum.find_value(parts, fn n when is_integer(n) -> n; {:size, n} -> n; _ -> nil end)
+
+    size =
+      Enum.find_value(parts, fn
+        n when is_integer(n) -> n
+        {:size, n} -> n
+        _ -> nil
+      end)
+
     names = for p <- parts, is_atom(p), do: p
 
     cond do
-      :float in names -> if size in [nil, 64] and names -- [:float, :native] == [] and :native in names, do: {v, :f64}
-      size == 64 -> if names -- [:integer, :signed, :unsigned, :native] == [] and :native in names, do: {v, :i64}
-      size in [nil, 8] -> if names -- [:integer, :unsigned, :big, :little, :native] == [], do: {v, :u8}
-      true -> nil
+      :float in names ->
+        if size in [nil, 64] and names -- [:float, :native] == [] and :native in names,
+          do: {v, :f64}
+
+      size == 64 ->
+        if names -- [:integer, :signed, :unsigned, :native] == [] and :native in names,
+          do: {v, :i64}
+
+      size in [nil, 8] ->
+        if names -- [:integer, :unsigned, :big, :little, :native] == [], do: {v, :u8}
+
+      true ->
+        nil
     end
   end
 
@@ -1250,8 +1504,11 @@ defmodule Defk.Errors do
   defp fresh_names(bases, asts) do
     {_, used} =
       Macro.prewalk(asts, MapSet.new(), fn
-        {n, _, ctx} = v, acc when is_atom(n) and is_atom(ctx) -> {v, MapSet.put(acc, Atom.to_string(n))}
-        other, acc -> {other, acc}
+        {n, _, ctx} = v, acc when is_atom(n) and is_atom(ctx) ->
+          {v, MapSet.put(acc, Atom.to_string(n))}
+
+        other, acc ->
+          {other, acc}
       end)
 
     Enum.map(bases, fn b -> Enum.find([b | Enum.map(2..9, &"#{b}#{&1}")], &(&1 not in used)) end)

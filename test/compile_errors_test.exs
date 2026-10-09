@@ -14,8 +14,11 @@ defmodule Defk.CompileErrorsTest do
 
     results =
       Defk.Errors.codes()
-      |> Task.async_stream(fn e -> {e.code, {compile(e.example, "Ex"), compile(e.rewrite, "Rw")}} end,
-        timeout: :infinity, ordered: false)
+      |> Task.async_stream(
+        fn e -> {e.code, {compile(e.example, "Ex"), compile(e.rewrite, "Rw")}} end,
+        timeout: :infinity,
+        ordered: false
+      )
       |> Map.new(fn {:ok, r} -> r end)
 
     %{results: results}
@@ -26,7 +29,10 @@ defmodule Defk.CompileErrorsTest do
   defp compile(body, tag) do
     mod = "Defk.CompileErrorsTest.M#{tag}#{System.unique_integer([:positive])}"
     path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-    indented = body |> String.split("\n") |> Enum.map_join("\n", &if(&1 == "", do: "", else: "  " <> &1))
+
+    indented =
+      body |> String.split("\n") |> Enum.map_join("\n", &if(&1 == "", do: "", else: "  " <> &1))
+
     File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{indented}\nend\n")
 
     try do
@@ -37,18 +43,26 @@ defmodule Defk.CompileErrorsTest do
     end
   end
 
-  defp codes(msg), do: Regex.scan(~r/^\(defk ([a-z0-9-]+): docs\/language\.md#\1\)$/m, msg) |> Enum.map(&Enum.at(&1, 1))
+  defp codes(msg),
+    do:
+      Regex.scan(~r/^\(defk ([a-z0-9-]+): docs\/language\.md#\1\)$/m, msg)
+      |> Enum.map(&Enum.at(&1, 1))
+
   defp whats(msg), do: Regex.scan(~r/^error: (.*)$/m, msg) |> Enum.map(&Enum.at(&1, 1))
 
   # permanent and planned in words
   defp assert_kind(:subset, what), do: assert(what =~ "not in the kernel subset")
   defp assert_kind(:planned, what), do: assert(what =~ "not supported yet")
-  defp assert_kind(:error, what), do: refute(what =~ ~r/not in the kernel subset|not supported yet/)
+
+  defp assert_kind(:error, what),
+    do: refute(what =~ ~r/not in the kernel subset|not supported yet/)
 
   describe "every code" do
     for %{code: code} <- Defk.Errors.codes() do
       @code code
-      test "#{code}: the example is rejected with it and the rewrite compiles", %{results: results} do
+      test "#{code}: the example is rejected with it and the rewrite compiles", %{
+        results: results
+      } do
         %{kind: kind} = Defk.Errors.fetch!(@code)
         {msg, rewrite} = Map.fetch!(results, @code)
         assert is_binary(msg), "the example for #{@code} compiled"
@@ -67,16 +81,26 @@ defmodule Defk.CompileErrorsTest do
       for e <- Defk.Errors.codes() do
         assert e.code =~ ~r/^[a-z0-9]+(-[a-z0-9]+)*$/
         assert e.kind in [:subset, :planned, :error]
-        for k <- [:summary, :why, :hint], do: assert(is_binary(Map.fetch!(e, k)) and e[k] != "", "#{e.code} #{k}")
+
+        for k <- [:summary, :why, :hint],
+            do: assert(is_binary(Map.fetch!(e, k)) and e[k] != "", "#{e.code} #{k}")
       end
     end
 
     test "every code the compiler uses is in the registry, and every registry code is used" do
       src = File.read!("lib/defk/compiler.ex") <> File.read!("lib/defk/errors.ex")
-      used = Regex.scan(~r/\{?"([a-z0-9]+(?:-[a-z0-9]+)+|recursion|bitwise|pipe)",/, src) |> Enum.map(&Enum.at(&1, 1))
+
+      used =
+        Regex.scan(~r/\{?"([a-z0-9]+(?:-[a-z0-9]+)+|recursion|bitwise|pipe)",/, src)
+        |> Enum.map(&Enum.at(&1, 1))
+
       registry = MapSet.new(Defk.Errors.codes(), & &1.code)
-      assert MapSet.subset?(MapSet.new(used), registry), inspect(MapSet.difference(MapSet.new(used), registry))
-      assert MapSet.subset?(registry, MapSet.new(used)), inspect(MapSet.difference(registry, MapSet.new(used)))
+
+      assert MapSet.subset?(MapSet.new(used), registry),
+             inspect(MapSet.difference(MapSet.new(used), registry))
+
+      assert MapSet.subset?(registry, MapSet.new(used)),
+             inspect(MapSet.difference(registry, MapSet.new(used)))
     end
   end
 
@@ -137,7 +161,9 @@ defmodule Defk.CompileErrorsTest do
         )
 
       assert msg =~ ~r/^\S+: cannot compile \S+: 6 kernel compile errors\n/
-      assert codes(msg) == ~w(unsupported-map unsupported-string recursion array-in-branch unsupported-call return-type)
+
+      assert codes(msg) ==
+               ~w(unsupported-map unsupported-string recursion array-in-branch unsupported-call return-type)
 
       assert whats(msg) == [
                "maps are not in the kernel subset",
@@ -151,13 +177,21 @@ defmodule Defk.CompileErrorsTest do
       # carets under the whole construct, as written
       assert msg =~ "5 │    m = %{a: x}\n  │        ^^^^^^^\n"
       assert msg =~ "10 │    s = \"hello\"\n   │        ^^^^^^^\n"
-      assert msg =~ "15 │    if x == 0, do: 0, else: f(x - 1)\n   │                            ^^^^^^^^\n"
+
+      assert msg =~
+               "15 │    if x == 0, do: 0, else: f(x - 1)\n   │                            ^^^^^^^^\n"
+
       assert msg =~ "19 │    c = if p, do: a, else: b\n   │        ^^^^^^^^^^^^^^^^^^^^\n"
-      assert msg =~ "24 │    b = Enum.map(a, fn x -> x * 2.0 end)\n   │        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"
+
+      assert msg =~
+               "24 │    b = Enum.map(a, fn x -> x * 2.0 end)\n   │        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"
+
       assert msg =~ "29 │    x + y\n   │    ^^^^^\n"
 
       # rewrites from the developer's own code
-      assert msg =~ "hint: do the array work inside each branch:\n\n    if p, do: a[0], else: b[0]\n"
+      assert msg =~
+               "hint: do the array work inside each branch:\n\n    if p, do: a[0], else: b[0]\n"
+
       assert msg =~ "    for i <- 0..(len(a) - 1)//1 do\n      out[i] = a[i] * 2.0\n    end\n"
       assert msg =~ "    trunc(x + y)    # or declare :: f64\n"
       refute msg =~ ~r/defk-[a-z0-9]{3}/
@@ -175,7 +209,9 @@ defmodule Defk.CompileErrorsTest do
       """
 
       msg = Exception.message(assert_raise(CompileError, fn -> Code.compile_string(src) end))
-      assert msg =~ ~r"error: string literals are not in the kernel subset\n└─ nofile:4:\d+: Defk.CompileErrorsTest.NoFile.f/1\n\nwhy:"
+
+      assert msg =~
+               ~r"error: string literals are not in the kernel subset\n└─ nofile:4:\d+: Defk.CompileErrorsTest.NoFile.f/1\n\nwhy:"
     end
   end
 
@@ -210,7 +246,9 @@ defmodule Defk.CompileErrorsTest do
 
       # helper's string once (not again where f inlines helper); m, y, z and w
       # are poisoned, so their uses report nothing; bad_head's callers are silent
-      assert codes(msg) == ~w(unsupported-string unsupported-map unknown-function unsupported-atom untyped-parameter)
+      assert codes(msg) ==
+               ~w(unsupported-string unsupported-map unknown-function unsupported-atom untyped-parameter)
+
       assert msg =~ ": 5 kernel compile errors\n"
     end
 
@@ -238,20 +276,32 @@ defmodule Defk.CompileErrorsTest do
         )
 
       assert codes(msg) == ["recursion"]
-      assert whats(msg) == ["ping/1 calls itself through pong/1, and recursion is not in the kernel subset"]
+
+      assert whats(msg) == [
+               "ping/1 calls itself through pong/1, and recursion is not in the kernel subset"
+             ]
     end
   end
 
   describe "targeted hints for first-write forms" do
     defp rejection(body, sig \\ "a :: [f64], x :: i64, n :: i64", ret \\ "f64") do
-      msg = compile("defk f(#{sig}) :: #{ret} do\n#{body |> String.split("\n") |> Enum.map_join("\n", &("  " <> &1))}\nend", "Hint")
+      msg =
+        compile(
+          "defk f(#{sig}) :: #{ret} do\n#{body |> String.split("\n") |> Enum.map_join("\n", &("  " <> &1))}\nend",
+          "Hint"
+        )
+
       assert [_] = codes(msg), msg
       msg
     end
 
     defp rewrite(msg) do
       [_, rw] = Regex.run(~r/^hint: .*:\n\n((?:    .*\n|\n)+)\(defk/m, msg)
-      rw |> String.split("\n") |> Enum.map_join("\n", &String.replace_prefix(&1, "    ", "")) |> String.trim_trailing()
+
+      rw
+      |> String.split("\n")
+      |> Enum.map_join("\n", &String.replace_prefix(&1, "    ", ""))
+      |> String.trim_trailing()
     end
 
     test "|> gets the nested call" do
@@ -269,7 +319,9 @@ defmodule Defk.CompileErrorsTest do
 
     test "Enum.max over an array gets the reduce loop from the first element" do
       msg = rejection("Enum.max(a)")
-      assert rewrite(msg) == "for i <- 1..(len(a) - 1)//1, reduce: a[0] do\n  acc -> max(acc, a[i])\nend"
+
+      assert rewrite(msg) ==
+               "for i <- 1..(len(a) - 1)//1, reduce: a[0] do\n  acc -> max(acc, a[i])\nend"
     end
 
     test "Enum.min over a list literal gets nested min/2" do
@@ -279,7 +331,9 @@ defmodule Defk.CompileErrorsTest do
     end
 
     test "Enum.with_index in a generator gets the index generator" do
-      msg = rejection("for {y, i} <- Enum.with_index(a), reduce: 0.0 do\n  acc -> acc + y * i\nend")
+      msg =
+        rejection("for {y, i} <- Enum.with_index(a), reduce: 0.0 do\n  acc -> acc + y * i\nend")
+
       assert codes(msg) == ["generator-pattern"]
       assert msg =~ "read y = a[i] in the body"
       assert rewrite(msg) == "i <- 0..(len(a) - 1)//1"

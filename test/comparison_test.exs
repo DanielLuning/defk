@@ -50,23 +50,73 @@ defmodule Defk.ComparisonTest do
   defp agree(fun, args) do
     native = Defk.ElixirMode.with_mode(:native, fn -> apply(K, fun, args) end)
     elixir = K.__defk_elixir__(fun, args)
-    assert native === elixir, "#{fun}(#{Enum.map_join(args, ", ", &inspect/1)}): native #{inspect(native)}, Elixir mode #{inspect(elixir)}"
+
+    assert native === elixir,
+           "#{fun}(#{Enum.map_join(args, ", ", &inspect/1)}): native #{inspect(native)}, Elixir mode #{inspect(elixir)}"
+
     native
   end
 
   # doubles next to x
   defp neighbours(x) when is_float(x) do
     <<bits::64>> = <<x::float-64>>
-    for d <- [-1, 0, 1], b = bits + d, b >= 0, do: (<<f::float-64>> = <<b::64>>; f)
+
+    for d <- [-1, 0, 1],
+        b = bits + d,
+        b >= 0,
+        do:
+          (
+            <<f::float-64>> = <<b::64>>
+            f
+          )
   end
 
-  defp ints, do: [0, 1, -1, 2, -3, @two53 - 1, @two53, @two53 + 1, -@two53 - 1, -@two53, -@two53 + 1,
-                  @two53 * 2 + 1, @i64_max, @i64_max - 1, @i64_min, @i64_min + 1, 4_611_686_018_427_387_903, 4_611_686_018_427_387_905]
+  defp ints,
+    do: [
+      0,
+      1,
+      -1,
+      2,
+      -3,
+      @two53 - 1,
+      @two53,
+      @two53 + 1,
+      -@two53 - 1,
+      -@two53,
+      -@two53 + 1,
+      @two53 * 2 + 1,
+      @i64_max,
+      @i64_max - 1,
+      @i64_min,
+      @i64_min + 1,
+      4_611_686_018_427_387_903,
+      4_611_686_018_427_387_905
+    ]
 
   defp floats do
-    base = [0.0, -0.0, 0.5, -0.5, 1.0, -1.0, 1.5, 2.0, -2.5, 9.007199254740992e15, -9.007199254740992e15,
-            9.223372036854776e18, -9.223372036854776e18, 4.611686018427388e18, 1.0e300, -1.0e300]
-    Enum.uniq(Enum.flat_map(base, &neighbours(abs(&1))) ++ Enum.flat_map(base, &Enum.map(neighbours(abs(&1)), fn f -> -f end)))
+    base = [
+      0.0,
+      -0.0,
+      0.5,
+      -0.5,
+      1.0,
+      -1.0,
+      1.5,
+      2.0,
+      -2.5,
+      9.007199254740992e15,
+      -9.007199254740992e15,
+      9.223372036854776e18,
+      -9.223372036854776e18,
+      4.611686018427388e18,
+      1.0e300,
+      -1.0e300
+    ]
+
+    Enum.uniq(
+      Enum.flat_map(base, &neighbours(abs(&1))) ++
+        Enum.flat_map(base, &Enum.map(neighbours(abs(&1)), fn f -> -f end))
+    )
   end
 
   test "i64 against f64 compares exact values, as Elixir does" do
@@ -78,12 +128,20 @@ defmodule Defk.ComparisonTest do
 
   test "the cases that rounding the integer gets wrong" do
     # 2^53 + 1 rounds to 2^53 as a double
-    assert K.cmp_if(@two53 + 1, @two53 * 1.0) == {false, true, false, true, false, false, true, true}
-    assert K.cmp_fi(@two53 * 1.0, @two53 + 1) == {false, true, false, true, true, true, false, false}
+    assert K.cmp_if(@two53 + 1, @two53 * 1.0) ==
+             {false, true, false, true, false, false, true, true}
+
+    assert K.cmp_fi(@two53 * 1.0, @two53 + 1) ==
+             {false, true, false, true, true, true, false, false}
+
     # i64_max rounds up to 2^63
-    assert K.cmp_if(@i64_max, 9.223372036854776e18) == {false, true, false, true, true, true, false, false}
+    assert K.cmp_if(@i64_max, 9.223372036854776e18) ==
+             {false, true, false, true, true, true, false, false}
+
     # i64_min is exactly -2^63
-    assert K.cmp_if(@i64_min, -9.223372036854776e18) == {false, true, true, false, false, true, false, true}
+    assert K.cmp_if(@i64_min, -9.223372036854776e18) ==
+             {false, true, true, false, false, true, false, true}
+
     assert K.cmp_if(0, -0.0) == {false, true, true, false, false, true, false, true}
   end
 

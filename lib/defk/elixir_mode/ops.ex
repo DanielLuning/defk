@@ -48,7 +48,10 @@ defmodule Defk.ElixirMode.Ops do
   # match would; writes rebuild it (value semantics, defk-i2e).
 
   def alloc(n, _esz) when n < 0, do: raise(ArgumentError, "alloc/2: negative length #{n}")
-  def alloc(n, esz) when n * esz > @max_alloc_bytes, do: raise(ArgumentError, "alloc/2: length too large")
+
+  def alloc(n, esz) when n * esz > @max_alloc_bytes,
+    do: raise(ArgumentError, "alloc/2: length too large")
+
   def alloc(n, esz) when n * esz >= @no_alloc_bytes,
     do: raise(ArgumentError, "out of memory (allocating #{n * esz} bytes)")
 
@@ -105,7 +108,10 @@ defmodule Defk.ElixirMode.Ops do
     len = Kernel.div(byte_size(a), esz)
 
     if i < 0 or i >= len do
-      raise %Enum.OutOfBoundsError{message: "index #{i} out of bounds for array of length #{len}", index: i}
+      raise %Enum.OutOfBoundsError{
+        message: "index #{i} out of bounds for array of length #{len}",
+        index: i
+      }
     end
   end
 
@@ -139,7 +145,9 @@ defmodule Defk.ElixirMode.Ops do
   def args!(args, params) do
     indexed = Enum.with_index(Enum.zip(args, params), 1)
     for {{arg, {p, {:arr, e}}}, n} <- indexed, do: array!(arg, n, p, e)
-    for {{arg, {p, t}}, n} <- indexed, do: if(match?({:arr, _}, t), do: arg, else: scalar!(arg, t, n, p))
+
+    for {{arg, {p, t}}, n} <- indexed,
+        do: if(match?({:arr, _}, t), do: arg, else: scalar!(arg, t, n, p))
   end
 
   defp array!(a, n, p, e) do
@@ -147,14 +155,20 @@ defmodule Defk.ElixirMode.Ops do
     esz = if e == :u8, do: 1, else: 8
 
     Kernel.rem(byte_size(a), esz) == 0 ||
-      raise ArgumentError, "argument #{n} (#{p}): byte size #{byte_size(a)} is not a multiple of #{esz} (#{e})"
+      raise ArgumentError,
+            "argument #{n} (#{p}): byte size #{byte_size(a)} is not a multiple of #{esz} (#{e})"
   end
 
   defp scalar!(x, :i64, _n, _p) when is_i64(x), do: x
-  defp scalar!(_x, :i64, n, p), do: raise(ArgumentError, "argument #{n} (#{p}) must be an integer fitting in i64")
+
+  defp scalar!(_x, :i64, n, p),
+    do: raise(ArgumentError, "argument #{n} (#{p}) must be an integer fitting in i64")
+
   defp scalar!(x, :f64, _n, _p) when is_float(x), do: x
   defp scalar!(x, :f64, _n, _p) when is_i64(x), do: :erlang.float(x)
   defp scalar!(_x, :f64, n, p), do: raise(ArgumentError, "argument #{n} (#{p}) must be a number")
   defp scalar!(x, :bool, _n, _p) when is_boolean(x), do: x
-  defp scalar!(_x, :bool, n, p), do: raise(ArgumentError, "argument #{n} (#{p}) must be a boolean")
+
+  defp scalar!(_x, :bool, n, p),
+    do: raise(ArgumentError, "argument #{n} (#{p}) must be a boolean")
 end

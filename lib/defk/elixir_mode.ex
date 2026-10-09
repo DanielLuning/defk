@@ -74,10 +74,14 @@ defmodule Defk.ElixirMode do
         raise CompileError,
           file: env.file,
           line: 0,
-          description: "defk: `config :defk, mode: :elixir` is allowed only in the :dev and :test environments, not #{inspect(mix_env)}"
+          description:
+            "defk: `config :defk, mode: :elixir` is allowed only in the :dev and :test environments, not #{inspect(mix_env)}"
 
       other ->
-        raise CompileError, file: env.file, line: 0, description: "defk: unknown mode #{inspect(other)}; use :native or :elixir"
+        raise CompileError,
+          file: env.file,
+          line: 0,
+          description: "defk: unknown mode #{inspect(other)}; use :native or :elixir"
     end
   end
 
@@ -106,7 +110,9 @@ defmodule Defk.ElixirMode do
 
         quote generated: true do
           def __defk_elixir__(unquote(sig.name), [unquote_splicing(vs)] = args) do
-            [unquote_splicing(vs)] = Defk.ElixirMode.Ops.args!(args, unquote(Macro.escape(sig.params)))
+            [unquote_splicing(vs)] =
+              Defk.ElixirMode.Ops.args!(args, unquote(Macro.escape(sig.params)))
+
             unquote(fun_name(sig.name))(unquote_splicing(vs))
           end
         end
@@ -120,7 +126,8 @@ defmodule Defk.ElixirMode do
     source =
       quote do
         @doc "Generated Elixir mode source."
-        def __defk_elixir_source__, do: unquote(Enum.map_join(kernels, "\n\n", &Macro.to_string/1))
+        def __defk_elixir_source__,
+          do: unquote(Enum.map_join(kernels, "\n\n", &Macro.to_string/1))
       end
 
     [source, doc | entries] ++ kernels
@@ -185,7 +192,8 @@ defmodule Defk.ElixirMode do
 
   # ------------------------------------------------------------ statements --
 
-  defp stmt({:=, m, [{{:., _, [Access, :get]}, _, [arr, idx]}, rhs]}, env), do: {write(arr, idx, rhs, env, m), env}
+  defp stmt({:=, m, [{{:., _, [Access, :get]}, _, [arr, idx]}, rhs]}, env),
+    do: {write(arr, idx, rhs, env, m), env}
 
   defp stmt({:=, _, [lhs, rhs]}, env) do
     {q, t} = expr(rhs, env)
@@ -193,7 +201,9 @@ defmodule Defk.ElixirMode do
   end
 
   defp stmt({:if, m, [c, kw]}, env) when is_list(kw), do: {if_form(c, kw, :stmt, env, m), env}
-  defp stmt({:case, m, [subject, [do: clauses]]}, env), do: {case_form(subject, clauses, :stmt, env, m), env}
+
+  defp stmt({:case, m, [subject, [do: clauses]]}, env),
+    do: {case_form(subject, clauses, :stmt, env, m), env}
 
   defp stmt({:for, m, args} = e, env) do
     case parse_for(args) do
@@ -260,12 +270,22 @@ defmodule Defk.ElixirMode do
 
   defp expr({:if, m, [c, kw]}, env) when is_list(kw), do: if_form(c, kw, :value, env, m)
   defp expr({:cond, m, [[do: clauses]]}, env), do: cond_form(clauses, env, m)
-  defp expr({:case, m, [subject, [do: clauses]]}, env), do: case_form(subject, clauses, :value, env, m)
 
-  defp expr({{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m, [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}]}, env),
-    do: reduce_while(src, init, x, acc, body, env, m)
+  defp expr({:case, m, [subject, [do: clauses]]}, env),
+    do: case_form(subject, clauses, :value, env, m)
 
-  defp expr({{:., _, [{:__aliases__, _, [:Enum]}, f]} = dot, m, [src, {:fn, fm, [{:->, am, [[x], pred]}]}]}, env)
+  defp expr(
+         {{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m,
+          [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}]},
+         env
+       ),
+       do: reduce_while(src, init, x, acc, body, env, m)
+
+  defp expr(
+         {{:., _, [{:__aliases__, _, [:Enum]}, f]} = dot, m,
+          [src, {:fn, fm, [{:->, am, [[x], pred]}]}]},
+         env
+       )
        when f in [:all?, :any?] do
     {_, writes} =
       trial(fn ->
@@ -356,7 +376,9 @@ defmodule Defk.ElixirMode do
   end
 
   defp expr({{:., _, [:math, fun]}, m, args}, env), do: fun_call(fun, args, m, env)
-  defp expr({name, m, args}, env) when is_atom(name) and is_list(args), do: fun_call(name, args, m, env)
+
+  defp expr({name, m, args}, env) when is_atom(name) and is_list(args),
+    do: fun_call(name, args, m, env)
 
   defp tuple_expr(items, env) do
     {pre, qs, ts} = operands(items, env)
@@ -384,7 +406,10 @@ defmodule Defk.ElixirMode do
   defp builtin(f, [a], [:f64], m) when f in [:trunc, :round], do: {call(f, [a], m), :i64}
   defp builtin(:abs, [a], [:i64], m), do: {call(:abs, [a], m), :i64}
   defp builtin(:abs, [a], [:f64], m), do: {remote(Kernel, :abs, [a], m), :f64}
-  defp builtin(f, [a, b], [t, t], m) when f in [:min, :max] and t in [:i64, :f64], do: {remote(Kernel, f, [a, b], m), t}
+
+  defp builtin(f, [a, b], [t, t], m) when f in [:min, :max] and t in [:i64, :f64],
+    do: {remote(Kernel, f, [a, b], m), t}
+
   defp builtin(f, [a], [_], m) when f in @math1, do: {remote(:math, f, [a], m), :f64}
   defp builtin(:pow, [a, b], [_, _], m), do: {remote(:math, :pow, [a, b], m), :f64}
   defp builtin(_, _, _, _), do: nil
@@ -479,7 +504,12 @@ defmodule Defk.ElixirMode do
 
       {test, benv, prefix} = case_pattern(pat, s, st, env)
       gq = guard && elem(expr(guard, guard_env(pat, s, st, env)), 0)
-      seen = if guard == nil and match?({:lit, _, _}, test), do: MapSet.put(seen, elem(test, 1)), else: seen
+
+      seen =
+        if guard == nil and match?({:lit, _, _}, test),
+          do: MapSet.put(seen, elem(test, 1)),
+          else: seen
+
       always? = guard == nil and (test == :any or MapSet.equal?(seen, MapSet.new([true, false])))
       {stmts, last, t} = parts(body, benv, mode)
       parts = {prefix ++ stmts, last, t}
@@ -495,8 +525,11 @@ defmodule Defk.ElixirMode do
       if always?, do: {:halt, {:done, [arm | arms]}}, else: {:cont, {[arm | arms], seen}}
     end)
     |> case do
-      {:done, arms} -> Enum.reverse(arms)
-      {arms, _} -> Enum.reverse([{:raise, quote(do: raise(CaseClauseError, term: unquote(s)))} | arms])
+      {:done, arms} ->
+        Enum.reverse(arms)
+
+      {arms, _} ->
+        Enum.reverse([{:raise, quote(do: raise(CaseClauseError, term: unquote(s)))} | arms])
     end
   end
 
@@ -536,7 +569,13 @@ defmodule Defk.ElixirMode do
   # `cond` condition is not), every arm ending in the threaded arrays.
   # A tail chain (mode {:tail, _}) threads nothing: its leaves carry the arrays.
   defp finish(arms, w, mode, m, pre \\ []) do
-    t = Enum.find_value(arms, fn {:when, _, {_, _, t}} -> t; {:else, {_, _, t}} -> t; _ -> nil end)
+    t =
+      Enum.find_value(arms, fn
+        {:when, _, {_, _, t}} -> t
+        {:else, {_, _, t}} -> t
+        _ -> nil
+      end)
+
     nested? = w != []
     tail? = match?({:tail, _}, mode)
     w = if tail?, do: [], else: w
@@ -544,12 +583,23 @@ defmodule Defk.ElixirMode do
     res = temp("res")
 
     out = fn
-      {stmts, last, _} when value? and w == [] -> block(stmts ++ [last])
-      {stmts, last, _} when value? -> block(stmts ++ [{:=, [generated: true], [res, last]}, tuple([res | vars(w)])])
-      {stmts, last, _} when tail? -> block(stmts ++ [last])
-      {[], _, _} when w == [] -> nil
-      {stmts, _, _} when w == [] -> block(stmts)
-      {stmts, _, _} -> block(stmts ++ [wtuple(w)])
+      {stmts, last, _} when value? and w == [] ->
+        block(stmts ++ [last])
+
+      {stmts, last, _} when value? ->
+        block(stmts ++ [{:=, [generated: true], [res, last]}, tuple([res | vars(w)])])
+
+      {stmts, last, _} when tail? ->
+        block(stmts ++ [last])
+
+      {[], _, _} when w == [] ->
+        nil
+
+      {stmts, _, _} when w == [] ->
+        block(stmts)
+
+      {stmts, _, _} ->
+        block(stmts ++ [wtuple(w)])
     end
 
     rendered =
@@ -649,7 +699,10 @@ defmodule Defk.ElixirMode do
       end)
 
     w = threaded(writes, env)
-    if w == [], do: for_direct(init, levels, body_parts, acc, m), else: for_threaded(init, levels, body_parts, acc, w, m)
+
+    if w == [],
+      do: for_direct(init, levels, body_parts, acc, m),
+      else: for_threaded(init, levels, body_parts, acc, w, m)
   end
 
   defp quals(quals, env) do
@@ -665,11 +718,15 @@ defmodule Defk.ElixirMode do
   end
 
   # [{name, type}] of an accumulator pattern and its init type
-  defp acc_parts(pat, {:tuple, ts}), do: Enum.zip_with(tuple_items(pat), ts, fn p, t -> {var_name(p), t} end)
+  defp acc_parts(pat, {:tuple, ts}),
+    do: Enum.zip_with(tuple_items(pat), ts, fn p, t -> {var_name(p), t} end)
+
   defp acc_parts(pat, t), do: [{var_name(pat), t}]
 
   defp put_accs(env, acc) do
-    Enum.reduce(acc, env, fn {name, t}, e -> if underscore?(name), do: e, else: put_var(e, name, t) end)
+    Enum.reduce(acc, env, fn {name, t}, e ->
+      if underscore?(name), do: e, else: put_var(e, name, t)
+    end)
   end
 
   defp acc_type([{_, t}]), do: t
@@ -691,7 +748,9 @@ defmodule Defk.ElixirMode do
   defp for_direct({iq, it}, levels, {stmts, last, bt}, acc, m) do
     at = acc_type(acc)
     clause = {:->, [generated: true], [[acc_pat(acc)], block(stmts ++ [coerce(last, bt, at)])]}
-    {{:for, gm(m), Enum.map(levels, &qual_q/1) ++ [[reduce: coerce(iq, it, at), do: [clause]]]}, at}
+
+    {{:for, gm(m), Enum.map(levels, &qual_q/1) ++ [[reduce: coerce(iq, it, at), do: [clause]]]},
+     at}
   end
 
   defp for_threaded(init, levels, {stmts, last, bt}, acc, w, m) do
@@ -708,7 +767,11 @@ defmodule Defk.ElixirMode do
           rs = Enum.map(acc, fn _ -> temp("next") end)
           next = coerce(last, bt, acc_type(acc))
           bind_user = {:=, [generated: true], [acc_pat(acc), tuple_or_one(ts)]}
-          block([bind_user | stmts] ++ [{:=, [generated: true], [tuple_or_one(rs), next]}, tuple_or_one(rs ++ vars(w))])
+
+          block(
+            [bind_user | stmts] ++
+              [{:=, [generated: true], [tuple_or_one(rs), next]}, tuple_or_one(rs ++ vars(w))]
+          )
       end
 
     loops =
@@ -716,7 +779,11 @@ defmodule Defk.ElixirMode do
         {:gen, x, src}, body ->
           s = temp("src")
           clause = {:->, [generated: true], [[state], body]}
-          block([{:=, [generated: true], [s, src]}, {:for, gm(m), [{:<-, [generated: true], [x, s]}, [reduce: state, do: [clause]]]}])
+
+          block([
+            {:=, [generated: true], [s, src]},
+            {:for, gm(m), [{:<-, [generated: true], [x, s]}, [reduce: state, do: [clause]]]}
+          ])
 
         {:filter, q}, body ->
           {:if, [generated: true], [q, [do: body, else: state]]}
@@ -744,6 +811,7 @@ defmodule Defk.ElixirMode do
         acc = acc_parts(acc_pat_ast, it)
         fenv = bind_gen(x, xt, env)
         fenv = put_accs(fenv, acc)
+
         leaf = fn tag, v_ast, lenv ->
           {vq, vt} = expr(v_ast, lenv)
           {:"$defk_leaf", [tag: tag], [coerce(vq, vt, acc_type(acc))]}
@@ -760,17 +828,24 @@ defmodule Defk.ElixirMode do
 
     fq =
       Macro.prewalk(fq, fn
-        {:"$defk_leaf", [tag: tag], [vq]} when w == [] -> {tag, vq}
+        {:"$defk_leaf", [tag: tag], [vq]} when w == [] ->
+          {tag, vq}
+
         {:"$defk_leaf", [tag: tag], [vq]} ->
           r = temp("acc")
           block([{:=, [generated: true], [r, vq]}, {tag, tuple([r | vars(w)])}])
-        other -> other
+
+        other ->
+          other
       end)
 
     pat = if w == [], do: acc_pat(acc), else: tuple([acc_pat(acc) | vars(w)])
     init = if w == [], do: coerce(iq, it, at), else: tuple([coerce(iq, it, at) | vars(w)])
     fun = {:fn, [generated: true], [{:->, [generated: true], [[gen_pat(x), pat], fq]}]}
-    call = {{:., gm(m), [{:__aliases__, [alias: false], [:Enum]}, :reduce_while]}, gm(m), [srcq, init, fun]}
+
+    call =
+      {{:., gm(m), [{:__aliases__, [alias: false], [:Enum]}, :reduce_while]}, gm(m),
+       [srcq, init, fun]}
 
     if w == [] do
       {with_pre(src_pre, call), at}
@@ -799,7 +874,12 @@ defmodule Defk.ElixirMode do
     {{_, arms}, writes} =
       scoped(fn ->
         {cq, _} = expr(c, env)
-        {cq, [{:when, cq, parts(kw[:do], env, {:tail, leaf})}, {:else, parts(kw[:else], env, {:tail, leaf})}]}
+
+        {cq,
+         [
+           {:when, cq, parts(kw[:do], env, {:tail, leaf})},
+           {:else, parts(kw[:else], env, {:tail, leaf})}
+         ]}
       end)
 
     tail_finish(arms, writes, env, m)
@@ -850,7 +930,8 @@ defmodule Defk.ElixirMode do
 
   defp put_var(env, name, t), do: %{env | vars: Map.put(env.vars, name, %{t: t, id: fresh_id()})}
 
-  defp record_write(name, id), do: Process.put(:defk_em_writes, [{name, id} | Process.get(:defk_em_writes)])
+  defp record_write(name, id),
+    do: Process.put(:defk_em_writes, [{name, id} | Process.get(:defk_em_writes)])
 
   defp scoped(fun) do
     outer = Process.get(:defk_em_writes)
@@ -881,7 +962,9 @@ defmodule Defk.ElixirMode do
 
   # i64 -> f64 where the kernel converts (returns, arguments, accumulators, stores)
   defp coerce(q, t, t), do: q
-  defp coerce(q, :i64, :f64), do: {{:., [generated: true], [:erlang, :float]}, [generated: true], [q]}
+
+  defp coerce(q, :i64, :f64),
+    do: {{:., [generated: true], [:erlang, :float]}, [generated: true], [q]}
 
   defp coerce(q, {:tuple, ts}, {:tuple, rts}) do
     tmps = Enum.map(ts, fn _ -> temp("el") end)
@@ -891,7 +974,9 @@ defmodule Defk.ElixirMode do
 
   defp coerce(q, _t, _rt), do: q
 
-  defp call(fun, args, m), do: {{:., gm(m), [{:__aliases__, [alias: false], [:Ops]}, fun]}, gm(m), args}
+  defp call(fun, args, m),
+    do: {{:., gm(m), [{:__aliases__, [alias: false], [:Ops]}, fun]}, gm(m), args}
+
   defp remote(mod, fun, args, m), do: {{:., gm(m), [mod, fun]}, gm(m), args}
 
   defp gm(m), do: [generated: true] ++ Keyword.take(m || [], [:line])

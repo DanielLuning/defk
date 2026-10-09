@@ -15,12 +15,16 @@ defmodule Defk.Generators do
 
   def array_f64 do
     StreamData.list_of(f64(), min_length: 0, max_length: 10_000)
-    |> StreamData.map(fn list -> :erlang.list_to_binary(for(x <- list, do: <<x::float-64-native>>)) end)
+    |> StreamData.map(fn list ->
+      :erlang.list_to_binary(for(x <- list, do: <<x::float-64-native>>))
+    end)
   end
 
   def array_i64 do
     StreamData.list_of(i64(), min_length: 0, max_length: 10_000)
-    |> StreamData.map(fn list -> :erlang.list_to_binary(for(x <- list, do: <<x::signed-64-native>>)) end)
+    |> StreamData.map(fn list ->
+      :erlang.list_to_binary(for(x <- list, do: <<x::signed-64-native>>))
+    end)
   end
 
   def array_u8 do

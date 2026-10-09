@@ -33,20 +33,28 @@ defmodule Defk.ElixirModeTest.Agree do
 
   @doc "Native and Elixir mode agree on `fun(args)`; returns the outcome."
   def agree(mod, fun, args, opts \\ []) do
-    native = outcome(fn -> Defk.ElixirMode.with_mode(:native, fn -> apply(mod, fun, args) end) end)
+    native =
+      outcome(fn -> Defk.ElixirMode.with_mode(:native, fn -> apply(mod, fun, args) end) end)
+
     elixir = outcome(fn -> mod.__defk_elixir__(fun, args) end)
     call = "#{inspect(mod)}.#{fun}(#{Enum.map_join(args, ", ", &inspect(&1, limit: 5))})"
 
     case {native, elixir} do
       {{:ok, a}, {:ok, b}} ->
-        assert a === b, "#{call}: native #{inspect(a, limit: 8)}, Elixir mode #{inspect(b, limit: 8)}"
+        assert a === b,
+               "#{call}: native #{inspect(a, limit: 8)}, Elixir mode #{inspect(b, limit: 8)}"
 
       {{:raise, a}, {:raise, b}} ->
-        assert a.__struct__ == b.__struct__, "#{call}: native raised #{inspect(a)}, Elixir mode #{inspect(b)}"
-        if opts[:message] != false, do: assert(a == b, "#{call}: native raised #{inspect(a)}, Elixir mode #{inspect(b)}")
+        assert a.__struct__ == b.__struct__,
+               "#{call}: native raised #{inspect(a)}, Elixir mode #{inspect(b)}"
+
+        if opts[:message] != false,
+          do: assert(a == b, "#{call}: native raised #{inspect(a)}, Elixir mode #{inspect(b)}")
 
       _ ->
-        flunk("#{call}: native #{inspect(native, limit: 8)}, Elixir mode #{inspect(elixir, limit: 8)}")
+        flunk(
+          "#{call}: native #{inspect(native, limit: 8)}, Elixir mode #{inspect(elixir, limit: 8)}"
+        )
     end
 
     native
@@ -107,11 +115,15 @@ defmodule Defk.ElixirModeTest.K do
 
     k =
       cond do
-        n < 0 -> 0
+        n < 0 ->
+          0
+
         n > 10 ->
           out[0] = 100
           1
-        true -> 2
+
+        true ->
+          2
       end
 
     out[2] = out[2] * 10 + k
@@ -152,11 +164,15 @@ defmodule Defk.ElixirModeTest.K do
         out[i] = acc
 
         case rem(i, 2) do
-          0 when i >= stop -> {:halt, acc}
+          0 when i >= stop ->
+            {:halt, acc}
+
           0 ->
             out[i] = -acc
             {:cont, acc + i}
-          _ -> {:cont, acc + 1}
+
+          _ ->
+            {:cont, acc + 1}
         end
       end)
 
@@ -178,8 +194,14 @@ defmodule Defk.ElixirModeTest.K do
 
   defk w_and(c :: bool) :: {bool, i64} do
     out = alloc(i64, 1)
-    b = c and (out[0] = 5
-               true)
+
+    b =
+      c and
+        (
+          out[0] = 5
+          true
+        )
+
     {b, out[0]}
   end
 
@@ -292,12 +314,17 @@ defmodule Defk.ElixirModeTest do
   # the existing tests' modules, when this file runs on its own (a sync
   # test runs after every test file is loaded, so this is no-op in a full run)
   setup_all do
-    for {mod, file} <- [{Defk.EarlyExitTest, "early_exit_test.exs"}, {Defk.SelectTest, "select_test.exs"}, {Defk.ResumeTest, "resume_test.exs"}],
+    for {mod, file} <- [
+          {Defk.EarlyExitTest, "early_exit_test.exs"},
+          {Defk.SelectTest, "select_test.exs"},
+          {Defk.ResumeTest, "resume_test.exs"}
+        ],
         not Code.ensure_loaded?(mod),
         do: Code.require_file(file, __DIR__)
 
     :ok
   end
+
   @min -9_223_372_036_854_775_808
   @max 9_223_372_036_854_775_807
 
@@ -334,7 +361,10 @@ defmodule Defk.ElixirModeTest do
       for stop <- [1, 2, 7, 50, 301, 699, 700, 701], do: agree(E, :nest3, [700, stop])
       for x <- 2..500, do: agree(E, :first_div, [x])
       agree(E, :sum_first_divs, [3_000])
-      for {n, l} <- [{10, 5}, {100, 1_000}, {100, 1_000_000}, {0, 0}], do: agree(E, :abs_sum_until, [n, l])
+
+      for {n, l} <- [{10, 5}, {100, 1_000}, {100, 1_000_000}, {0, 0}],
+          do: agree(E, :abs_sum_until, [n, l])
+
       for n <- [1, 10, 96, 97, 98, 1_000], do: agree(E, :classify_until, [n])
       for n <- [0, 1, 5, 30], k <- [1, 2, 7, 9, 25, 31], do: agree(E, :all_any, [n, k])
 
@@ -347,13 +377,23 @@ defmodule Defk.ElixirModeTest do
       agree(E, :find_at_least, [<<>>, 1])
       agree(E, :find_many, [a, 300])
 
-      for xs <- [[], [1.0, 2.0, -1.0, 5.0], [1.5, 2.5], [-1.0]], do: agree(E, :until_negative, [f64s(xs)])
+      for xs <- [[], [1.0, 2.0, -1.0, 5.0], [1.5, 2.5], [-1.0]],
+          do: agree(E, :until_negative, [f64s(xs)])
 
       b = i64s(Enum.to_list(1..3_000))
-      for stop <- [10, 3_000, 3_001], f <- [:sum_until, :sum_until_nb], do: agree(E, f, [b, stop, 3_050])
 
-      for x <- [-3, -1, 0, 1, 2, 3, 100, 101, 102, 1_000, 1_001], do: agree(E, :case_val, [x]) && agree(E, :case_partial, [x])
-      for b <- [true, false], do: agree(E, :case_partial_bool, [b]) && agree(E, :case_stmt, [i64s([3, 4, 5, 6, 7, 9, 10]), b])
+      for stop <- [10, 3_000, 3_001],
+          f <- [:sum_until, :sum_until_nb],
+          do: agree(E, f, [b, stop, 3_050])
+
+      for x <- [-3, -1, 0, 1, 2, 3, 100, 101, 102, 1_000, 1_001],
+          do: agree(E, :case_val, [x]) && agree(E, :case_partial, [x])
+
+      for b <- [true, false],
+          do:
+            agree(E, :case_partial_bool, [b]) &&
+              agree(E, :case_stmt, [i64s([3, 4, 5, 6, 7, 9, 10]), b])
+
       big = 1_099_511_627_776
       for k <- [0, 1], do: agree(E, :case_sel, [big, k])
       agree(E, :case_loop, [120, 7])
@@ -394,7 +434,11 @@ defmodule Defk.ElixirModeTest do
 
     test "fuzzy_search" do
       :rand.seed(:exsss, {7, 8, 9})
-      words = for _ <- 1..2_000, do: for(_ <- 1..Enum.random(3..12), into: "", do: <<Enum.random(?a..?z)>>)
+
+      words =
+        for _ <- 1..2_000,
+            do: for(_ <- 1..Enum.random(3..12), into: "", do: <<Enum.random(?a..?z)>>)
+
       {offs, total} = Enum.map_reduce(words, 0, fn w, at -> {at, at + byte_size(w)} end)
       {blob, offs} = {IO.iodata_to_binary(words), i64s(offs ++ [total])}
 
@@ -410,15 +454,30 @@ defmodule Defk.ElixirModeTest do
       agree(Examples.Kernels, :add, [1, 2])
       agree(Examples.Kernels, :add, [@max, 1])
       # float division by zero: Elixir's own message in Elixir mode
-      for f <- [:sum, :mean_var, :oob], a <- [x, <<>>], do: agree(Examples.Kernels, f, [a], message: false)
+      for f <- [:sum, :mean_var, :oob],
+          a <- [x, <<>>],
+          do: agree(Examples.Kernels, f, [a], message: false)
+
       agree(Examples.Kernels, :dot, [x, f64s([2.0, 3.0])])
       agree(Examples.Kernels, :scale, [x, 3])
-      agree(Examples.Kernels, :histogram, [:binary.list_to_bin(for i <- 1..3_000, do: rem(i * 31, 256))])
 
-      for f <- [:count_primes, :count_primes_noyield, :count_primes_via_call, :count_primes_early, :count_primes_early_noyield],
+      agree(Examples.Kernels, :histogram, [
+        :binary.list_to_bin(for i <- 1..3_000, do: rem(i * 31, 256))
+      ])
+
+      for f <- [
+            :count_primes,
+            :count_primes_noyield,
+            :count_primes_via_call,
+            :count_primes_early,
+            :count_primes_early_noyield
+          ],
           do: agree(Examples.Kernels, f, [10_000])
 
-      for n <- [-1, 0, 1, 2, 97, 1_000_003], f <- [:prime?, :prime_early?], do: agree(Examples.Kernels, f, [n], message: false)
+      for n <- [-1, 0, 1, 2, 97, 1_000_003],
+          f <- [:prime?, :prime_early?],
+          do: agree(Examples.Kernels, f, [n], message: false)
+
       agree(Examples.Kernels, :overflow, [3_037_000_500])
       agree(Examples.Kernels, :overflow, [3_037_000_499])
     end
@@ -462,7 +521,12 @@ defmodule Defk.ElixirModeTest do
 
     test "image_blur, also against its Elixir version" do
       for {w, h} <- [{64, 48}, {1, 1}, {3, 2}] do
-        rgb = for y <- 0..(h - 1), x <- 0..(w - 1), into: <<>>, do: <<rem(x * 7, 256), rem(y * 13, 256), rem(x * y, 256)>>
+        rgb =
+          for y <- 0..(h - 1),
+              x <- 0..(w - 1),
+              into: <<>>,
+              do: <<rem(x * 7, 256), rem(y * 13, 256), rem(x * y, 256)>>
+
         {:ok, got} = agree(Blur.Kernels, :gray_blur, [rgb, w, h])
         assert got == Blur.Elixir.gray_blur(rgb, w, h)
       end
@@ -477,7 +541,8 @@ defmodule Defk.ElixirModeTest do
       agree(Example.Kernels, :work, [totals])
       assert Example.Kernels.__defk_elixir__(:work, [totals]) === Example.Elixir.work(totals)
 
-      for x <- [-50, -10.0, 0, 3.5, 90.0, 150.5], do: agree(Clamp.Kernels, :clamp, [x, -10.0, 90.0])
+      for x <- [-50, -10.0, 0, 3.5, 90.0, 150.5],
+          do: agree(Clamp.Kernels, :clamp, [x, -10.0, 90.0])
     end
   end
 
@@ -527,21 +592,56 @@ defmodule Defk.ElixirModeTest do
     end
 
     test "i64 range, division, indices, element fit and alloc" do
-      for op <- 0..6, {a, b} <- [{@max, 1}, {@min, 1}, {@min, -1}, {3_037_000_500, 3_037_000_500}, {7, 0}, {-7, 2}, {@min, 0}] do
+      for op <- 0..6,
+          {a, b} <- [
+            {@max, 1},
+            {@min, 1},
+            {@min, -1},
+            {3_037_000_500, 3_037_000_500},
+            {7, 0},
+            {-7, 2},
+            {@min, 0}
+          ] do
         agree(K, :arith, [op, a, b])
       end
 
       a = f64s([1.0, 2.0, 3.0])
       for i <- [-1, 0, 2, 3, @max, @min], do: agree(K, :read, [a, i])
-      for {n, i, v} <- [{2, 0, 255}, {2, 1, 0}, {2, 0, 256}, {2, 0, -1}, {2, 2, 1}, {2, 2, 300}, {0, 0, 0}], do: agree(K, :put_u8, [n, i, v])
+
+      for {n, i, v} <- [
+            {2, 0, 255},
+            {2, 1, 0},
+            {2, 0, 256},
+            {2, 0, -1},
+            {2, 2, 1},
+            {2, 2, 300},
+            {0, 0, 0}
+          ],
+          do: agree(K, :put_u8, [n, i, v])
+
       for {i, v} <- [{0, 3}, {1, @max}, {2, 1}], do: agree(K, :put_f64, [i, v])
       for e <- [0, 1], n <- [0, 5, -1], do: agree(K, :mk, [e, n])
     end
 
     test "float operations" do
-      for {op, x, y} <- [{0, 1.0, 0.0}, {0, 1.0, -0.0}, {0, 0.0, 0.0}, {0, 7.0, 2.0}, {1, -1.0, 0.0}, {1, -0.0, 0.0}, {1, 2.0, 0.0},
-                         {2, 0.0, 0.0}, {2, -1.0, 0.0}, {2, 10.0, 0.0}, {3, 1.0, 0.0}, {4, 2.0, 10.0}, {5, 1.0e300, 1.0e300},
-                         {6, 2.5, -2.5}, {6, 1.0e19, 0.0}, {6, 1.0, 1.0e19}] do
+      for {op, x, y} <- [
+            {0, 1.0, 0.0},
+            {0, 1.0, -0.0},
+            {0, 0.0, 0.0},
+            {0, 7.0, 2.0},
+            {1, -1.0, 0.0},
+            {1, -0.0, 0.0},
+            {1, 2.0, 0.0},
+            {2, 0.0, 0.0},
+            {2, -1.0, 0.0},
+            {2, 10.0, 0.0},
+            {3, 1.0, 0.0},
+            {4, 2.0, 10.0},
+            {5, 1.0e300, 1.0e300},
+            {6, 2.5, -2.5},
+            {6, 1.0e19, 0.0},
+            {6, 1.0, 1.0e19}
+          ] do
         # messages differ: Elixir's own for float arithmetic, %g in the kernel's for trunc/round
         agree(K, :fl, [op, x, y], message: false)
       end
@@ -583,7 +683,9 @@ defmodule Defk.ElixirModeTest do
       assert plain =~ "elixir_mode_test.exs:"
       assert out =~ "acc: 1.0\nacc: 3.0\n"
       assert capture_io(fn -> assert K.debug(3, a) === 9.0 end) == ""
-      assert capture_io(fn -> Defk.ElixirMode.with_mode(:elixir, fn -> K.debug(3, a) end) end) == out
+
+      assert capture_io(fn -> Defk.ElixirMode.with_mode(:elixir, fn -> K.debug(3, a) end) end) ==
+               out
     end
 
     test "the generated Elixir is readable source" do
@@ -600,7 +702,10 @@ defmodule Defk.ElixirModeTest do
       assert function_exported?(Examples.Kernels, :__defk_elixir__, 2)
       assert Defk.ElixirMode.setup!(:native, env) == {:native, true}
       assert Defk.ElixirMode.setup!(:elixir, env) == {:elixir, true}
-      assert_raise CompileError, ~r/unknown mode :fast/, fn -> apply(Defk.ElixirMode, :setup!, [:fast, env]) end
+
+      assert_raise CompileError, ~r/unknown mode :fast/, fn ->
+        apply(Defk.ElixirMode, :setup!, [:fast, env])
+      end
 
       for {mix_env, expect} <- [dev: {:native, false}, prod: {:native, false}] do
         try do
@@ -609,7 +714,9 @@ defmodule Defk.ElixirModeTest do
           if mix_env == :dev, do: assert(Defk.ElixirMode.setup!(:elixir, env) == {:elixir, true})
 
           if mix_env == :prod do
-            assert_raise CompileError, ~r/allowed only in the :dev and :test/, fn -> Defk.ElixirMode.setup!(:elixir, env) end
+            assert_raise CompileError, ~r/allowed only in the :dev and :test/, fn ->
+              Defk.ElixirMode.setup!(:elixir, env)
+            end
           end
         after
           Mix.env(:test)
@@ -637,12 +744,17 @@ defmodule Defk.ElixirModeTest do
 
       mod = Module.concat(__MODULE__, Configured)
       assert capture_io(fn -> assert mod.twice(4) == 8 end) == "8\n"
-      assert capture_io(fn -> Defk.ElixirMode.with_mode(:native, fn -> assert mod.twice(4) == 8 end) end) == ""
+
+      assert capture_io(fn ->
+               Defk.ElixirMode.with_mode(:native, fn -> assert mod.twice(4) == 8 end)
+             end) == ""
     end
 
     test "with_mode/2 switches only the calling process" do
       x = f64s([1.0])
-      assert capture_io(fn -> Defk.ElixirMode.with_mode(:elixir, fn -> K.debug(1, x) end) end) =~ "acc: 1.0"
+
+      assert capture_io(fn -> Defk.ElixirMode.with_mode(:elixir, fn -> K.debug(1, x) end) end) =~
+               "acc: 1.0"
 
       Defk.ElixirMode.with_mode(:elixir, fn ->
         task = Task.async(fn -> capture_io(fn -> K.debug(1, x) end) end)

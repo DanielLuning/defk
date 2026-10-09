@@ -21,29 +21,26 @@ defmodule Defk.Test do
       flunk("#{inspect(mod)}.#{fun}/#{arity} is not exported")
     end
 
-    native = outcome(fn -> Defk.ElixirMode.with_mode(:native, fn -> apply(mod, fun, args) end) end)
+    native =
+      outcome(fn -> Defk.ElixirMode.with_mode(:native, fn -> apply(mod, fun, args) end) end)
+
     elixir = outcome(fn -> mod.__defk_elixir__(fun, args) end)
 
     call = "#{inspect(mod)}.#{fun}(#{Enum.map_join(args, ", ", &inspect(&1, limit: 5))})"
 
     case {native, elixir} do
       {{:ok, a}, {:ok, b}} ->
-        assert a === b, "#{call}: native #{inspect(a, limit: 8)}, Elixir mode #{inspect(b, limit: 8)}"
+        assert a === b,
+               "#{call}: native #{inspect(a, limit: 8)}, Elixir mode #{inspect(b, limit: 8)}"
 
       {{:raise, %a_mod{}}, {:raise, %b_mod{}}} ->
-        assert a_mod == b_mod, "#{call}: native raised #{inspect(native)}, Elixir mode #{inspect(elixir)}"
-
-      {{:raise, a_mod, _a_reason}, {:raise, b_mod, _b_reason}} when is_atom(a_mod) and is_atom(b_mod) ->
-        assert a_mod == b_mod, "#{call}: native raised #{inspect(native)}, Elixir mode #{inspect(elixir)}"
-
-      {{:raise, a_mod, _a_reason}, {:raise, %b_mod{}}} when is_atom(a_mod) ->
-        assert a_mod == b_mod.__struct__, "#{call}: native raised #{inspect(native)}, Elixir mode #{inspect(elixir)}"
-
-      {{:raise, %a_mod{}}, {:raise, b_mod, _b_reason}} when is_atom(b_mod) ->
-        assert a_mod.__struct__ == b_mod, "#{call}: native raised #{inspect(native)}, Elixir mode #{inspect(elixir)}"
+        assert a_mod == b_mod,
+               "#{call}: native raised #{inspect(native)}, Elixir mode #{inspect(elixir)}"
 
       _ ->
-        flunk("#{call}: native #{inspect(native, limit: 8)}, Elixir mode #{inspect(elixir, limit: 8)}")
+        flunk(
+          "#{call}: native #{inspect(native, limit: 8)}, Elixir mode #{inspect(elixir, limit: 8)}"
+        )
     end
 
     native

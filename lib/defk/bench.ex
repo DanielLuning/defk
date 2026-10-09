@@ -52,7 +52,10 @@ defmodule Defk.Bench do
     name = Keyword.fetch!(opts, :name)
     expected = Keyword.fetch!(opts, :expected)
     baseline = Keyword.get(opts, :baseline, :first_pass)
-    baseline in [:first_pass, :optimized] || raise ArgumentError, "baseline must be :first_pass or :optimized"
+
+    baseline in [:first_pass, :optimized] ||
+      raise ArgumentError, "baseline must be :first_pass or :optimized"
+
     runs = Keyword.get(opts, :runs, 5)
     elixir_us = best(Keyword.fetch!(opts, :elixir), runs)
 
@@ -72,7 +75,13 @@ defmodule Defk.Bench do
           }
 
         :error ->
-          %{correct: true, elixir_ms: ms(elixir_us), defk_ms: nil, speedup: nil, verdict: :out_of_scope}
+          %{
+            correct: true,
+            elixir_ms: ms(elixir_us),
+            defk_ms: nil,
+            speedup: nil,
+            verdict: :out_of_scope
+          }
       end
 
     result =
@@ -82,6 +91,7 @@ defmodule Defk.Bench do
         baseline: baseline,
         reason: Keyword.get(opts, :reason)
       })
+
     print(result)
     result
   end
@@ -111,8 +121,15 @@ defmodule Defk.Bench do
     IO.puts("  elixir     #{r.elixir_ms} ms")
     if r.defk_ms, do: IO.puts("  defk       #{r.defk_ms} ms   (#{r.speedup}x)")
     IO.puts("  correct    #{r.correct}")
-    IO.puts("  baseline   #{r.baseline}#{if r.verdict == :good and r.baseline != :optimized, do: "   (claim is provisional until the Elixir side is optimised)", else: ""}")
-    IO.puts("  verdict    #{r.verdict}#{if r.verdict != r.expected, do: "   (expected #{r.expected}!)", else: ""}")
+
+    IO.puts(
+      "  baseline   #{r.baseline}#{if r.verdict == :good and r.baseline != :optimized, do: "   (claim is provisional until the Elixir side is optimised)", else: ""}"
+    )
+
+    IO.puts(
+      "  verdict    #{r.verdict}#{if r.verdict != r.expected, do: "   (expected #{r.expected}!)", else: ""}"
+    )
+
     if r.reason, do: IO.puts("  why        #{r.reason}")
     IO.puts("\nDEFK_RESULT " <> JSON.encode!(r))
   end

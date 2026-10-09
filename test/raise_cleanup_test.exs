@@ -93,6 +93,7 @@ defmodule Defk.RaiseCleanupTest do
     assert %{frames_live: 0} = K.__defk_stats__()
 
     grown = binary_bytes() - before
+
     assert grown < @leak_slack,
            "#{grown} bytes still counted after the raising calls " <>
              "(#{@stack_calls} * #{@stack_bufs * 8} + 4 * #{@loop_n * 4096 * 8} were allocated)"
@@ -105,8 +106,12 @@ defmodule Defk.RaiseCleanupTest do
 
   defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + 30_000) do
     cond do
-      f.() -> :ok
-      System.monotonic_time(:millisecond) > deadline -> flunk("timed out")
+      f.() ->
+        :ok
+
+      System.monotonic_time(:millisecond) > deadline ->
+        flunk("timed out")
+
       true ->
         Process.sleep(1)
         wait_until(f, deadline)

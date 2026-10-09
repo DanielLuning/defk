@@ -9,13 +9,6 @@ defmodule Defk.Case do
     end
   end
 
-  defmacro __using__(opts \\ []) do
-    quote do
-      use ExUnit.Case, unquote(opts)
-      import Defk.Case
-    end
-  end
-
   defmacro in_both_modes(do: block) do
     quote do
       Defk.ElixirMode.with_mode(:native, fn -> unquote(block) end)

@@ -44,7 +44,8 @@ defmodule Defk.CompileRewritesTest do
     {"Enum.min(xs)", "xs :: [i64], i :: i64", "i64", "@@ + i", :rewrite},
     {"Enum.max(for y <- a, do: y * y)", "a :: [f64]", "f64", "@@", :none},
     {"Enum.min_by(a, fn x -> abs(x - 1.0) end)", "a :: [f64]", "f64", "@@", :rewrite},
-    {"Enum.max_by(xs, fn x -> rem(x, best) end)", "xs :: [i64], best :: i64", "i64", "@@", :rewrite},
+    {"Enum.max_by(xs, fn x -> rem(x, best) end)", "xs :: [i64], best :: i64", "i64", "@@",
+     :rewrite},
     {"Enum.max_by(xs, fn x -> rem(x, 7) end)", "xs :: [i64]", "i64", "@@", :rewrite},
     {"Enum.min_max(a)", "a :: [f64]", "f64", "{lo, hi} = @@\nhi - lo", :rewrite},
     # other Enum functions
@@ -81,8 +82,14 @@ defmodule Defk.CompileRewritesTest do
   defp compile(params, ret, body) do
     mod = "Defk.CompileRewritesTest.M#{System.unique_integer([:positive])}"
     path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-    body = body |> String.split("\n") |> Enum.map_join("\n", &if(&1 == "", do: "", else: "    " <> &1))
-    File.write!(path, "defmodule #{mod} do\n  use Defk\n\n  defk f(#{params}) :: #{ret} do\n#{body}\n  end\nend\n")
+
+    body =
+      body |> String.split("\n") |> Enum.map_join("\n", &if(&1 == "", do: "", else: "    " <> &1))
+
+    File.write!(
+      path,
+      "defmodule #{mod} do\n  use Defk\n\n  defk f(#{params}) :: #{ret} do\n#{body}\n  end\nend\n"
+    )
 
     try do
       Code.compile_file(path)
@@ -95,8 +102,14 @@ defmodule Defk.CompileRewritesTest do
   # the rewrite under the hint, unindented; nil without one
   defp rewrite(msg) do
     case Regex.run(~r/^hint: .*:\n\n((?:    .*\n|\n)+)\(defk/m, msg) do
-      [_, rw] -> rw |> String.split("\n") |> Enum.map_join("\n", &String.replace_prefix(&1, "    ", "")) |> String.trim_trailing()
-      nil -> nil
+      [_, rw] ->
+        rw
+        |> String.split("\n")
+        |> Enum.map_join("\n", &String.replace_prefix(&1, "    ", ""))
+        |> String.trim_trailing()
+
+      nil ->
+        nil
     end
   end
 
@@ -154,7 +167,10 @@ defmodule Defk.CompileRewritesTest do
 
     test "the rejection alone is a CompileError" do
       kernels = [kernel(quote(do: f(x :: i64) :: i64), quote(do: %{a: x}))]
-      assert_raise CompileError, fn -> Defk.Compiler.compile(Defk.CompileRewritesTest.Crash, kernels, nil) end
+
+      assert_raise CompileError, fn ->
+        Defk.Compiler.compile(Defk.CompileRewritesTest.Crash, kernels, nil)
+      end
     end
   end
 end

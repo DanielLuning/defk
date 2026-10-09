@@ -10,8 +10,8 @@ defmodule Defk.EarlyExitTest.Twin do
     nb_head = {:"::", hm, [{:"#{name}_nb", cm, params}, ret]}
 
     quote do
-      defk unquote(head), do: unquote(body)
-      defk unquote(nb_head), [yield: false], do: unquote(body)
+      defk(unquote(head), do: unquote(body))
+      defk(unquote(nb_head), [yield: false], do: unquote(body))
       def unquote(:"ex_#{name}")(unquote_splicing(vars)), do: unquote(body)
     end
   end
@@ -144,13 +144,21 @@ defmodule Defk.EarlyExitTest.K do
 
   twin case_val(x :: i64) :: i64 do
     case x do
-      0 -> 10
-      1 -> 20
-      -1 -> 30
+      0 ->
+        10
+
+      1 ->
+        20
+
+      -1 ->
+        30
+
       n when n > 100 and rem(n, 2) == 0 ->
         n = n + 1
         n * 2
-      _ -> 40
+
+      _ ->
+        40
     end
   end
 
@@ -319,7 +327,11 @@ defmodule Defk.EarlyExitTest do
     test "out of bounds raises only when reached before the halt (natural and forced yields)" do
       len = 3_000
       a = i64s(Enum.to_list(1..len))
-      ref = fn stop -> Enum.sum(1..stop//1) + Enum.sum(for i <- 0..(stop - 1)//1, do: div(rem(i, 3) * (rem(i, 3) + 1), 2)) end
+
+      ref = fn stop ->
+        Enum.sum(1..stop//1) +
+          Enum.sum(for i <- 0..(stop - 1)//1, do: div(rem(i, 3) * (rem(i, 3) + 1), 2))
+      end
 
       for f <- [&K.sum_until/3, &K.sum_until_nb/3] do
         # halts before index len: no error
@@ -333,7 +345,11 @@ defmodule Defk.EarlyExitTest do
       {got, y1} = forced(K, fn -> K.sum_until(a, len, len + 50) end)
       assert got == ref.(len)
 
-      {e, y2} = forced(K, fn -> assert_raise(Enum.OutOfBoundsError, fn -> K.sum_until(a, len + 1, len + 50) end) end)
+      {e, y2} =
+        forced(K, fn ->
+          assert_raise(Enum.OutOfBoundsError, fn -> K.sum_until(a, len + 1, len + 50) end)
+        end)
+
       assert e.index == len and y1 > 0 and y2 > 0
     end
   end
@@ -365,7 +381,11 @@ defmodule Defk.EarlyExitTest do
       assert K.case_loop(120, 7) == K.ex_case_loop(120, 7)
       big = 1_099_511_627_776
       assert K.case_sel(big, 0) == big
-      assert_raise ArithmeticError, "i64 overflow in #{big} * #{big}", fn -> K.case_sel(big, 1) end
+
+      assert_raise ArithmeticError, "i64 overflow in #{big} * #{big}", fn ->
+        K.case_sel(big, 1)
+      end
+
       c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
       assert c =~ "defk_mul_i64_s(&"
     end
@@ -406,7 +426,9 @@ defmodule Defk.EarlyExitTest do
       assert compile_error("Enum.reduce_while(1..x, 0, fn i, acc -> acc + i end)") =~
                "an Enum.reduce_while/3 fn returns acc + i, not {:cont, acc} or {:halt, acc}"
 
-      assert compile_error("Enum.reduce_while(1..x, 0, fn i, acc -> if(i > 2, do: {:halt, acc}) end)") =~
+      assert compile_error(
+               "Enum.reduce_while(1..x, 0, fn i, acc -> if(i > 2, do: {:halt, acc}) end)"
+             ) =~
                "(defk reduce-while-tail:"
 
       assert compile_error("Enum.reduce_while(1..x, {0, 0}, fn i, {a, c} -> {:cont, a} end)") =~
@@ -415,19 +437,33 @@ defmodule Defk.EarlyExitTest do
       assert compile_error("Enum.reduce_while(1..x, 0, fn i, acc -> {:cont, f} end)") =~
                "the new value of acc f has type f64, expected i64"
 
-      assert compile_error("Enum.reduce_while(1..x, 0, &foo/2)") =~ "Enum.reduce_while/3 with &foo/2 is not in the kernel subset"
+      assert compile_error("Enum.reduce_while(1..x, 0, &foo/2)") =~
+               "Enum.reduce_while/3 with &foo/2 is not in the kernel subset"
+
       assert compile_error("Enum.all?(1..x, &foo/1)", "bool") =~ "(defk fn-argument:"
-      assert compile_error("Enum.any?(1..x, fn i -> i end)", "bool") =~ "a condition must be a boolean, and i is i64"
+
+      assert compile_error("Enum.any?(1..x, fn i -> i end)", "bool") =~
+               "a condition must be a boolean, and i is i64"
     end
 
     test "case" do
-      assert compile_error("case f do\n_ -> 1\nend") =~ "case on f, an f64 value, is not in the kernel subset"
-      assert compile_error("case x do\n1.0 -> 1\n_ -> 2\nend") =~ "the case pattern 1.0 is not in the kernel subset"
-      assert compile_error("case x do\n{a, b} -> a\n_ -> 2\nend") =~ "the case pattern {a, b} is not in the kernel subset"
-      assert compile_error("case b do\n1 -> 1\n_ -> 2\nend") =~ "the pattern 1 never matches a bool subject"
+      assert compile_error("case f do\n_ -> 1\nend") =~
+               "case on f, an f64 value, is not in the kernel subset"
+
+      assert compile_error("case x do\n1.0 -> 1\n_ -> 2\nend") =~
+               "the case pattern 1.0 is not in the kernel subset"
+
+      assert compile_error("case x do\n{a, b} -> a\n_ -> 2\nend") =~
+               "the case pattern {a, b} is not in the kernel subset"
+
+      assert compile_error("case b do\n1 -> 1\n_ -> 2\nend") =~
+               "the pattern 1 never matches a bool subject"
+
       assert compile_error("case x do\ny when bad(y, f, b) > 0 -> 1\n_ -> 2\nend") =~
                "bad(y, f, b) is not allowed in a case guard"
-      assert compile_error("case x do\n1 -> 1\n_ -> 2.0\nend") =~ "the branches of this case have different types: i64, f64"
+
+      assert compile_error("case x do\n1 -> 1\n_ -> 2.0\nend") =~
+               "the branches of this case have different types: i64, f64"
     end
   end
 end

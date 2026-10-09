@@ -75,8 +75,12 @@ defmodule Defk.UpgradeTest do
 
   defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + @timeout) do
     cond do
-      f.() -> :ok
-      System.monotonic_time(:millisecond) > deadline -> flunk("timed out")
+      f.() ->
+        :ok
+
+      System.monotonic_time(:millisecond) > deadline ->
+        flunk("timed out")
+
       true ->
         Process.sleep(1)
         wait_until(f, deadline)
