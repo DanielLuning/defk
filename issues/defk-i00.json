@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-6g6"
+  ],
   "blocks": [
     "defk-sgw.3"
   ],
@@ -20,5 +22,5 @@
   "status": "open",
   "title": "Raise on non-finite floats like Elixir",
   "type": "task",
-  "updated_at": "2026-10-08T13:28:08Z"
+  "updated_at": "2026-10-09T20:15:54Z"
 }
