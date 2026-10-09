@@ -3,6 +3,7 @@
   "blocked_by": [],
   "blocks": [
     "defk-52v.1",
+    "defk-52v.10",
     "defk-52v.2",
     "defk-52v.4",
     "defk-52v.7",
@@ -24,5 +25,5 @@
   "status": "open",
   "title": "Module attributes as constants in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:41Z"
+  "updated_at": "2026-10-09T19:47:42Z"
 }
