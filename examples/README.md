@@ -107,6 +107,20 @@ The verdict comes from the measurement and is a recommendation:
 | `poor` | defk slower | use Elixir |
 | `out_of_scope` | can't be written as a kernel | use Elixir |
 
+Target workloads add optional keys to `report/1`. None of them changes the verdict, and
+scripts that do not pass them need no change:
+
+| Key | Reports (JSON keys) |
+|---|---|
+| `native: {fun, "pkg x.y.z"}` | the anchor package's NIF, timed like the other sides: `native_ms`, `native_label`, `native_speedup` (defk against the NIF) |
+| `responsiveness: true` (or `[elixir: f, defk: f, native: f]`) | max and p99 gap of a 1 ms ticker on one scheduler while each side runs once (`Defk.Bench.TickGap`, the `bench/tick_gap.exs` method): `elixir_gap_ms`, `defk_gap_ms`, `native_gap_ms`, each `{max, p99}` |
+| `realistic_size: "n = 4096"` | the size the anchor package is really called with, which the verdict is measured at: `realistic_size` |
+| `sweep: [{label, elixir_fun, defk_fun}]` or `{sizes, fn size -> {elixir_fun, defk_fun} end}` | best-of (`sweep_runs`, default 3) per-size times and speedups, and the `crossover`: the first size where defk is at least 2x, or `null` |
+
+`elixir examples/run_all.exs` prints these on a second line per example, and
+`--snapshot` adds the results as a markdown table for the "Workload results"
+section of `docs/verdict.md`.
+
 Each example also declares the verdict it **expects**. `run_all.exs` fails if an
 example is incorrect, crashes, or measures a different verdict than it claims,
 and it lists every `good` claim whose baseline is still provisional.
