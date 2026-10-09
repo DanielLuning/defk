@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-ivt"
+  ],
   "blocks": [],
   "created": "2026-10-09T18:40:51Z",
   "description": "`if b == ?;` works today (?; is an integer literal), but comparing a byte range against \"Hamburg\" or emitting a separator needs a literal [u8]. Proposed: a binary literal `\"abc\"` in a kernel body (and `\u003c\u003c1, 2, 3\u003e\u003e` with integer segments) lowers to a static const uint8_t[] view {data, len}, type [u8], not owned (read-only, cannot be returned). Elixir meaning: the literal itself. Module attributes holding a binary (defk-ivt) should lower the same way, so do this together with or right after defk-ivt. Non-byte segments (floats, utf32) are rejected with a rewrite.\n\nDone when: a kernel can index and `len` a literal, pass it to a helper, and compare its bytes in a loop; Elixir mode agrees; a literal in a yielding loop survives resume (static data needs no rebinding, add a test anyway).",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "String literals as [u8] constants in kernel bodies",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:52Z"
+  "updated_at": "2026-10-09T18:40:53Z"
 }
