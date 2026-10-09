@@ -45,33 +45,9 @@ defmodule Defk do
     lib = Defk.Build.build!(env.module, c_src, env.file)
 
     stubs =
-      for %{name: name, params: params, ret: ret} <- sigs do
-        args = for {p, _} <- params, do: Macro.var(:"_#{p}", nil)
-        specs = for {_, t} <- params, do: spec(t, :in)
-
-        if elixir? do
-          # the NIF has its own name; this picks the mode per call
-          vs = for {p, _} <- params, do: Macro.var(p, nil)
-          native = nif_name.(name)
-
-          quote do
-            @doc false
-            def unquote(native)(unquote_splicing(args)), do: :erlang.nif_error(:defk_not_loaded)
-            @spec unquote(name)(unquote_splicing(specs)) :: unquote(spec(ret, :out))
-            def unquote(name)(unquote_splicing(vs)) do
-              case Process.get(unquote(Defk.ElixirMode.process_mode_key()), unquote(mode)) do
-                :elixir -> __defk_elixir__(unquote(name), [unquote_splicing(vs)])
-                _ -> unquote(native)(unquote_splicing(vs))
-              end
-            end
-          end
-        else
-          quote do
-            @spec unquote(name)(unquote_splicing(specs)) :: unquote(spec(ret, :out))
-            def unquote(name)(unquote_splicing(args)), do: :erlang.nif_error(:defk_not_loaded)
-          end
-        end
-      end
+      if elixir?,
+        do: native_stubs(sigs, nif_name) ++ dispatch_defs(sigs, mode, nif_name),
+        else: render_stubs(sigs)
 
     elixir_mode = if elixir?, do: Defk.ElixirMode.definitions(kernels, sigs, env.file), else: []
 
@@ -89,6 +65,50 @@ defmodule Defk do
       def __defk_force_yields__(_on), do: :erlang.nif_error(:defk_not_loaded)
       unquote_splicing(stubs)
       unquote_splicing(elixir_mode)
+    end
+  end
+
+  # A kernel's spec and stub, whose call raises unless the NIF is loaded.
+  defp render_stubs(sigs) do
+    for %{name: name, params: params, ret: ret} <- sigs do
+      args = for {p, _} <- params, do: Macro.var(:"_#{p}", nil)
+      specs = for {_, t} <- params, do: spec(t, :in)
+
+      quote do
+        @spec unquote(name)(unquote_splicing(specs)) :: unquote(spec(ret, :out))
+        def unquote(name)(unquote_splicing(args)), do: :erlang.nif_error(:defk_not_loaded)
+      end
+    end
+  end
+
+  # Elixir mode: the NIF keeps its own name, so each kernel gets a bare native
+  # stub plus a kernel-name def that dispatches on the process mode.
+  defp native_stubs(sigs, nif_name) do
+    for %{name: name, params: params} <- sigs do
+      args = for {p, _} <- params, do: Macro.var(:"_#{p}", nil)
+
+      quote do
+        @doc false
+        def unquote(nif_name.(name))(unquote_splicing(args)),
+          do: :erlang.nif_error(:defk_not_loaded)
+      end
+    end
+  end
+
+  defp dispatch_defs(sigs, mode, nif_name) do
+    for %{name: name, params: params, ret: ret} <- sigs do
+      specs = for {_, t} <- params, do: spec(t, :in)
+      vs = for {p, _} <- params, do: Macro.var(p, nil)
+
+      quote do
+        @spec unquote(name)(unquote_splicing(specs)) :: unquote(spec(ret, :out))
+        def unquote(name)(unquote_splicing(vs)) do
+          case Process.get(unquote(Defk.ElixirMode.process_mode_key()), unquote(mode)) do
+            :elixir -> __defk_elixir__(unquote(name), [unquote_splicing(vs)])
+            _ -> unquote(nif_name.(name))(unquote_splicing(vs))
+          end
+        end
+      end
     end
   end
 

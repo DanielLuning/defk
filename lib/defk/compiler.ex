@@ -285,39 +285,7 @@ defmodule Defk.Compiler do
           )
       end
 
-    params =
-      Enum.map(params, fn
-        {:"::", _, [{p, _, ctx}, t]} = param when is_atom(p) and is_atom(ctx) ->
-          ty = parse_type(t, param)
-
-          if match?({:tuple, _}, ty) do
-            {:tuple, ts} = ty
-
-            split =
-              ts
-              |> Enum.with_index()
-              |> Enum.map_join(", ", fn {t, i} -> "#{p}#{i} :: #{fmt(t)}" end)
-
-            err!(
-              param,
-              "tuple-parameter",
-              "tuple parameters such as #{p} :: #{fmt(ty)} are not in the kernel subset",
-              rewrite: split
-            )
-          end
-
-          {p, ty}
-
-        {p, _, ctx} = other when is_atom(p) and is_atom(ctx) ->
-          err!(other, "untyped-parameter", "parameter #{p} has no type", rewrite: "#{p} :: i64")
-
-        other ->
-          err!(
-            other,
-            "untyped-parameter",
-            "#{Macro.to_string(other)} is not a parameter `name :: type`"
-          )
-      end)
+    params = Enum.map(params, &parse_param/1)
 
     for k <- Keyword.keys(opts), k != :yield do
       err!(head, "unknown-option", "#{k}: is not a defk option")
@@ -335,6 +303,40 @@ defmodule Defk.Compiler do
       yield: Keyword.get(opts, :yield, true),
       cid: "k#{idx}_#{sanitize(name)}"
     }
+  end
+
+  defp parse_param({:"::", _, [{p, _, ctx}, t]} = param) when is_atom(p) and is_atom(ctx) do
+    ty = parse_type(t, param)
+
+    if match?({:tuple, _}, ty) do
+      {:tuple, ts} = ty
+
+      split =
+        ts
+        |> Enum.with_index()
+        |> Enum.map_join(", ", fn {t, i} -> "#{p}#{i} :: #{fmt(t)}" end)
+
+      err!(
+        param,
+        "tuple-parameter",
+        "tuple parameters such as #{p} :: #{fmt(ty)} are not in the kernel subset",
+        rewrite: split
+      )
+    end
+
+    {p, ty}
+  end
+
+  defp parse_param({p, _, ctx} = other) when is_atom(p) and is_atom(ctx) do
+    err!(other, "untyped-parameter", "parameter #{p} has no type", rewrite: "#{p} :: i64")
+  end
+
+  defp parse_param(other) do
+    err!(
+      other,
+      "untyped-parameter",
+      "#{Macro.to_string(other)} is not a parameter `name :: type`"
+    )
   end
 
   # `at` is the node an unknown type is reported at when the type has no position
@@ -949,42 +951,7 @@ defmodule Defk.Compiler do
        when op in [:==, :!=, :===, :!==, :<, :>, :<=, :>=] do
     {sa, va} = lower_expr(a, env)
     {sb, vb} = lower_expr(b, env)
-
-    c =
-      cond do
-        va.t == :bool and vb.t == :bool and op in [:==, :!=, :===, :!==] ->
-          "(#{va.c} #{cop(op)} #{vb.c})"
-
-        op in [:===, :!==] and va.t != vb.t and numeric?(va) and numeric?(vb) ->
-          if op == :===, do: "0", else: "1"
-
-        # exact equality tells -0.0 from 0.0, as Erlang's =:= does
-        op in [:===, :!==] and va.t == :f64 and vb.t == :f64 ->
-          if op == :===,
-            do: "defk_feq_exact(#{va.c}, #{vb.c})",
-            else: "(!defk_feq_exact(#{va.c}, #{vb.c}))"
-
-        numeric?(va) and numeric?(vb) and va.t == vb.t ->
-          "(#{va.c} #{cop(op)} #{vb.c})"
-
-        # i64 against f64 by exact value, as Erlang compares them: a OP b is
-        # cmp(a, b) OP 0, and cmp(f, i) = -cmp(i, f)
-        va.t == :i64 and vb.t == :f64 ->
-          "(defk_cmp_i64_f64(#{va.c}, #{vb.c}) #{cop(op)} 0)"
-
-        va.t == :f64 and vb.t == :i64 ->
-          "(0 #{cop(op)} defk_cmp_i64_f64(#{vb.c}, #{va.c}))"
-
-        true ->
-          err!(
-            node,
-            "operand-type",
-            "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
-            hint: "compare two numbers or two booleans"
-          )
-      end
-
-    {[sa, sb], val(c, :bool)}
+    {[sa, sb], val(compare_c(op, va, vb, node), :bool)}
   end
 
   defp lower_expr({op, _, [a, b]}, env) when op in [:and, :or, :&&, :||] do
@@ -1404,32 +1371,39 @@ defmodule Defk.Compiler do
     arity = if name in [:div, :rem, :min, :max, :pow], do: 2, else: 1
     takes = "#{name}/#{arity} takes #{@builtin_takes[name]}"
 
-    fix =
-      cond do
-        name in [:div, :rem] and length(ts) == 2 and Enum.all?(ts, &(&1 in [:i64, :f64])) ->
-          conv =
-            Enum.zip_with(args, ts, fn a, t -> if t == :f64, do: {:trunc, [], [a]}, else: a end)
+    err!(
+      node,
+      "builtin-arguments",
+      "#{takes}, and is called here with (#{sig})",
+      argument_fix(name, ts, args)
+    )
+  end
 
-          [
-            hint:
-              "convert the f64 arguments with trunc/1 or round/1, or use / for float division",
-            rewrite: Macro.to_string({name, [], conv})
-          ]
+  # A hint/rewrite pairing the mis-typed call off against the near variants.
+  @spec argument_fix(term(), [atom()], [term()]) :: keyword()
+  defp argument_fix(name, ts, args) do
+    cond do
+      name in [:div, :rem] and length(ts) == 2 and Enum.all?(ts, &(&1 in [:i64, :f64])) ->
+        conv =
+          Enum.zip_with(args, ts, fn a, t -> if t == :f64, do: {:trunc, [], [a]}, else: a end)
 
-        name in [:min, :max] and Enum.sort(ts) == [:f64, :i64] ->
-          conv =
-            Enum.zip_with(args, ts, fn a, t -> if t == :i64, do: {:float, [], [a]}, else: a end)
+        [
+          hint: "convert the f64 arguments with trunc/1 or round/1, or use / for float division",
+          rewrite: Macro.to_string({name, [], conv})
+        ]
 
-          [
-            hint: "convert the i64 argument with float/1",
-            rewrite: Macro.to_string({name, [], conv})
-          ]
+      name in [:min, :max] and Enum.sort(ts) == [:f64, :i64] ->
+        conv =
+          Enum.zip_with(args, ts, fn a, t -> if t == :i64, do: {:float, [], [a]}, else: a end)
 
-        true ->
-          []
-      end
+        [
+          hint: "convert the i64 argument with float/1",
+          rewrite: Macro.to_string({name, [], conv})
+        ]
 
-    err!(node, "builtin-arguments", "#{takes}, and is called here with (#{sig})", fix)
+      true ->
+        []
+    end
   end
 
   @spec unknown_function!(term(), term(), term(), term()) :: no_return()
@@ -2089,22 +2063,7 @@ defmodule Defk.Compiler do
 
     {arms, exhaustive?} =
       Enum.reduce_while(clauses, {[], MapSet.new()}, fn clause, {arms, seen} ->
-        {pat, guard, body, cm} =
-          case clause do
-            {:->, cm, [[{:when, _, [pat, guard]}], body]} ->
-              {pat, guard, body, cm}
-
-            {:->, cm, [[pat], body]} ->
-              {pat, nil, body, cm}
-
-            {:->, _, [pats, _]} = cl ->
-              err!(
-                cl,
-                "case-pattern",
-                "a case clause with #{length(pats)} patterns is not in the kernel subset"
-              )
-          end
-
+        {pat, guard, body, cm} = case_clause_head(clause)
         {test, rename} = case_pattern(pat, sv.t, subj, cm)
         guard = guard && rename.(guard_safe!(guard))
         body = rename.(body)
@@ -2117,13 +2076,7 @@ defmodule Defk.Compiler do
         always? =
           guard == nil and (test == :any or MapSet.equal?(seen, MapSet.new([true, false])))
 
-        cond_ast =
-          cond do
-            always? -> true
-            test == :any -> guard
-            guard == nil -> elem(test, 2)
-            true -> {:and, cm, [elem(test, 2), guard]}
-          end
+        cond_ast = case_test_cond(test, guard, seen, cm)
 
         arms = [{cond_ast, body} | arms]
         if always?, do: {:halt, {arms, true}}, else: {:cont, {arms, seen}}
@@ -2133,6 +2086,36 @@ defmodule Defk.Compiler do
     # exhaustive? is the set of literals seen unless a clause always matches
     arms = Enum.reverse(arms) ++ if(exhaustive? == true, do: [], else: [{:nomatch, nomatch}])
     {[ss, "#{c} = #{sv.c};\n"], arms, env}
+  end
+
+  # A case clause as {pattern, guard, body, meta}; a clause with several
+  # patterns is rejected (the compiler only commits to the subject once).
+  defp case_clause_head(clause) do
+    case clause do
+      {:->, cm, [[{:when, _, [pat, guard]}], body]} ->
+        {pat, guard, body, cm}
+
+      {:->, cm, [[pat], body]} ->
+        {pat, nil, body, cm}
+
+      {:->, _, [pats, _]} = cl ->
+        err!(
+          cl,
+          "case-pattern",
+          "a case clause with #{length(pats)} patterns is not in the kernel subset"
+        )
+    end
+  end
+
+  # The `if` condition of a clause: `true` when the clause always matches,
+  # the eval of its test, the guard, or the test and the guard together.
+  defp case_test_cond(test, guard, seen, m) do
+    cond do
+      guard == nil and (test == :any or MapSet.equal?(seen, MapSet.new([true, false]))) -> true
+      test == :any -> guard
+      guard == nil -> elem(test, 2)
+      true -> {:and, m, [elem(test, 2), guard]}
+    end
   end
 
   # {test, rename}: test is :any or {:lit | :pin, value, cond_ast}; rename
@@ -2346,113 +2329,146 @@ defmodule Defk.Compiler do
 
     yields? = k.yield and k.sp_count > 0
 
-    fields =
-      Enum.map(k.params, fn {p, t} -> "  #{ctype(t)} p_#{sanitize(p)};\n" end) ++
-        Enum.map(k.decls, fn {c, ct} -> "  #{ct} #{c};\n" end)
-
-    bind =
-      Enum.map(arrays, fn {p, i} ->
-        {:arr, e} = Keyword.fetch!(k.params, p)
-        sp = "p_#{sanitize(p)}"
-
-        # bind through temporaries: if the view's address escaped, clang would
-        # reload data/len on every iteration (the yield call might change them)
-        "{ void *d; int64_t l; defk_bind(env, ctx, argv[#{i}], sizeof(*#{sp}.data), &d, &l, &F->copy[#{i}], #{i + 1}, \"#{p}\", \"#{e}\"); #{sp}.data = d; #{sp}.len = l; }\n"
-      end)
-
-    decode =
-      Enum.map(scalars, fn {p, t, i} ->
-        "p_#{sanitize(p)} = defk_get_#{t}_arg(env, ctx, argv[#{i}], #{i + 1}, \"#{p}\");\n"
-      end)
-
-    result =
-      case k.ret_vals do
-        [{c, t}] ->
-          to_term(c, t)
-
-        many ->
-          "enif_make_tuple(env, #{length(many)}#{Enum.map(many, fn {c, t} -> ", " <> to_term(c, t) end)})"
-      end
-
-    sp_macro =
-      if yields? do
-        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { if (DEFK_UNLIKELY(F->resume)) { defk_lost_resume(ctx, F->resume, N); return DEFK_ERR; } #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
-          "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n#define DEFK_RESUMING DEFK_UNLIKELY(defk_rs)\n"
-      else
-        @no_yield_macros
-      end
-
     [
       "/* ---- #{k.name}/#{k.arity}#{if yields?, do: " (yielding)", else: ""} ---- */\n",
       "typedef struct {\n  defk_ctx ctx;\n  int resume;\n  int64_t budget;\n  int copy[#{max(k.arity, 1)}];\n",
-      fields,
+      frame_fields(k),
       "} #{f};\n\n",
       # noinline: keep the kernel body out of the setjmp frame below
       "static __attribute__((noinline)) int run_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n",
       "defk_ctx *ctx = &F->ctx;\n",
-      if(yields?,
-        do:
-          "int defk_rs = F->resume;\nint64_t defk_ticks = 0;\nint64_t defk_budget = defk_rs ? F->budget : DEFK_BUDGET0;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk);\n",
-        else: ""
-      ),
-      Enum.map(k.params, fn {p, t} -> "#{ctype(t)} p_#{sanitize(p)} = {0};\n" end),
+      run_preamble(yields?),
+      zero_params(k),
       decl_locals(k),
-      bind,
-      if yields? do
-        [
-          "if (defk_rs) {\n",
-          Enum.map(saved, &"#{&1} = F->#{&1};\n"),
-          "switch (defk_rs) {\n",
-          resume_cases(k.sps, []),
-          "}\n}\n"
-        ]
-      else
-        ""
-      end,
-      decode,
-      sp_macro,
+      bind_params(k, arrays),
+      resume_block(yields?, k, saved),
+      decode_params(scalars),
+      sp_macro(yields?, saved),
       k.stmts,
-      "*result = #{result};\nreturn DEFK_DONE;\n",
+      "*result = #{emit_result(k)};\nreturn DEFK_DONE;\n",
       @undef_macros,
       "}\n\n",
-      # setjmp lives in a separate frame so it does not pessimise the kernel body
-      "static __attribute__((noinline)) int guard_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n",
-      "if (sigsetjmp(F->ctx.jb, 0)) return DEFK_ERR;\nreturn run_#{k.cid}(env, F, argv, result);\n}\n\n",
-      if yields? do
-        [
-          "static ERL_NIF_TERM step_#{k.cid}(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {\n",
-          "#{f} *F;\nERL_NIF_TERM res;\n",
-          "enif_get_resource(env, argv[0], defk_frame_rt, (void **)&F);\n",
-          "int r = guard_#{k.cid}(env, F, argv + 1, &res);\n",
-          "if (DEFK_UNLIKELY(r == DEFK_DONE && F->resume)) { defk_lost_resume(&F->ctx, F->resume, 0); r = DEFK_ERR; }\n",
-          "if (r == DEFK_YIELD) {\natomic_fetch_add(&defk_stat_yields, 1);\n",
-          "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc, argv);\n}\n",
-          "defk_finish(&F->ctx);\n",
-          "return r == DEFK_ERR ? defk_raise(env, &F->ctx) : res;\n}\n\n"
-        ]
-      else
-        ""
-      end,
+      guard_fn(k, f),
+      step_fn(yields?, k, f),
+      nif_fn(yields?, k, f)
+    ]
+  end
+
+  defp frame_fields(k) do
+    Enum.map(k.params, fn {p, t} -> "  #{ctype(t)} p_#{sanitize(p)};\n" end) ++
+      Enum.map(k.decls, fn {c, ct} -> "  #{ct} #{c};\n" end)
+  end
+
+  defp run_preamble(yields?) do
+    if yields?,
+      do:
+        "int defk_rs = F->resume;\nint64_t defk_ticks = 0;\nint64_t defk_budget = defk_rs ? F->budget : DEFK_BUDGET0;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk);\n",
+      else: ""
+  end
+
+  defp zero_params(k),
+    do: Enum.map(k.params, fn {p, t} -> "#{ctype(t)} p_#{sanitize(p)} = {0};\n" end)
+
+  defp bind_params(k, arrays) do
+    Enum.map(arrays, fn {p, i} ->
+      {:arr, e} = Keyword.fetch!(k.params, p)
+      sp = "p_#{sanitize(p)}"
+
+      # bind through temporaries: if the view's address escaped, clang would
+      # reload data/len on every iteration (the yield call might change them)
+      "{ void *d; int64_t l; defk_bind(env, ctx, argv[#{i}], sizeof(*#{sp}.data), &d, &l, &F->copy[#{i}], #{i + 1}, \"#{p}\", \"#{e}\"); #{sp}.data = d; #{sp}.len = l; }\n"
+    end)
+  end
+
+  defp resume_block(yields?, k, saved) do
+    if yields? do
+      [
+        "if (defk_rs) {\n",
+        Enum.map(saved, &"#{&1} = F->#{&1};\n"),
+        "switch (defk_rs) {\n",
+        resume_cases(k.sps, []),
+        "}\n}\n"
+      ]
+    else
+      ""
+    end
+  end
+
+  defp decode_params(scalars) do
+    Enum.map(scalars, fn {p, t, i} ->
+      "p_#{sanitize(p)} = defk_get_#{t}_arg(env, ctx, argv[#{i}], #{i + 1}, \"#{p}\");\n"
+    end)
+  end
+
+  defp sp_macro(yields?, saved) do
+    if yields? do
+      "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { if (DEFK_UNLIKELY(F->resume)) { defk_lost_resume(ctx, F->resume, N); return DEFK_ERR; } #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
+        "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n#define DEFK_RESUMING DEFK_UNLIKELY(defk_rs)\n"
+    else
+      @no_yield_macros
+    end
+  end
+
+  defp emit_result(k) do
+    case k.ret_vals do
+      [{c, t}] ->
+        to_term(c, t)
+
+      many ->
+        "enif_make_tuple(env, #{length(many)}#{Enum.map(many, fn {c, t} -> ", " <> to_term(c, t) end)})"
+    end
+  end
+
+  # setjmp lives in a separate frame so it does not pessimise the kernel body
+  defp guard_fn(k, f) do
+    "static __attribute__((noinline)) int guard_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n" <>
+      "if (sigsetjmp(F->ctx.jb, 0)) return DEFK_ERR;\nreturn run_#{k.cid}(env, F, argv, result);\n}\n\n"
+  end
+
+  defp step_fn(yields?, k, f) do
+    if yields? do
+      [
+        "static ERL_NIF_TERM step_#{k.cid}(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {\n",
+        "#{f} *F;\nERL_NIF_TERM res;\n",
+        "enif_get_resource(env, argv[0], defk_frame_rt, (void **)&F);\n",
+        "int r = guard_#{k.cid}(env, F, argv + 1, &res);\n",
+        "if (DEFK_UNLIKELY(r == DEFK_DONE && F->resume)) { defk_lost_resume(&F->ctx, F->resume, 0); r = DEFK_ERR; }\n",
+        "if (r == DEFK_YIELD) {\natomic_fetch_add(&defk_stat_yields, 1);\n",
+        "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc, argv);\n}\n",
+        "defk_finish(&F->ctx);\n",
+        "return r == DEFK_ERR ? defk_raise(env, &F->ctx) : res;\n}\n\n"
+      ]
+    else
+      ""
+    end
+  end
+
+  defp nif_fn(yields?, k, f) do
+    [
       "static ERL_NIF_TERM nif_#{k.cid}(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {\n",
       "#{f} local;\nERL_NIF_TERM res;\n",
       "local.ctx.err = 0;\nlocal.ctx.owned = NULL;\nlocal.ctx.nowned = local.ctx.cap = 0;\nlocal.ctx.finished = local.ctx.is_resource = 0;\n",
       "local.resume = 0;\nmemset(local.copy, 0, sizeof local.copy);\n",
       "int r = guard_#{k.cid}(env, &local, argv, &res);\n",
-      if yields? do
-        [
-          "if (r == DEFK_YIELD) {\n",
-          "ERL_NIF_TERM args2[#{k.arity + 1}];\n",
-          "defk_promote(env, &local, sizeof local, &args2[0]);\n",
-          "memcpy(args2 + 1, argv, sizeof(ERL_NIF_TERM) * argc);\n",
-          "atomic_fetch_add(&defk_stat_yields, 1);\n",
-          "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc + 1, args2);\n}\n"
-        ]
-      else
-        ""
-      end,
+      promote(yields?, k),
       "defk_finish(&local.ctx);\n",
       "return r == DEFK_ERR ? defk_raise(env, &local.ctx) : res;\n}\n\n"
     ]
+  end
+
+  defp promote(yields?, k) do
+    if yields? do
+      [
+        "if (r == DEFK_YIELD) {\n",
+        "ERL_NIF_TERM args2[#{k.arity + 1}];\n",
+        "defk_promote(env, &local, sizeof local, &args2[0]);\n",
+        "memcpy(args2 + 1, argv, sizeof(ERL_NIF_TERM) * argc);\n",
+        "atomic_fetch_add(&defk_stat_yields, 1);\n",
+        "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc + 1, args2);\n}\n"
+      ]
+    else
+      ""
+    end
   end
 
   defp emit_init(module, kernels, nif_name) do
@@ -2627,6 +2643,58 @@ defmodule Defk.Compiler do
   defp cop(:===), do: "=="
   defp cop(:!==), do: "!="
   defp cop(op), do: Atom.to_string(op)
+
+  # The C text comparing `va` OP `vb` by Elixir's semantics, or a rejection.
+  defp compare_c(op, va, vb, node) do
+    if numeric?(va) and numeric?(vb) do
+      compare_numeric_c(op, va, vb, node)
+    else
+      cond do
+        va.t == :bool and vb.t == :bool and op in [:==, :!=, :===, :!==] ->
+          "(#{va.c} #{cop(op)} #{vb.c})"
+
+        true ->
+          err!(
+            node,
+            "operand-type",
+            "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
+            hint: "compare two numbers or two booleans"
+          )
+      end
+    end
+  end
+
+  # Numeric compare with exact-value semantics: i64 against f64 orders by
+  # value (cmp(a, b) OP 0, and cmp(f, i) = -cmp(i, f)), and === tells -0.0
+  # from 0.0 the way Erlang's =:= does.
+  defp compare_numeric_c(op, va, vb, node) do
+    cond do
+      op in [:===, :!==] and va.t != vb.t ->
+        if op == :===, do: "0", else: "1"
+
+      op in [:===, :!==] and va.t == :f64 and vb.t == :f64 ->
+        if op == :===,
+          do: "defk_feq_exact(#{va.c}, #{vb.c})",
+          else: "(!defk_feq_exact(#{va.c}, #{vb.c}))"
+
+      va.t == vb.t ->
+        "(#{va.c} #{cop(op)} #{vb.c})"
+
+      va.t == :i64 and vb.t == :f64 ->
+        "(defk_cmp_i64_f64(#{va.c}, #{vb.c}) #{cop(op)} 0)"
+
+      va.t == :f64 and vb.t == :i64 ->
+        "(0 #{cop(op)} defk_cmp_i64_f64(#{vb.c}, #{va.c}))"
+
+      true ->
+        err!(
+          node,
+          "operand-type",
+          "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
+          hint: "compare two numbers or two booleans"
+        )
+    end
+  end
 
   defp fmt({:arr, e}), do: "[#{e}]"
   defp fmt({:tuple, ts}), do: "{#{Enum.map_join(ts, ", ", &fmt/1)}}"

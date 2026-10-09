@@ -3,6 +3,12 @@
 # with natural yields and with a yield forced at every clock read, which
 # exercises the resume path of every safepoint, including those in loops of
 # inlined kernel calls (defk-jaj).
+#
+# The kernel bodies in `shapes` are fixture data: credo counts their nested
+# `for`s and reports them as one complex function (defk-x15.3), so the
+# complexity/nesting checks are off here.
+
+# credo:disable-for-this-file
 
 Code.require_file("../examples/fuzzy_search/lib/fuzzy_search/kernels.ex", __DIR__)
 

@@ -493,12 +493,7 @@ defmodule Defk.ElixirMode do
 
   defp case_arms(clauses, s, st, mode, env) do
     Enum.reduce_while(clauses, {[], MapSet.new()}, fn {:->, _, [[head], body]}, {arms, seen} ->
-      {pat, guard} =
-        case head do
-          {:when, _, [pat, guard]} -> {pat, guard}
-          pat -> {pat, nil}
-        end
-
+      {pat, guard} = case_clause_head(head)
       {test, benv, prefix} = case_pattern(pat, s, st, env)
       gq = guard && elem(expr(guard, guard_env(pat, s, st, env)), 0)
 
@@ -507,17 +502,9 @@ defmodule Defk.ElixirMode do
           do: MapSet.put(seen, elem(test, 1)),
           else: seen
 
-      always? = guard == nil and (test == :any or MapSet.equal?(seen, MapSet.new([true, false])))
       {stmts, last, t} = parts(body, benv, mode)
       parts = {prefix ++ stmts, last, t}
-
-      arm =
-        cond do
-          always? -> {:else, parts}
-          test == :any -> {:when, gq, parts}
-          guard == nil -> {:when, elem(test, 2), parts}
-          true -> {:when, {:and, [generated: true], [elem(test, 2), gq]}, parts}
-        end
+      {arm, always?} = case_arm(test, guard, gq, parts, seen)
 
       if always?, do: {:halt, {:done, [arm | arms]}}, else: {:cont, {[arm | arms], seen}}
     end)
@@ -527,6 +514,22 @@ defmodule Defk.ElixirMode do
 
       {arms, _} ->
         Enum.reverse([{:raise, quote(do: raise(CaseClauseError, term: unquote(s)))} | arms])
+    end
+  end
+
+  defp case_clause_head({:when, _, [pat, guard]}), do: {pat, guard}
+  defp case_clause_head(pat), do: {pat, nil}
+
+  # The completed arm and whether it always matches; the last is what decides
+  # whether the reducer stops early with an exhaustive set.
+  defp case_arm(test, guard, gq, parts, seen) do
+    always? = guard == nil and (test == :any or MapSet.equal?(seen, MapSet.new([true, false])))
+
+    cond do
+      always? -> {{:else, parts}, true}
+      test == :any -> {{:when, gq, parts}, false}
+      guard == nil -> {{:when, elem(test, 2), parts}, false}
+      true -> {{:when, {:and, [generated: true], [elem(test, 2), gq]}, parts}, false}
     end
   end
 
@@ -610,23 +613,10 @@ defmodule Defk.ElixirMode do
             else: {:if, gm(m), [c, [do: out.(a), else: out.(b)]]}
 
         _ when nested? ->
-          List.foldr(arms, nil, fn
-            {:when, c, a}, rest -> {:if, gm(m), [c, [do: out.(a), else: rest]]}
-            {:else, a}, _ -> out.(a)
-            {:raise, q}, _ -> q
-          end)
+          nested_arms(arms, out, m)
 
         _ ->
-          clauses =
-            for arm <- arms do
-              case arm do
-                {:when, c, a} -> {:->, gm(m), [[c], out.(a)]}
-                {:else, a} -> {:->, gm(m), [[true], out.(a)]}
-                {:raise, q} -> {:->, gm(m), [[true], q]}
-              end
-            end
-
-          {:cond, gm(m), [[do: clauses]]}
+          cond_arms(arms, out, m)
       end
 
     q =
@@ -637,6 +627,29 @@ defmodule Defk.ElixirMode do
       end
 
     {q, t}
+  end
+
+  # Nested mode: each when-arm wraps the rest, the first else/raise ends the chain.
+  defp nested_arms(arms, out, m) do
+    List.foldr(arms, nil, fn
+      {:when, c, a}, rest -> {:if, gm(m), [c, [do: out.(a), else: rest]]}
+      {:else, a}, _ -> out.(a)
+      {:raise, q}, _ -> q
+    end)
+  end
+
+  # Flat mode: a cond of when/else/raise clauses, each arm rendered by `out`.
+  defp cond_arms(arms, out, m) do
+    clauses =
+      for arm <- arms do
+        case arm do
+          {:when, c, a} -> {:->, gm(m), [[c], out.(a)]}
+          {:else, a} -> {:->, gm(m), [[true], out.(a)]}
+          {:raise, q} -> {:->, gm(m), [[true], q]}
+        end
+      end
+
+    {:cond, gm(m), [[do: clauses]]}
   end
 
   # ----------------------------------------------------------------- loops --
