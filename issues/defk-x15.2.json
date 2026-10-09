@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-x15.7"
@@ -10,8 +10,8 @@
   "labels": [],
   "parent": "defk-x15",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "ExDNA: extract shared Enum.all?/any? accumulator recipe",
   "type": "task",
-  "updated_at": "2026-10-09T09:30:31Z"
+  "updated_at": "2026-10-09T09:40:02Z"
 }
