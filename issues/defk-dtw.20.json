@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T18:40:50Z",
+  "description": "## Question\n\ndefk today is \"Elixir over numbers and binaries\". A UTF-8 string is already a [u8], so byte-level text work is in reach, but the subset has no bitwise operators, no sub-array views, no word loads, no growable output and no way to build a hash table except over alloc'd arrays. Before planning text support (see the 1BRC epic), survey the string and byte-processing jobs for which Elixir developers actually write NIFs today, and what each would need from the subset.\n\nCover at least: 1BRC-style parse-and-aggregate (the Elixir community attempts and their numbers), CSV scanning (ecsv, nimble_csv, rusty_csv), JSON scanning/validation (jsont, simdjson bindings), base64/hex/base58 (ex_base58), UTF-8 validation (bandit_native/simdutf8), substring and pattern search (:binary.match, bm/aho-corasick NIFs), tokenisation (tokenizers wraps a crate: out of scope, but the \"simple whitespace/byte tokeniser\" case), hashing (xxhash, murmur, siphash NIFs vs :erlang.phash2), string distance (ex_strsim, already a target), and sorting/dedup of byte keys.\n\nFor each: the anchor package(s) with download counts, whether the native code is hand-written or wraps a library, the input/output shapes (binary in, what out: number, binary, list of offsets, map?), the realistic input size, whether a pure-Elixir baseline exists (`:binary`, `String`, nimble_csv, Jason) and how fast it is, and the kernel-subset additions the kernel would need, named against existing tickets where they exist (defk-w38 bitwise, defk-cmr bitstring accumulator, defk-gqk arrays through branches / returning input arrays, defk-ivt module attributes, defk-4ai narrow types) and as new needs otherwise (word loads, sub-array views, byte-range compare, writable array parameters in helper kernels, hash tables over arrays, string literals).\n\nEnd with a ranked list of candidate text workloads for the catalog, the ones that are out of scope (anything that must build BEAM terms per element, Unicode semantics), and the minimal ordered set of subset additions that unlocks the top three.\n\n## Method\n\nPrimary sources only: Hex.pm API and package tarballs for the NIF code, the Erlang `binary`/`erl_nif` docs for what the BEAM already offers, the 1brc repository and the Elixir Forum 1BRC threads for the community numbers, and this repo's CONTEXT.md, README and ADRs for the subset's rules. Record what was measured vs quoted.\n\nOutput: branch research/string-workloads, docs/research/string-workloads.md, in the format of docs/research/nif-workloads.md.",
+  "id": "defk-dtw.20",
+  "labels": [],
+  "parent": "defk-dtw",
+  "priority": 2,
+  "status": "open",
+  "title": "Which text and byte-processing jobs push Elixir developers to NIFs, and what does each need from the kernel subset?",
+  "type": "task",
+  "updated_at": "2026-10-09T18:40:50Z"
+}
