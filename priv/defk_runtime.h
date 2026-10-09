@@ -452,6 +452,26 @@ static inline int64_t defk_trunc(defk_ctx *ctx, double a) {
   return (int64_t)a;
 }
 static inline int64_t defk_round(defk_ctx *ctx, double a) { return defk_trunc(ctx, round(a)); }
+/* Bit builtins (Defk.Bits): on the u64 bit patterns. __builtin_clzll and
+ * ctzll are undefined at 0, so 0 is guarded (the compiler folds the test into
+ * the instruction where the target defines it); rotates mask the count to 0..63
+ * and use the two-shift idiom, which compiles to one rotate instruction. */
+static inline int64_t defk_mulhi(int64_t a, int64_t b) {
+  return (int64_t)(((unsigned __int128)(uint64_t)a * (uint64_t)b) >> 64);
+}
+static inline int64_t defk_clz(int64_t x) { return x == 0 ? 64 : __builtin_clzll((uint64_t)x); }
+static inline int64_t defk_ctz(int64_t x) { return x == 0 ? 64 : __builtin_ctzll((uint64_t)x); }
+static inline int64_t defk_popcount(int64_t x) { return __builtin_popcountll((uint64_t)x); }
+static inline int64_t defk_rotl64(int64_t x, int64_t n) {
+  uint64_t u = (uint64_t)x;
+  unsigned k = (unsigned)n & 63u;
+  return (int64_t)((u << k) | (u >> ((64u - k) & 63u)));
+}
+static inline int64_t defk_rotr64(int64_t x, int64_t n) {
+  uint64_t u = (uint64_t)x;
+  unsigned k = (unsigned)n & 63u;
+  return (int64_t)((u >> k) | (u << ((64u - k) & 63u)));
+}
 static inline int64_t defk_min_i64(int64_t a, int64_t b) { return a < b ? a : b; }
 static inline int64_t defk_max_i64(int64_t a, int64_t b) { return a > b ? a : b; }
 /* Erlang's min/max return the first argument when the two compare equal

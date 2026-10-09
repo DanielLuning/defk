@@ -1625,6 +1625,15 @@ defmodule Defk.Compiler do
     Map.merge(val(c, :i64), facts)
   end
 
+  # mulhi, clz, ctz, popcount, rotl64, rotr64 (Defk.Builtins.bits/0): the
+  # Defk.Bits functions on the u64 bit patterns; the helpers are in
+  # defk_runtime.h. The counts are in 0..64.
+  defp builtin(f, [%{t: :i64} = a], _, _) when f in [:clz, :ctz, :popcount],
+    do: Map.merge(val("defk_#{f}(#{a.c})", :i64), %{lo: 0, hi: 64})
+
+  defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:mulhi, :rotl64, :rotr64],
+    do: val("defk_#{f}(#{a.c}, #{b.c})", :i64)
+
   defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:div, :rem],
     do: val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
 
@@ -1713,7 +1722,13 @@ defmodule Defk.Compiler do
     u32_le: "a [u8] array and an i64 byte offset",
     u32_be: "a [u8] array and an i64 byte offset",
     u16_le: "a [u8] array and an i64 byte offset",
-    u16_be: "a [u8] array and an i64 byte offset"
+    u16_be: "a [u8] array and an i64 byte offset",
+    mulhi: "two i64 values",
+    clz: "an i64 value",
+    ctz: "an i64 value",
+    popcount: "an i64 value",
+    rotl64: "two i64 values",
+    rotr64: "two i64 values"
   }
 
   @spec builtin_arguments!(term(), term(), term()) :: no_return()
@@ -1722,7 +1737,18 @@ defmodule Defk.Compiler do
     ts = Enum.map(vals, & &1.t)
 
     arity =
-      if name in [:div, :rem, :min, :max, :pow | @loads ++ (@bitwise -- [:bnot])], do: 2, else: 1
+      if name in [
+           :div,
+           :rem,
+           :min,
+           :max,
+           :pow,
+           :mulhi,
+           :rotl64,
+           :rotr64 | @loads ++ (@bitwise -- [:bnot])
+         ],
+         do: 2,
+         else: 1
 
     takes = "#{name}/#{arity} takes #{@builtin_takes[name]}"
 
