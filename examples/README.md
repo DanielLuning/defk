@@ -60,6 +60,10 @@ These numbers will shrink as the Elixir baselines are optimised; that's
 expected and is the point. Each example's header lists what hasn't been
 tried yet.
 
+## Target workloads in progress
+
+[`one_brc/`](one_brc/) is the One Billion Row Challenge (parse `<station>;<temp>\n` lines, min/mean/max per station), **baseline only, kernel pending (defk-n4r.6)**. `gen.exs` writes a deterministic file outside the repo (`$ONE_BRC_FILE`, default `/tmp/one_brc/measurements.txt`); `elixir.exs` is the pure-Elixir baseline, marked **optimised**: five variants measured at 10M and 100M rows, fastest `Task.async_stream` over `:file.pread` chunks with an `:atomics` accumulator, 1.66 s for 100M rows (1.4 GB) on 12 schedulers, checked against an independent Enum reference (`--check`). It is not run by `run_all.exs` (a directory) and does not call `Defk.Bench.report` yet.
+
 ## Where Elixir is the right choice
 
 | Example | The trap | defk vs Elixir | Elixir baseline |
