@@ -2223,11 +2223,21 @@ defmodule Defk.Compiler do
       body,
       "}\n",
       if(flat == :exits, do: [], else: "DEFK_TICKS(#{r} + 1)\n"),
+      strip_frame(id, done, se, strip, e, strip_stop, [
+        "while (!(#{strip.done_at.(se)})) {\n",
+        body,
+        "}\n"
+      ])
+    ]
+  end
+
+  # The long form of a flat loop: strips of DEFK_STRIP trips, `inner` running
+  # one strip, one safepoint per strip. Shared by the plain and flagged forms.
+  defp strip_frame(id, done, se, strip, e, strip_stop, inner) do
+    [
       "} else {\n",
       "defk_l#{id}:;\nwhile (!(#{done})) {\n#{se} = #{strip.remaining} < DEFK_STRIP ? #{e} : #{strip_stop};\n",
-      "while (!(#{strip.done_at.(se)})) {\n",
-      body,
-      "}\n",
+      inner,
       safepoint("DEFK_STRIP"),
       "}\n}\n"
     ]
@@ -2270,11 +2280,7 @@ defmodule Defk.Compiler do
       "#{se} = #{e};\n",
       flagged.(done),
       "DEFK_TICKS(#{r} + 1)\n",
-      "} else {\n",
-      "defk_l#{id}:;\nwhile (!(#{done})) {\n#{se} = #{strip.remaining} < DEFK_STRIP ? #{e} : #{strip_stop};\n",
-      flagged.(strip.done_at.(se)),
-      safepoint("DEFK_STRIP"),
-      "}\n}\n",
+      strip_frame(id, done, se, strip, e, strip_stop, flagged.(strip.done_at.(se))),
       "if (0) {\ndefk_rp#{id}:;\n",
       restore,
       "while (!(#{strip.done_at.(se)})) {\n",

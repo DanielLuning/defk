@@ -78,6 +78,25 @@ defmodule Defk.AgreementTest.Catalog do
 
   # nearest(lat, lon, coslat, qlat, qlon, k): three arrays of one length
   # (sometimes lon or coslat shorter: index errors), k up to past the length
+  # nearest_ids(ids, lat, lon, coslat, qlat, qlon, k): ids alongside the
+  # three arrays, k up to past the length (the kernel's bounds checks raise
+  # the same way in both modes when k exceeds it)
+  defp geo_ids(f64, max_length) do
+    bind(integer(0..max_length), fn n ->
+      arr = fn -> G.array(:f64, of: f64, length: n) end
+
+      fixed_list([
+        G.array(:i64, length: n),
+        arr.(),
+        arr.(),
+        arr.(),
+        f64,
+        f64,
+        integer(0..(n + 2))
+      ])
+    end)
+  end
+
   defp geo(f64, max_length) do
     bind(integer(0..max_length), fn n ->
       shorter = frequency([{8, constant(n)}, {1, integer(0..n)}])
@@ -169,6 +188,10 @@ defmodule Defk.AgreementTest.Catalog do
     nearest: [
       args: geo(f64s(), 40),
       deep: [args: geo(f64s(), 2049), max_runs: 1_000]
+    ],
+    nearest_ids: [
+      args: geo_ids(f64s(), 40),
+      deep: [args: geo_ids(f64s(), 2049), max_runs: 1_000]
     ]
   )
 

@@ -485,11 +485,16 @@ defmodule Defk.ElixirModeTest do
       pack = fn f -> f64s(Enum.map(points, f)) end
       {lat, lon, coslat} = {pack.(&elem(&1, 0)), pack.(&elem(&1, 1)), pack.(&elem(&1, 2))}
 
+      rec =
+        for {la, lo, c} <- points,
+            into: <<>>,
+            do: <<la::float-64-native, lo::float-64-native, c::float-64-native>>
+
       for {k, q} <- [{10, {59.3293, 18.0686}}, {1, {40.0, 0.0}}, {3_000, {50.0, 5.0}}] do
         {qlat, qlon} = {rad.(elem(q, 0)), rad.(elem(q, 1))}
         {:ok, got} = agree(Geo.Kernels, :nearest, [lat, lon, coslat, qlat, qlon, k])
         idx = for <<i::64-signed-native <- got>>, do: i
-        assert Enum.sort(idx) == Enum.sort(Geo.Elixir.nearest(points, qlat, qlon, k))
+        assert Enum.sort(idx) == Enum.sort(Geo.Elixir.nearest(rec, qlat, qlon, k))
       end
 
       agree(Geo.Kernels, :nearest, [lat, lon, coslat, 0.0, 0.0, 0])
