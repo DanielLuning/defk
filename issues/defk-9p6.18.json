@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T19:21:02Z",
+  "description": "## The job\n\nProvably-fair iGaming RNG derives each round from a hash chain: a server seed hashed N times (the chain is revealed from the end), or HMAC-SHA256(server_seed, client_seed:nonce) per round, then bytes -\u003e float -\u003e outcome. Verifying a player's history recomputes millions of rounds. People ask whether native code would make this faster.\n\nExpected verdict: marginal or poor, and the entry exists to say so with numbers. `:crypto` is already a NIF over OpenSSL using the CPU's SHA instructions, and each call is reduction-counted, so a chain in an Enum.reduce already keeps the runtime contract. Measured 2026-10-09 on an M-series Mac (single run, includes the reduce): chained `:crypto.hash(:sha256, h)` 226 ns/step, `:crypto.mac(:hmac, :sha256, key, msg)` 1.1 us/step. A kernel emits portable C with no intrinsics, so its SHA-256 compression costs a few hundred ns; the only cost it removes is the per-call overhead between steps.\n\n## Design\n\n- Kernel `sha256_chain(seed :: [u8], n :: i64) :: [u8]`: SHA-256 in the subset (message schedule, 64 rounds, big-endian u32 words via `u32_be(bytes, i)`, rotates and masked 32-bit arithmetic `band(x + y, 0xFFFFFFFF)`), applied n times over a 32-byte alloc'd buffer; returns the final digest. Test vectors from FIPS 180-4 and agreement against `:crypto.hash/2` for n = 1 and n = 1000 (the one rule is checked against OpenSSL, not only Elixir mode). HMAC variant optional: it is two SHA-256 computations per step, so the ratio is the same.\n- Elixir baseline: `Enum.reduce(1..n, seed, \u0026:crypto.hash(:sha256, \u00262))`; also try `:crypto.hash_init/update/final` and a tail-recursive loop. Mark :optimized.\n- Realistic size: 10M-step chain (seconds), 1M for development.\n- Report beside the verdict: that `:crypto`'s path is hardware SHA (cite OpenSSL's sha256 asm selection), and that the result is \"use :crypto\" unless a future intrinsics path exists. Also note the outcome-derivation step (bytes -\u003e float -\u003e table lookup) is cheap and belongs in Elixir.\n\nBlocked by defk-w38, defk-n4r.2 (word loads and masked arithmetic), defk-n4r.5 or defk-ivt (the 64 round constants as a [i64] attribute).\n\nDone when: the kernel passes the FIPS vectors, agrees with :crypto, Defk.Bench.report runs with expected: :marginal (or whatever it measures) and the README \"Where Elixir is the right choice\" table gets the row.",
+  "id": "defk-9p6.18",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 3,
+  "status": "open",
+  "title": "Example: SHA-256 and HMAC hash chains (provably-fair RNG) vs :crypto, expected marginal",
+  "type": "task",
+  "updated_at": "2026-10-09T19:21:02Z"
+}
