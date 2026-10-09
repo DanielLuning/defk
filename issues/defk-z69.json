@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-09T22:05:54Z",
   "created": "2026-10-09T21:40:28Z",
   "description": "Hit in examples/hashes.exs (defk-9p6.20): `murmur3_128` returns `{i64, i64}` and could not be called from the batch kernel, so the batch is a \"batch of one\" through an alloc'd offsets array, ~100 ns per call. Also hit by the Monte Carlo and geohash authors as `branch-tuple` in a different place (defk-uew covers if/cond/case; this ticket covers calls). The inliner (`inline/4` in lib/defk/compiler.ex) already binds the callee's value; a tuple value is `%{elems: ...}` like a reduce accumulator, so a tuple-returning callee can be inlined by binding each element to a temporary and returning the tuple value, exactly as `coerce_return` does for the kernel itself. Retire the `tuple-return-call` code (grep docs/language.md for links to it) and update docs/language.md section 8.\n\nTests: a kernel calling a tuple-returning helper and destructuring `{a, b} = helper(x)`, using the pair in arithmetic, in both modes (assert_agrees) and under forced yields when the helper has a loop; the helper returning a tuple with an alloc'd array element stays rejected until defk-gqk (arrays through branches) unless it falls out naturally.\n\nDone when: hashes.exs's murmur3_128 batch calls the helper directly and the suite is green.",
   "id": "defk-z69",
@@ -9,8 +10,8 @@
     "ready-for-agent"
   ],
   "priority": 3,
-  "status": "open",
+  "status": "closed",
   "title": "Kernels returning tuples cannot be called from other kernels (tuple-return-call)",
   "type": "task",
-  "updated_at": "2026-10-09T21:40:28Z"
+  "updated_at": "2026-10-09T22:05:54Z"
 }
