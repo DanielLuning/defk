@@ -1,6 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [
+    "defk-n4r.10",
     "defk-n4r.4"
   ],
   "blocks": [
@@ -17,5 +18,5 @@
   "status": "open",
   "title": "Bounded CDCL SAT kernel vs picosat_elixir and simple_sat, measured on Crux's scenario enumeration",
   "type": "task",
-  "updated_at": "2026-10-09T21:16:27Z"
+  "updated_at": "2026-10-09T22:03:23Z"
 }
