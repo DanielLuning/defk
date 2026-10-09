@@ -4,6 +4,7 @@
   "blocks": [
     "defk-n4r.9"
   ],
+  "closed_at": "2026-10-09T21:56:19Z",
   "created": "2026-10-09T18:40:52Z",
   "description": "The workload verdict compares defk with the optimized Elixir baseline; the comparison with a hand-written NIF is reported beside it (CONTEXT.md, \"workload verdict\"). Write the NIF a careful Elixir developer would write today: a Rustler crate with the same per-chunk aggregate function (hash map from the std library or ahash, the same parse), called the same way from the same Elixir chunking code, both as a DirtyCpu NIF and as a plain NIF (to show the scheduler gap the way examples/fuzzy_search does with search_blocking). Record build toolchain requirements beside defk's (Rust toolchain vs cc).\n\nAlso run a responsiveness probe during the full-size run: a 1 ms ticker as in bench/tick_gap.exs, reported for Elixir, defk and both NIF variants.\n\nDone when: the NIF produces the same output as the baseline for two seeds, the three implementations are measured by the same harness, and the tick-gap numbers are recorded.",
   "id": "defk-n4r.8",
@@ -12,8 +13,8 @@
   ],
   "parent": "defk-n4r",
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "1BRC: Rustler reference implementation for the native comparison",
   "type": "task",
-  "updated_at": "2026-10-09T21:51:25Z"
+  "updated_at": "2026-10-09T21:56:19Z"
 }
