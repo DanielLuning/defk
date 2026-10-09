@@ -46,7 +46,7 @@ So far:
 - **Where Elixir is the right choice:**
   - data that arrives as lists (defk ≈3× slower)
   - one kernel call per element (defk ≈2.5× slower)
-  - maps and strings (not expressible)
+  - maps and string building (not expressible; a string literal is a read-only `[u8]`)
 
 ## What it is
 
@@ -103,6 +103,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 - Masked arithmetic: `+ - *` and `bsl` by a literal directly inside `band(expr, 2^k - 1)` wrap like machine arithmetic and give Elixir's exact masked result without raising; `wrap64(expr)` wraps the same tree to the low 64 bits as a signed i64, as `Defk.Bits.wrap64/1` does in Elixir (for hashes such as FNV-1a).
 - Bit builtins: `mulhi(a, b)` (high 64 bits of the unsigned 128-bit product), `clz`, `ctz`, `popcount` and `rotl64`/`rotr64` on the u64 bit pattern of an `i64`; each is a plain function in `Defk.Bits` that Elixir mode calls (for hashing and bit-reader kernels).
 - Word loads: `u64_le(bytes, i)`, `u32_le`, `u16_le` and the `_be` variants read an unsigned word at a byte offset of a `[u8]` (one unaligned load; `u64` comes back as its signed i64 bit pattern).
+- Binary literals: `"abc"` and `<<1, 2, 3>>` (integer segments 0..255) are a read-only `[u8]` in static storage, like a binary attribute: index it, `len` it, `for x <- "abc"`, pass it to a helper, compare it byte by byte; `"0123456789abcdef"[band(x, 15)]` has no bounds check. Not writable or returnable; no interpolation or charlists.
 - Module attributes as constants: `@name` holding an integer, float or boolean is inlined as that literal (also as a `case` pattern, in a guard, as a range bound, or a `band` mask that elides bounds checks); one holding a binary is a read-only `[u8]`. The value is the one where the kernel is defined, as in a `def`.
 
 **Elixir mode** (tests and debugging only): each kernel body is also compiled to
@@ -163,7 +164,7 @@ These are deliberate, to keep defk small for now.
 - A float operation whose result would be inf or NaN raises `ArithmeticError` at that operation, as Elixir does (`1.0e308 * 10.0`, `x / 0.0`, `0.0 / 0.0`, `sqrt(-1.0)`, `log(0.0)`, `exp(1000.0)`, `:math.pow(10.0, 400.0)`), also when the value would never be returned. An `[f64]` input element whose bits are inf or NaN raises `ArgumentError` when it is read, as Elixir mode's binary match does; an element never read does not. Underflow to 0.0 or a subnormal does not raise. A select whose untaken arm would give inf or NaN (`if y != 0.0, do: x / y, else: 0.0`) does not raise: float arms are speculated with a flag, like i64 overflow (defk-i00).
   This is Elixir's behaviour, not a limit, but it costs time. A float expression over variables, literals and in-range reads is computed with plain C operators and checked once (`+ - *` keep an inf or NaN operand non-finite, so the result shows it; a divisor that may be inf is checked too); a failed check replays the expression one operation at a time, so it raises the error Elixir would. Other float operations are checked one by one. Measured with the checks and with them compiled out (`mix run bench/float_checks.exs`, 1M elements, 3 runs of 11 interleaved rounds, best of 5 per round, on a shared machine): `dot` +24% (run medians 23.5-24.1%, single rounds 20-28%), cosine similarity +17% (17.4-17.5%, 13-20%), rolling_stats `mean_std` +23% (22.0-23.3%, 19-44%), and an element-wise map (`scale`, `out[i] = a[i] * k`) +87-91% (75-118%), because a check per element stops clang from vectorising the loop. Checking every operation and read on its own cost `dot` 30%, cosine 82%, `mean_std` 48% and `scale` 150%.
 - An array may be returned only if it was created with `alloc/2`. Arrays can't flow through `if`/`cond` branches.
-- No maps, lists or strings (a binary module attribute is a read-only `[u8]`).
+- No maps, lists or strings (a string literal, `<<1, 2, 3>>` or a binary module attribute is a read-only `[u8]`).
 - Early exit only through `Enum.reduce_while` and `Enum.all?/any?`. Every tail of the `fn` must be a literal `{:cont, acc}` or `{:halt, acc}` (through `if`/`cond`/`case`). There is no `while`/`break`, and `{:halt, acc}` in a `for ..., reduce:` is not early exit, as in Elixir. No `Enum.find`/`find_index` (no `nil`).
 - `case` matches only `i64`/`bool` subjects against literals, variables and pins (no floats, tuples or ranges). An error inside a guard (overflow, `rem` by zero) raises, where Elixir would fail that clause. Kernel calls are rejected in guards, as Elixir rejects them.
 - Array writes alias: `b = a` then `a[i] = x` is visible through `b`.

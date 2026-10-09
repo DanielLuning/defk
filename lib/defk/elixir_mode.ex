@@ -268,6 +268,14 @@ defmodule Defk.ElixirMode do
     {b, {:arr, :u8}}
   end
 
+  # a binary literal: the binary itself
+  defp expr(b, _env) when is_binary(b), do: {b, {:arr, :u8}}
+
+  defp expr({:<<>>, _, _} = node, _env) do
+    {:ok, b} = Defk.BinaryLiteral.bytes(node)
+    {b, {:arr, :u8}}
+  end
+
   defp expr({:__block__, _, _} = b, env), do: value_block(b, env)
 
   defp expr({a, b}, env), do: tuple_expr([a, b], env)

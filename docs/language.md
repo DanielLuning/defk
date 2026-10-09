@@ -214,8 +214,8 @@ end
 - Float literals are `f64`. An integer literal where an `f64` is expected
   (a result, an argument, a `[f64]` write) widens, as in Elixir arithmetic.
 - `true` and `false` are `bool`. Other atoms and `nil` are
-  [`unsupported-atom`](#unsupported-atom); strings are
-  [`unsupported-string`](#unsupported-string).
+  [`unsupported-atom`](#unsupported-atom). A string or `<<1, 2, 3>>` is a
+  read-only `[u8]` ([binary literals](#binary-literals)).
 
 ## 4. Expressions and operators
 
@@ -442,6 +442,48 @@ end
 
 (defk-n4r.2)
 
+### Binary literals
+
+**Supported:** a string literal `"abc"` (its UTF-8 bytes) and `<<1, 2, 3>>`
+with integer-literal segments (each `0..255`, optionally `::8` or
+`::size(8)`) are a read-only `[u8]`, the same value a binary module attribute
+is: indexed (out of range raises `Enum.OutOfBoundsError`), measured with
+`len/1`, iterated with `for x <- "abc"`, bound to a variable, passed to a
+kernel, compared byte by byte in a loop. Natively it is a static const view in
+the NIF: no allocation and no copy, and its length is known, so
+`"0123456789abcdef"[band(x, 15)]` has no bounds check. In Elixir mode it is
+the binary itself. `""` and `<<>>` are a zero-length array (`len` is 0, any
+index raises).
+
+```elixir
+defk hex_digit(x :: i64) :: i64 do
+  "0123456789abcdef"[band(x, 15)]
+end
+
+defk starts_with?(s :: [u8], p :: [u8]) :: bool do
+  if len(p) > len(s) do
+    false
+  else
+    for i <- 0..(len(p) - 1)//1, reduce: true do
+      acc -> acc and s[i] == p[i]
+    end
+  end
+end
+
+defk is_ham?(s :: [u8]) :: bool, do: starts_with?(s, "Ham")
+```
+
+A literal cannot be written ([`read-only-array`](#read-only-array)) or
+returned ([`return-input-array`](#return-input-array)), and it is not a `case`
+pattern.
+
+**Unsupported:** interpolation, charlists (`'abc'`, `~c"abc"`; write
+`"abc"`), a segment that is a float, a variable, a string, a value outside
+`0..255`, or any type or size other than 8-bit integer
+([`binary-literal`](#binary-literal)); build it in Elixir and pass it as a
+`[u8]` parameter, or use a module attribute. `<>` and `~s` are
+[`unsupported-string`](#unsupported-string). (defk-n4r.5)
+
 ### Module attributes
 
 **Supported:** `@name` in a kernel body reads a module attribute as a
@@ -501,13 +543,13 @@ Each of these is a compile error with a code; the code's entry in
 | Construct | Code |
 |---|---|
 | maps, structs, `map.field` | [`unsupported-map`](#unsupported-map) |
-| string literals, sigils `~s`, `<>`, interpolation | [`unsupported-string`](#unsupported-string) |
+| string concatenation `<>`, the sigil `~s` | [`unsupported-string`](#unsupported-string) |
+| interpolation `"#{x}"`, charlists `'abc'`/`~c"abc"`, a `<<...>>` with a non-byte segment | [`binary-literal`](#binary-literal) |
 | atoms other than `true`/`false`, `nil` | [`unsupported-atom`](#unsupported-atom) |
 | lists, `++`, `--` | [`unsupported-list`](#unsupported-list) |
 | `fn`, captures `&f/1` (except the `fn` of `Enum.reduce_while/3`, `Enum.all?/2`, `Enum.any?/2`) | [`unsupported-fn`](#unsupported-fn), [`fn-argument`](#fn-argument) |
 | the pipe `\|>` | [`pipe`](#pipe) (the hint shows the nested call) |
 | a module attribute holding a list, tuple, map, atom or `nil`, or not defined above the kernel | [`attribute-value`](#attribute-value), [`undefined-attribute`](#undefined-attribute) |
-| building a bitstring `<<...>>` | [`bitstring-build`](#bitstring-build) (planned) |
 | binary patterns `<<a, b, rest::binary>> = arr` | [`bitstring-match`](#bitstring-match) |
 | calls to other modules (`Enum.sum/1`, `Enum.map/2`, `String.*`, `:math.tan/1`, ...) | [`unsupported-call`](#unsupported-call), [`enum-reduce`](#enum-reduce) and [`enum-find`](#enum-find) (planned) |
 | a range as a value (`r = 1..10`), `x in [1, 2, 3]`, `**`, a match used as a value | [`unsupported-expression`](#unsupported-expression) |
@@ -2527,26 +2569,27 @@ end
 
 ### unsupported-string
 
-Strings are not in the kernel subset; a kernel sees bytes as a [u8] array.
+String concatenation with <> and the ~s sigil are not in the kernel subset; a string literal is a [u8].
 
 - kind: outside the kernel subset (permanent)
-- why: kernels see bytes, not text: there are no UTF-8 or grapheme operations
-- hint: pass the bytes as a [u8] argument, and do text work in Elixir before or after the call
+- why: kernels see bytes, not text: there are no UTF-8 or grapheme operations, and a kernel cannot build a string at run time
+- hint: write one string literal, or pass the bytes as a [u8] argument and do text work in Elixir before or after the call
 
 Rejected:
 
 ```elixir
 defk f(x :: i64) :: i64 do
-  s = "hello"
-  x
+  s = "ab" <> "cd"
+  len(s) + x
 end
 ```
 
 Write instead:
 
 ```elixir
-defk f(s :: [u8]) :: i64 do
-  s[0]
+defk f(x :: i64) :: i64 do
+  s = "abcd"
+  len(s) + x
 end
 ```
 
@@ -2626,33 +2669,6 @@ end
 
 defk f(x :: i64) :: i64 do
   g(x)
-end
-```
-
-### bitstring-build
-
-Building bitstrings with <<...>> is planned (the bitstring accumulator).
-
-- kind: not supported yet (planned)
-- why: a kernel produces bytes by writing an alloc/2 array; building bitstrings is planned
-- hint: write the bytes into an alloc(u8, n) array
-
-Rejected:
-
-```elixir
-defk f(x :: i64) :: i64 do
-  b = <<x::8>>
-  x
-end
-```
-
-Write instead:
-
-```elixir
-defk f(x :: i64) :: [u8] do
-  b = alloc(u8, 1)
-  b[0] = rem(x, 256)
-  b
 end
 ```
 
@@ -2790,6 +2806,32 @@ Write instead:
 
 defk f(i :: i64) :: i64 do
   @table[i]
+end
+```
+
+### binary-literal
+
+A binary literal in a kernel is a string or <<...>> of integer bytes (0..255); anything else is built in Elixir.
+
+- kind: outside the kernel subset (permanent)
+- why: a binary literal is a read-only [u8] in static storage, so every byte must be known when the kernel compiles: no interpolation, charlists, floats, other segment types or sizes, and no value over 255
+- hint: build it in Elixir and pass it as a [u8] parameter, or use a module attribute
+
+Rejected:
+
+```elixir
+defk f(i :: i64) :: i64 do
+  t = <<1, 2, 300>>
+  t[i]
+end
+```
+
+Write instead:
+
+```elixir
+defk f(i :: i64) :: i64 do
+  t = <<1, 2, 44>>
+  t[i]
 end
 ```
 

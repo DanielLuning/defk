@@ -156,7 +156,7 @@ defmodule Defk.CompileErrorsTest do
           end
 
           defk string(x :: i64) :: i64 do
-            s = "hello"
+            s = "he" <> "llo"
             x
           end
 
@@ -188,7 +188,7 @@ defmodule Defk.CompileErrorsTest do
 
       assert whats(msg) == [
                "maps are not in the kernel subset",
-               "string literals are not in the kernel subset",
+               "string concatenation with <> is not in the kernel subset",
                "f/1 calls itself, and recursion is not in the kernel subset",
                "this if gives an array ([f64]); arrays from an if are not supported yet",
                "Enum.map/2 is not in the kernel subset",
@@ -197,7 +197,7 @@ defmodule Defk.CompileErrorsTest do
 
       # carets under the whole construct, as written
       assert msg =~ "5 │    m = %{a: x}\n  │        ^^^^^^^\n"
-      assert msg =~ "10 │    s = \"hello\"\n   │        ^^^^^^^\n"
+      assert msg =~ "10 │    s = \"he\" <> \"llo\"\n   │             ^^^^^^^^\n"
 
       assert msg =~
                "15 │    if x == 0, do: 0, else: f(x - 1)\n   │                            ^^^^^^^^\n"
@@ -223,7 +223,7 @@ defmodule Defk.CompileErrorsTest do
       defmodule Defk.CompileErrorsTest.NoFile do
         use Defk
         defk f(x :: i64) :: i64 do
-          s = "hello"
+          s = "he" <> "llo"
           x
         end
       end
@@ -232,7 +232,7 @@ defmodule Defk.CompileErrorsTest do
       msg = Exception.message(assert_raise(CompileError, fn -> Code.compile_string(src) end))
 
       assert msg =~
-               ~r"error: string literals are not in the kernel subset\n└─ nofile:4:\d+: Defk.CompileErrorsTest.NoFile.f/1\n\nwhy:"
+               ~r"error: string concatenation with <> is not in the kernel subset\n└─ nofile:4:\d+: Defk.CompileErrorsTest.NoFile.f/1\n\nwhy:"
     end
   end
 
@@ -242,7 +242,7 @@ defmodule Defk.CompileErrorsTest do
         compile(
           """
           defk helper(x :: i64) :: i64 do
-            x + "one"
+            x + ("one" <> "two")
           end
 
           defk f(x :: i64) :: i64 do
