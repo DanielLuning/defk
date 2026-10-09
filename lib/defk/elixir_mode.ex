@@ -260,6 +260,12 @@ defmodule Defk.ElixirMode do
     {v[:q] || var(name), v.t}
   end
 
+  # a binary module attribute (Defk.Attributes.inline/1): the binary itself
+  defp expr({:@, _, [{name, _, ctx}]} = node, _env) when is_atom(name) and is_atom(ctx) do
+    {:ok, b} = Defk.Attributes.of(node)
+    {b, {:arr, :u8}}
+  end
+
   defp expr({:__block__, _, _} = b, env), do: value_block(b, env)
 
   defp expr({a, b}, env), do: tuple_expr([a, b], env)
