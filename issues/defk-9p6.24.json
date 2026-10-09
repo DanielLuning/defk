@@ -9,9 +9,15 @@
     "needs-triage"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Second instance: examples/utf8_valid.exs (defk-9p6.22) measures 1.04-1.09x against :unicode.characters_to_binary, expected marginal; a noisy run can land below 1.0x and flip it to poor. Same recommendation: a tie band around 1.0x.",
+      "timestamp": "2026-10-09T21:05:00Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Defk.Bench verdict has no tie band: a 1.0x result flips between marginal and poor run to run",
   "type": "task",
-  "updated_at": "2026-10-09T20:24:43Z"
+  "updated_at": "2026-10-09T21:05:00Z"
 }
