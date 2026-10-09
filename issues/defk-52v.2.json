@@ -1,6 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [
+    "defk-ivt",
     "defk-n4r.2",
     "defk-w38"
   ],
@@ -16,5 +17,5 @@
   "status": "open",
   "title": "BLAKE2b and BLAKE3 from scratch vs blake2_elixir and b3 NIFs",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:38Z"
+  "updated_at": "2026-10-09T19:47:39Z"
 }
