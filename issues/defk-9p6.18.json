@@ -14,6 +14,12 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Merged: chain 0.57x (poor), HMAC 1.3-1.47x (marginal). Finding filed as defk-pvp (nested block scoping); the macro-error crash was defk-f4n, fixed.",
+      "timestamp": "2026-10-09T22:07:35Z"
+    }
+  ],
   "priority": 3,
   "status": "closed",
   "title": "Example: SHA-256 and HMAC hash chains (provably-fair RNG) vs :crypto, expected marginal",
