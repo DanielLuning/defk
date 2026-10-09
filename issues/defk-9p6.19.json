@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T19:21:02Z",
+  "description": "Ranked #2 in docs/research/string-workloads.md (defk-dtw.20). Anchor packages: fast64 (541k downloads, 580 lines of hand-written C base64 with enif_consume_timeslice + enif_schedule_nif chunking; README claims \"20x faster than Elixir default implementation\"), b64fast (272k, same chunking), ex_base58 (156k, Rust over the bs58 crate, normal scheduler, no size limit); three pure-Elixir/Erlang base58s (erl_base58 416k, b58 307k, base58 32k) are the base58 baseline.\n\nShape: [u8] in, [u8] out of a length known up front (base64 4*ceil(n/3), hex 2n, base58 at most ceil(n*138/100)+1): alloc the bound, return {out, len}, Elixir takes binary_part. Decode raises ArgumentError on a bad byte, as Base.decode64! does. Nothing growable.\n\nElixir baseline (measured in the research, 16 MiB random, single run): Base.encode64 764 MB/s, Base.decode64! 551 MB/s, Base.encode16 475 MB/s, :binary.encode_hex 1091 MB/s. These are already C BIFs underneath for hex, so hex is expected marginal; base64 is expected good only if a table-driven kernel reaches a few GB/s; base58 is expected good (pure implementations are bignum long division). Pre-register all three verdicts separately in one example file with three DEFK_RESULT lines (extend Defk.Bench.report per defk-9p6.10 if it cannot report several).\n\nRealistic size: tens of KB to tens of MB for base64 (uploads, JWT, data URLs); 20-64-byte keys for base58, which means the base58 verdict must be measured on a batch of keys per call (poor_tiny_calls lesson) and also reported per single call.\n\nNeeds: defk-w38 (bsr/band to split 24-bit groups into 6-bit indices), an alphabet constant via defk-ivt or defk-n4r.5 (`@alphabet \"ABC...\"` read as alphabet[i]); base58's long-division loop writes an alloc'd digit array in place, which works today in one kernel body and needs defk-n4r.4 only if split into helpers.\n\nReport beside the verdict: fast64's and b64fast's numbers run through the same harness (they are the \"existing NIF\" comparison), and the tick gap during a 64 MB encode, since the anchors hand-roll chunking for exactly that.\n\nDone when: three verdicts are measured against :optimized baselines, agreement holds against Base/:binary (and Elixir mode) including bad-byte decode errors, and the README tables get the rows.",
+  "id": "defk-9p6.19",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 2,
+  "status": "open",
+  "title": "Target workload: base64, hex and base58 codecs vs fast64, b64fast and ex_base58",
+  "type": "task",
+  "updated_at": "2026-10-09T19:21:02Z"
+}
