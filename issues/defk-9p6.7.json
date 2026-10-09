@@ -14,11 +14,15 @@
     {
       "text": "Lowered to P3 by 'Choose the target workload set' (defk-dtw.5): this is now a supporting example and doesn't count towards the verdict.",
       "timestamp": "2026-10-05T19:56:14Z"
+    },
+    {
+      "text": "Post-merge fix on main: the new nearest_ids kernel needed an agreement property and the Elixir-mode test now builds the record binary (the gate caught it; examples that change kernel modules get the full gate from now on).",
+      "timestamp": "2026-10-09T22:05:37Z"
     }
   ],
   "priority": 3,
   "status": "closed",
   "title": "Optimise the Elixir baseline: geo_nearest",
   "type": "task",
-  "updated_at": "2026-10-09T22:01:39Z"
+  "updated_at": "2026-10-09T22:05:37Z"
 }
