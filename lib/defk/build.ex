@@ -6,6 +6,10 @@ defmodule Defk.Build do
   # credo:disable-for-next-line ExSlop.Check.Warning.PathExpandPriv
   @priv Path.expand("../../priv", __DIR__)
 
+  # The cache key (see cache_key/2) covers: these cflags, the generated C
+  # source, the contents of priv/defk_runtime.h, the ERTS version (whose
+  # erl_nif.h the library is built against), the resolved compiler (`CC` or
+  # "cc") and the first line of its `--version` output.
   # -ffp-contract=off: never fuse a*b+c into an FMA, whose single rounding
   # differs from Elixir's in the last bit. Float results must be bit-exact
   # with Elixir mode, so no -ffast-math or reassociation either (defk-jlk).
@@ -20,11 +24,7 @@ defmodule Defk.Build do
     dir = Path.join(build_root(), "defk")
     File.mkdir_p!(dir)
 
-    hash =
-      :erlang.md5([@cflags, src, File.read!(Path.join(@priv, "defk_runtime.h"))])
-      |> Base.encode16(case: :lower)
-
-    base = Path.join(dir, "#{module}-#{binary_part(hash, 0, 10)}")
+    base = Path.join(dir, "#{module}-#{cache_key(src)}")
 
     unless File.exists?(base <> ".so") do
       File.write!(base <> ".c", src)
@@ -48,6 +48,64 @@ defmodule Defk.Build do
     end
 
     base
+  end
+
+  @doc """
+  Cache key for a generated kernel: the 10 hex chars used in the file name.
+
+  Fills in the environment-dependent parts (ERTS version, resolved compiler,
+  first line of `cc --version`) and delegates to `cache_key/2`.
+  """
+  @spec cache_key(binary()) :: String.t()
+  def cache_key(src) do
+    cc = System.get_env("CC", "cc")
+
+    cache_key(src, %{
+      erts: to_string(:erlang.system_info(:version)),
+      cc: cc,
+      cc_version: cc_version(cc)
+    })
+  end
+
+  @doc """
+  Pure cache key: md5 over the cflags, the C source, the runtime header
+  contents, and the `:erts`, `:cc` and `:cc_version` strings in `env`.
+  Returns the first 10 lowercase hex chars.
+  """
+  @spec cache_key(binary(), %{erts: String.t(), cc: String.t(), cc_version: String.t()}) ::
+          String.t()
+  def cache_key(src, %{erts: erts, cc: cc, cc_version: cc_version}) do
+    header = File.read!(Path.join(@priv, "defk_runtime.h"))
+
+    [@cflags, src, header, erts, cc, cc_version]
+    |> :erlang.md5()
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 10)
+  end
+
+  # First line of `<cc> --version`, "unknown" if it cannot be run. Memoised in
+  # :persistent_term so a module with many kernels shells out once per cc.
+  defp cc_version(cc) do
+    key = {__MODULE__, :cc_version, cc}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        version = probe_cc_version(cc)
+        :persistent_term.put(key, version)
+        version
+
+      version ->
+        version
+    end
+  end
+
+  defp probe_cc_version(cc) do
+    case System.cmd(cc, ["--version"], stderr_to_stdout: true) do
+      {out, 0} -> out |> String.split("\n", parts: 2) |> hd() |> String.trim()
+      _ -> "unknown"
+    end
+  rescue
+    _ -> "unknown"
   end
 
   defp build_root do
