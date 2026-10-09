@@ -49,6 +49,8 @@ So far:
 
 ## What it is
 
+The full reference for kernel authors (every construct, its exact semantics, the limits, and every compile error code) is [`docs/language.md`](docs/language.md); this section is the overview.
+
 ```elixir
 defmodule Stats do
   use Defk

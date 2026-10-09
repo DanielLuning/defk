@@ -22,16 +22,18 @@ defmodule Defk.Errors do
 
       why: a kernel works on numbers, booleans, tuples and packed arrays; ...
       hint: pass the values as separate arguments, ...
-      (defk unsupported-map; mix run -e 'Defk.Errors.explain!("unsupported-map")')
+      (defk unsupported-map: docs/language.md#unsupported-map)
 
-  Once `docs/language.md` exists the footer is `(defk unsupported-map: docs/language.md#unsupported-map)`.
+  Without `docs/language.md` (a build from a copy of `lib/` alone) the footer
+  is `(defk unsupported-map; mix run -e 'Defk.Errors.explain!("unsupported-map")')`.
+  The "Compile errors" section of `docs/language.md` is `reference/0`.
   """
 
   @docs "docs/language.md#"
 
   # The footer names docs/language.md only when that file exists, so no rendered
-  # error points at a missing path. defk-sgw.1 writes the file; this attribute
-  # then flips to true on the next compile of this module (touch it to force).
+  # error points at a missing path (the file is tracked as an external resource,
+  # so creating or removing it recompiles this module).
   @external_resource Path.expand("../../docs/language.md", __DIR__)
   @language_doc_exists File.exists?(Path.expand("../../docs/language.md", __DIR__))
 
@@ -806,6 +808,46 @@ defmodule Defk.Errors do
   end
 
   defp indent_block(text), do: text |> String.split("\n") |> Enum.map_join("\n", &indent/1)
+
+  @doc """
+  The entries of the "Compile errors" section of `docs/language.md`, one
+  `### <code>` heading per code (the anchor the error footer links), in
+  registry order. Regenerate that section with:
+
+      mix run -e 'IO.write(Defk.Errors.reference())'
+
+  The test suite checks the document contains this text verbatim.
+  """
+  @spec reference() :: String.t()
+  def reference, do: Enum.map_join(@codes, "\n", &reference_entry/1)
+
+  @kinds %{
+    subset: "outside the kernel subset (permanent)",
+    planned: "not supported yet (planned)",
+    error: "a mistake to fix (in the kernel or the build)"
+  }
+
+  defp reference_entry(e) do
+    example =
+      if e.example,
+        do: [
+          "\nRejected:\n\n```elixir\n",
+          e.example,
+          "\n```\n\nWrite instead:\n\n```elixir\n",
+          e.rewrite,
+          "\n```\n"
+        ],
+        else: []
+
+    IO.iodata_to_binary([
+      "### #{e.code}\n\n",
+      "#{e.summary}\n\n",
+      "- kind: #{@kinds[e.kind]}\n",
+      "- why: #{e.why}\n",
+      "- hint: #{e.hint}\n",
+      example
+    ])
+  end
 
   defp footer(code) do
     if @language_doc_exists do
