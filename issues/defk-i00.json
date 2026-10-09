@@ -22,11 +22,15 @@
     {
       "text": "From defk-6g6 probes: pow(negative, 0.5) written into an output array gives NaN natively while Elixir mode raises (the scalar form raises in both). Covered by this ticket: a non-finite result must raise at the op, whether or not it is stored.",
       "timestamp": "2026-10-09T20:48:33Z"
+    },
+    {
+      "text": "Merged 2026-10-09 (9d18617, 6bb037d). Cost follow-up: defk-6tt (branchless per-strip flag with replay to recover vectorisation: scale +87-91%, dot +24% today).",
+      "timestamp": "2026-10-09T21:07:14Z"
     }
   ],
   "priority": 1,
   "status": "in_progress",
   "title": "Raise on non-finite floats like Elixir",
   "type": "task",
-  "updated_at": "2026-10-09T20:48:33Z"
+  "updated_at": "2026-10-09T21:07:14Z"
 }
