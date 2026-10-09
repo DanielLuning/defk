@@ -5,11 +5,13 @@
   "created": "2026-10-09T19:47:33Z",
   "description": "Tier 2 on paper, but the [u8]-only versions work today (image_blur already does a 3x3 blur on raw RGB). Anchors: image/vix (libvips), cvt_color (RGB888 to RGB565/666 for Nerves displays, hand-written C++ with optional OpenMP), dither (error diffusion for e-paper). The jobs: bilinear and Lanczos-3 resize of raw RGB/RGBA frames, RGB\u003c-\u003eYUV420 conversion, Floyd-Steinberg dithering to 1-bit. libvips is SIMD-tuned (orc/highway), so resize is expected poor against it on speed; cvt_color and dither references are plain loops, parity expected, and on Nerves there is no libvips.\n\nKernels: `resize_bilinear(px :: [u8], w, h, ch, out_w, out_h) :: [u8]`, `resize_lanczos3(...)` with weights precomputed per output column/row into alloc'd [f64] arrays (separable: horizontal pass then vertical), `rgb_to_yuv420(px, w, h) :: [u8]`, `rgb888_to_rgb565(px) :: [u8]` (needs bsr/band: defk-w38), `dither_fs(gray :: [u8], w, h) :: [u8]` with an [i64] error row.\n\nElixir baselines: pure Elixir binary comprehensions for each (first pass, then optimise with :binary.part-based row access); report libvips beside.\n\nRealistic size: 1080p frames (6 MB) and 320x240 (Nerves). Expected verdict: good vs pure Elixir for all; poor vs libvips on resize; parity with cvt_color.\n\nNeeds: nothing for bilinear/Lanczos/YUV/dither; defk-w38 for RGB565; defk-4ai ([f32] weights) is optional. 2D indexing is row*w+col arithmetic with range facts: check the fast-path report for which bounds checks stayed (defk-6cn).\n\nDone when: agreement with the pure Elixir versions holds (bit-exact for integer paths; Lanczos float rounding documented), verdicts measured, README rows added.",
   "id": "defk-52v.11",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-52v",
   "priority": 3,
   "status": "open",
   "title": "Image resize, colour conversion and dithering from scratch vs image/vix (libvips) and cvt_color",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:33Z"
+  "updated_at": "2026-10-09T19:47:36Z"
 }
