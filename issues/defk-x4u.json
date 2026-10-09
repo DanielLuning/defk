@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-09T17:10:45Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "docs/beam-nifs.md cites stale line numbers; reference symbols instead",
   "type": "task",
-  "updated_at": "2026-10-09T17:10:46Z"
+  "updated_at": "2026-10-09T20:02:17Z"
 }
