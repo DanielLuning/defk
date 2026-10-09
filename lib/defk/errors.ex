@@ -3,8 +3,8 @@ defmodule Defk.Errors do
   Kernel compile errors: the registry of error codes and the error format.
 
   Every rejection the compiler makes has a stable code, a readable slug that is
-  also its anchor in `docs/language.md` (`docs/language.md#<code>`). Codes are
-  never renamed. `codes/0` lists them with a one-line summary, whether the
+  also its anchor in `docs/language.md` (`docs/language.md#<code>`) once that
+  file exists. Codes are never renamed. `explain!/1` prints a code's entry. `codes/0` lists them with a one-line summary, whether the
   construct is outside the kernel subset for good (`:subset`), planned
   (`:planned`), or a mistake in a construct that is in it (`:error`), the
   default `why`/`hint`, and a failing `example` with its `rewrite` (both module
@@ -22,10 +22,17 @@ defmodule Defk.Errors do
 
       why: a kernel works on numbers, booleans, tuples and packed arrays; ...
       hint: pass the values as separate arguments, ...
-      (defk unsupported-map: docs/language.md#unsupported-map)
+      (defk unsupported-map; mix run -e 'Defk.Errors.explain!("unsupported-map")')
+
+  Once `docs/language.md` exists the footer is `(defk unsupported-map: docs/language.md#unsupported-map)`.
   """
 
   @docs "docs/language.md#"
+
+  # The footer names docs/language.md only when that file exists, so no rendered
+  # error points at a missing path. defk-sgw.1 writes the file; this attribute
+  # then flips to true on the next compile of this module (touch it to force).
+  @language_doc_exists File.exists?(Path.expand("../../docs/language.md", __DIR__))
 
   # Rejections reported per module; later ones are counted, not shown.
   @cap 10
@@ -746,6 +753,52 @@ defmodule Defk.Errors do
   @doc "The docs/language.md anchor for `code`."
   def docs(code), do: @docs <> code
 
+  @doc """
+  Prints the registry entry for `code`: summary, why, hint, example and rewrite.
+
+  Raises `ArgumentError` for an unknown code.
+
+      mix run -e 'Defk.Errors.explain!("unsupported-map")'
+  """
+  @spec explain!(String.t()) :: :ok
+  def explain!(code) do
+    entry =
+      case Map.fetch(@by_code, code) do
+        {:ok, entry} -> entry
+        :error -> raise ArgumentError, "unknown defk error code #{inspect(code)}"
+      end
+
+    IO.puts(
+      Enum.join(
+        [
+          "defk #{entry.code}",
+          "",
+          entry.summary,
+          "",
+          "why: #{entry.why}",
+          "hint: #{entry.hint}",
+          "",
+          "example:",
+          indent_block(entry.example),
+          "",
+          "rewrite:",
+          indent_block(entry.rewrite)
+        ],
+        "\n"
+      )
+    )
+  end
+
+  defp indent_block(text), do: text |> String.split("\n") |> Enum.map_join("\n", &indent/1)
+
+  defp footer(code) do
+    if @language_doc_exists do
+      "(defk #{code}: #{docs(code)})"
+    else
+      "(defk #{code}; mix run -e 'Defk.Errors.explain!(\"#{code}\")')"
+    end
+  end
+
   # ------------------------------------------------------------ rendering --
 
   @doc false
@@ -777,11 +830,11 @@ defmodule Defk.Errors do
     hint =
       case d[:rewrite] do
         nil -> hint
-        rw -> "#{hint}:\n\n" <> (rw |> String.split("\n") |> Enum.map_join("\n", &indent/1))
+        rw -> "#{hint}:\n\n" <> indent_block(rw)
       end
 
     Enum.join(
-      [frame(d), "", "why: #{why}", "hint: #{hint}", "(defk #{d.code}: #{docs(d.code)})"],
+      [frame(d), "", "why: #{why}", "hint: #{hint}", footer(d.code)],
       "\n"
     )
   end

@@ -431,7 +431,7 @@ defmodule Defk.EarlyExitTest do
       assert compile_error(
                "Enum.reduce_while(1..x, 0, fn i, acc -> if(i > 2, do: {:halt, acc}) end)"
              ) =~
-               "(defk reduce-while-tail:"
+               "(defk reduce-while-tail"
 
       assert compile_error("Enum.reduce_while(1..x, {0, 0}, fn i, {a, c} -> {:cont, a} end)") =~
                "{:cont, acc} gives 1 value, the accumulator has 2"
@@ -442,7 +442,7 @@ defmodule Defk.EarlyExitTest do
       assert compile_error("Enum.reduce_while(1..x, 0, &foo/2)") =~
                "Enum.reduce_while/3 with &foo/2 is not in the kernel subset"
 
-      assert compile_error("Enum.all?(1..x, &foo/1)", "bool") =~ "(defk fn-argument:"
+      assert compile_error("Enum.all?(1..x, &foo/1)", "bool") =~ "(defk fn-argument"
 
       assert compile_error("Enum.any?(1..x, fn i -> i end)", "bool") =~
                "a condition must be a boolean, and i is i64"
