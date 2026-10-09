@@ -4,6 +4,7 @@
     "defk-w38"
   ],
   "blocks": [],
+  "closed_at": "2026-10-09T21:19:51Z",
   "created": "2026-10-09T19:21:02Z",
   "description": "## The job\n\nReturn-to-player (RTP) and volatility certification runs simulate a game hundreds of millions of times: draw reel stops from a PRNG, look up symbols and paylines in tables, add the win. In iGaming this runs for every game build and is where teams reach for a NIF or leave Elixir. The same loop shape covers path pricing (Box-Muller normals, exp/sqrt/log) and risk aggregation.\n\nExpected verdict: good. Measured 2026-10-09 on an M-series Mac (single run, includes the Enum.reduce overhead): `:rand.uniform_s/1` 160 ns/draw, `:rand.normal_s/1` 175 ns/draw. A C xorshift draw is ~1 ns, so the generator alone is a 100x gap before any model logic.\n\n## Design\n\n- Both sides run the identical generator: `:rand`'s default `exsss` (Xorshift116**, two 58-bit words, pure Erlang in OTP; `:rand.seed_s(:exsss, seed)` gives the state). The kernel implements exsss in the subset over i64 (58-bit values, so no u64 needed: `bsl`/`bsr`/`bxor` on values below 2^58 stay in i64). That makes agreement checkable against `:rand` itself: a property that draws N values from the kernel and from `:rand.uniform_s` with the same seed must match exactly, in addition to Elixir mode. Spell out the exsss step from OTP's rand.erl (`exsss_next/1`, `exsss_uniform/1`) in the example header with a link to the source file and OTP version.\n- Game model: 5 reels of 32 stops as one [i64] (symbol per stop), a [i64] paytable (symbol, count -\u003e credits), 10 fixed paylines as a [i64] of stop offsets. Kernel `simulate(reels :: [i64], paylines :: [i64], paytable :: [i64], s0 :: i64, s1 :: i64, spins :: i64) :: {i64, i64, i64, i64}` returns total bet, total win, hit count and the final generator state (state travels as values, ADR-0001). Elixir runs K calls with K independently seeded states under Task.async_stream and sums.\n- Elixir baseline: the same model with `:rand.uniform_s/2` threaded through a tail-recursive loop (never the process-dictionary `:rand.uniform/1`), on all schedulers, with integer arithmetic only; try also a precomputed cumulative paytable and `:array` vs tuple lookups. Mark :optimized only after measuring the variants.\n- Report beside the verdict: per-scheduler scaling, yields and promotions (`__defk_stats__`), and the tick gap during a 1-minute run (bench/tick_gap.exs style), since certification runs are long.\n- Realistic size: 100M spins for the verdict, 10M for development.\n\n## Scope note\n\nThis is the simulation and verification side. A certified production RNG is a compliance artifact (GLI-19 style); the example header states that a kernel generator would need the same certification path as any other implementation and that nothing here changes that.\n\nBlocked by defk-w38 (bitwise operators: the exsss step and the float draw `(x bsr 5) * 2^-53`). Supporting example unless an anchor package appears; the anchor for us is the internal RTP job.\n\nDone when: the kernel's draws match `:rand` for three seeds over 1M draws, Defk.Bench.report runs with expected: :good and an :optimized baseline, and the header records the variants tried and the scaling numbers.",
   "id": "defk-9p6.17",
@@ -12,8 +13,8 @@
   ],
   "parent": "defk-9p6",
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Example: Monte Carlo slot RTP simulation with the kernel running :rand's exsss generator",
   "type": "task",
-  "updated_at": "2026-10-09T21:01:39Z"
+  "updated_at": "2026-10-09T21:19:51Z"
 }
