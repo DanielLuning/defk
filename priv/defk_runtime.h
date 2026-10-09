@@ -31,6 +31,8 @@
 #define DEFK_E_CASE_I64 4  /* CaseClauseError; the term is err_index */
 #define DEFK_E_CASE_BOOL 5
 #define DEFK_E_RESUME 6    /* a resume missed its safepoint (a defk bug); RuntimeError */
+#define DEFK_E_RUNTIME 7   /* RuntimeError: a kernel's raise "msg" */
+#define DEFK_E_USER 16     /* flag on a kind: a kernel's own raise, message in umsg/ulen */
 
 #define DEFK_LIKELY(x) __builtin_expect(!!(x), 1)
 #define DEFK_UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -48,6 +50,8 @@ typedef struct {
   int err;
   int64_t err_index; /* for out-of-bounds */
   char msg[200];
+  const char *umsg; /* a kernel's raise: its literal message (static), ulen bytes */
+  size_t ulen;
   ErlNifBinary *owned; /* binaries we allocated (outputs, aligned copies) */
   int nowned, cap;
   int finished;
@@ -68,6 +72,16 @@ defk_fail(defk_ctx *ctx, int kind, const char *fmt, ...) {
   vsnprintf(ctx->msg, sizeof ctx->msg, fmt, ap);
   va_end(ap);
   ctx->err = kind;
+  siglongjmp(ctx->jb, 1);
+}
+
+/* raise Module, "msg" in a kernel: the literal is static, so it is raised
+ * whole (no length limit, NUL bytes kept) rather than copied into msg */
+__attribute__((noreturn, cold, unused)) static void
+defk_user_raise(defk_ctx *ctx, int kind, const char *msg, size_t len) {
+  ctx->umsg = msg;
+  ctx->ulen = len;
+  ctx->err = kind | DEFK_E_USER;
   siglongjmp(ctx->jb, 1);
 }
 
@@ -686,13 +700,16 @@ static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
     enif_make_map_from_arrays(env, ks, vs, 3, &exc);
     return enif_raise_exception(env, exc);
   }
-  const char *mod = ctx->err == DEFK_E_ARITH    ? "Elixir.ArithmeticError"
-                    : ctx->err == DEFK_E_OOB    ? "Elixir.Enum.OutOfBoundsError"
-                    : ctx->err == DEFK_E_RESUME ? "Elixir.RuntimeError"
+  int user = ctx->err & DEFK_E_USER;
+  int kind = ctx->err & ~DEFK_E_USER;
+  const char *mod = kind == DEFK_E_ARITH    ? "Elixir.ArithmeticError"
+                    : kind == DEFK_E_OOB    ? "Elixir.Enum.OutOfBoundsError"
+                    : kind == DEFK_E_RESUME || kind == DEFK_E_RUNTIME ? "Elixir.RuntimeError"
                                                 : "Elixir.ArgumentError";
   ERL_NIF_TERM msg;
-  size_t n = strlen(ctx->msg);
-  memcpy(enif_make_new_binary(env, n, &msg), ctx->msg, n);
+  const char *text = user ? ctx->umsg : ctx->msg;
+  size_t n = user ? ctx->ulen : strlen(ctx->msg);
+  memcpy(enif_make_new_binary(env, n, &msg), text, n);
   ERL_NIF_TERM keys[5] = {enif_make_atom(env, "__struct__"), enif_make_atom(env, "__exception__"),
                           enif_make_atom(env, "message"), enif_make_atom(env, "index"),
                           enif_make_atom(env, "enumerable")};
