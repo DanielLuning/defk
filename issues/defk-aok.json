@@ -5,10 +5,12 @@
   "created": "2026-10-09T17:10:44Z",
   "description": "Since at least 2026-10-09 the working tree carries uncommitted changes (`git diff lib/defk.ex lib/defk/build.ex`, 36 lines) that look like a timing experiment:\n- `__before_compile__` prints \"DEFKTIMING \u003cmodule\u003e compile=.. build=.. prep=..\" to stderr at every compile.\n- `Defk.Build.build!` prints \"DEFKBUILD \u003cmodule\u003e hash=.. hit=..\" and \"cc_start/cc_dur\" lines.\n- `__defk_load__` prints \"DEFKLOAD \u003cmodule\u003e start=.. dur=.. us\" to stderr on every NIF load, i.e. at runtime, in releases too.\n- A `DEFK_EXP` environment variable: `o0` compiles at -O0 (and is correctly part of the cache hash via the flags), `nobuild` skips cc and makes `__defk_load__` catch a throw and return :ok without loading the NIF, so every kernel then raises :defk_not_loaded.\n\n`mix format --check-formatted`, `mix credo --strict` and `mix test` all pass with these changes, so the `mix ci` gate would not stop them landing. `bw prime` warns about the dirty tree.\n\nThis is the owner's call, which is why the ticket is ready-for-human: keep the measurement as a proper feature or drop it.\n- Drop: `git checkout lib/defk.ex lib/defk/build.ex`. Record any numbers the experiment produced in a comment here or on the ticket they were for (likely the compile-time cost question behind defk-9if or defk-6ag).\n- Keep: move it behind `config :defk, build_timing: true` (compile_env, dev/test only like `mode: :elixir`), never print at NIF load time, drop the `nobuild` path (a kernel that silently does not load violates the runtime contract), and add a test that nothing is written to stderr by default.\n\nDone when: the working tree is clean on main and, if kept, the feature is behind config with a test.",
   "id": "defk-aok",
-  "labels": [],
+  "labels": [
+    "ready-for-human"
+  ],
   "priority": 1,
   "status": "open",
   "title": "Resolve the uncommitted DEFK_EXP compile-timing instrumentation in lib/defk.ex and lib/defk/build.ex",
   "type": "task",
-  "updated_at": "2026-10-09T17:10:44Z"
+  "updated_at": "2026-10-09T17:10:47Z"
 }
