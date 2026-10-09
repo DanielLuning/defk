@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T11:41:04Z",
+  "description": "PRECISE repro, root-cause sketch, pre-epic attribution, and the two observed failure signatures. Links to root CONTEXT/architecture notes. NOTE: defk-nbl survivor test was passing before the x15 epic; attribution verified empirically on pre-epic main@d90d09c running test/upgrade_test.exs alone (repeat-until-failure: \"match (=) failed\" at test/upgrade_test.exs:72 start_suspended).",
+  "id": "defk-vvy",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Defk.UpgradeTest suspend race makes mix ci flaky",
+  "type": "bug",
+  "updated_at": "2026-10-09T11:41:04Z"
+}
