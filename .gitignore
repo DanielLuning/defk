@@ -5,3 +5,5 @@
 /.claude/
 erl_crash.dump
 *.ez
+/.dexter/
+/.expert/
