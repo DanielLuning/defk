@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T19:21:02Z",
+  "description": "Three jobs the research (docs/research/string-workloads.md, categories F, I, H) found people ask about and that are expressible in the subset today, with byte loops and no bitwise ops. Each is expected poor or marginal, and that is the point: a short entry each, so the catalog guides people to the BEAM's own tools instead of being silent.\n\n1. Substring search: `find(hay :: [u8], needle :: [u8]) :: i64` (Horspool with a 256-entry alloc'd skip table) vs :binary.match/2, which is Boyer-Moore in ERTS C (0.5-10 GB/s measured in the research) and returns a position, not a sub-binary, so the output shapes match. Expected poor or marginal. Multi-pattern (:binary.matches with a compiled pattern = Aho-Corasick) gets one sentence, no kernel.\n2. Sort and dedup of fixed-width byte keys: `sort_u64(keys :: [i64]) :: [i64]` (radix or introsort in the subset over an alloc'd copy) vs :lists.usort on a decoded list and vs Enum.sort of a binary-split list, measured end to end from a packed binary. Expected good only when the data is already packed and stays packed; poor when the caller needs a list afterwards. No NIF package exists for this (research category I), so it is a supporting example.\n3. Per-pair string distance: one kernel call per pair inside Enum.map (ex_strsim's API shape) vs the batched fuzzy_search form. Expected poor, as poor_tiny_calls already shows for numbers; one short script reusing the fuzzy_search Levenshtein kernel makes the lesson explicit for strings.\n\nNot blocked by anything: all three compile against the current subset (sort uses rem/div and comparisons; search uses byte compares).\n\nDone when: three scripts with pre-registered expected verdicts run in run_all.exs and the README \"Where Elixir is the right choice\" table has the rows.",
+  "id": "defk-9p6.23",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 4,
+  "status": "open",
+  "title": "Guidance examples that need no new constructs: substring search vs :binary.match, byte-key sort/dedup, per-pair string distance",
+  "type": "task",
+  "updated_at": "2026-10-09T19:21:02Z"
+}
