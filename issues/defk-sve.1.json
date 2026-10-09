@@ -5,11 +5,13 @@
   "created": "2026-10-09T19:47:34Z",
   "description": "The exploration's first and possibly only step. With today's kernels, measure the cost of \"state travels as binaries\" against the kernel's own work:\n- HLL-style: 16 KiB of registers in, 16 KiB out, per batch of 100 / 1k / 10k items (the ADR-0001 case; the HLL target workload defk-9p6.15 will reuse this).\n- Bloom filter: 1 MiB and 16 MiB bit arrays, per batch of 1 / 100 / 10k inserts (needs defk-w38 for bit ops; until then simulate with byte-granular writes, which is a fair proxy for the copy cost).\n- Streaming window: a 128 MB [u8] passed in and returned with one byte touched (the zstd/xxh3 streaming shape).\n\nFor each: time the kernel call end to end, and separately the memcpy-equivalent (alloc + copy + return of the same size, e.g. the `scale` kernel with k = 1.0), so the copy share is explicit. Note: an input binary is zero-copy in; the copy is the output allocation plus the copy of untouched bytes, so the share is (output copy) / (call time). Also record how the BEAM's own binary GC behaves with 16 MiB outputs at 10k calls/s (refc binary churn, :erlang.memory(:binary)).\n\nWrite the numbers into docs/research/state-copy-cost.md (branch research/state-copy-cost) with the per-size verdict: \"value semantics is enough\" where the share is under ~10%, and the sizes where it is not.\n\nDone when: the document exists with measurements at the sizes above and a one-paragraph recommendation for the design review.",
   "id": "defk-sve.1",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-sve",
   "priority": 3,
   "status": "open",
   "title": "Measure the per-call state copy cost at catalog sizes (value semantics vs in-place)",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:34Z"
+  "updated_at": "2026-10-09T19:47:36Z"
 }
