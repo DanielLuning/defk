@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-w38"
+  ],
   "blocks": [],
   "created": "2026-10-09T19:21:02Z",
   "description": "Ranked #3 in docs/research/string-workloads.md (defk-dtw.20). Anchors: murmur (2.4M downloads, pure Elixir), xxhash (205k, pure Elixir, README: \"consider creating a NIF of xxHash if you require a high performance version\"), siphash (224k, 108-line hand-written C next to an Elixir fallback, README claims ~200x), crc32cer (48.5M, wraps Google's SIMD crc32c with a dirty twin), evil_crc32c (38.8k, 66 lines of hand-written Rust, bit-at-a-time), spirit_fingers (SimHash, ~200 lines of Rust).\n\nWhy a kernel and not :erlang.phash2 or :erlang.crc32: a specific hash must match other systems (Kafka, sharding, dedup indexes); phash2 is not portable across OTP versions and crc32 is one polynomial. Both BIFs are reported beside the verdict as the ceiling (measured in the research: phash2 2.6 GB/s, crc32 ~39 GB/s on 16 MiB).\n\nShape: [u8] plus a seed or 16-byte key in, i64 (u64 bits) or a 16-byte [u8] out. Realistic size: 16 B to a few MB; measure a batch of 1k short keys per call and one 4 MB message.\n\nDesign: one example file with xxHash64, Murmur3 x64_128 and SipHash-2-4 as kernels; CRC32C table-driven (the 256-entry table built in the kernel, works today) as a fourth. Agreement against the anchor packages' own outputs (their test vectors) and against Elixir mode. Elixir baselines: the murmur and xxhash packages themselves and siphash's fallback, marked :optimized after checking they use bitwise BIFs sensibly (they are the community's best pure versions).\n\nExpected verdicts: good against murmur/xxhash/siphash-fallback (pure Elixir bignum and bitwise), marginal against siphash's C NIF, poor against crc32cer's SIMD (report, do not hide).\n\nNeeds: defk-w38 with masked arithmetic (CONTEXT.md \"how hashes and checksums wrap\"), defk-n4r.2 (u64_le(bytes, i), wrapping * and +, rotates), defk-ivt for the primes and seeds. u64 results: the kernel returns the i64 bit pattern; the example documents that Elixir callers reinterpret with `\u003c\u003cu::unsigned-64\u003e\u003e = \u003c\u003ch::signed-64\u003e\u003e` until a u64 scalar exists.\n\nDone when: all four hashes pass their reference vectors, verdicts are measured and the README tables get the rows, with the NIF and BIF comparisons beside them.",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Target workload: non-cryptographic hashes (xxHash64, Murmur3, SipHash, CRC32C) vs murmur, xxhash, siphash and crc32cer",
   "type": "task",
-  "updated_at": "2026-10-09T19:21:03Z"
+  "updated_at": "2026-10-09T19:21:04Z"
 }
