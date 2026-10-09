@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Merged. dot/cosine ~0%, scale +0.5-3.6%; mean_std unchanged at ~+30%: follow-up defk-hki.",
+      "timestamp": "2026-10-09T22:02:11Z"
+    }
+  ],
   "priority": 1,
   "status": "in_progress",
   "title": "Recover the vectorised fast path under non-finite float checks: branchless per-strip flag with replay",
   "type": "task",
-  "updated_at": "2026-10-09T21:36:59Z"
+  "updated_at": "2026-10-09T22:02:11Z"
 }
