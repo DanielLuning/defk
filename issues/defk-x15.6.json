@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T09:30:22Z",
+  "description": "Write ADRs (matching docs/adr format with Date/Status/Source/bw cross-ref) for every deliberate deviation from the rules:\n- complexity/nesting thresholds for a compiler codebase\n- test fixtures exercising linted constructs (cond/dbg/IO.inspect)\n- compile-time priv resolution via __DIR__ (PathExpandPriv suppression)\n- any @dialyzer nowarn_function used\nEach ADR: context, decision, consequences, and how to revisit. Reference the bw ticket.",
+  "id": "defk-x15.6",
+  "labels": [],
+  "parent": "defk-x15",
+  "priority": 2,
+  "status": "open",
+  "title": "ADRs for out-of-bounds decisions",
+  "type": "task",
+  "updated_at": "2026-10-09T09:30:22Z"
+}
