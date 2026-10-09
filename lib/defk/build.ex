@@ -18,7 +18,21 @@ defmodule Defk.Build do
   # unflagged baseline, best-of per round, sum/dot/count_primes/count_primes_early.
   # Worst metric: +1.64% (all three combined, count_primes_early); worst per-flag
   # +1.62% (fno-strict-overflow) — all under the 2% bar. Adopted.
-  @cflags ~w(-O3 -ffp-contract=off -std=gnu11 -fPIC -shared -Wall -Wno-unused-label -Wno-unused-variable -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-strict-overflow)
+  # -fno-builtin (defk-6g6): libm calls are never fused or substituted. With
+  # cos(a) and sin(a) in one loop clang emits one sincos call (Darwin's
+  # __sincos_stret, glibc's sincos) whose sin differs from :math.sin in the
+  # last bit; -fno-builtin-sin -fno-builtin-cos -fno-builtin-sincos did NOT stop
+  # it, only -fno-builtin did. It also stops pow(x, 2.0) -> x*x and
+  # pow(x, 0.5) -> sqrt (the latter differs for -0.0 and -inf). Measured
+  # 2026-10-09: 7 interleaved rounds against the build without it, best-of per
+  # round (sum best-of-5, dot 5, count_primes 3, count_primes_early 5), plus a
+  # second 7 rounds of count_primes_early alone (best of 15): flagged vs
+  # unflagged, best across rounds: sum -0.71%, dot -0.16%, count_primes +0.15%,
+  # count_primes_early +2.30% (first run) and +0.88% (second). Single rounds
+  # swing -8%..+6% either way on this machine, and the loop of
+  # count_primes_early calls no builtin, so the worst case is noise-level:
+  # +2.3% at the very worst, about +1% on the mean of rounds. Adopted.
+  @cflags ~w(-O3 -ffp-contract=off -std=gnu11 -fPIC -shared -Wall -Wno-unused-label -Wno-unused-variable -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-strict-overflow -fno-builtin)
 
   def build!(module, src, file) do
     dir = Path.join(build_root(), "defk")
