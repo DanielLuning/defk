@@ -258,7 +258,8 @@ __attribute__((unused)) static int defk_get_bool_arg(ErlNifEnv *env, defk_ctx *c
 /* ---- result encoding ----------------------------------------------------- */
 
 static ERL_NIF_TERM defk_make_f64(defk_ctx *ctx, ErlNifEnv *env, double d) {
-  /* BEAM floats cannot be inf/nan: raise like Elixir arithmetic would */
+  /* BEAM floats cannot be inf/nan. Every operation that could make one
+     already raised (defk-i00); this stays as defence in depth. */
   if (DEFK_UNLIKELY(!isfinite(d)))
     defk_fail(ctx, DEFK_E_ARITH, "kernel produced a non-finite float");
   return enif_make_double(env, d);
@@ -369,9 +370,73 @@ static inline int64_t defk_rem_i64(defk_ctx *ctx, int64_t a, int64_t b) {
 static inline int64_t defk_abs_i64(defk_ctx *ctx, int64_t a) {
   return a < 0 ? defk_neg_i64(ctx, a) : a;
 }
-static inline double defk_fdiv(defk_ctx *ctx, double a, double b) {
-  if (DEFK_UNLIKELY(b == 0.0)) defk_fail(ctx, DEFK_E_ARITH, "bad argument in arithmetic expression: division by zero");
-  return a / b;
+
+/* ---- float arithmetic Elixir's way (defk-i00, decided in defk-q1c) -------
+ *
+ * Elixir raises ArithmeticError at any float operation whose result would be
+ * inf or NaN (BEAM floats are always finite), so each operation that can make
+ * one checks its result: one predictable branch, raising at the operation as
+ * Elixir does. Underflow to 0.0 or a subnormal is finite and does not raise.
+ * Operations that keep a finite value finite (unary -, abs, min, max, sin,
+ * cos, float/1) need no check, and since every value a kernel computes is
+ * finite, neither does a write to an array. The _s twins flag the result
+ * instead of raising, for the arms of a speculated `if`/`cond` (as the i64
+ * _s forms do): only the taken arm's flag replays the raising form.
+ *
+ * DEFK_NO_FLOAT_CHECKS compiles the checks out; it exists only to measure
+ * their cost (README "Known limitations") and is not a user option.
+ */
+#ifdef DEFK_NO_FLOAT_CHECKS
+#define DEFK_FINITE(x) 1
+#else
+#define DEFK_FINITE(x) DEFK_LIKELY(isfinite(x))
+#endif
+
+__attribute__((noreturn, cold)) static void defk_nonfinite(defk_ctx *ctx, double a, char op,
+                                                           double b) {
+  if (op == '/' && b == 0.0)
+    defk_fail(ctx, DEFK_E_ARITH, "bad argument in arithmetic expression: division by zero");
+  defk_fail(ctx, DEFK_E_ARITH, "float result of %.17g %c %.17g is inf or NaN", a, op, b);
+}
+
+#define DEFK_FLOAT_OP(NAME, OP)                                                   \
+  static inline double defk_##NAME(defk_ctx *ctx, double a, double b) {           \
+    double r = a OP b;                                                            \
+    if (!DEFK_FINITE(r)) defk_nonfinite(ctx, a, (#OP)[0], b);                     \
+    return r;                                                                     \
+  }                                                                               \
+  static inline double defk_##NAME##_s(int *nf, double a, double b) {             \
+    double r = a OP b;                                                            \
+    *nf |= !DEFK_FINITE(r);                                                       \
+    return r;                                                                     \
+  }
+DEFK_FLOAT_OP(fadd, +)
+DEFK_FLOAT_OP(fsub, -)
+DEFK_FLOAT_OP(fmul, *)
+DEFK_FLOAT_OP(fdiv, /)
+
+/* a float expression's check failed but its replay did not raise (a defk bug;
+   raising is still Elixir's outcome, see float_tree in the compiler) */
+__attribute__((noreturn, cold, unused)) static void defk_nonfinite_lost(defk_ctx *ctx) {
+  defk_fail(ctx, DEFK_E_ARITH, "float result is inf or NaN");
+}
+
+/* libm calls: Erlang's :math raises when the result is not finite */
+__attribute__((noreturn, cold)) static void defk_nonfinite_call(defk_ctx *ctx, const char *f,
+                                                                double a, double b, int arity) {
+  if (arity == 1)
+    defk_fail(ctx, DEFK_E_ARITH, "float result of %s(%.17g) is inf or NaN", f, a);
+  defk_fail(ctx, DEFK_E_ARITH, "float result of %s(%.17g, %.17g) is inf or NaN", f, a, b);
+}
+static inline double defk_exp(defk_ctx *ctx, double a) {
+  double r = exp(a);
+  if (!DEFK_FINITE(r)) defk_nonfinite_call(ctx, "exp", a, 0.0, 1);
+  return r;
+}
+static inline double defk_pow(defk_ctx *ctx, double a, double b) {
+  double r = pow(a, b);
+  if (!DEFK_FINITE(r)) defk_nonfinite_call(ctx, "pow", a, b, 2);
+  return r;
 }
 static inline double defk_sqrt(defk_ctx *ctx, double a) {
   if (DEFK_UNLIKELY(a < 0.0)) defk_fail(ctx, DEFK_E_ARITH, "sqrt of negative number %g", a);
@@ -403,7 +468,8 @@ static inline double defk_max_f64(double a, double b) { return a < b ? b : a; }
 /* -1, 0 or 1 as the exact value of i is below, equal to or above f, as Erlang
  * compares an integer with a float (erts_cmp_compound in erts utils.c): never
  * by rounding i to a double, which would make 2^53 + 1 == 2^53 + 0.0.
- * Kernel floats are never NaN; one would compare below every integer. */
+ * Kernel floats are never NaN (every operation that could make one raises,
+ * defk-i00); one would compare below every integer. */
 static inline int defk_cmp_i64_f64(int64_t i, double f) {
   if (f >= 0x1p63) return -1;           /* above every i64 */
   if (!(f >= -0x1p63)) return 1;        /* below every i64 (or NaN) */
@@ -435,6 +501,26 @@ static inline int defk_feq_exact(double a, double b) {
 DEFK_ACCESS_FN(f64, double)
 DEFK_ACCESS_FN(i64, int64_t)
 DEFK_ACCESS_FN(u8, uint8_t)
+
+/*
+ * An f64 element read from an array the kernel did not create (an input) may
+ * hold inf or NaN bits, which no BEAM float can: the read raises ArgumentError
+ * like Elixir mode's <<x::float-64>> match, and only elements actually read
+ * count (defk-q1c). Arrays from alloc/2 hold only finite values, so their
+ * reads skip the check.
+ */
+__attribute__((noreturn, cold)) static void defk_nonfinite_input(defk_ctx *ctx, int64_t i) {
+  defk_fail(ctx, DEFK_E_ARG,
+            "non-finite float (inf or NaN) read from an input array at index %lld", (long long)i);
+}
+/* an element read whose index is in range (checked or proved) */
+static inline double defk_in_f64(defk_ctx *ctx, double x, int64_t i) {
+  if (!DEFK_FINITE(x)) defk_nonfinite_input(ctx, i);
+  return x;
+}
+static inline double defk_get_in_f64(defk_ctx *ctx, defk_arr_f64 a, int64_t i) {
+  return defk_in_f64(ctx, defk_get_f64(ctx, a, i), i);
+}
 
 static inline uint8_t defk_to_u8(defk_ctx *ctx, int64_t v) {
   if (DEFK_UNLIKELY(v < 0 || v > 255)) defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in u8", (long long)v);

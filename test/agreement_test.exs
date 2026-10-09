@@ -17,29 +17,22 @@ defmodule Defk.AgreementTest.Examples do
   # to 10^6, and negative edges (sqrt raises)
   defp divisible, do: G.i64(-1_000..1_000_000, [@min, -(2 ** 62)])
 
-  # arrays of any floats (mostly a sum overflows to inf, and both raise), or
-  # of floats whose sums and products stay finite
-  defp floats, do: one_of([G.array(:f64), G.array(:f64, of: G.f64(1.0e100))])
+  # arrays of any floats (mostly a sum or product overflows to inf, and both
+  # raise at that operation), of floats whose sums and products stay finite
+  # (so the values are compared too), or holding inf or NaN bits (both raise
+  # at the read)
+  defp floats,
+    do: one_of([G.array(:f64), G.array(:f64, of: G.f64(1.0e100)), G.array_non_finite()])
 
   agreement(Examples.Kernels, [
     :add,
     :histogram,
     :oob,
     :overflow,
-    sum: [
-      args: fixed_list([floats()]),
-      divergence:
-        {"defk-i00: inf/NaN input bits: native ArithmeticError at return, Elixir mode ArgumentError at the read",
-         fixed_list([G.array_non_finite()])}
-    ],
+    sum: [args: fixed_list([floats()])],
     dot: [args: fixed_list([floats(), floats()])],
     mean_var: [args: fixed_list([floats()])],
-    scale: [
-      args: fixed_list([G.array(:f64, of: G.f64(1.0e150)), G.f64(1.0e150)]),
-      divergence:
-        {"defk-i00: an inf written to an output array does not raise natively",
-         fixed_list([G.array(:f64), G.f64()])}
-    ],
+    scale: [args: fixed_list([floats(), one_of([G.f64(), G.f64(1.0e150)])])],
     count_primes: [args: fixed_list([trips()])],
     count_primes_noyield: [args: fixed_list([trips()])],
     count_primes_via_call: [args: fixed_list([trips()])],
@@ -59,10 +52,10 @@ defmodule Defk.AgreementTest.Catalog do
   @min -0x8000000000000000
   @max 0x7FFFFFFFFFFFFFFF
 
-  # Floats small enough that no sum, square or product overflows to inf:
-  # until defk-i00 lands an inf the kernel computes but does not return (a
-  # discarded comparison, an output array element) does not raise natively.
-  @finite 1.0e100
+  # Any floats (a sum, square or product that overflows to inf raises at that
+  # operation in both modes, defk-i00), or floats small enough that none
+  # does, so the computed values are compared too.
+  defp f64s, do: one_of([G.f64(), G.f64(1.0e100)])
 
   # mean_std(x, w): a window 1..len(x) mostly; also empty or negative
   # windows and the lengths n - w + 1 that overflow or exceed the alloc limit
@@ -163,21 +156,19 @@ defmodule Defk.AgreementTest.Catalog do
 
   agreement(Rolling.Kernels,
     mean_std: [
-      args: rolling(G.f64(@finite)),
-      deep: [args: rolling(G.f64(@finite), max_length: 2049), max_runs: 2_000],
-      divergence:
-        {"defk-i00: an inf in the output array (v * v overflowing) does not raise natively",
-         rolling(G.f64())}
+      args: one_of([rolling(G.f64()), rolling(G.f64(1.0e100))]),
+      deep: [
+        args:
+          one_of([rolling(G.f64(), max_length: 2049), rolling(G.f64(1.0e100), max_length: 2049)]),
+        max_runs: 2_000
+      ]
     ]
   )
 
   agreement(Geo.Kernels,
     nearest: [
-      args: geo(G.f64(@finite), 40),
-      deep: [args: geo(G.f64(@finite), 2049), max_runs: 1_000],
-      divergence:
-        {"defk-i00: an inf or NaN in a discarded comparison does not raise natively",
-         geo(G.f64(), 40)}
+      args: geo(f64s(), 40),
+      deep: [args: geo(f64s(), 2049), max_runs: 1_000]
     ]
   )
 
