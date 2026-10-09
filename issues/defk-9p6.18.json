@@ -1,6 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [
+    "defk-n4r.2",
     "defk-w38"
   ],
   "blocks": [],
@@ -15,5 +16,5 @@
   "status": "open",
   "title": "Example: SHA-256 and HMAC hash chains (provably-fair RNG) vs :crypto, expected marginal",
   "type": "task",
-  "updated_at": "2026-10-09T19:21:03Z"
+  "updated_at": "2026-10-09T19:21:04Z"
 }
