@@ -70,6 +70,21 @@ Also not what defk is for (no script needed):
 Numbers are from an M-series Mac (OTP 29, Elixir 1.20); ranges cover the runs so far.
 The scoreboard, not these tables, is the source of truth: rerun `run_all.exs`.
 
+## Where a wrapper is the right choice
+
+Nothing here is excluded on principle: each row names the condition that would reopen it. The from-scratch epic `defk-52v` tracks what we do rewrite.
+
+| Job | Wrapped today | Why not from scratch | What would change it |
+|---|---|---|---|
+| Signing, key exchange, secret-dependent crypto (secp256k1, ed25519, X25519, AEAD) | libsodium, secp256k1, ring via Rustler; `:crypto` | The one rule says nothing about timing: clang `-O3` may turn a select into a branch or a table lookup into a secret-dependent access, and a process dump or yielded frame holds key material. Public-input verification is allowed but gains little. | A constant-time mode: a restricted subset checked at compile time, codegen verified with dudect or ctgrind in CI, frame zeroisation, and an external audit. Until then, `:crypto`. |
+| Parsers that produce trees or term streams (HTML, Markdown, tree-sitter, JSON/CSV to terms, protobuf, msgpack) | html5ever, comrak, tree-sitter, jsont, rusty_csv, protox | The product is BEAM terms and building them is the cost: `docs/research/string-workloads.md` measured a 13x gap between scanning and term creation, and a NIF builds terms serially at the same price. A kernel cannot build terms, and if it could it would be no faster. | A "tape" output (flat `[i64]` of kind/start/len events, `defk-9p6.21` is the fused CSV form), plus a benchmark showing tape plus Elixir tree building beats Jason or NimbleCSV end to end. BPE tokenisation to `[i64]` ids is the exception: its product is packed. |
+| Regular expressions | `:re` (PCRE in C), Rust regex via Rustler | `:re` is already native and compiled once per pattern; a kernel cannot take a pattern as data without becoming an interpreter, and fixed-string search is `:binary.match`. | A specific pattern class with a known kernel form (glob, or a simple byte DFA compiled at Elixir compile time) and a benchmark showing `:re` loses on it. |
+| Large codecs and encoders (brotli, zstd encode, audio and video, PDF/typst rendering) | brotli, zstd, membrane_* FFmpeg/opus bindings, typst | The cost is spec surface and tuning, not the loop: 10^4-10^5 lines with SIMD everywhere. A kernel would be a worse implementation of a solved problem. | A narrow, named need: one compression level with fixed tables (zstd level 1 is the lz4-encode ticket plus FSE) or a decoder-only requirement for untrusted input. Each reopens one row, not the category. |
+| Systems: databases, dataframes, tensor compilers (SQLite, DuckDB, Polars/Explorer, XLA/EXLA, LibTorch) | exqlite, duckdbex, explorer, exla, torchx | The value is the library: query planners, columnar engines, autodiff, device backends. defk is a kernel, not a system. | Interop, not rewriting: zero-copy views over their packed buffers so a per-element loop beside them runs as a kernel. `docs/research/nx-boundary.md` says where that line is; file an interop ticket when a workload asks. |
+| Kernel-owned mutable state (SortedSet, in-place sketches, streaming decoders) | sorted_set_nif, xxh3 streaming, zstd streaming | A semantics question, not a rewrite one: ADR-0001 keeps state as values. | The design review of the kernel-owned-state epic (`defk-sve`). |
+
+The verdict's Limitations (`defk-sgw.5`) will cite this table.
+
 ## How verdicts work
 
 Every script ends with `Defk.Bench.report/1`, which:
