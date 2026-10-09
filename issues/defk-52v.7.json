@@ -5,11 +5,13 @@
   "created": "2026-10-09T19:47:33Z",
   "description": "Tier 2. Inflate is the canonical \"untrusted input decoder\": Huffman tables from the stream, a bit reader, and LZ77 copies into an output of unknown length. PNG is inflate plus the four filter types per row and the chunk structure. :zlib is built into OTP (C, already chunked through its API), so the speed verdict is expected marginal; the entry's point is that a bounds-checked decoder for attacker-controlled bytes is possible in the subset, yields, and reads as Elixir.\n\nKernels: `inflate(src :: [u8]) :: [u8]` (raw deflate; zlib and gzip headers are thin Elixir wrappers), with a bit reader as a (pos, bitbuf, bitcount) triple threaded through helpers, canonical Huffman decoding tables built in alloc'd arrays, and output through the bitstring accumulator (defk-cmr) or a two-pass design (first pass computes the length by decoding without writing; measure the cost). `png_decode(png :: [u8]) :: {[u8], i64, i64, i64}` returns raw pixels, width, height, channels for 8-bit RGB/RGBA/gray; other bit depths and interlacing raise with a clear message.\n\nElixir baseline: :zlib.uncompress for inflate (:optimized by definition); for PNG, :zlib plus Elixir unfiltering (first pass, then optimise).\n\nFuzz agreement: random and mutated inputs must raise in both modes or agree; never crash the VM; run under forced yields.\n\nExpected verdict: marginal vs :zlib (report ns/byte and the safety argument), good vs the Elixir PNG baseline.\n\nNeeds: defk-w38, defk-n4r.2 (bit reader loads, clz for table lengths), defk-ivt (length/distance base and extra-bit tables), defk-n4r.4 (table builders and copy helpers), defk-cmr or the two-pass decision, defk-6ag (inlined helpers from many sites; record generated C size).\n\nDone when: the decoder passes zlib's test corpus and a PNG suite (PngSuite), the fuzz agreement runs, verdicts measured, README rows added.",
   "id": "defk-52v.7",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-52v",
   "priority": 3,
   "status": "open",
   "title": "Inflate (RFC 1951) and PNG decode from scratch vs :zlib and image libraries",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:33Z"
+  "updated_at": "2026-10-09T19:47:36Z"
 }
