@@ -883,6 +883,7 @@ defmodule Defk.Compiler do
   #   depth      - block nesting, to check that an input array is copied in
   #                the block it is bound in
 
+  @spec scope(MapSet.t()) :: map()
   defp scope(outer) do
     %{
       out: outer,
