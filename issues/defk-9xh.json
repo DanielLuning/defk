@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T17:10:44Z",
+  "description": "A divergence (CONTEXT.md: a kernel gives a different value or behaviour from Elixir mode without raising; not allowed by the one rule).\n\nReproduced 2026-10-09 (review): `defk t(x :: f64) :: i64 do trunc(x) end` with x = -9.223372036854775808e18 (exactly -2^63, representable as a double):\n- native: raises ArithmeticError \"trunc/1: -9.22337e+18 does not fit in i64\"\n- Elixir mode: returns -9223372036854775808 (the i64 minimum, which fits)\n- plain Elixir: returns -9223372036854775808\n\nCause: `defk_trunc` in priv/defk_runtime.h tests `a \u003e -9.2233720368547758e18`, which excludes the minimum itself. `defk_cmp_i64_f64` a few lines down already uses the inclusive form (`f \u003e= -0x1p63`). `defk_round` is `defk_trunc(round(a))`, so it has the same edge. Elixir mode (`Defk.ElixirMode.Ops.trunc/round`) range-checks with an inclusive i64 guard, which is correct.\n\nThis was already noted by inspection in a comment on defk-63k (2026-10-07: \"trunc(-2^63) (native rejects, Elixir mode accepts)\") but never fixed.\n\nFix: make the lower bound inclusive (`a \u003e= -0x1p63`) and keep the upper bound exclusive (`a \u003c 0x1p63`). Add a test in test/comparison_test.exs or a new boundary test that calls Defk.Test.assert_agrees for trunc and round at -2^63, -2^63 - 2048 (next double below, must raise in both), 2^63 (must raise in both) and 2^63 - 1024 (largest double below 2^63; trunc gives 9223372036854774784).\n\nDone when: both modes agree at those four values for trunc and round, the test is in the suite, and `mix ci` is green.",
+  "id": "defk-9xh",
+  "labels": [],
+  "priority": 1,
+  "status": "open",
+  "title": "trunc/1 and round/1 of -2^63 raise natively but return in Elixir mode",
+  "type": "bug",
+  "updated_at": "2026-10-09T17:10:44Z"
+}
