@@ -1045,7 +1045,13 @@ How to run it:
   and `:test` (any other environment is a compile error).
 - `Defk.ElixirMode.with_mode(:elixir, fun)` (or `:native`) switches the
   calling process for modules compiled with Elixir mode.
-- Elixir mode is always compiled in `:test`. There every kernel's NIF is
+- `use Defk, elixir_mode: true` compiles Elixir mode into that module in any
+  environment, including a `Mix.install` script run with `elixir script.exs`
+  (no Mix project, where `config :defk, mode: :elixir` is refused with an
+  error naming the condition). The default call path stays native; call
+  `Mod.__defk_elixir__/2` or use `Defk.ElixirMode.with_mode/2` to run Elixir
+  mode. Scripts use this for their agreement check.
+- Without the option, Elixir mode is compiled in `:test`. There every kernel's NIF is
   registered as `__defk_native_<name>__` and the public function checks the
   process's mode on each call, so measure speed in `:dev` or `:prod`.
 - `Defk.Test.assert_agrees(Mod, :fun, args)` runs a call both ways and asserts

@@ -714,9 +714,11 @@ defmodule Defk.ElixirModeTest do
           if mix_env == :dev, do: assert(Defk.ElixirMode.setup!(:elixir, env) == {:elixir, true})
 
           if mix_env == :prod do
-            assert_raise CompileError, ~r/allowed only in the :dev and :test/, fn ->
-              Defk.ElixirMode.setup!(:elixir, env)
-            end
+            assert_raise CompileError,
+                         ~r/needs a Mix project in :dev or :test \(found: the :prod environment\)/,
+                         fn ->
+                           Defk.ElixirMode.setup!(:elixir, env)
+                         end
           end
         after
           Mix.env(:test)
@@ -762,6 +764,92 @@ defmodule Defk.ElixirModeTest do
       end)
 
       assert Process.get(:defk_mode) == nil
+    end
+  end
+
+  describe "use Defk, elixir_mode: true" do
+    test "compiles __defk_elixir__/2 and agrees with native; default path stays native" do
+      src = """
+      defmodule Defk.ElixirModeTest.OptIn do
+        use Defk, elixir_mode: true
+
+        defk twice(n :: i64) :: i64 do
+          n * 2
+        end
+      end
+      """
+
+      [{mod, _}] = Code.compile_string(src)
+      assert function_exported?(mod, :__defk_elixir__, 2)
+      assert 8 == Defk.Test.assert_agrees(mod, :twice, [4]) |> elem(1)
+      assert capture_io(fn -> assert mod.twice(4) == 8 end) == ""
+    end
+
+    test "rejects unknown options" do
+      assert_raise ArgumentError, ~r/elixir_mode/, fn ->
+        Code.compile_string("defmodule Defk.ElixirModeTest.BadOpt do\n use Defk, nope: 1\nend")
+      end
+    end
+
+    test "a Mix.install script (no Mix project) compiles Elixir mode on request" do
+      dir = Path.join(System.tmp_dir!(), "defk_fzp_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      script = Path.join(dir, "script.exs")
+      root = File.cwd!()
+
+      File.write!(script, """
+      Mix.install([{:defk, path: #{inspect(root)}}])
+
+      defmodule Script.K do
+        use Defk, elixir_mode: true
+
+        defk twice(n :: i64) :: i64 do
+          n * 2
+        end
+      end
+
+      native = Script.K.twice(4)
+      elixir = Script.K.__defk_elixir__(:twice, [4])
+      IO.puts("RESULT \#{native} \#{elixir} \#{Mix.Project.get() == nil}")
+      """)
+
+      {out, status} =
+        System.cmd("elixir", [script],
+          env: [{"MIX_INSTALL_DIR", Path.join(dir, "mix_install")}, {"MIX_ENV", "dev"}],
+          stderr_to_stdout: true
+        )
+
+      File.rm_rf!(dir)
+      assert status == 0, out
+      assert out =~ "RESULT 8 8 true"
+    end
+  end
+
+  describe "setup!/3 without a Mix project" do
+    @env %{file: "x.exs"}
+
+    test "opt-in compiles Elixir mode and stays native by default" do
+      # the test run has a Mix project in :test, so this checks the option's
+      # contract; the child-process test above covers no project at all
+      assert {:native, true} = Defk.ElixirMode.setup!(:native, true, @env)
+    end
+
+    test "the unsupported-environment error names the condition and the fix" do
+      err =
+        assert_raise CompileError, fn ->
+          Defk.ElixirMode.setup!(:elixir, false, @env, nil)
+        end
+
+      assert err.description =~
+               "`config :defk, mode: :elixir` needs a Mix project in :dev or :test (found: no Mix project)"
+
+      assert err.description =~
+               "use `use Defk, elixir_mode: true` and `Defk.ElixirMode.with_mode/2`"
+    end
+
+    test "no project and no opt-in is native without Elixir mode" do
+      assert {:native, false} = Defk.ElixirMode.setup!(:native, false, @env, nil)
+      assert {:native, true} = Defk.ElixirMode.setup!(:native, true, @env, nil)
     end
   end
 end

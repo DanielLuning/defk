@@ -28,8 +28,10 @@ defmodule Defk.ElixirMode do
   ## Entry points
 
     * `Mod.__defk_elixir__(name, args)` runs kernel `name` in Elixir mode.
-      Generated in the `:test` environment, and wherever Elixir mode is the
-      configured mode.
+      Generated in the `:test` environment, wherever Elixir mode is the
+      configured mode, and in any module that opts in with
+      `use Defk, elixir_mode: true` (any environment, including a
+      `Mix.install` script with no Mix project).
     * `config :defk, mode: :elixir` (allowed in `:dev` and `:test` only; the
       default is `:native`) makes every kernel call run in Elixir mode.
     * `with_mode/2` switches the calling process between `:native` and
@@ -63,13 +65,14 @@ defmodule Defk.ElixirMode do
   # ---------------------------------------------------- compile-time hooks --
 
   @doc false
-  # {default mode, whether Elixir mode is compiled} for a module
-  def setup!(configured, env) do
-    mix_env = mix_env()
-
+  # {default mode, whether Elixir mode is compiled} for a module.
+  # `opt_in` is `use Defk, elixir_mode: true`: compile Elixir mode in any
+  # environment, including a script with no Mix project; the default call path
+  # stays native.
+  def setup!(configured, opt_in \\ false, env, mix_env \\ mix_env()) do
     case configured do
       :native ->
-        {:native, mix_env == :test}
+        {:native, opt_in == true or mix_env == :test}
 
       :elixir when mix_env in [:dev, :test] ->
         {:elixir, true}
@@ -79,7 +82,9 @@ defmodule Defk.ElixirMode do
           file: env.file,
           line: 0,
           description:
-            "defk: `config :defk, mode: :elixir` is allowed only in the :dev and :test environments, not #{inspect(mix_env)}"
+            "defk: `config :defk, mode: :elixir` needs a Mix project in :dev or :test " <>
+              "(found: #{found(mix_env)}); in a script, use `use Defk, elixir_mode: true` " <>
+              "and `Defk.ElixirMode.with_mode/2`"
 
       other ->
         raise CompileError,
@@ -88,6 +93,9 @@ defmodule Defk.ElixirMode do
           description: "defk: unknown mode #{inspect(other)}; use :native or :elixir"
     end
   end
+
+  defp found(nil), do: "no Mix project"
+  defp found(env), do: "the #{inspect(env)} environment"
 
   defp mix_env do
     if Code.ensure_loaded?(Mix.Project) and Mix.Project.get(), do: Mix.env()

@@ -22,8 +22,16 @@ defmodule Defk do
   # credo:disable-for-next-line ExSlop.Check.Warning.PathExpandPriv
   @runtime_h Path.expand("../priv/defk_runtime.h", __DIR__)
 
-  defmacro __using__(_opts) do
+  defmacro __using__(opts) do
+    elixir_mode = Keyword.get(opts, :elixir_mode, false)
+
+    if Keyword.keys(opts) -- [:elixir_mode] != [] or not is_boolean(elixir_mode) do
+      raise ArgumentError,
+            "use Defk accepts only `elixir_mode: true | false`, got: #{Macro.to_string(opts)}"
+    end
+
     quote do
+      @defk_elixir_mode unquote(elixir_mode)
       import Defk, only: [defk: 2, defk: 3]
       Module.register_attribute(__MODULE__, :defk_kernels, accumulate: true)
       @defk_mode Application.compile_env(:defk, :mode, :native)
@@ -53,8 +61,15 @@ defmodule Defk do
       |> Enum.reverse()
       |> Enum.map(&Defk.Attributes.inline/1)
 
-    # Elixir mode: compiled in :test, and wherever it is the configured mode
-    {mode, elixir?} = Defk.ElixirMode.setup!(Module.get_attribute(env.module, :defk_mode), env)
+    # Elixir mode: compiled in :test, wherever it is the configured mode, and
+    # in any module that opts in with `use Defk, elixir_mode: true`
+    {mode, elixir?} =
+      Defk.ElixirMode.setup!(
+        Module.get_attribute(env.module, :defk_mode),
+        Module.get_attribute(env.module, :defk_elixir_mode),
+        env
+      )
+
     nif_name = if elixir?, do: &Defk.ElixirMode.native_name/1, else: & &1
     {c_src, sigs} = Defk.Compiler.compile(env.module, kernels, env.file, nif_name: nif_name)
     lib = Defk.Build.build!(env.module, c_src, env.file)
