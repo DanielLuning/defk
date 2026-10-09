@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [
     "defk-n4r.2",
+    "defk-n4r.4",
     "defk-w38"
   ],
   "blocks": [],
@@ -16,5 +17,5 @@
   "status": "open",
   "title": "LZ4 and Snappy block decode from scratch vs lz4 and snappyer NIFs",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:38Z"
+  "updated_at": "2026-10-09T19:47:39Z"
 }
