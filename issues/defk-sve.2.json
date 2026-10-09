@@ -5,11 +5,13 @@
   "created": "2026-10-09T19:47:34Z",
   "description": "Runs only if the copy-cost measurement finds sizes where value semantics costs more than ~10%. A critical design review (the repo's CRD skill) with the owner over these questions, ending in an ADR:\n1. The Elixir meaning: a reference to a process-owned binary, single owner, kernels take and return the same reference and mutate in place. In Elixir mode the buffer lives in the owner process (process dictionary keyed by the reference, or an ETS table with the owner pid). Is this meaning observable only through kernel calls, so that native and Elixir mode cannot be told apart by any Elixir program? List the ways they could be (reading the binary while a kernel yields; sending the reference to another process; GC timing).\n2. Aliasing: can two references point at one buffer? (Answer should be no: a reference is created by one kernel call and consumed by exactly the calls that return it.) What stops `b = a` from aliasing, and what does `read(buf)` return (a copy, like :ets.lookup, or a zero-copy binary view that becomes invalid on the next write)?\n3. Cross-process use: forbidden (ArgumentError when the caller is not the owner), or transferable like a port? Transfer is the only safe option if allowed.\n4. Lifecycle: destructor frees on owner death (as frames do), hot upgrade keeps the old library alive while buffers exist (per-library resource type, as frames do), `__defk_stats__` counts them.\n5. The one rule's statement must change: \"numbers, binaries, and single-owner buffers\". What limits appear (a buffer cannot be returned as a binary without a copy; cannot be sent)?\n6. Which Tier 3 jobs this shape serves (Bloom, HLL in place, ring buffers, streaming hash and decoder windows) and which it still does not (growing trees, shared caches, term references): keep the \"probably not\" list in the epic accurate.\n\nOutput: docs/adr/000N-kernel-owned-buffers.md with accept-for-prototype or reject, and the limits listed.\n\nHuman-run: it is a semantics decision about the one rule. Blocked by the measurement ticket.",
   "id": "defk-sve.2",
-  "labels": [],
+  "labels": [
+    "ready-for-human"
+  ],
   "parent": "defk-sve",
   "priority": 3,
   "status": "open",
   "title": "Design review: an Elixir-mode meaning for a single-owner kernel buffer, or a recorded rejection",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:34Z"
+  "updated_at": "2026-10-09T19:47:37Z"
 }
