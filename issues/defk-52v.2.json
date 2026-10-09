@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-w38"
+  ],
   "blocks": [],
   "created": "2026-10-09T19:47:32Z",
   "description": "Tier 1. Anchors: blake2_elixir / blake2 (Rustler over the blake2 crate), b3 (Rustler over the blake3 crate). BLAKE2b (RFC 7693) is 12 rounds of a u64 G function over a 16-word state; the reference is plain C and is the expectation for parity. BLAKE3's reference has SIMD (AVX2/NEON) and a tree mode; its portable C (blake3_portable.c) is the fair comparison, and the verdict against the SIMD build is expected poor and reported as such.\n\nKernels: `blake2b(msg :: [u8], outlen :: i64) :: [u8]` with keyed variant optional; `blake3(msg :: [u8]) :: [u8]` single-threaded with the chunk/parent tree computed iteratively over an alloc'd stack of chaining values (no recursion in the subset). Constants (IV, sigma permutations) as module attributes.\n\nElixir baseline: a pure Elixir BLAKE2b (check Hex; if none, a straightforward Elixir implementation with bitwise BIFs marked :first_pass, then optimised). :crypto has blake2b/blake2s since OTP 22 (if OpenSSL has them): report it beside as the ceiling.\n\nRealistic size: 1 KB to 64 MB (content hashing, dedup); measure 64 KB and 64 MB.\n\nExpected verdict: good vs pure Elixir; marginal vs :crypto's blake2b; poor vs b3's SIMD, parity with blake3_portable.\n\nNeeds: defk-w38, defk-n4r.2 (u64 and u32 loads, wrapping add, rotates), defk-ivt, defk-n4r.4 (the compression function as a helper writing the state array).\n\nDone when: RFC 7693 and BLAKE3 official vectors pass, agreement holds, verdicts measured, README row added.",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "BLAKE2b and BLAKE3 from scratch vs blake2_elixir and b3 NIFs",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:35Z"
+  "updated_at": "2026-10-09T19:47:37Z"
 }
