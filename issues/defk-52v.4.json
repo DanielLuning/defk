@@ -1,6 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [
+    "defk-ivt",
     "defk-w38"
   ],
   "blocks": [],
@@ -15,5 +16,5 @@
   "status": "open",
   "title": "Geohash batch encode/decode and CRC16/CRC64 vs geohash, crc packages",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:38Z"
+  "updated_at": "2026-10-09T19:47:39Z"
 }
