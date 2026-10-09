@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-09T19:47:33Z",
@@ -10,8 +10,8 @@
   ],
   "parent": "defk-52v",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "FFT, convolution and resampling over [f64] vs Nx and pure Elixir",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:35Z"
+  "updated_at": "2026-10-09T20:05:12Z"
 }
