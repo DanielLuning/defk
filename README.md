@@ -129,6 +129,8 @@ generated code.
 
 ## Results (M-series Mac, OTP 29, Elixir 1.20; noisy, single runs)
 
+The float rows predate the inf/NaN checks (defk-i00), which add about a quarter to `dot` (see Known limitations).
+
 | | Elixir | defk | plain C |
 |---|---|---|---|
 | sum of 5M f64 (ns/elem) | 8.5 (list), 16.7 (binary comprehension) | 0.58 | 0.64 |
@@ -150,7 +152,8 @@ generated code.
 These are deliberate, to keep defk small for now.
 
 - No recursion (rejected at compile time). Kernel calls are inlined, so the generated code grows with the number of call sites along each call chain.
-- inf/NaN are allowed inside a kernel; a non-finite *returned* float raises.
+- A float operation whose result would be inf or NaN raises `ArithmeticError` at that operation, as Elixir does (`1.0e308 * 10.0`, `x / 0.0`, `0.0 / 0.0`, `sqrt(-1.0)`, `log(0.0)`, `exp(1000.0)`, `:math.pow(10.0, 400.0)`), also when the value would never be returned. An `[f64]` input element whose bits are inf or NaN raises `ArgumentError` when it is read, as Elixir mode's binary match does; an element never read does not. Underflow to 0.0 or a subnormal does not raise. A select whose untaken arm would give inf or NaN (`if y != 0.0, do: x / y, else: 0.0`) does not raise: float arms are speculated with a flag, like i64 overflow (defk-i00).
+  This is Elixir's behaviour, not a limit, but it costs time. A float expression over variables, literals and in-range reads is computed with plain C operators and checked once (`+ - *` keep an inf or NaN operand non-finite, so the result shows it; a divisor that may be inf is checked too); a failed check replays the expression one operation at a time, so it raises the error Elixir would. Other float operations are checked one by one. Measured with the checks and with them compiled out (`mix run bench/float_checks.exs`, 1M elements, 3 runs of 11 interleaved rounds, best of 5 per round, on a shared machine): `dot` +24% (run medians 23.5-24.1%, single rounds 20-28%), cosine similarity +17% (17.4-17.5%, 13-20%), rolling_stats `mean_std` +23% (22.0-23.3%, 19-44%), and an element-wise map (`scale`, `out[i] = a[i] * k`) +87-91% (75-118%), because a check per element stops clang from vectorising the loop. Checking every operation and read on its own cost `dot` 30%, cosine 82%, `mean_std` 48% and `scale` 150%.
 - An array may be returned only if it was created with `alloc/2`. Arrays can't flow through `if`/`cond` branches.
 - No maps, lists or strings.
 - Early exit only through `Enum.reduce_while` and `Enum.all?/any?`. Every tail of the `fn` must be a literal `{:cont, acc}` or `{:halt, acc}` (through `if`/`cond`/`case`). There is no `while`/`break`, and `{:halt, acc}` in a `for ..., reduce:` is not early exit, as in Elixir. No `Enum.find`/`find_index` (no `nil`).
@@ -197,7 +200,7 @@ The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show
 
 **3. Semantics: behave like Elixir where it matters**
 - [ ] Array value semantics: aliasing on write (defk-i2e)
-- [ ] inf/NaN inside kernels (defk-q1c)
+- [x] inf/NaN inside kernels: raise like Elixir (defk-q1c, defk-i00)
 - [ ] An error inside a guard fails the clause instead of raising (defk-7a6)
 
 **4. Performance: plain-C speed from Elixir-shaped code**
