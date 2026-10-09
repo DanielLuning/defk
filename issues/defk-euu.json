@@ -8,9 +8,15 @@
   "labels": [
     "needs-triage"
   ],
+  "comments": [
+    {
+      "text": "Review 2026-10-09, supporting evidence: every new construct must be added in three places that have to agree (C emitter in compiler.ex, Elixir-mode emitter in elixir_mode.ex, registry in errors.ex), and the runtime messages are hand-copied between defk_runtime.h and ElixirMode.Ops. The agreement properties (defk-ne6) are what keep the two emitters honest until this refactor; consider sequencing it after them so the refactor has a safety net.",
+      "timestamp": "2026-10-09T17:10:48Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Split Defk.Errors and replace compiler process-dictionary globals with a context",
   "type": "task",
-  "updated_at": "2026-10-07T14:47:02Z"
+  "updated_at": "2026-10-09T17:10:48Z"
 }
