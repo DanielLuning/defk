@@ -3,7 +3,9 @@
   "blocked_by": [
     "defk-9xh"
   ],
-  "blocks": [],
+  "blocks": [
+    "defk-813"
+  ],
   "created": "2026-10-09T17:10:44Z",
   "description": "defk-63k was closed on 2026-10-08 with the scaffolding delivered (Defk.Test.assert_agrees, Defk.Case.in_both_modes, Defk.Generators, stream_data dep), but its \"Done when\" is not met: \"every catalog kernel has an assert_agrees property\". As of 2026-10-09 the only caller of assert_agrees is one smoke test in test/defk_test.exs, Defk.Generators is unused, and there are no `property` tests in the suite. The one rule is the project's central claim and Elixir mode is a second ~1000-line compiler that must mirror the C emitter, so generator-driven agreement is the highest-value missing test. The trunc(-2^63) divergence (see the bug ticket created with this one) is the kind of defect it finds.\n\nScope (the spec is in `bw show defk-63k`; this ticket is the part of it that was not built):\n1. A property per kernel in lib/examples.ex, examples/*.exs kernel modules (rolling_stats, geo_nearest, image_blur), examples/fuzzy_search/lib/fuzzy_search/kernels.ex and the kernels in test/*_test.exs that have a plain-Elixir meaning. Each property draws arguments from Defk.Generators by the kernel's signature (sigs are available from the compiled module; a small helper that reads `Mod.__defk_source__`/the @spec or a per-kernel arg list is fine) and calls Defk.Test.assert_agrees.\n2. Edge-biased generators as 63k specifies: 0, +-1, i64 min/max +-1, near 2^31/2^53/2^63, empty and length-1 arrays, +-0.0, tiny/huge floats, unaligned sub-binaries, lengths not a multiple of the element size. Defk.Generators currently only draws uniform ranges.\n3. assert_agrees compares raises by exception module only; 63k asks for module plus a normalised reason. Add the normalised reason (overflow, index, zero divisor, clause, badarg, non_finite, non_finite_input).\n4. Keep the default run under ~60 s total (around 100 runs per property); the ~10k-run deep pass can be a `@tag :deep` excluded by default.\n\nNot in scope: the :peer-node and ASan/UBSan deep runs from 63k (open a follow-up when the default properties are green).\n\nDone when: every kernel listed above has a passing agreement property in `mix test`, the suite stays under ~60 s, and any divergence found is either fixed or filed as its own bug ticket.",
   "id": "defk-ne6",
@@ -14,5 +16,5 @@
   "status": "open",
   "title": "Agreement properties for every catalog and test kernel (finish defk-63k)",
   "type": "task",
-  "updated_at": "2026-10-09T17:10:47Z"
+  "updated_at": "2026-10-09T17:10:48Z"
 }
