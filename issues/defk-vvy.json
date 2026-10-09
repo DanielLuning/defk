@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-09T11:41:04Z",
@@ -7,8 +7,8 @@
   "id": "defk-vvy",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Defk.UpgradeTest suspend race makes mix ci flaky",
   "type": "bug",
-  "updated_at": "2026-10-09T11:41:30Z"
+  "updated_at": "2026-10-09T12:10:40Z"
 }
