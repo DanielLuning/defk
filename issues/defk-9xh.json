@@ -10,9 +10,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Found during the 2026-10-09 review; probe script compared native and Elixir mode under MIX_ENV=test.",
+      "timestamp": "2026-10-09T17:10:49Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "trunc/1 and round/1 of -2^63 raise natively but return in Elixir mode",
   "type": "bug",
-  "updated_at": "2026-10-09T17:10:47Z"
+  "updated_at": "2026-10-09T17:10:49Z"
 }
