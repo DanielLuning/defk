@@ -740,6 +740,18 @@ defmodule Defk.Errors do
       example: "defk f(x :: i64) :: i64 do\n  r = 1..x\n  x\nend",
       rewrite:
         "defk f(x :: i64) :: i64 do\n  for i <- 1..x//1, reduce: 0 do\n    acc -> acc + i\n  end\nend"
+    },
+    # -- build environment (no kernel source triggers this; see test/build_test.exs)
+    %{
+      code: "no-c-compiler",
+      kind: :error,
+      summary: "No C compiler could be run to build the kernels.",
+      why:
+        "a kernel is compiled to native code at build time, so a C toolchain is needed on the build machine, as for elixir_make packages",
+      hint:
+        "install one (macOS: `xcode-select --install`; Debian/Ubuntu: `apt install build-essential`; Alpine: `apk add build-base`), or set `CC` to a compiler path",
+      example: nil,
+      rewrite: nil
     }
   ]
 
@@ -819,6 +831,26 @@ defmodule Defk.Errors do
       line: 0,
       description: Enum.join([head | Enum.map(shown, &render/1)] ++ more, "\n\n")
     }
+  end
+
+  @doc false
+  # The CompileError for a C compiler that cannot be run (enoent).
+  def no_compiler(module, file, cc) do
+    entry = fetch!("no-c-compiler")
+
+    description =
+      Enum.join(
+        [
+          "error: cannot compile #{inspect(module)}: C compiler `#{cc}` not found",
+          "",
+          "why: #{entry.why}",
+          "hint: #{entry.hint}",
+          "(defk #{entry.code}: #{docs(entry.code)})"
+        ],
+        "\n"
+      )
+
+    %CompileError{file: file, line: 0, description: description}
   end
 
   @doc false

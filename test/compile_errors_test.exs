@@ -14,6 +14,7 @@ defmodule Defk.CompileErrorsTest do
 
     results =
       Defk.Errors.codes()
+      |> Enum.filter(& &1.example)
       |> Task.async_stream(
         fn e -> {e.code, {compile(e.example, "Ex"), compile(e.rewrite, "Rw")}} end,
         timeout: :infinity,
@@ -58,7 +59,10 @@ defmodule Defk.CompileErrorsTest do
     do: refute(what =~ ~r/not in the kernel subset|not supported yet/)
 
   describe "every code" do
-    for %{code: code} <- Defk.Errors.codes() do
+    # Codes with `example: nil` come from the build environment, not from kernel
+    # source (no-c-compiler), so no module body triggers them; test/build_test.exs
+    # covers them.
+    for %{code: code} <- Defk.Errors.codes(), Defk.Errors.fetch!(code).example do
       @code code
       test "#{code}: the example is rejected with it and the rewrite compiles", %{
         results: results

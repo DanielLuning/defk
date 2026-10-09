@@ -35,19 +35,34 @@ defmodule Defk.Build do
           ["-I", erts_include(), "-I", @priv, "-o", base <> ".so", base <> ".c"] ++
           if(match?({:unix, :darwin}, :os.type()), do: ~w(-undefined dynamic_lookup), else: [])
 
-      case System.cmd(cc, args, stderr_to_stdout: true) do
-        {_, 0} ->
-          :ok
-
-        {out, _} ->
-          raise CompileError,
-            file: file,
-            line: 0,
-            description: "defk: C compilation failed (#{base}.c):\n" <> out
-      end
+      run_cc!(cc, args, module, file, base)
     end
 
     base
+  end
+
+  # Run the compiler. A failed build never leaves a half-written .so behind,
+  # or the next build would take it for a cache hit.
+  defp run_cc!(cc, args, module, file, base) do
+    case System.cmd(cc, args, stderr_to_stdout: true) do
+      {_, 0} ->
+        :ok
+
+      {out, _} ->
+        File.rm(base <> ".so")
+
+        raise CompileError,
+          file: file,
+          line: 0,
+          description: "defk: C compilation failed (#{base}.c):\n" <> out
+    end
+  rescue
+    e in ErlangError ->
+      File.rm(base <> ".so")
+
+      if e.original == :enoent,
+        do: reraise(Defk.Errors.no_compiler(module, file, cc), __STACKTRACE__),
+        else: reraise(e, __STACKTRACE__)
   end
 
   @doc """
@@ -61,7 +76,7 @@ defmodule Defk.Build do
     cc = System.get_env("CC", "cc")
 
     cache_key(src, %{
-      erts: to_string(:erlang.system_info(:version)),
+      erts: to_string(:erlang.system_info(:version)) <> erts_include_override(),
       cc: cc,
       cc_version: cc_version(cc)
     })
@@ -83,15 +98,26 @@ defmodule Defk.Build do
     |> binary_part(0, 10)
   end
 
+  # A cross-build's headers differ from the running ERTS's, so they key the cache.
+  defp erts_include_override do
+    case System.get_env("ERTS_INCLUDE_DIR", "") do
+      "" -> ""
+      dir -> "@" <> dir
+    end
+  end
+
   # First line of `<cc> --version`, "unknown" if it cannot be run. Memoised in
   # :persistent_term so a module with many kernels shells out once per cc.
+  # "unknown" is not memoised, so a compiler installed later in the same VM is
+  # picked up (the build raises when it is missing, so this costs one failed
+  # exec per attempt).
   defp cc_version(cc) do
     key = {__MODULE__, :cc_version, cc}
 
     case :persistent_term.get(key, nil) do
       nil ->
         version = probe_cc_version(cc)
-        :persistent_term.put(key, version)
+        if version != "unknown", do: :persistent_term.put(key, version)
         version
 
       version ->
@@ -114,7 +140,19 @@ defmodule Defk.Build do
       else: System.tmp_dir!()
   end
 
-  defp erts_include do
+  @doc """
+  The directory holding `erl_nif.h`: `ERTS_INCLUDE_DIR` when set and non-empty
+  (the elixir_make convention, for cross-builds), else the running ERTS's.
+  """
+  @spec erts_include() :: String.t()
+  def erts_include do
+    case System.get_env("ERTS_INCLUDE_DIR", "") do
+      "" -> default_erts_include()
+      dir -> dir
+    end
+  end
+
+  defp default_erts_include do
     Path.join([to_string(:code.root_dir()), "erts-#{:erlang.system_info(:version)}", "include"])
   end
 end
