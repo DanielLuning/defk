@@ -5,11 +5,13 @@
   "created": "2026-10-09T19:47:33Z",
   "description": "Tier 1 enabler for hashing and crypto kernels (xxh3 and Murmur3-128 use the high half of a 64x64 product; BLAKE3 and bit-set kernels want popcount; decoders want clz/ctz for bit readers). Each is one line of C (__builtin_mul_overflow / unsigned __int128, __builtin_clzll, __builtin_ctzll, __builtin_popcountll) and has an exact Elixir meaning:\n- `mulhi(a, b)`: the high 64 bits of the unsigned 128-bit product of a and b taken as u64 bit patterns; Elixir mode: `band(bsr(ua * ub, 64), mask64)` with the sign fix-up to the i64 pattern.\n- `clz(x)`, `ctz(x)`: leading/trailing zero count of the u64 pattern, 64 for 0 (C's builtins are undefined at 0, so guard it).\n- `popcount(x)`: via :erlang.band loops or a 64-step Elixir function in Elixir mode.\n\nAlso decide here whether `rotl64/rotr64` become builtins or stay the bsl/bsr/bor idiom under a mask (clang recognises the idiom; a builtin is clearer in Elixir mode).\n\nNeeds defk-w38 (mask idiom) and lands best alongside defk-n4r.2.\n\nDone when: the builtins exist in both modes with agreement properties at 0, 1, -1, i64 min/max and random values, and are listed in docs/language.md.",
   "id": "defk-52v.6",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-52v",
   "priority": 3,
   "status": "open",
   "title": "Builtins mulhi, clz, ctz and popcount with exact Elixir meanings",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:33Z"
+  "updated_at": "2026-10-09T19:47:35Z"
 }
