@@ -72,9 +72,10 @@ defmodule FFT.Kernels do
       end)
 
     # A kernel has no `raise` yet: a negative alloc length is how it raises
-    # ArgumentError ("alloc/2: negative length -1") for a bad length. (A
-    # discarded `_ = alloc(...)` does not work: the compiler drops it.)
-    ore = alloc(f64, if(p == n and len(im) == n, do: n, else: -1))
+    # ArgumentError ("alloc/2: negative length -1") for a bad length. The
+    # discarded value is still evaluated, as in Elixir.
+    _ = alloc(f64, if(p == n and len(im) == n, do: 0, else: -1))
+    ore = alloc(f64, n)
     oim = alloc(f64, n)
 
     # bit-reversal permutation: j is i with its `bits` bits reversed, kept as

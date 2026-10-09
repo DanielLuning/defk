@@ -650,14 +650,15 @@ defmodule Defk.Compiler do
     {[s, discard(v)], env}
   end
 
-  defp discard(%{elems: _}), do: []
+  defp discard(%{elems: elems}), do: Enum.map(elems, &discard/1)
   defp discard(%{c: c}), do: "(void)(#{c});\n"
 
   # Bind pattern `pat` to value `v`; `match` is the whole `pat = rhs`.
   defp bind({name, _, ctx} = var, v, env, match) when is_atom(name) and is_atom(ctx) do
     cond do
+      # `_ = rhs` still evaluates rhs, as Elixir does: its raise lives in the value
       String.starts_with?(Atom.to_string(name), "_") ->
-        {[], env}
+        {discard(v), env}
 
       match?({:tuple, _}, v.t) ->
         {:tuple, ts} = v.t
