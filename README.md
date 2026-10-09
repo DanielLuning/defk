@@ -13,7 +13,7 @@ mix test                      # resumed kernels match yield: false, incl. a forc
                               # reloading a module while a kernel is suspended
 ```
 
-Needs Elixir ≥ 1.18 and a C compiler (`cc`, or set `CC`).
+Needs Elixir ≥ 1.20 (OTP 29 tested) and a C compiler (`cc`, or set `CC`).
 
 ## Purpose: help Elixir, not compete with it
 
@@ -77,6 +77,11 @@ At `mix compile`, `defk` type-checks the body, emits C
 | Compile error codes and format | `lib/defk/errors.ex` |
 | C build, cached by source hash | `lib/defk/build.ex` |
 | Elixir mode: kernel bodies as plain Elixir | `lib/defk/elixir_mode.ex`, `lib/defk/elixir_mode/ops.ex` |
+| Measurement and the DEFK_RESULT line for examples | `lib/defk/bench.ex` |
+| The builtin list shared by the compiler, Elixir mode and the error registry | `lib/defk/builtins.ex` |
+| Agreement helpers for tests | `lib/defk/test.ex`, `lib/defk/ex_unit/case.ex` |
+| Placeholder registry, see ticket defk-813 | `lib/defk/divergences.ex` |
+| StreamData generators by kernel type | `test/support/generators.ex` |
 | Runtime: arrays, checks, safepoints, frames, exceptions | `priv/defk_runtime.h` |
 | BEAM/NIF reference (execution model, lifecycles, errors, upgrade) | `docs/beam-nifs.md` |
 | Example kernels | `lib/examples.ex` |
