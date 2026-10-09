@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-x15.3"
+  ],
   "blocks": [],
   "created": "2026-10-09T09:30:21Z",
   "description": "After the extractions the worst remaining function is ~13-14 (one-table dispatch). Calibrate, do not bless:\n- .credo.exs: Credo.Check.Refactor.Nesting [max_nesting: 3] (clears the 8 depth-3 AST-lowering idioms; 4+ still caught)\n- .credo.exs: Credo.Check.Refactor.CyclomaticComplexity [max_complexity: 15] (covers single-table functions with margin; still catches growth)\n- test/resume_test.exs:10 shapes (20, depth 4): extract or file-exclude — decide and record.\nRequires an ADR.",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Credo: calibrate complexity/nesting thresholds",
   "type": "task",
-  "updated_at": "2026-10-09T09:30:21Z"
+  "updated_at": "2026-10-09T09:30:30Z"
 }
