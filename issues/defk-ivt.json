@@ -5,6 +5,7 @@
     "defk-52v.1",
     "defk-52v.2",
     "defk-52v.4",
+    "defk-52v.7",
     "defk-9p6.14",
     "defk-9p6.16",
     "defk-9p6.19",
@@ -22,5 +23,5 @@
   "status": "open",
   "title": "Module attributes as constants in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:39Z"
+  "updated_at": "2026-10-09T19:47:40Z"
 }
