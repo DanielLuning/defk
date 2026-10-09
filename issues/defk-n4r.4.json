@@ -4,6 +4,7 @@
     "defk-auo"
   ],
   "blocks": [
+    "defk-52v.15",
     "defk-52v.2",
     "defk-52v.3",
     "defk-52v.7",
@@ -27,5 +28,5 @@
   "status": "open",
   "title": "Helper kernels can write to arrays their caller allocated",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:41Z"
+  "updated_at": "2026-10-09T21:16:27Z"
 }
