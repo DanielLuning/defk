@@ -329,6 +329,21 @@ wrong types is [`builtin-arguments`](#builtin-arguments).
 evaluates the expression and ignores the call, and Elixir mode prints it (see
 [section 10](#10-elixir-mode)).
 
+### Bitwise operators
+
+On `i64`: `band(a, b)`, `bor`, `bxor`, `bnot(a)`, `bsl(a, n)`, `bsr(a, n)`,
+also written `a &&& b`, `|||`, `^^^`, `~~~a`, `<<<`, `>>>`, or
+`Bitwise.band(a, b)`; no `import Bitwise` is needed. Results are Elixir's:
+`band`/`bor`/`bxor`/`bnot` are two's complement. `bsl`/`bsr` shift exactly: a
+negative shift goes the other way, `bsr` fills with the sign (a shift of 64
+or more gives 0 or -1), and `bsl` raises `ArithmeticError` when the exact
+result does not fit in i64, where Elixir would return a bignum (a limit, see
+[shift-overflow](#shift-overflow)). Operands must be `i64`; `bool` and `f64`
+are rejected ([operand-type](#operand-type)). `band` with a constant mask
+gives the compiler a range: `table[band(h, 255)]` skips its bounds check
+against a 256-element array. Elixir 1.20 deprecates `~~~` and `^^^`; prefer
+`bnot/1` and `bxor/2`. (defk-w38)
+
 ### What is not an expression
 
 Each of these is a compile error with a code; the code's entry in
@@ -1443,7 +1458,7 @@ end
 
 ### operand-type
 
-Arithmetic takes numbers, and/or/not take booleans, comparisons take two numbers or two booleans.
+Arithmetic takes numbers, bitwise operators take integers, and/or/not take booleans, comparisons take two numbers or two booleans.
 
 - kind: a mistake to fix (in the kernel or the build)
 - why: booleans are not numbers in Elixir, and defk keeps that
@@ -1550,7 +1565,7 @@ end
 A kernel calls builtins and the other kernels in its module.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow) and the kernels in this module, which are inlined
+- why: a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr) and the kernels in this module, which are inlined
 - hint: define it as a kernel in this module, or compute it in Elixir and pass the result in
 
 Rejected:
@@ -1867,30 +1882,6 @@ Write instead:
 ```elixir
 defk f(x :: f64) :: f64 do
   sqrt(abs(x))
-end
-```
-
-### bitwise
-
-Bitwise operators (&&&, |||, ^^^, <<<, >>>, band, bor, ...) are planned.
-
-- kind: not supported yet (planned)
-- why: bitwise operators on i64 are planned
-- hint: for a non-negative x, rem(x, 2) is band(x, 1) and x * 4 is x <<< 2
-
-Rejected:
-
-```elixir
-defk f(x :: i64) :: i64 do
-  Bitwise.band(x, 1)
-end
-```
-
-Write instead:
-
-```elixir
-defk f(x :: i64) :: i64 do
-  rem(x, 2)
 end
 ```
 
@@ -2558,6 +2549,30 @@ No C compiler could be run to build the kernels.
 - why: a kernel is compiled to native code at build time, so a C toolchain is needed on the build machine, as for elixir_make packages
 - hint: install one (macOS: `xcode-select --install`; Debian/Ubuntu: `apt install build-essential`; Alpine: `apk add build-base`), or set `CC` to a compiler path
 
+### shift-overflow
+
+A shift of two integer literals whose result does not fit in i64.
+
+- kind: a mistake to fix (in the kernel or the build)
+- why: bsl/<<< gives the exact result as Elixir does, and raises ArithmeticError when it does not fit in i64; with literal operands it would raise every time
+- hint: a mask (1 <<< n) - 1 can be computed in i64 for n <= 62; write the 63-bit one as 0x7FFFFFFFFFFFFFFF, and drop a mask that the value already fits
+
+Rejected:
+
+```elixir
+defk f(x :: i64) :: i64 do
+  band(x, (1 <<< 63) - 1)
+end
+```
+
+Write instead:
+
+```elixir
+defk f(x :: i64) :: i64 do
+  band(x, 0x7FFFFFFFFFFFFFFF)
+end
+```
+
 ## 12. Limits
 
 Every case where a kernel raises or refuses to compile where Elixir would have
@@ -2606,11 +2621,6 @@ unspecified. The exception can then differ between a kernel and Elixir mode.
 Written against `main` at the merge of defk-ne6. Two tickets change the
 language on their own branches; each adds its entries here when it lands:
 
-- **defk-w38**, bitwise operators: `band`, `bor`, `bxor`, `bnot`, `bsl`,
-  `bsr` and the `Bitwise` operators on `i64`. Today they are
-  [`bitwise`](#bitwise) (not supported yet). Its entries go in
-  [section 4](#4-expressions-and-operators), the builtins table and
-  [Limits](#12-limits) (shift overflow).
 - **defk-i00**, non-finite floats raise like Elixir: an inf or NaN produced
   inside a kernel raises `ArithmeticError`, and a non-finite input element
   read raises `ArgumentError`. It removes the first two
