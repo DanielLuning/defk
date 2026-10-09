@@ -6,9 +6,15 @@
   "description": "A growing directory of self-contained use-case scripts (mix_install_examples style: one .exs per use case, runnable with 'elixir examples/\u003cname\u003e.exs'). Each example implements a real use case in pure Elixir and with defk, checks they agree, measures both, and prints a machine-readable DEFK_RESULT line with a verdict. examples/run_all.exs aggregates them into a scoreboard. The catalog must include poor fits too, so the docs can say clearly what defk is good at and what not to use it for.",
   "id": "defk-9p6",
   "labels": [],
+  "comments": [
+    {
+      "text": "Ordering rule for new catalog entries (owner, 2026-10-09): we do not exclude a job on principle because the BEAM or a library already does it; every plausible job gets an entry with a pre-registered expected verdict, so the catalog guides people. Priority goes to what defk can make better: expected-good entries with a real anchor first (P2), guidance entries where Elixir or a BIF is expected to win second (P3-P4). The text workloads from docs/research/string-workloads.md (defk-dtw.20) and the Monte Carlo and hash-chain jobs are filed under this rule below.",
+      "timestamp": "2026-10-09T19:21:01Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Example catalog: where defk is (and is not) the right tool",
   "type": "epic",
-  "updated_at": "2026-10-05T11:18:39Z"
+  "updated_at": "2026-10-09T19:21:01Z"
 }
