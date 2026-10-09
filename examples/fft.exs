@@ -18,16 +18,26 @@
 # best of 20 runs at n = 4096, best of 3 at n = 2^20):
 #
 #   variant                                         n = 4096   n = 2^20
-#   recursive lists (split evens/odds, combine)      2.8 ms    4420 ms
+#   recursive lists (split evens/odds, combine)      2.8 ms    4420 ms  <- reported at 4096
 #   iterative over lists, one pass per stage         3.2 ms    3006 ms
-#   iterative, each stage rebuilds one tuple         3.5 ms    2032-2326 ms  <- reported
+#   iterative, each stage rebuilds one tuple         3.5 ms    2032-2326 ms  <- sweep, large sizes
 #   textbook in-place loop on :array                 6.0 ms   21637 ms
 #   Nx 0.13.1 Nx.fft, binary backend (*)             7.9 ms    9719 ms
 #   defk                                            0.045 ms     32-34 ms
 #
 # so ~62x at n = 4096 (against the recursive variant, the fastest there) and
-# 63-91x at n = 2^20 (against the tuple variant, the fastest there; the
-# report below measures it again). Runs vary with GC: the ranges are two runs. Every variant uses the same twiddle table
+# 63-91x at n = 2^20 (against the tuple variant, the fastest there). Runs vary
+# with GC: the ranges are two runs.
+#
+# Realistic size: n = 4096, one audio or metrics frame per call; the verdict
+# is measured there (recursive variant vs defk, best of 20). Beside it the
+# report sweeps 4096, 16384, 65536, 262144 and 2^20 (fastest Elixir variant
+# per size: recursive up to 16384, tuples above; best of 2), giving 50-110x
+# at every size, so the crossover is 4096, the smallest size swept. It also
+# records the 1 ms-ticker gap on one scheduler for one 2^20-point transform:
+# Elixir ~50 ms max, defk ~2 ms (its yield budget; one run each). There is no
+# native side: Nx is the only established alternative and is not a
+# dependency (see below). Every variant uses the same twiddle table
 # and butterflies as the kernel. Not tried yet: separate re/im float lists
 # instead of a {re, im} tuple per value, a radix-4 or split-radix FFT (on
 # both sides), and EXLA, which should win for large or batched transforms
@@ -467,7 +477,10 @@ end
 
 IO.puts("convolve defk: #{FFT.Check.time_ms(fn -> FFT.Kernels.convolve(ca, cb) end, 5)} ms")
 
-# the reported measurement: one 2^20-point transform
+# The reported measurement is at the realistic size, one 4096-point frame
+# (what an audio or metrics pipeline transforms per call). Beside it: a
+# geometric sweep up to 2^20 (the fastest Elixir variant per size) and the
+# 1 ms-ticker gap of each side on one 2^20-point transform.
 n = 1_048_576
 {re, im} = signal.(n)
 
@@ -482,17 +495,38 @@ IO.puts(
   "n = #{n}: agreement (close, bit-exact) #{inspect(agree.({re, im}, {kre, kim}, Keyword.take(variants, [:tuples, :stages])))}"
 )
 
+{sre, sim} = signal.(4096)
+{skre, skim} = FFT.Kernels.fft(sre, sim)
+
+# fastest Elixir variant at each size: recursive up to 16384, tuples above
+elixir_for = fn size ->
+  if size <= 16_384, do: &FFT.Elixir.recursive/2, else: &FFT.Elixir.tuples/2
+end
+
+sweep_fun = fn size ->
+  {re, im} = signal.(size)
+  f = elixir_for.(size)
+  {fn -> f.(re, im) end, fn -> FFT.Kernels.fft(re, im) end}
+end
+
 Defk.Bench.report(
   name: "fft",
   expected: :good,
   baseline: :optimized,
-  runs: 3,
-  elixir: fn -> FFT.Elixir.tuples(re, im) end,
-  defk: fn -> FFT.Kernels.fft(re, im) end,
+  runs: 20,
+  realistic_size: "n = 4096",
+  elixir: fn -> FFT.Elixir.recursive(sre, sim) end,
+  defk: fn -> FFT.Kernels.fft(sre, sim) end,
   check: fn ->
-    {r, i} = FFT.Elixir.tuples(re, im)
-    FFT.Check.close?(r, FFT.Elixir.floats(kre)) and FFT.Check.close?(i, FFT.Elixir.floats(kim))
+    {r, i} = FFT.Elixir.recursive(sre, sim)
+    FFT.Check.close?(r, FFT.Elixir.floats(skre)) and FFT.Check.close?(i, FFT.Elixir.floats(skim))
   end,
+  sweep: {[4096, 16_384, 65_536, 262_144, 1_048_576], sweep_fun},
+  sweep_runs: 2,
+  responsiveness: [
+    elixir: fn -> FFT.Elixir.tuples(re, im) end,
+    defk: fn -> FFT.Kernels.fft(re, im) end
+  ],
   reason:
-    "butterflies over packed floats in place, where Elixir allocates a tuple per value and rebuilds the signal every stage"
+    "butterflies over packed floats in place, where Elixir allocates a tuple or cons cell per value and rebuilds the signal every stage"
 )
