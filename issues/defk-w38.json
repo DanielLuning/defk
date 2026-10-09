@@ -44,11 +44,15 @@
     {
       "text": "Now also blocks the Monte Carlo (defk-9p6.17), hash-chain (defk-9p6.18), codec (defk-9p6.19), hash (defk-9p6.20), CSV loader (defk-9p6.21) and UTF-8 (defk-9p6.22) catalog entries: eleven tickets in total. Recommend P1.",
       "timestamp": "2026-10-09T19:21:05Z"
+    },
+    {
+      "text": "Also blocks the from-scratch epic defk-52v (keccak, blake, lz4/snappy, geohash/crc, the builtins ticket, inflate, argon2id). The count is now about twenty tickets.",
+      "timestamp": "2026-10-09T19:47:44Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Support bitwise operators in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:40Z"
+  "updated_at": "2026-10-09T19:47:44Z"
 }
