@@ -20,11 +20,15 @@
     {
       "text": "defk-n4r.4 (writable array parameters in helper kernels) proposes a  marker in kernel heads; its Elixir-mode threading is the same mechanism value semantics needs. Decide the two together.",
       "timestamp": "2026-10-09T18:40:55Z"
+    },
+    {
+      "text": "Correction of the previous comment (a shell ate the word): defk-n4r.4 (writable array parameters in helper kernels) proposed a `mut` marker in kernel heads; its Elixir-mode threading is the same mechanism value semantics needs. Decide the two together, and see defk-dtw.18 below: writes to a parameter array that is not returned are already decided to be a compile error.",
+      "timestamp": "2026-10-09T18:41:36Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Give arrays value semantics: copy on aliased write",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:55Z"
+  "updated_at": "2026-10-09T18:41:36Z"
 }
