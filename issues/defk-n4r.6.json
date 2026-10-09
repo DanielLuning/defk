@@ -24,11 +24,15 @@
     {
       "text": "Per the decision on defk-n4r.4 (and defk-dtw.18): the kernel head is `aggregate(chunk :: [u8], slots :: [i64], arena :: [u8], stats :: [i64]) :: {[i64], [u8], [i64], i64}`, returning the tables it wrote plus the station count; the Elixir side rebinds them per chunk. No mut marker.",
       "timestamp": "2026-10-09T18:41:56Z"
+    },
+    {
+      "text": "Baseline landed (defk-n4r.1): par_atomics (a pre-built name-\u003eslot map plus :atomics) is 1.66 s at 100M rows on 12 schedulers; the dynamic-discovery variant par_map is 3.62 s. Fairness rule for this ticket: the kernel must discover station names at run time (its hash table), so the baseline it is measured against is the fastest variant that also discovers names dynamically (par_map, or a dynamic-ETS variant), and par_atomics is reported beside it as \"with a known station list\" for both sides (the kernel can take the slot map as an input too). Decide and state it in the header before measuring.",
+      "timestamp": "2026-10-09T21:47:34Z"
     }
   ],
   "priority": 2,
   "status": "open",
   "title": "1BRC kernel example at the development size (100M rows)",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:43Z"
+  "updated_at": "2026-10-09T21:47:34Z"
 }
