@@ -47,13 +47,12 @@ defmodule Defk.Compiler do
         key = {k.name, k.arity}
 
         if key in seen do
-          attempt(key, k.head, fn ->
-            err!(
-              k.head,
-              "duplicate-kernel",
-              "#{k.name}/#{k.arity} is defined more than once; multi-clause kernels are not supported yet"
-            )
-          end)
+          attempt_err!(
+            key,
+            k.head,
+            "duplicate-kernel",
+            "#{k.name}/#{k.arity} is defined more than once; multi-clause kernels are not supported yet"
+          )
 
           {[], seen}
         else
@@ -97,6 +96,9 @@ defmodule Defk.Compiler do
   # was rejected is silent too, and a rejection already recorded at the same
   # place (an inlined kernel repeats its callee's) is dropped.
 
+  # no_return(): err! always throws, which is how a rejection is recorded.
+  @spec err!(term(), term(), term()) :: no_return()
+  @spec err!(term(), term(), term(), keyword()) :: no_return()
   defp err!(node, code, what, opts \\ []) do
     {line, col, width, text} =
       Defk.Errors.locate(node, Process.get(:defk_ctx), Process.get(:defk_lines))
@@ -140,8 +142,23 @@ defmodule Defk.Compiler do
       :error
   end
 
+  # `attempt/3` for a rejection that is the whole action: records it and
+  # returns nil. The throwing call is written inline rather than in a fun,
+  # which Dialyzer would flag as a no-return anonymous function.
+  defp attempt_err!(key, head, code, what) do
+    Process.put(:defk_fun, key)
+    Process.put(:defk_ctx, head)
+
+    try do
+      err!(head, code, what)
+    catch
+      {:defk_reject, d} -> record(d)
+    end
+  end
+
   # A construct outside the kernel subset (Defk.Errors.unsupported/2), shown
   # with the first of its rewrites that compiles here, if any.
+  @spec unsupported!(term(), term(), term()) :: no_return()
   defp unsupported!(node, {code, what, opts}, env),
     do: err!(node, code, what, checked_rewrite(opts, env))
 
@@ -413,6 +430,7 @@ defmodule Defk.Compiler do
     end
   end
 
+  @spec return_input_array!(term(), term()) :: no_return()
   defp return_input_array!(at, k) do
     err!(
       at,
@@ -682,6 +700,7 @@ defmodule Defk.Compiler do
 
   defp bind(pat, v, _env, match), do: unsupported_pattern!(pat, v, match)
 
+  @spec unsupported_pattern!(term(), term(), term()) :: no_return()
   defp unsupported_pattern!({:<<>>, _, _}, _v, match), do: bitstring_match!(match)
 
   defp unsupported_pattern!(pat, v, _match) do
@@ -703,6 +722,7 @@ defmodule Defk.Compiler do
   end
 
   # `<<...>> = bin`: rejected before `bin` is compiled, so the pattern is what's reported
+  @spec bitstring_match!(term()) :: no_return()
   defp bitstring_match!({:=, _, [{:<<>>, _, segs} = pat, rhs]}) do
     float_bits? =
       match?({:<<>>, _, [{:"::", _, [_, {:-, _, [{:float, _, _}, _]}]}]}, rhs) or
@@ -1380,6 +1400,7 @@ defmodule Defk.Compiler do
     cos: "a number"
   }
 
+  @spec builtin_arguments!(term(), term(), term()) :: no_return()
   defp builtin_arguments!(name, vals, {_, _, args} = node) do
     sig = Enum.map_join(vals, ", ", &fmt(&1.t))
     ts = Enum.map(vals, & &1.t)
@@ -1414,6 +1435,7 @@ defmodule Defk.Compiler do
     err!(node, "builtin-arguments", "#{takes}, and is called here with (#{sig})", fix)
   end
 
+  @spec unknown_function!(term(), term(), term(), term()) :: no_return()
   defp unknown_function!(name, vals, node, env) do
     arity = length(vals)
     others = for {{^name, a}, _} <- env.sigs, do: "#{name}/#{a}"
@@ -1490,6 +1512,7 @@ defmodule Defk.Compiler do
 
   # `node` calls `key`, which is being inlined already: env.inlining is the
   # chain of kernels being inlined, innermost first
+  @spec recursion!(term(), term(), term()) :: no_return()
   defp recursion!({name, arity} = key, node, env) do
     cycle = Enum.take_while(env.inlining, &(&1 != key))
     through = Enum.map_join(Enum.reverse(cycle), " and ", fn {n, a} -> "#{n}/#{a}" end)
@@ -2505,6 +2528,7 @@ defmodule Defk.Compiler do
 
   # ------------------------------------------------------ more rejections --
 
+  @spec not_an_array!(term(), term(), term()) :: no_return()
   defp not_an_array!(node, arr, a) do
     err!(
       node,
@@ -2520,6 +2544,7 @@ defmodule Defk.Compiler do
     "#{a}_copy = alloc(#{e}, len(#{a}))\n\nfor i <- 0..(len(#{a}) - 1)//1 do\n  #{a}_copy[i] = #{a}[i]\nend\n"
   end
 
+  @spec cond_without_true!(term()) :: no_return()
   defp cond_without_true!(node) do
     err!(
       node,
@@ -2528,12 +2553,14 @@ defmodule Defk.Compiler do
     )
   end
 
+  @spec case_form!(term()) :: no_return()
   defp case_form!(node) do
     err!(node, "case-form", "this case has no do block of `pattern -> body` clauses")
   end
 
   # `fun` (e.g. "Enum.all?/2") called without a literal one-clause fn; `params`
   # name the fn's parameters for the rewrite of a capture
+  @spec fn_argument!(term(), term(), term()) :: no_return()
   defp fn_argument!({_, _, args}, fun, params) do
     f = List.last(args)
     vars = Enum.map(params, &{&1, [], nil})
@@ -2566,6 +2593,7 @@ defmodule Defk.Compiler do
   end
 
   # a for that would collect values (`into` is its into:, or nil): `what` says how
+  @spec for_collect!(term(), term(), term(), term(), term(), term()) :: no_return()
   defp for_collect!(node, quals, body, into, env, what) do
     rewrite =
       case quals do
@@ -2576,6 +2604,7 @@ defmodule Defk.Compiler do
     err!(node, "for-collect", what, checked_rewrite([rewrite: rewrite], env))
   end
 
+  @spec generator_pattern!(term()) :: no_return()
   defp generator_pattern!({:<-, _, [pat, src]} = gen) do
     {opts, what} =
       case {pat, src} do
