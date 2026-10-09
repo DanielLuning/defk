@@ -5,11 +5,13 @@
   "created": "2026-10-09T19:47:33Z",
   "description": "Tier 2 and probably the highest-value rewrite here. Argon2 is memory-hard: it fills a 64 KiB to 1 GiB block array with a BLAKE2b-based mixing function and makes data-dependent (argon2i: independent) passes over it; the reference (phc-winner-argon2) is plain C with optional SSE, and argon2_elixir wraps it with dirty schedulers because a hash takes 10-500 ms. A kernel of the same code yields every 250 us, is killed cleanly with its memory freed when the process dies, and is bounds-checked. The memory is one alloc'd [i64] of m_cost KiB (well under the 2^48 cap).\n\nKernel: `argon2id(password :: [u8], salt :: [u8], t_cost :: i64, m_cost_kib :: i64, parallelism :: i64, out_len :: i64) :: [u8]` with lanes computed sequentially (parallelism \u003e 1 changes the indexing, not the result; a multi-process version can split lanes across kernel calls later), BLAKE2b from the sibling ticket inlined (or its long-hash variant H'), the G mixing function over 1 KiB blocks (u64 wrapping adds and rotates), and the index computation for argon2id's hybrid mode. Vectors from the RFC 9106 test cases and argon2_elixir's own outputs.\n\nElixir baseline: there is none (nobody hashes passwords in pure Elixir); the comparison is argon2_elixir itself (reference C), so the verdict is about parity and the runtime contract, not a speedup. Pre-register: expected marginal on speed, with tick-gap and process-kill measurements beside it.\n\nGovernance, stated in the header: a password-hashing implementation needs review before any production use; the kernel's test vectors and agreement give correctness, not an audit; constant-time behaviour is not required for argon2id's data-independent first half but the final comparison must happen in Elixir with a constant-time compare (:crypto.hash_equals/2).\n\nNeeds: defk-w38, defk-n4r.2, defk-ivt, defk-n4r.4, the BLAKE2b ticket, big alloc (works today), rotates (the builtins ticket).\n\nDone when: RFC 9106 vectors pass, output matches argon2_elixir for random parameters within the supported ranges, the kill-mid-hash test shows frames_live back to 0 and memory released, verdict and tick gap recorded.",
   "id": "defk-52v.9",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-52v",
   "priority": 3,
   "status": "open",
   "title": "argon2id from scratch vs argon2_elixir, with the yield and memory story",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:33Z"
+  "updated_at": "2026-10-09T19:47:36Z"
 }
