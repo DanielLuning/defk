@@ -214,8 +214,8 @@ end
 - Float literals are `f64`. An integer literal where an `f64` is expected
   (a result, an argument, a `[f64]` write) widens, as in Elixir arithmetic.
 - `true` and `false` are `bool`. Other atoms and `nil` are
-  [`unsupported-atom`](#unsupported-atom); strings are
-  [`unsupported-string`](#unsupported-string).
+  [`unsupported-atom`](#unsupported-atom). A string or `<<1, 2, 3>>` is a
+  `[u8]` ([binary literals](#binary-literals)).
 
 ## 4. Expressions and operators
 
@@ -330,6 +330,9 @@ wrong types is [`builtin-arguments`](#builtin-arguments).
 | `pow(a, b)` | two numbers | `f64`, like `:math.pow/2` (`pow(2, 10)` is `1024.0`) | |
 | `alloc(type, n)` | an element type and an `i64` length | a new zero-filled array | see [Arrays](#6-arrays) |
 | `wrap64(expr)` | an `i64` expression | the low 64 bits of its exact result as a signed `i64`, as `Defk.Bits.wrap64/1` | see [Masked arithmetic](#masked-arithmetic) |
+| `mulhi(a, b)` | two `i64` | `i64`: the high 64 bits of the unsigned 128-bit product of the u64 bit patterns, as `Defk.Bits.mulhi/2` | see [Bit builtins](#bit-builtins) |
+| `clz(x)`, `ctz(x)`, `popcount(x)` | an `i64` | `i64` in 0..64: leading zeros, trailing zeros (64 for 0), set bits of the u64 pattern | see [Bit builtins](#bit-builtins) |
+| `rotl64(x, n)`, `rotr64(x, n)` | two `i64` | `i64`: the 64-bit pattern of `x` rotated by `band(n, 63)` | see [Bit builtins](#bit-builtins) |
 | `u64_le(b, i)`, `u32_le`, `u16_le`, `u64_be`, `u32_be`, `u16_be` | a `[u8]` and an `i64` byte offset | `i64`: the unsigned word at `i` (`u64` as its signed bit pattern) | see [Word loads](#word-loads) |
 
 `length/1`, `byte_size/1` and `tuple_size/1` are
@@ -353,6 +356,28 @@ are rejected ([operand-type](#operand-type)). `band` with a constant mask
 gives the compiler a range: `table[band(h, 255)]` skips its bounds check
 against a 256-element array. Elixir 1.20 deprecates `~~~` and `^^^`; prefer
 `bnot/1` and `bxor/2`. (defk-w38)
+
+### Bit builtins
+
+`mulhi(a, b)`, `clz(x)`, `ctz(x)`, `popcount(x)`, `rotl64(x, n)` and
+`rotr64(x, n)` work on the u64 bit pattern of an `i64` and return an `i64`
+(a pattern, so a value with the top bit set is negative). Each is a plain
+function in `Defk.Bits` with a doctest, which Elixir mode calls, so both
+modes give the same value:
+
+- `mulhi` is the high 64 bits of the unsigned 128-bit product, as
+  `band(bsr(ua * ub, 64), 2^64 - 1)` on the unsigned values, then
+  `Defk.Bits.wrap64/1`. It is the half of a 64x64 multiply that
+  `wrap64(a * b)` drops (xxh3, Murmur3-128).
+- `clz` and `ctz` count leading and trailing zero bits: 0 to 64, and 64 for 0
+  (the C builtins are undefined there; the kernel guards it).
+- `popcount` counts set bits: 0 to 64. The three counts give the compiler the
+  range 0..64.
+- `rotl64` and `rotr64` rotate the 64-bit pattern by `band(n, 63)`, so `n`
+  may be any `i64`, negative included.
+
+Operands must be `i64`; `f64` and `bool` are rejected
+([builtin-arguments](#builtin-arguments)). None of them can raise. (defk-52v.6)
 
 ### Masked arithmetic
 
@@ -417,6 +442,49 @@ end
 
 (defk-n4r.2)
 
+### Binary literals
+
+**Supported:** a string literal `"abc"` (its UTF-8 bytes) and `<<1, 2, 3>>`
+with integer-literal segments (each `0..255`, optionally `::8` or
+`::size(8)`) are a `[u8]`, the same value a binary module attribute
+is: indexed (out of range raises `Enum.OutOfBoundsError`), measured with
+`len/1`, iterated with `for x <- "abc"`, bound to a variable, passed to a
+kernel, compared byte by byte in a loop. Natively it is a static const view in
+the NIF: no allocation and no copy, and its length is known, so
+`"0123456789abcdef"[band(x, 15)]` has no bounds check. In Elixir mode it is
+the binary itself. `""` and `<<>>` are a zero-length array (`len` is 0, any
+index raises).
+
+```elixir
+defk hex_digit(x :: i64) :: i64 do
+  "0123456789abcdef"[band(x, 15)]
+end
+
+defk starts_with?(s :: [u8], p :: [u8]) :: bool do
+  if len(p) > len(s) do
+    false
+  else
+    for i <- 0..(len(p) - 1)//1, reduce: true do
+      acc -> acc and s[i] == p[i]
+    end
+  end
+end
+
+defk is_ham?(s :: [u8]) :: bool, do: starts_with?(s, "Ham")
+```
+
+A write to a literal bound to a variable copies it first, like an input
+array's ([Copies](#copies)); a literal cannot be returned unwritten
+([`return-input-array`](#return-input-array)), and it is not a `case`
+pattern.
+
+**Unsupported:** interpolation, charlists (`'abc'`, `~c"abc"`; write
+`"abc"`), a segment that is a float, a variable, a string, a value outside
+`0..255`, or any type or size other than 8-bit integer
+([`binary-literal`](#binary-literal)); build it in Elixir and pass it as a
+`[u8]` parameter, or use a module attribute. `<>` and `~s` are
+[`unsupported-string`](#unsupported-string). (defk-n4r.5)
+
 ### Module attributes
 
 **Supported:** `@name` in a kernel body reads a module attribute as a
@@ -429,7 +497,7 @@ inlined when the module compiles, the same in native code and Elixir mode:
 | an integer in `i64` | that integer literal, `i64` |
 | a float | that float literal, `f64` |
 | `true`, `false` | that boolean literal |
-| a binary | a read-only `[u8]` array of its bytes, kept in the kernel's static data |
+| a binary | a `[u8]` array of its bytes, kept in the kernel's static data (a write copies it) |
 
 An integer, float or boolean attribute works wherever its literal does: in
 arithmetic, as a range bound or step, as a `case` pattern
@@ -476,20 +544,18 @@ Each of these is a compile error with a code; the code's entry in
 | Construct | Code |
 |---|---|
 | maps, structs, `map.field` | [`unsupported-map`](#unsupported-map) |
-| string literals, sigils `~s`, `<>`, interpolation | [`unsupported-string`](#unsupported-string) |
+| string concatenation `<>`, the sigil `~s` | [`unsupported-string`](#unsupported-string) |
+| interpolation `"#{x}"`, charlists `'abc'`/`~c"abc"`, a `<<...>>` with a non-byte segment | [`binary-literal`](#binary-literal) |
 | atoms other than `true`/`false`, `nil` | [`unsupported-atom`](#unsupported-atom) |
 | lists, `++`, `--` | [`unsupported-list`](#unsupported-list) |
 | `fn`, captures `&f/1` (except the `fn` of `Enum.reduce_while/3`, `Enum.all?/2`, `Enum.any?/2`) | [`unsupported-fn`](#unsupported-fn), [`fn-argument`](#fn-argument) |
 | the pipe `\|>` | [`pipe`](#pipe) (the hint shows the nested call) |
-<<<<<<< HEAD
-=======
 | a module attribute holding a list, tuple, map, atom or `nil`, or not defined above the kernel | [`attribute-value`](#attribute-value), [`undefined-attribute`](#undefined-attribute) |
->>>>>>> defk-ivt/module-attributes
-| building a bitstring `<<...>>` | [`bitstring-build`](#bitstring-build) (planned) |
 | binary patterns `<<a, b, rest::binary>> = arr` | [`bitstring-match`](#bitstring-match) |
 | calls to other modules (`Enum.sum/1`, `Enum.map/2`, `String.*`, `:math.tan/1`, ...) | [`unsupported-call`](#unsupported-call), [`enum-reduce`](#enum-reduce) and [`enum-find`](#enum-find) (planned) |
 | a range as a value (`r = 1..10`), `x in [1, 2, 3]`, `**`, a match used as a value | [`unsupported-expression`](#unsupported-expression) |
-| `unless`, `with`, `try`, `receive`, `raise`, `throw`, `send`, `spawn`, ... | [`unsupported-construct`](#unsupported-construct) |
+| `unless`, `with`, `try`, `receive`, `reraise`, `throw`, `send`, `spawn`, ... | [`unsupported-construct`](#unsupported-construct) |
+| `raise` with an interpolated or computed message, of another module, or used as a value | [`raise-message`](#raise-message), [`raise-module`](#raise-module), [`raise-value`](#raise-value) (see [`raise`](#raise)) |
 | a call to a function that is neither a builtin nor a kernel of this module (`while`, `length`) | [`unknown-function`](#unknown-function) |
 
 ### Unsupported, write this instead
@@ -906,6 +972,40 @@ end
   ([`enum-reduce`](#enum-reduce)) or `Enum.find`/`find_index`
   ([`enum-find`](#enum-find)) yet.
 
+### `raise`
+
+**Supported with restrictions:** `raise Module, "message"`, `raise Module`
+and `raise "message"`, with `Module` one of `ArgumentError`,
+`ArithmeticError` and `RuntimeError`. It raises what Elixir would: the
+exception with that message, or the module's default message for
+`raise Module` ("argument error", "bad argument in arithmetic expression",
+"runtime error"), and `raise "message"` is a `RuntimeError`.
+
+```elixir
+defk fft_size(n :: i64) :: i64 do
+  if n < 1 or band(n, n - 1) != 0, do: raise(ArgumentError, "n must be a power of two")
+  ctz(n)
+end
+```
+
+- **A statement**, anywhere a statement goes: in a block before its value, in
+  `if`/`case` statements, in a branch before the branch's value, in a loop
+  body, and in an `Enum.reduce_while/3` `fn` before its tail. A `raise` as a
+  value (`x = raise ...`, the last expression of a kernel, or a value
+  branch that only raises, `if ok, do: v, else: raise(...)`) is
+  [`raise-value`](#raise-value): write the check as a statement first,
+  `if not ok, do: raise(...)`, then the value. A `cond` whose arms only
+  raise needs a value in each; write the checks as `if` statements instead.
+- **The message is a string literal**, of any length and any bytes (also
+  `raise Module, message: "..."`). Interpolation and computed messages are
+  [`raise-message`](#raise-message): the message is a C string in the
+  kernel's static storage. Put the value in Elixir, before or after the
+  call. Other modules are [`raise-module`](#raise-module).
+- Natively the exception is raised in the calling process like the
+  kernel's own errors, after its buffers are freed, also from inside a
+  yielding loop or an inlined call. In Elixir mode it is the `raise` itself,
+  so both give the same exception with the same message.
+
 ### Blocks
 
 Every block that needs a value ends in an expression; an empty block is
@@ -979,7 +1079,8 @@ including ordinary `def`s of the kernel's own module, are not callable
   1 ms ticker).
 - **Errors are exceptions.** Every runtime error in this document is raised in
   the calling process as an ordinary Elixir exception (`ArithmeticError`,
-  `ArgumentError`, `Enum.OutOfBoundsError`, `CaseClauseError`), after the
+  `ArgumentError`, `Enum.OutOfBoundsError`, `CaseClauseError`, and
+  `RuntimeError` from a kernel's own [`raise`](#raise)), after the
   kernel's own buffers are freed. Catch it like any other.
 - **Process death.** A process killed while its kernel is suspended between
   steps frees the kernel's frame and arrays (`__defk_stats__().frames_live`
@@ -1734,7 +1835,7 @@ end
 A kernel calls builtins and the other kernels in its module.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be) and the kernels in this module, which are inlined
+- why: a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, mulhi, clz, ctz, popcount, rotl64, rotr64) and the kernels in this module, which are inlined
 - hint: define it as a kernel in this module, or compute it in Elixir and pass the result in
 
 Rejected:
@@ -2493,26 +2594,27 @@ end
 
 ### unsupported-string
 
-Strings are not in the kernel subset; a kernel sees bytes as a [u8] array.
+String concatenation with <> and the ~s sigil are not in the kernel subset; a string literal is a [u8].
 
 - kind: outside the kernel subset (permanent)
-- why: kernels see bytes, not text: there are no UTF-8 or grapheme operations
-- hint: pass the bytes as a [u8] argument, and do text work in Elixir before or after the call
+- why: kernels see bytes, not text: there are no UTF-8 or grapheme operations, and a kernel cannot build a string at run time
+- hint: write one string literal, or pass the bytes as a [u8] argument and do text work in Elixir before or after the call
 
 Rejected:
 
 ```elixir
 defk f(x :: i64) :: i64 do
-  s = "hello"
-  x
+  s = "ab" <> "cd"
+  len(s) + x
 end
 ```
 
 Write instead:
 
 ```elixir
-defk f(s :: [u8]) :: i64 do
-  s[0]
+defk f(x :: i64) :: i64 do
+  s = "abcd"
+  len(s) + x
 end
 ```
 
@@ -2595,36 +2697,9 @@ defk f(x :: i64) :: i64 do
 end
 ```
 
-### bitstring-build
-
-Building bitstrings with <<...>> is planned (the bitstring accumulator).
-
-- kind: not supported yet (planned)
-- why: a kernel produces bytes by writing an alloc/2 array; building bitstrings is planned
-- hint: write the bytes into an alloc(u8, n) array
-
-Rejected:
-
-```elixir
-defk f(x :: i64) :: i64 do
-  b = <<x::8>>
-  x
-end
-```
-
-Write instead:
-
-```elixir
-defk f(x :: i64) :: [u8] do
-  b = alloc(u8, 1)
-  b[0] = rem(x, 256)
-  b
-end
-```
-
 ### unsupported-construct
 
-A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and raise are not in the kernel subset.
+A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and throw are not in the kernel subset.
 
 - kind: outside the kernel subset (permanent)
 - why: a kernel uses a fixed set of Elixir forms: =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2
@@ -2756,6 +2831,109 @@ Write instead:
 
 defk f(i :: i64) :: i64 do
   @table[i]
+end
+```
+
+### binary-literal
+
+A binary literal in a kernel is a string or <<...>> of integer bytes (0..255); anything else is built in Elixir.
+
+- kind: outside the kernel subset (permanent)
+- why: a binary literal is a read-only [u8] in static storage, so every byte must be known when the kernel compiles: no interpolation, charlists, floats, other segment types or sizes, and no value over 255
+- hint: build it in Elixir and pass it as a [u8] parameter, or use a module attribute
+
+Rejected:
+
+```elixir
+defk f(i :: i64) :: i64 do
+  t = <<1, 2, 300>>
+  t[i]
+end
+```
+
+Write instead:
+
+```elixir
+defk f(i :: i64) :: i64 do
+  t = <<1, 2, 44>>
+  t[i]
+end
+```
+
+### raise-value
+
+`raise` in a kernel is a statement: it cannot be a value, the last expression of a kernel or of a branch that gives one.
+
+- kind: a mistake to fix (in the kernel or the build)
+- why: a kernel's values are numbers, booleans, tuples and arrays; a raise has no value to give, so it goes where a statement goes
+- hint: raise is a statement; put it before the value: `if not ok, do: raise(...)` on its own line, then the value
+
+Rejected:
+
+```elixir
+defk f(x :: i64) :: i64 do
+  if x >= 0, do: x * 2, else: raise(ArgumentError, "x must not be negative")
+end
+```
+
+Write instead:
+
+```elixir
+defk f(x :: i64) :: i64 do
+  if x < 0, do: raise(ArgumentError, "x must not be negative")
+  x * 2
+end
+```
+
+### raise-message
+
+A kernel's `raise` message is a string literal: no interpolation or computed value.
+
+- kind: outside the kernel subset (permanent)
+- why: the message is a C string in the kernel's static storage, so it is known when the kernel compiles; formatting a value would need a BEAM binary
+- hint: a kernel raises with a literal message: put the value in Elixir, before or after the call
+
+Rejected:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  if n < 1, do: raise(ArgumentError, "bad length #{n}")
+  n
+end
+```
+
+Write instead:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  if n < 1, do: raise(ArgumentError, "length must be positive")
+  n
+end
+```
+
+### raise-module
+
+A kernel raises ArgumentError, ArithmeticError or RuntimeError.
+
+- kind: outside the kernel subset (permanent)
+- why: the runtime builds the exception natively, for the modules whose only field is the message
+- hint: use ArgumentError, ArithmeticError or RuntimeError
+
+Rejected:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  if n < 1, do: raise(KeyError, "no such key")
+  n
+end
+```
+
+Write instead:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  if n < 1, do: raise(ArgumentError, "no such key")
+  n
 end
 ```
 

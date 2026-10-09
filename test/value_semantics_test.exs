@@ -230,6 +230,13 @@ defmodule Defk.ValueSemanticsTest.K do
     end
   end
 
+  # so is a binary literal
+  defk lit_write(i :: i64) :: [u8] do
+    t = "abc"
+    t[i] = 65
+    t
+  end
+
   # a binary attribute is copied before a write
   @table <<1, 2, 3, 4>>
   defk attr_write(i :: i64) :: {[u8], i64} do
@@ -320,6 +327,7 @@ defmodule Defk.ValueSemanticsTest do
 
     test "a binary attribute" do
       assert agree(:attr_write, [1]) == {:ok, {<<1, 9, 3, 4>>, 2}}
+      assert agree(:lit_write, [2]) == {:ok, "abA"}
     end
   end
 
@@ -505,6 +513,7 @@ defmodule Defk.ValueSemanticsTest do
     use_fill: [args: StreamData.fixed_list([StreamData.integer(0..100), G.i64()])],
     keep_fill: [args: StreamData.fixed_list([StreamData.integer(0..100), G.i64()])],
     attr_write: [args: StreamData.fixed_list([G.i64(-2..6)])],
+    lit_write: [args: StreamData.fixed_list([G.i64(-2..6)])],
     alias_per_iter: [args: StreamData.fixed_list([StreamData.integer(0..100)])],
     nested_hoist: [args: StreamData.fixed_list([StreamData.integer(0..60)])],
     branch_in_loop: [args: StreamData.fixed_list([G.array(:i64), G.i64(-1..2)])],

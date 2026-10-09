@@ -668,6 +668,15 @@ defmodule Defk.Compiler do
     end
   end
 
+  # raise Module, "literal" / raise Module / raise "literal": the exception
+  # Elixir would raise, its message a C string literal (see "raise")
+  defp lower_stmt({:raise, _, args} = node, env) when is_list(args) do
+    {mod, msg} = Defk.Raise.parse!(node, &err!/4)
+    msg = Defk.Raise.message(mod, msg)
+    kind = Defk.Raise.kind(mod)
+    {"defk_user_raise(ctx, #{kind}, #{Defk.Raise.c_string(msg)}, #{byte_size(msg)});\n", env}
+  end
+
   defp lower_stmt(e, env) do
     {s, v} = lower_expr(e, env)
     {[s, discard(v)], env}
@@ -1206,14 +1215,24 @@ defmodule Defk.Compiler do
   # literal: a binary is a read-only [u8] in static storage, as an input array
   defp lower_expr({:@, _, [{name, _, ctx}]} = node, _env) when is_atom(name) and is_atom(ctx) do
     case Defk.Attributes.of(node) do
-      {:ok, b} when is_binary(b) ->
-        view = "((defk_arr_u8){(uint8_t *)#{c_bytes(b)}, #{byte_size(b)}})"
-        {[], Map.merge(val(view, {:arr, :u8}), %{len_lo: byte_size(b), buf: make_ref()})}
-
-      _ ->
-        attribute!(node)
+      {:ok, b} when is_binary(b) -> {[], static_u8(b)}
+      _ -> attribute!(node)
     end
   end
+
+  # a binary literal, `"abc"` or `<<1, 2, 3>>`: the same static read-only [u8]
+  # as a binary attribute (defk-n4r.5)
+  defp lower_expr({:<<>>, _, _} = node, _env) do
+    case Defk.BinaryLiteral.bytes(node) do
+      {:ok, b} ->
+        {[], static_u8(b)}
+
+      {:error, why, opts} ->
+        err!(node, "binary-literal", Defk.BinaryLiteral.message(node, why), opts)
+    end
+  end
+
+  defp lower_expr(b, _env) when is_binary(b), do: {[], static_u8(b)}
 
   defp lower_expr({:__block__, _, _} = b, env), do: lower_block(b, env)
 
@@ -1936,6 +1955,9 @@ defmodule Defk.Compiler do
     )
   end
 
+  # a raise is a statement: it has no value to give
+  defp lower_call(:raise, args, m, _env), do: Defk.Raise.value!({:raise, m, args}, &err!/4)
+
   defp lower_call(name, args, m, env) do
     node = {name, m, args}
 
@@ -1992,6 +2014,15 @@ defmodule Defk.Compiler do
     facts = if w < 8, do: %{lo: 0, hi: Bitwise.bsl(1, 8 * w) - 1}, else: %{}
     Map.merge(val(c, :i64), facts)
   end
+
+  # mulhi, clz, ctz, popcount, rotl64, rotr64 (Defk.Builtins.bits/0): the
+  # Defk.Bits functions on the u64 bit patterns; the helpers are in
+  # defk_runtime.h. The counts are in 0..64.
+  defp builtin(f, [%{t: :i64} = a], _, _) when f in [:clz, :ctz, :popcount],
+    do: Map.merge(val("defk_#{f}(#{a.c})", :i64), %{lo: 0, hi: 64})
+
+  defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:mulhi, :rotl64, :rotr64],
+    do: val("defk_#{f}(#{a.c}, #{b.c})", :i64)
 
   defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:div, :rem],
     do: val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
@@ -2074,7 +2105,13 @@ defmodule Defk.Compiler do
     u32_le: "a [u8] array and an i64 byte offset",
     u32_be: "a [u8] array and an i64 byte offset",
     u16_le: "a [u8] array and an i64 byte offset",
-    u16_be: "a [u8] array and an i64 byte offset"
+    u16_be: "a [u8] array and an i64 byte offset",
+    mulhi: "two i64 values",
+    clz: "an i64 value",
+    ctz: "an i64 value",
+    popcount: "an i64 value",
+    rotl64: "two i64 values",
+    rotr64: "two i64 values"
   }
 
   @spec builtin_arguments!(term(), term(), term()) :: no_return()
@@ -2083,7 +2120,18 @@ defmodule Defk.Compiler do
     ts = Enum.map(vals, & &1.t)
 
     arity =
-      if name in [:div, :rem, :min, :max, :pow | @loads ++ (@bitwise -- [:bnot])], do: 2, else: 1
+      if name in [
+           :div,
+           :rem,
+           :min,
+           :max,
+           :pow,
+           :mulhi,
+           :rotl64,
+           :rotr64 | @loads ++ (@bitwise -- [:bnot])
+         ],
+         do: 2,
+         else: 1
 
     takes = "#{name}/#{arity} takes #{@builtin_takes[name]}"
 
@@ -2777,6 +2825,9 @@ defmodule Defk.Compiler do
     [ss, branch_chain(arms, cenv, &lower_tail(&1, &2, leaf))]
   end
 
+  defp tail_expr({:raise, m, args}, _env, _leaf) when is_list(args),
+    do: Defk.Raise.value!({:raise, m, args}, &err!/4)
+
   defp tail_expr(other, _env, _leaf) do
     err!(
       other,
@@ -3401,6 +3452,12 @@ defmodule Defk.Compiler do
   # ------------------------------------------------------ more rejections --
 
   # The bytes of `b` as a C string literal of octal escapes, 64 bytes a line.
+  # a read-only [u8] view over a static C string; its length is a known fact
+  defp static_u8(b) do
+    view = "((defk_arr_u8){(uint8_t *)#{c_bytes(b)}, #{byte_size(b)}})"
+    Map.merge(val(view, {:arr, :u8}), %{len_lo: byte_size(b), buf: make_ref()})
+  end
+
   defp c_bytes(""), do: ~s("")
 
   defp c_bytes(b) do

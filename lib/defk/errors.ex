@@ -635,12 +635,14 @@ defmodule Defk.Errors do
     %{
       code: "unsupported-string",
       kind: :subset,
-      summary: "Strings are not in the kernel subset; a kernel sees bytes as a [u8] array.",
-      why: "kernels see bytes, not text: there are no UTF-8 or grapheme operations",
+      summary:
+        "String concatenation with <> and the ~s sigil are not in the kernel subset; a string literal is a [u8].",
+      why:
+        "kernels see bytes, not text: there are no UTF-8 or grapheme operations, and a kernel cannot build a string at run time",
       hint:
-        "pass the bytes as a [u8] argument, and do text work in Elixir before or after the call",
-      example: "defk f(x :: i64) :: i64 do\n  s = \"hello\"\n  x\nend",
-      rewrite: "defk f(s :: [u8]) :: i64 do\n  s[0]\nend"
+        "write one string literal, or pass the bytes as a [u8] argument and do text work in Elixir before or after the call",
+      example: "defk f(x :: i64) :: i64 do\n  s = \"ab\" <> \"cd\"\n  len(s) + x\nend",
+      rewrite: "defk f(x :: i64) :: i64 do\n  s = \"abcd\"\n  len(s) + x\nend"
     },
     %{
       code: "unsupported-atom",
@@ -673,19 +675,10 @@ defmodule Defk.Errors do
         "defk g(y :: i64) :: i64 do\n  y * 2\nend\n\ndefk f(x :: i64) :: i64 do\n  g(x)\nend"
     },
     %{
-      code: "bitstring-build",
-      kind: :planned,
-      summary: "Building bitstrings with <<...>> is planned (the bitstring accumulator).",
-      why: "a kernel produces bytes by writing an alloc/2 array; building bitstrings is planned",
-      hint: "write the bytes into an alloc(u8, n) array",
-      example: "defk f(x :: i64) :: i64 do\n  b = <<x::8>>\n  x\nend",
-      rewrite: "defk f(x :: i64) :: [u8] do\n  b = alloc(u8, 1)\n  b[0] = rem(x, 256)\n  b\nend"
-    },
-    %{
       code: "unsupported-construct",
       kind: :subset,
       summary:
-        "A kernel uses the Elixir forms #{@forms}; others such as unless, with, try, receive and raise are not in the kernel subset.",
+        "A kernel uses the Elixir forms #{@forms}; others such as unless, with, try, receive and throw are not in the kernel subset.",
       why: "a kernel uses a fixed set of Elixir forms: #{@forms}",
       hint: "write it with those forms",
       example: "defk f(x :: i64) :: i64 do\n  unless x > 0, do: 0, else: x\nend",
@@ -747,6 +740,58 @@ defmodule Defk.Errors do
       hint: "pass the value as a parameter; pack a list of bytes into a binary attribute",
       example: "@table [1, 2, 4, 8]\n\ndefk f(i :: i64) :: i64 do\n  i + @table\nend",
       rewrite: "@table <<1, 2, 4, 8>>\n\ndefk f(i :: i64) :: i64 do\n  @table[i]\nend"
+    },
+    %{
+      code: "binary-literal",
+      kind: :subset,
+      summary:
+        "A binary literal in a kernel is a string or <<...>> of integer bytes (0..255); anything else is built in Elixir.",
+      why:
+        "a binary literal is a read-only [u8] in static storage, so every byte must be known when the kernel compiles: no interpolation, charlists, floats, other segment types or sizes, and no value over 255",
+      hint: "build it in Elixir and pass it as a [u8] parameter, or use a module attribute",
+      example: "defk f(i :: i64) :: i64 do\n  t = <<1, 2, 300>>\n  t[i]\nend",
+      rewrite: "defk f(i :: i64) :: i64 do\n  t = <<1, 2, 44>>\n  t[i]\nend"
+    },
+    # -- raise
+    %{
+      code: "raise-value",
+      kind: :error,
+      summary:
+        "`raise` in a kernel is a statement: it cannot be a value, the last expression of a kernel or of a branch that gives one.",
+      why:
+        "a kernel's values are numbers, booleans, tuples and arrays; a raise has no value to give, so it goes where a statement goes",
+      hint:
+        "raise is a statement; put it before the value: `if not ok, do: raise(...)` on its own line, then the value",
+      example:
+        "defk f(x :: i64) :: i64 do\n  if x >= 0, do: x * 2, else: raise(ArgumentError, \"x must not be negative\")\nend",
+      rewrite:
+        "defk f(x :: i64) :: i64 do\n  if x < 0, do: raise(ArgumentError, \"x must not be negative\")\n  x * 2\nend"
+    },
+    %{
+      code: "raise-message",
+      kind: :subset,
+      summary:
+        "A kernel's `raise` message is a string literal: no interpolation or computed value.",
+      why:
+        "the message is a C string in the kernel's static storage, so it is known when the kernel compiles; formatting a value would need a BEAM binary",
+      hint:
+        "a kernel raises with a literal message: put the value in Elixir, before or after the call",
+      example:
+        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(ArgumentError, \"bad length \#{n}\")\n  n\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(ArgumentError, \"length must be positive\")\n  n\nend"
+    },
+    %{
+      code: "raise-module",
+      kind: :subset,
+      summary: "A kernel raises ArgumentError, ArithmeticError or RuntimeError.",
+      why:
+        "the runtime builds the exception natively, for the modules whose only field is the message",
+      hint: "use ArgumentError, ArithmeticError or RuntimeError",
+      example:
+        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(KeyError, \"no such key\")\n  n\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(ArgumentError, \"no such key\")\n  n\nend"
     },
     %{
       code: "array-rebind-in-loop",
@@ -937,11 +982,13 @@ defmodule Defk.Errors do
   defp indent(line), do: "    " <> line
 
   defp frame(d) do
-    loc = "#{relative(d.file)}:#{d.line}#{if d.col, do: ":#{d.col}"}"
+    loc =
+      "#{relative(d.file)}#{if d.line > 0, do: ":#{d.line}"}#{if d.line > 0 and d.col, do: ":#{d.col}"}"
+
     fun = with {name, arity} <- d.fun, do: ": #{inspect(d.module)}.#{name}/#{arity}"
 
     case d.text do
-      nil ->
+      text when is_nil(text) or is_nil(d.col) ->
         "error: #{d.what}\n└─ #{loc}#{fun}"
 
       text ->
@@ -978,6 +1025,7 @@ defmodule Defk.Errors do
       nil ->
         case start(ctx) do
           nil -> {0, nil, 1, nil}
+          {line, nil} -> {line, nil, 1, nil}
           {line, col} -> find_literal(lines, line, col, node) || place(lines, line, col, ctx)
         end
     end
@@ -1009,7 +1057,8 @@ defmodule Defk.Errors do
 
   defp source_line(_, _), do: nil
 
-  defp place(lines, line, nil, _node), do: {line, nil, 1, nil} |> with_text(lines)
+  # a node from a macro has a line but no column: no caret, no text, no width
+  defp place(_lines, line, nil, _node), do: {line, nil, 1, nil}
 
   defp place(lines, line, col, node) do
     case source_line(lines, line) do
@@ -1021,8 +1070,6 @@ defmodule Defk.Errors do
         {line, col, width, text}
     end
   end
-
-  defp with_text({line, col, width, _}, lines), do: {line, col, width, source_line(lines, line)}
 
   # The columns of `node` on its first line: the longest slice from its start
   # (or an opening bracket just before it) that parses back to the node. A node
@@ -1137,16 +1184,14 @@ defmodule Defk.Errors do
 
   defp form({:%, _, _}), do: map("structs")
 
-  defp form(s) when is_binary(s), do: string()
   defp form({:<>, _, _}), do: string("string concatenation with <>")
-  defp form({sigil, _, _}) when sigil in [:sigil_s, :sigil_S], do: string()
+  defp form({sigil, _, _}) when sigil in [:sigil_s, :sigil_S], do: string("the sigil ~s")
 
-  defp form({:<<>>, _, parts} = node) do
-    if Enum.any?(parts, &string_part?/1),
-      do: string(),
-      else:
-        {"bitstring-build",
-         "building a bitstring with #{Macro.to_string(node)} is not supported yet", []}
+  defp form({:<<>>, _, _} = node) do
+    case Defk.BinaryLiteral.bytes(node) do
+      {:error, why, opts} -> {"binary-literal", Defk.BinaryLiteral.message(node, why), opts}
+      _ -> {"binary-literal", "#{Macro.to_string(node)} is not a binary literal", []}
+    end
   end
 
   defp form(nil), do: {"unsupported-atom", "nil is not in the kernel subset", []}
@@ -1154,10 +1199,18 @@ defmodule Defk.Errors do
   defp form(a) when is_atom(a),
     do: {"unsupported-atom", "atoms such as #{inspect(a)} are not in the kernel subset", []}
 
-  defp form(list) when is_list(list),
-    do:
-      {"unsupported-list", "lists such as #{Macro.to_string(list)} are not in the kernel subset",
-       []}
+  # 'abc' is the list [97, 98, 99]: a charlist is a likely intent
+  defp form(list) when is_list(list) do
+    if list != [] and Enum.all?(list, &(is_integer(&1) and &1 in 32..126)),
+      do:
+        {"binary-literal",
+         "the list #{Macro.to_string(list)} is not in the kernel subset; if it is a charlist, a kernel takes a string literal",
+         hint: ~s(use a string literal, "#{List.to_string(list)}"),
+         rewrite: inspect(List.to_string(list))},
+      else:
+        {"unsupported-list",
+         "lists such as #{Macro.to_string(list)} are not in the kernel subset", []}
+  end
 
   defp form({op, _, _}) when op in [:++, :--],
     do: {"unsupported-list", "list operator #{op} is not in the kernel subset", []}
@@ -1216,11 +1269,11 @@ defmodule Defk.Errors do
      hint: "write if not", rewrite: rewrite}
   end
 
-  defp form({name, _, args}) when name in [:raise, :reraise, :throw, :exit] and is_list(args) do
+  defp form({name, _, args}) when name in [:reraise, :throw, :exit] and is_list(args) do
     {"unsupported-construct", "#{name} is not in the kernel subset",
      why:
-       "a kernel raises only Elixir's own errors (an i64 overflow, an index out of range, ...), where Elixir would raise them",
-     hint: "check the arguments in Elixir before the call"}
+       "a kernel raises Elixir's own errors where Elixir would, and its own with raise Module, \"message\" (Module ArgumentError, ArithmeticError or RuntimeError)",
+     hint: "use raise, or check the arguments in Elixir before the call"}
   end
 
   defp form({name, _, args})
@@ -1282,7 +1335,6 @@ defmodule Defk.Errors do
         unsupported(node, type_of)
 
       name in [
-        :raise,
         :reraise,
         :throw,
         :exit,
@@ -1303,12 +1355,19 @@ defmodule Defk.Errors do
         unsupported(node, type_of)
 
       String.starts_with?(Atom.to_string(name), "sigil_") ->
-        if name in [:sigil_s, :sigil_S],
-          do: string(),
-          else:
+        cond do
+          name in [:sigil_s, :sigil_S] ->
+            string("the sigil ~s")
+
+          name in [:sigil_c, :sigil_C] ->
+            {"binary-literal", "a charlist sigil is not in the kernel subset",
+             hint: ~s(use a string literal, "abc")}
+
+          true ->
             {"unsupported-expression",
              "sigil ~#{String.trim_leading(Atom.to_string(name), "sigil_")} is not in the kernel subset",
              []}
+        end
 
       true ->
         local_hint(name, args)
@@ -1334,14 +1393,8 @@ defmodule Defk.Errors do
 
   defp map(what \\ "maps"), do: {"unsupported-map", "#{what} are not in the kernel subset", []}
 
-  defp string(what \\ "string literals"),
-    do:
-      {"unsupported-string",
-       "#{what} #{if what =~ "literals", do: "are", else: "is"} not in the kernel subset", []}
-
-  defp string_part?(s) when is_binary(s), do: true
-  defp string_part?({:"::", _, [{{:., _, [Kernel, :to_string]}, _, _}, _]}), do: true
-  defp string_part?(_), do: false
+  defp string(what),
+    do: {"unsupported-string", "#{what} is not in the kernel subset", []}
 
   defp unpipe({:|>, _, [l, r]}) do
     l = unpipe(l)

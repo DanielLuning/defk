@@ -43,6 +43,7 @@ defmodule Defk.ElixirMode do
   @bitwise Defk.Builtins.bitwise()
   @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
   @loads Defk.Builtins.loads()
+  @bits Defk.Builtins.bits()
 
   @doc """
   Runs `fun` with this process's kernel calls in `mode` (`:native` or
@@ -215,7 +216,21 @@ defmodule Defk.ElixirMode do
     end
   end
 
+  # a kernel's raise (the compiler checked its form): the raise itself
+  defp stmt({:raise, _, args} = node, env) when is_list(args) do
+    q =
+      case Defk.Raise.parse!(node, &raise_form!/4) do
+        {mod, nil} -> quote(do: Kernel.raise(unquote(mod)))
+        {mod, msg} -> quote(do: Kernel.raise(unquote(mod), unquote(msg)))
+      end
+
+    {q, env}
+  end
+
   defp stmt(e, env), do: {elem(expr(e, env), 0), env}
+
+  defp raise_form!(_node, code, what, _opts),
+    do: raise(ArgumentError, "defk: #{code}: #{what} reached Elixir mode")
 
   defp bind({name, _, ctx}, q, t, env) when is_atom(name) and is_atom(ctx) do
     if underscore?(name),
@@ -264,6 +279,14 @@ defmodule Defk.ElixirMode do
   # a binary module attribute (Defk.Attributes.inline/1): the binary itself
   defp expr({:@, _, [{name, _, ctx}]} = node, _env) when is_atom(name) and is_atom(ctx) do
     {:ok, b} = Defk.Attributes.of(node)
+    {b, {:arr, :u8}}
+  end
+
+  # a binary literal: the binary itself
+  defp expr(b, _env) when is_binary(b), do: {b, {:arr, :u8}}
+
+  defp expr({:<<>>, _, _} = node, _env) do
+    {:ok, b} = Defk.BinaryLiteral.bytes(node)
     {b, {:arr, :u8}}
   end
 
@@ -468,6 +491,13 @@ defmodule Defk.ElixirMode do
 
   defp builtin(:len, [a], [{:arr, e}], m), do: {call(:"len_#{e}", [a], m), :i64}
   defp builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: {call(f, [a, i], m), :i64}
+
+  defp builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl64, :rotr64],
+    do: {remote(Defk.Bits, f, [a, b], m), :i64}
+
+  defp builtin(f, [a], [:i64], m) when f in @bits,
+    do: {remote(Defk.Bits, f, [a], m), :i64}
+
   defp builtin(f, [a, b], [:i64, :i64], m) when f in [:div, :rem], do: {call(f, [a, b], m), :i64}
   defp builtin(:float, [a], [:i64], m), do: {{{:., gm(m), [:erlang, :float]}, gm(m), [a]}, :f64}
   defp builtin(:float, [a], [:f64], _m), do: {a, :f64}
