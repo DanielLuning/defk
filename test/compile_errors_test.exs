@@ -95,7 +95,7 @@ defmodule Defk.CompileErrorsTest do
       src = File.read!("lib/defk/compiler.ex") <> File.read!("lib/defk/errors.ex")
 
       used =
-        Regex.scan(~r/\{?"([a-z0-9]+(?:-[a-z0-9]+)+|recursion|bitwise|pipe)",/, src)
+        Regex.scan(~r/\{?"([a-z0-9]+(?:-[a-z0-9]+)+|recursion|pipe)",/, src)
         |> Enum.map(&Enum.at(&1, 1))
 
       registry = MapSet.new(Defk.Errors.codes(), & &1.code)
@@ -378,10 +378,11 @@ defmodule Defk.CompileErrorsTest do
       assert msg =~ "Defk.Bits.f64_to_u64/1, is planned"
     end
 
-    test "bitwise operators are planned" do
-      msg = rejection("(1 <<< n) - 1", "n :: i64", "i64")
-      assert codes(msg) == ["bitwise"]
-      assert hd(whats(msg)) =~ "not supported yet"
+    test "a literal mask (1 <<< 64) - 1 that overflows i64 gets the mask hint" do
+      msg = rejection("band(x, (1 <<< 64) - 1)", "x :: i64", "i64")
+      assert codes(msg) == ["shift-overflow"]
+      assert whats(msg) == ["1 <<< 64 does not fit in i64"]
+      assert msg =~ "0x7FFFFFFFFFFFFFFF"
     end
   end
 end

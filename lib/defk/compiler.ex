@@ -13,6 +13,9 @@ defmodule Defk.Compiler do
   @scalars [:i64, :f64, :bool]
   @elems [:f64, :i64, :u8]
   @math1 Defk.Builtins.math1()
+  # band/2 ... and the operators that are the same functions (&&& ...)
+  @bitwise Defk.Builtins.bitwise()
+  @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
   # range facts carried by values (see "range facts" below)
   @facts [:lo, :hi, :lb, :ub, :len_lo, :len_lb]
 
@@ -999,6 +1002,26 @@ defmodule Defk.Compiler do
   defp lower_expr({{:., _, [{:__aliases__, _, [:IO]}, :inspect]}, _, [x | _]}, env),
     do: lower_expr(x, env)
 
+  # band(a, b), a &&& b, Bitwise.band(a, b) and :erlang.band(a, b) are one
+  # builtin (see "bitwise"); a call of another arity may be a kernel
+  defp lower_expr({op, m, args} = node, env) when op in @bitwise_names and is_list(args) do
+    f = Defk.Builtins.bitwise_fun(op)
+    arity = Defk.Builtins.bitwise_arity(f)
+    label = if op == f, do: "#{f}/#{arity}", else: "#{op}"
+
+    if length(args) == arity,
+      do: lower_bitwise(f, label, args, node, env),
+      else: lower_call(op, args, m, env)
+  end
+
+  defp lower_expr({{:., _, [mod, f]}, _, args} = node, env) when f in @bitwise do
+    arity = Defk.Builtins.bitwise_arity(f)
+
+    if bitwise_module?(mod) and length(args) == arity,
+      do: lower_bitwise(f, "#{Macro.to_string(mod)}.#{f}/#{arity}", args, node, env),
+      else: unsupported!(node, Defk.Errors.unsupported(node, &type_in(&1, env)), env)
+  end
+
   # :math.sqrt(x) etc. map onto the builtins
   defp lower_expr({{:., _, [:math, fun]}, m, args}, env) when fun in [:pow | @math1],
     do: lower_call(fun, args, m, env)
@@ -1216,7 +1239,77 @@ defmodule Defk.Compiler do
             ],
        do: Enum.all?(args, &speculate?/1)
 
+  # bitwise operators: only bsl/bsr can fail, and only by i64 overflow
+  defp speculate?({op, _, args}) when op in @bitwise_names and is_list(args),
+    do: bitwise_call?(op, args) and Enum.all?(args, &speculate?/1)
+
+  defp speculate?({{:., _, [mod, f]}, _, args}) when f in @bitwise,
+    do: bitwise_module?(mod) and bitwise_call?(f, args) and Enum.all?(args, &speculate?/1)
+
   defp speculate?(_), do: false
+
+  # ------------------------------------------------------------- bitwise --
+  # The Bitwise functions on i64, with Elixir's results: band/bor/bxor/bnot
+  # are two's complement and stay in i64; bsl/bsr shift exactly (a negative
+  # shift goes the other way, bsr fills with the sign) and raise
+  # ArithmeticError when the exact result leaves i64 (defk_bsl_i64 in
+  # priv/defk_runtime.h). In a select's arms bsl/bsr flag the overflow
+  # instead (the _s forms), like + - *. `label` names the construct as
+  # written, for errors: "&&&", "band/2" or "Bitwise.band/2".
+
+  defp bitwise_module?({:__aliases__, _, [:Bitwise]}), do: true
+  defp bitwise_module?(mod), do: mod == :erlang
+
+  defp bitwise_call?(op, args),
+    do: length(args) == Defk.Builtins.bitwise_arity(Defk.Builtins.bitwise_fun(op))
+
+  defp lower_bitwise(f, label, args, node, env) do
+    {stmts, vals} = Enum.map(args, &lower_expr(&1, env)) |> Enum.unzip()
+    Enum.zip_with(vals, args, &int!(&1, &2, label))
+    {stmts, bitwise_val(f, vals, args, node, env)}
+  end
+
+  defp bitwise_val(:bnot, [a], _args, _node, _env),
+    do: Map.merge(val("(~#{a.c})", :i64), %{lo: bnot(a[:hi]), hi: bnot(a[:lo])})
+
+  defp bitwise_val(f, [a, b], _args, _node, _env) when f in [:band, :bor, :bxor] do
+    cop = %{band: "&", bor: "|", bxor: "^"}[f]
+    Map.merge(val("(#{a.c} #{cop} #{b.c})", :i64), bit_facts(f, a, b))
+  end
+
+  # a shift of two literals that leaves i64 would always raise: rejected
+  defp bitwise_val(f, [a, b], [x, n], node, env) when f in [:bsl, :bsr] do
+    {x, n} = {int_literal(x), int_literal(n)}
+
+    (is_integer(x) and is_integer(n) and Defk.ElixirMode.Ops.shift(f, x, n) == :overflow) &&
+      err!(node, "shift-overflow", "#{Macro.to_string(node)} does not fit in i64",
+        hint:
+          "the kernel would raise ArithmeticError here every time. A mask (1 <<< n) - 1 can be computed in i64 for n <= 62; write the 63-bit one as 0x7FFFFFFFFFFFFFFF, and drop a mask that the value already fits"
+      )
+
+    c =
+      if f == :bsr and nonneg?(b),
+        do: "defk_bsr_nn(#{a.c}, #{b.c})",
+        else: "defk_#{f}_i64#{checked(env)}, #{a.c}, #{b.c})"
+
+    Map.merge(val(c, :i64), if(f == :bsr, do: bsr_facts(a, b), else: %{}))
+  end
+
+  # the value of an integer literal, also a negative one (-63 is -(63))
+  defp int_literal(n) when is_integer(n), do: n
+  defp int_literal({:-, _, [n]}) when is_integer(n), do: -n
+  defp int_literal(_), do: nil
+
+  # `at` is the operand's expression; `label` names what takes it
+  defp int!(v, at, label) do
+    v.t == :i64 ||
+      err!(
+        at,
+        "operand-type",
+        "#{label} takes integers, and #{Macro.to_string(at)} is #{type_name(v)}",
+        convert_hint(v.t, :i64, at)
+      )
+  end
 
   # ---------------------------------------------------------------- calls --
 
@@ -1362,14 +1455,20 @@ defmodule Defk.Compiler do
     exp: "a number",
     log: "a number",
     sin: "a number",
-    cos: "a number"
+    cos: "a number",
+    band: "two integers",
+    bor: "two integers",
+    bxor: "two integers",
+    bsl: "two integers",
+    bsr: "two integers",
+    bnot: "an integer"
   }
 
   @spec builtin_arguments!(term(), term(), term()) :: no_return()
   defp builtin_arguments!(name, vals, {_, _, args} = node) do
     sig = Enum.map_join(vals, ", ", &fmt(&1.t))
     ts = Enum.map(vals, & &1.t)
-    arity = if name in [:div, :rem, :min, :max, :pow], do: 2, else: 1
+    arity = if name in [:div, :rem, :min, :max, :pow | @bitwise -- [:bnot]], do: 2, else: 1
     takes = "#{name}/#{arity} takes #{@builtin_takes[name]}"
 
     err!(
@@ -2297,6 +2396,47 @@ defmodule Defk.Compiler do
       ub: Map.intersect(ub(a), ub(b), fn _, x, y -> max(x, y) end)
     }
   end
+
+  # band with a non-negative operand is in 0..that operand's hi; bor/bxor of
+  # two non-negative values stay below the next power of two above both
+  defp bit_facts(:band, a, b) do
+    case Enum.filter([a, b], &nonneg?/1) do
+      [] ->
+        %{}
+
+      nn ->
+        %{
+          lo: 0,
+          hi: nn |> Enum.map(& &1[:hi]) |> Enum.filter(&is_integer/1) |> Enum.min(fn -> nil end)
+        }
+    end
+  end
+
+  defp bit_facts(_bor_or_bxor, a, b) do
+    cond do
+      not (nonneg?(a) and nonneg?(b)) -> %{}
+      is_integer(a[:hi]) and is_integer(b[:hi]) -> %{lo: 0, hi: ones(max(a[:hi], b[:hi]))}
+      true -> %{lo: 0}
+    end
+  end
+
+  # a non-negative value shifted right by a non-negative amount shrinks
+  defp bsr_facts(a, n) do
+    if nonneg?(a) and nonneg?(n) do
+      lo = if is_integer(n[:hi]), do: Bitwise.bsr(a[:lo], n[:hi]), else: 0
+      %{lo: lo, hi: Bitwise.bsr(a[:hi] || 0x7FFFFFFFFFFFFFFF, n[:lo])}
+    else
+      %{}
+    end
+  end
+
+  defp nonneg?(v), do: is_integer(v[:lo]) and v[:lo] >= 0
+
+  # 2^k - 1 for the bit length k of h >= 0: every value of at most k bits
+  defp ones(h), do: Bitwise.bsl(1, length(Integer.digits(h, 2))) - 1
+
+  defp bnot(x) when is_integer(x), do: -x - 1
+  defp bnot(_), do: nil
 
   defp add(x, y), do: both(x, y, &+/2)
 

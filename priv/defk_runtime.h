@@ -308,6 +308,54 @@ static inline int64_t defk_mul_i64_s(int *ovf, int64_t a, int64_t b) {
   return r;
 }
 static inline int64_t defk_neg_i64_s(int *ovf, int64_t a) { return defk_sub_i64_s(ovf, 0, a); }
+/* ---- bitwise shifts (Elixir's Bitwise.bsl/bsr, i64 domain) ---------------
+ * bsl(a, n) is a * 2^n exactly and bsr(a, n) is floor(a / 2^n), as Elixir
+ * computes them over bignums: a negative n shifts the other way, bsr fills
+ * with the sign (n >= 64 gives 0 or -1), and *ovf is set when the exact
+ * result does not fit in i64 (any bit shifted out of bsl, or its sign
+ * changing). Shift counts outside 0..63 are UB in C, so they branch first.
+ * `>>` on a negative int64_t is arithmetic on every compiler defk builds
+ * with (clang, gcc). band/bor/bxor/bnot are the C operators. */
+static inline int64_t defk_bsl_core(int *ovf, int64_t a, int64_t n) {
+  if (n >= 64) {
+    *ovf |= a != 0;
+    return 0;
+  }
+  if (n >= 0) {
+    int64_t r = (int64_t)((uint64_t)a << n);
+    *ovf |= (r >> n) != a;
+    return r;
+  }
+  if (n > -64) return a >> -n;
+  return a < 0 ? -1 : 0;
+}
+static inline int64_t defk_bsr_core(int *ovf, int64_t a, int64_t n) {
+  if (n >= 64) return a < 0 ? -1 : 0;
+  if (n >= 0) return a >> n;
+  if (n > -64) return defk_bsl_core(ovf, a, -n);
+  *ovf |= a != 0;
+  return 0;
+}
+static inline int64_t defk_bsl_i64(defk_ctx *ctx, int64_t a, int64_t n) {
+  int ovf = 0;
+  int64_t r = defk_bsl_core(&ovf, a, n);
+  if (DEFK_UNLIKELY(ovf))
+    defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in bsl(%lld, %lld)", (long long)a, (long long)n);
+  return r;
+}
+static inline int64_t defk_bsr_i64(defk_ctx *ctx, int64_t a, int64_t n) {
+  int ovf = 0;
+  int64_t r = defk_bsr_core(&ovf, a, n);
+  if (DEFK_UNLIKELY(ovf))
+    defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in bsr(%lld, %lld)", (long long)a, (long long)n);
+  return r;
+}
+static inline int64_t defk_bsl_i64_s(int *ovf, int64_t a, int64_t n) { return defk_bsl_core(ovf, a, n); }
+static inline int64_t defk_bsr_i64_s(int *ovf, int64_t a, int64_t n) { return defk_bsr_core(ovf, a, n); }
+/* bsr by a shift known to be non-negative: it cannot overflow */
+static inline int64_t defk_bsr_nn(int64_t a, int64_t n) {
+  return n >= 64 ? (a < 0 ? -1 : 0) : a >> n;
+}
 static inline int64_t defk_div_i64(defk_ctx *ctx, int64_t a, int64_t b) {
   if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "div/2 by zero");
   if (DEFK_UNLIKELY(a == INT64_MIN && b == -1)) defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in div/2");

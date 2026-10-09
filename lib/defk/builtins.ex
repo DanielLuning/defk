@@ -5,13 +5,30 @@ defmodule Defk.Builtins do
 
   # f64 -> f64 math, also callable as :math.sqrt/1 and so on
   @math1 [:sqrt, :exp, :log, :sin, :cos]
-  @all [:len, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++ @math1 ++ [:pow, :alloc]
+  # i64 -> i64 bitwise, as Elixir's Bitwise; each also has an operator form
+  @bitwise [:band, :bor, :bxor, :bnot, :bsl, :bsr]
+  @bitwise_ops %{&&&: :band, |||: :bor, "^^^": :bxor, "~~~": :bnot, <<<: :bsl, >>>: :bsr}
+  @all [:len, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
+         @math1 ++ [:pow] ++ @bitwise ++ [:alloc]
 
   @doc "Every builtin name."
   def all, do: @all
 
   @doc "The one-argument math builtins."
   def math1, do: @math1
+
+  @doc "The bitwise builtins (band/2, bor/2, bxor/2, bnot/1, bsl/2, bsr/2)."
+  def bitwise, do: @bitwise
+
+  @doc "The bitwise operators (&&&, |||, ^^^, ~~~, <<<, >>>)."
+  def bitwise_ops, do: Map.keys(@bitwise_ops)
+
+  @doc "The bitwise builtin an operator or bitwise function name stands for."
+  def bitwise_fun(name), do: Map.get(@bitwise_ops, name, name)
+
+  @doc "The arity of bitwise builtin `f`."
+  def bitwise_arity(:bnot), do: 1
+  def bitwise_arity(_f), do: 2
 
   @doc "Whether `name` is a builtin."
   def builtin?(name), do: name in @all

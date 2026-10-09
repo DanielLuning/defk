@@ -40,11 +40,11 @@ defmodule Defk.Errors do
 
   @calls Enum.join(Defk.Builtins.all() -- [:alloc], ", ")
   @math Enum.join(Defk.Builtins.math1(), ", ") <> " and pow"
-  @bitwise_ops [:&&&, :|||, :"^^^", :<<<, :>>>, :"~~~"]
-  @bitwise_funs [:band, :bor, :bxor, :bnot, :bsl, :bsr]
   @forms "=, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2"
 
   # ------------------------------------------------------------- registry --
+  # Retired codes, never reused: "bitwise" (the operators are supported since
+  # defk-w38).
 
   @codes [
     # -- kernel definitions
@@ -303,7 +303,7 @@ defmodule Defk.Errors do
       code: "operand-type",
       kind: :error,
       summary:
-        "Arithmetic takes numbers, and/or/not take booleans, comparisons take two numbers or two booleans.",
+        "Arithmetic takes numbers, bitwise operators take integers, and/or/not take booleans, comparisons take two numbers or two booleans.",
       why: "booleans are not numbers in Elixir, and defk keeps that",
       hint: "turn the value into the type the operator takes",
       example: "defk f(x :: i64, b :: bool) :: i64 do\n  x + b\nend",
@@ -474,15 +474,6 @@ defmodule Defk.Errors do
       hint: "write the nested call",
       example: "defk f(x :: f64) :: f64 do\n  x |> abs() |> sqrt()\nend",
       rewrite: "defk f(x :: f64) :: f64 do\n  sqrt(abs(x))\nend"
-    },
-    %{
-      code: "bitwise",
-      kind: :planned,
-      summary: "Bitwise operators (&&&, |||, ^^^, <<<, >>>, band, bor, ...) are planned.",
-      why: "bitwise operators on i64 are planned",
-      hint: "for a non-negative x, rem(x, 2) is band(x, 1) and x * 4 is x <<< 2",
-      example: "defk f(x :: i64) :: i64 do\n  Bitwise.band(x, 1)\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  rem(x, 2)\nend"
     },
 
     # -- loops
@@ -752,6 +743,18 @@ defmodule Defk.Errors do
         "install one (macOS: `xcode-select --install`; Debian/Ubuntu: `apt install build-essential`; Alpine: `apk add build-base`), or set `CC` to a compiler path",
       example: nil,
       rewrite: nil
+    },
+    # -- bitwise
+    %{
+      code: "shift-overflow",
+      kind: :error,
+      summary: "A shift of two integer literals whose result does not fit in i64.",
+      why:
+        "bsl/<<< gives the exact result as Elixir does, and raises ArithmeticError when it does not fit in i64; with literal operands it would raise every time",
+      hint:
+        "a mask (1 <<< n) - 1 can be computed in i64 for n <= 62; write the 63-bit one as 0x7FFFFFFFFFFFFFFF, and drop a mask that the value already fits",
+      example: "defk f(x :: i64) :: i64 do\n  band(x, (1 <<< 63) - 1)\nend",
+      rewrite: "defk f(x :: i64) :: i64 do\n  band(x, 0x7FFFFFFFFFFFFFFF)\nend"
     }
   ]
 
@@ -1116,16 +1119,6 @@ defmodule Defk.Errors do
     {"module-attribute", "module attributes such as @#{name} are not supported yet", []}
   end
 
-  defp form({op, _, args}) when op in @bitwise_ops or (op in @bitwise_funs and is_list(args)) do
-    {"bitwise",
-     "the bitwise #{if op in @bitwise_ops, do: "operator #{op}", else: "function #{op}/#{length(args)}"} is not supported yet",
-     []}
-  end
-
-  defp form({{:., _, [{:__aliases__, _, [:Bitwise]}, f]}, _, args}) do
-    {"bitwise", "Bitwise.#{f}/#{length(args)} is not supported yet", []}
-  end
-
   # map.field
   defp form({{:., _, [{v, _, ctx}, field]}, m, []})
        when is_atom(v) and is_atom(ctx) and is_atom(field) do
@@ -1232,9 +1225,6 @@ defmodule Defk.Errors do
         :=,
         :unless
       ] ->
-        unsupported(node, type_of)
-
-      name in @bitwise_ops or name in @bitwise_funs ->
         unsupported(node, type_of)
 
       name in [
