@@ -1,6 +1,6 @@
 # Module attributes as constants in kernel bodies (defk-ivt): an integer,
 # float or boolean attribute is inlined as its literal, a binary attribute is
-# a read-only [u8], and any other value is a compile error.
+# a [u8] (a write copies it first), and any other value is a compile error.
 
 defmodule Defk.AttributesTest.K do
   use Defk
@@ -297,10 +297,8 @@ defmodule Defk.AttributesTest do
       assert codes(msg) == ["case-pattern"]
     end
 
-    test "a binary attribute is read-only and not returnable" do
-      msg = rejected(kernel("@t <<1, 2>>", "a = @t\n  a[i] = 5\n  i"))
-      assert codes(msg) == ["read-only-array"]
-
+    # a write copies it first (test/value_semantics_test.exs)
+    test "a binary attribute is not returnable unwritten" do
       msg = rejected(kernel("@t <<1, 2>>", "@t", "i :: i64", "[u8]"))
       assert codes(msg) == ["return-input-array"]
     end

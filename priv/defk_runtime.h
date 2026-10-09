@@ -139,8 +139,8 @@ static void defk_frame_dtor(ErlNifEnv *env, void *obj) {
   atomic_fetch_sub(&defk_stat_frames_live, 1);
 }
 
-/* Owned binary: off-heap, stable address across yields and GC. */
-static int defk_own(defk_ctx *ctx, size_t bytes) {
+/* Owned binary: off-heap, stable address across yields and GC; uninitialised. */
+static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
   if (ctx->nowned == ctx->cap) {
     /* one slot per alloc/2 call, so a loop can grow the table without bound:
        a failed grow raises and keeps the old table, whose binaries are freed */
@@ -154,8 +154,14 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
   ErlNifBinary *b = &ctx->owned[ctx->nowned];
   if (!enif_alloc_binary(bytes, b))
     defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", bytes);
-  memset(b->data, 0, bytes);
   return ctx->nowned++;
+}
+
+/* Owned binary of zeros. */
+static int defk_own(defk_ctx *ctx, size_t bytes) {
+  int slot = defk_own_raw(ctx, bytes);
+  memset(ctx->owned[slot].data, 0, bytes);
+  return slot;
 }
 
 /*
@@ -189,6 +195,24 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
 DEFK_ALLOC_FN(f64, double)
 DEFK_ALLOC_FN(i64, int64_t)
 DEFK_ALLOC_FN(u8, uint8_t)
+
+/*
+ * Array value semantics (defk-auo): a copy of `src` in a new owned binary,
+ * made before a write when another binding may still see src's buffer, or
+ * src is the caller's binary (never written). The compiler decides where
+ * statically; see "array values" in lib/defk/compiler.ex.
+ */
+#define DEFK_COPY_FN(T, CT)                                                       \
+  static inline defk_arr_##T defk_copy_##T(defk_ctx *ctx, defk_arr_##T src) {    \
+    size_t bytes = (size_t)src.len * sizeof(CT);                                  \
+    int slot = defk_own_raw(ctx, bytes);                                          \
+    if (bytes) memcpy(ctx->owned[slot].data, src.data, bytes);                    \
+    defk_arr_##T a = {(CT *)ctx->owned[slot].data, src.len};                      \
+    return a;                                                                     \
+  }
+DEFK_COPY_FN(f64, double)
+DEFK_COPY_FN(i64, int64_t)
+DEFK_COPY_FN(u8, uint8_t)
 
 /* Hand an owned array back to the BEAM as a binary (ownership transfers). */
 static ERL_NIF_TERM defk_make_arr(ErlNifEnv *env, defk_ctx *ctx, void *data) {

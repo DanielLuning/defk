@@ -201,10 +201,8 @@ defmodule Defk.BinaryLiteralsTest do
     defp kernel(expr, ret \\ "i64"),
       do: "defk f(i :: i64) :: #{ret} do\n  #{expr}\nend"
 
-    test "a literal is read-only and not returnable" do
-      msg = rejected(kernel("a = \"ab\"\n  a[i] = 5\n  i"))
-      assert codes(msg) == ["read-only-array"]
-
+    # a write copies it first (test/value_semantics_test.exs)
+    test "a literal is not returnable unwritten" do
       msg = rejected(kernel("\"ab\"", "[u8]"))
       assert codes(msg) == ["return-input-array"]
 
