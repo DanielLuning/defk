@@ -149,8 +149,9 @@ Either way the catalog gets updated.
 2. Describe the real job and why people reach for a NIF, in the header.
 3. Write the Elixir version, then optimise it as far as you can. Note in the header what you tried and what you haven't yet.
 4. Give both versions the same input, in the form a real caller would have.
-5. Call `Defk.Bench.report/1` with the `expected` verdict, the `baseline` status and a one-sentence `reason`.
-6. Run `elixir examples/run_all.exs` and add a row to the right table above.
+5. Compile the kernels with `use Defk, elixir_mode: true` and check in the script that each agrees with its Elixir mode (`Mod.__defk_elixir__(name, args)` against the native call, on small and bad inputs). The option works in a `Mix.install` script; the default call path stays native, so timing is unaffected.
+6. Call `Defk.Bench.report/1` with the `expected` verdict, the `baseline` status and a one-sentence `reason`.
+7. Run `elixir examples/run_all.exs` and add a row to the right table above.
 
 Planned examples, and the work to optimise each first-pass baseline, are
 tracked as children of epic `defk-9p6` (`bw show defk-9p6`).
