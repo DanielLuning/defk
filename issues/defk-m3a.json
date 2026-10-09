@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T17:10:45Z",
+  "description": "Defk.Build.build!/3 names the cached library by md5 of [cflags, generated C source, priv/defk_runtime.h] and skips cc when `\u003cbase\u003e.so` exists in _build/\u003cenv\u003e/defk/. The key does not include:\n- the ERTS version whose erl_nif.h the library was compiled against (`erts_include/0` resolves it at build time, but it is not hashed);\n- the compiler (`CC` env var, default \"cc\") or its version.\n\nSo after an OTP upgrade (or switching asdf/mise versions) without `mix clean`, the stale .so is reused. Loading usually still works because the NIF major version rarely changes, but struct layouts in erl_nif.h have changed across releases before, and a silent reuse of a library built against another header is exactly the class of fault the runtime contract rules out. Switching compilers reuses the other compiler's output too.\n\nFix: add `:erlang.system_info(:version)` (ERTS version) and the resolved compiler path plus `cc --version` first line (or at least the `CC` value) to the hashed list. Keep the hash prefix at 10 hex chars. Note in the comment above @cflags what the key covers.\n\nDone when: changing the ERTS version or CC produces a different base name (unit test on a hash helper extracted from build!/3), and `mix ci` is green.",
+  "id": "defk-m3a",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Build cache key omits the ERTS version and the C compiler",
+  "type": "task",
+  "updated_at": "2026-10-09T17:10:45Z"
+}
