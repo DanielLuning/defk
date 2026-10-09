@@ -12,9 +12,15 @@
     "wayfinder:research"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Research done on branch research/string-workloads, file docs/research/string-workloads.md (worktree .claude/worktrees/research-string-workloads; not merged). Ranked candidates: (1) 1BRC parse-and-aggregate, where Elixir scans at ~600 MB/s but aggregates at ~45 MB/s (single-run measurement) and the community's best is 25-60 s vs 1.5 s Java; (2) base64/hex/base58 codecs (fast64 541k and b64fast 272k hand-written C with timeslice chunking, ex_base58 156k, Base.encode64 measured ~760 MB/s); (3) non-cryptographic hashes over binaries (siphash 224k C NIF with Elixir fallback, murmur 2.4M and xxhash 205k pure Elixir asking for a NIF, crc32cer 48.5M); then batch string distance (works today), CSV/JSON structural index only as a fused loader into packed columns, and UTF-8 validation expected marginal against :unicode.characters_to_binary (~2 GB/s). Out of scope: full CSV/JSON parsing to terms, tokenisers and String.split to lists, sort/dedup returning binaries, pattern search that returns sub-binaries (the :binary BIFs already run in C at 0.5-10 GB/s), regex, Unicode case/graphemes, and per-pair calls. Minimal ordered additions for the top three: defk-w38 bitwise with masked arithmetic; defk-ivt module attributes then defk-n4r.5 binary literals as [u8]; defk-n4r.2 word loads and wrapping u64; defk-n4r.4 writable array params in helpers (after defk-auo); defk-n4r.3 sub-array views (1BRC only). No workload needs a map type, string type, Unicode semantics or defk-cmr; a growable [i64] output and [i32] offsets (defk-4ai) matter only below the top three.",
+      "timestamp": "2026-10-09T18:52:20Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Which text and byte-processing jobs push Elixir developers to NIFs, and what does each need from the kernel subset?",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:54Z"
+  "updated_at": "2026-10-09T18:52:20Z"
 }
