@@ -503,6 +503,46 @@ DEFK_ACCESS_FN(i64, int64_t)
 DEFK_ACCESS_FN(u8, uint8_t)
 
 /*
+ * Word loads from a [u8] (u64_le(bytes, i) and friends): the unsigned
+ * w-byte integer at byte offset i, as Elixir's
+ * <<_::binary-size(i), x::little-unsigned-size(w * 8), _::binary>> = bytes.
+ * An unaligned load: __builtin_memcpy (not disabled by -fno-builtin) into an
+ * integer compiles to one load, plus a bswap for the other byte order. A u64
+ * value is returned as its i64 bit pattern (a value with the top bit set is
+ * negative). The checked form raises like a[i] when i < 0 or i + w > len;
+ * the _at form is for an offset the compiler proved in range.
+ */
+__attribute__((noreturn, cold, unused)) static void defk_oob_load(defk_ctx *ctx, int64_t i, int w,
+                                                          int64_t len) {
+  ctx->err_index = i;
+  defk_fail(ctx, DEFK_E_OOB, "%d-byte load at index %lld out of bounds for array of length %lld",
+            w, (long long)i, (long long)len);
+}
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define DEFK_LE(B, x) __builtin_bswap##B(x)
+#define DEFK_BE(B, x) (x)
+#else
+#define DEFK_LE(B, x) (x)
+#define DEFK_BE(B, x) __builtin_bswap##B(x)
+#endif
+#define DEFK_LOAD_FN(NAME, B, ORDER)                                                \
+  static inline int64_t defk_##NAME##_at(const uint8_t *p) {                        \
+    uint##B##_t x;                                                                  \
+    __builtin_memcpy(&x, p, B / 8);                                                 \
+    return (int64_t)ORDER(B, x);                                                    \
+  }                                                                                 \
+  static inline int64_t defk_##NAME(defk_ctx *ctx, defk_arr_u8 a, int64_t i) {      \
+    if (DEFK_UNLIKELY(i < 0 || i > a.len - B / 8)) defk_oob_load(ctx, i, B / 8, a.len); \
+    return defk_##NAME##_at(a.data + i);                                            \
+  }
+DEFK_LOAD_FN(u64_le, 64, DEFK_LE)
+DEFK_LOAD_FN(u64_be, 64, DEFK_BE)
+DEFK_LOAD_FN(u32_le, 32, DEFK_LE)
+DEFK_LOAD_FN(u32_be, 32, DEFK_BE)
+DEFK_LOAD_FN(u16_le, 16, DEFK_LE)
+DEFK_LOAD_FN(u16_be, 16, DEFK_BE)
+
+/*
  * An f64 element read from an array the kernel did not create (an input) may
  * hold inf or NaN bits, which no BEAM float can: the read raises ArgumentError
  * like Elixir mode's <<x::float-64>> match, and only elements actually read

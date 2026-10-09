@@ -56,6 +56,17 @@ defmodule Defk.ElixirMode.Ops do
     if is_i64(r), do: r, else: :overflow
   end
 
+  # masked arithmetic (Defk.Masked): bsl inside the mask, where only the low
+  # 64 bits matter, so a shift of 64 or more is 0 without building a bignum
+  def wbsl(_a, n) when n >= 64, do: 0
+  def wbsl(a, n), do: Bitwise.bsl(a, n)
+
+  # band(expr, -1): the low 64 bits of the exact result as a signed i64
+  def wrap64(x) do
+    <<r::signed-64>> = <<x::64>>
+    r
+  end
+
   defp shifted(:overflow, f, a, n), do: raise(ArithmeticError, "i64 overflow in #{f}(#{a}, #{n})")
   defp shifted(r, _f, _a, _n), do: r
 
@@ -119,6 +130,27 @@ defmodule Defk.ElixirMode.Ops do
     in_bounds!(a, i, esz)
     <<pre::binary-size(^i * ^esz), _::binary-size(^esz), post::binary>> = a
     <<pre::binary, bytes::binary, post::binary>>
+  end
+
+  # word loads from a [u8]: the unsigned w-byte integer at byte offset i, as
+  # <<_::binary-size(i), x::little-unsigned-size(w * 8), _::binary>> = a;
+  # u64 is the i64 bit pattern (signed), as the kernel returns it
+  def u64_le(a, i), do: wrap64(:binary.decode_unsigned(word(a, i, 8), :little))
+  def u64_be(a, i), do: wrap64(:binary.decode_unsigned(word(a, i, 8), :big))
+  def u32_le(a, i), do: :binary.decode_unsigned(word(a, i, 4), :little)
+  def u32_be(a, i), do: :binary.decode_unsigned(word(a, i, 4), :big)
+  def u16_le(a, i), do: :binary.decode_unsigned(word(a, i, 2), :little)
+  def u16_be(a, i), do: :binary.decode_unsigned(word(a, i, 2), :big)
+
+  defp word(a, i, w) do
+    if i < 0 or i > byte_size(a) - w do
+      raise %Enum.OutOfBoundsError{
+        message: "#{w}-byte load at index #{i} out of bounds for array of length #{byte_size(a)}",
+        index: i
+      }
+    end
+
+    binary_part(a, i, w)
   end
 
   # `for x <- a`: elements in order, each read only when the loop reaches it

@@ -42,6 +42,7 @@ defmodule Defk.ElixirMode do
   @math1 Defk.Builtins.math1()
   @bitwise Defk.Builtins.bitwise()
   @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
+  @loads Defk.Builtins.loads()
 
   @doc """
   Runs `fun` with this process's kernel calls in `mode` (`:native` or
@@ -393,9 +394,47 @@ defmodule Defk.ElixirMode do
     do: fun_call(name, args, m, env)
 
   defp bitwise(f, args, m, env) do
-    {pre, qs, _} = operands(args, env)
-    q = if f in [:bsl, :bsr], do: call(f, qs, m), else: remote(Bitwise, f, qs, m)
-    {with_pre(pre, q), :i64}
+    with :band <- f, {expr, mask} <- Defk.Masked.split(args) do
+      masked(expr, mask, m, env)
+    else
+      _ ->
+        {pre, qs, _} = operands(args, env)
+        q = if f in [:bsl, :bsr], do: call(f, qs, m), else: remote(Bitwise, f, qs, m)
+        {with_pre(pre, q), :i64}
+    end
+  end
+
+  # Masked arithmetic (Defk.Masked): the tree under the mask is Elixir's own
+  # + - * on bignums, unchecked, and the mask is Bitwise.band of the exact
+  # result; a -1 mask wraps it to the signed 64-bit pattern (Ops.wrap64), as
+  # the kernel's i64 result. Leaves are checked as usual.
+  defp masked(expr, mask, m, env) do
+    {q, _} = wrapped(expr, env)
+    q = if mask == -1, do: call(:wrap64, [q], m), else: remote(Bitwise, :band, [q, mask], m)
+    {q, :i64}
+  end
+
+  defp wrapped(ast, env) do
+    case Defk.Masked.tree_node(ast) do
+      nil ->
+        expr(ast, env)
+
+      {:pos, a} ->
+        wrapped(a, env)
+
+      {:neg, a} ->
+        {q, _} = wrapped(a, env)
+        {{:-, gm(elem(ast, 1)), [q]}, :i64}
+
+      {:bsl, a, n} ->
+        {q, _} = wrapped(a, env)
+        {call(:wbsl, [q, n], elem(ast, 1)), :i64}
+
+      {op, a, b} ->
+        {pre, [qa, qb], _} = operands([a, b], env, &wrapped/2)
+        eop = %{add: :+, sub: :-, mul: :*}[op]
+        {with_pre(pre, {eop, gm(elem(ast, 1)), [qa, qb]}), :i64}
+    end
   end
 
   defp tuple_expr(items, env) do
@@ -417,6 +456,7 @@ defmodule Defk.ElixirMode do
   end
 
   defp builtin(:len, [a], [{:arr, e}], m), do: {call(:"len_#{e}", [a], m), :i64}
+  defp builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: {call(f, [a, i], m), :i64}
   defp builtin(f, [a, b], [:i64, :i64], m) when f in [:div, :rem], do: {call(f, [a, b], m), :i64}
   defp builtin(:float, [a], [:i64], m), do: {{{:., gm(m), [:erlang, :float]}, gm(m), [a]}, :f64}
   defp builtin(:float, [a], [:f64], _m), do: {a, :f64}
@@ -444,8 +484,8 @@ defmodule Defk.ElixirMode do
   # surrounding code can see, every operand is bound to a temporary first, so
   # later operands see the write (Erlang can't use a variable bound inside a
   # sibling argument).
-  defp operands(asts, env) do
-    results = Enum.map(asts, fn a -> scoped(fn -> expr(a, env) end) end)
+  defp operands(asts, env, lower \\ &expr/2) do
+    results = Enum.map(asts, fn a -> scoped(fn -> lower.(a, env) end) end)
 
     if Enum.any?(results, fn {_, writes} -> threaded(writes, env) != [] end) do
       {pre, qs} =
