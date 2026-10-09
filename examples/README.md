@@ -76,11 +76,12 @@ tried yet.
 | [`utf8_valid.exs`](utf8_valid.exs) | Validate a 16 MB UTF-8 binary with a Hoehrmann DFA kernel, as bandit_native wraps simdutf8 to do; `String.valid?/1` and `:unicode.characters_to_binary/1` are C already (a SIMD validator is a wrapper job) | 1.05–1.09× at 16 MB (marginal; 0.57 vs 0.52 GB/s, `String.valid?` 0.27 GB/s); 0.6× at 64 KB, 0.0 vs 0.002 ms at 1 KB (call cost) | optimised |
 | [`geohash_crc.exs`](geohash_crc.exs) (CRC lines) | CRC-16/CCITT-FALSE and CRC-64/XZ of a 1 MB and 16 MB binary with a table-driven kernel, as device protocols and archive formats do; the `crc` package is a C NIF and `:erlang.crc32/1` (zlib, another polynomial) is a BIF | crc16 1.6-1.85x, crc64 1.65-1.8x over the best Elixir (about 300 vs 500 MB/s); the kernel is only 1.0-1.4x the `crc` NIF; `:erlang.crc32` is 100x faster than both (0.03 ms per MB) | optimised (CRC-64 in two 32-bit halves; a single integer goes bignum, 10x slower) |
 | [`hashes.exs`](hashes.exs) (CRC32C) | CRC32C of a 4 MB message, as crc32cer does for Kafka; the values are 32-bit, so Elixir stays in small integers and the JIT runs slicing-by-8 at 1.6 GB/s | 1.39–1.65× at 4 MB (marginal, same slicing-by-8 on both sides); 0.5× on 1k keys; crc32cer (hardware CRC32C) is 14× faster than the kernel, `:erlang.crc32` (another polynomial) 40 GB/s. Use crc32cer | optimised |
+| [`matmul.exs`](matmul.exs) | Dense matrix multiply, 256x256 f64 (64 to 1024 swept), the job Nx exists for: defk is 25x over the best pure Elixir, but Nx's binary backend is itself Elixir (~210x slower than defk, 8x slower than plain lists) and EXLA's BLAS (did not compile here, not measured) is expected to win; for tensor work use Nx, defk fits a custom loop beside it | 17–38× vs Elixir; 210× vs Nx binary backend | optimised |
 
 Also not what defk is for (no script needed):
 
 - **Wrapping an existing native library** (codecs, crypto, databases): use Rustler, Zigler or an existing binding.
-- **Tensor and ML work**: use Nx, which compiles to XLA or LibTorch. Ticket `defk-9p6.3` will measure where the boundary lies.
+- **Tensor and ML work**: use Nx, which compiles to XLA or LibTorch. [`matmul.exs`](matmul.exs) (defk-9p6.3) measures where the boundary lies.
 - **I/O-bound work**: native code doesn't make the network faster.
 
 Numbers are from an M-series Mac (OTP 29, Elixir 1.20); ranges cover the runs so far.
