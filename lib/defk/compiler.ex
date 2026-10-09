@@ -17,6 +17,8 @@ defmodule Defk.Compiler do
   # band/2 ... and the operators that are the same functions (&&& ...)
   @bitwise Defk.Builtins.bitwise()
   @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
+  # u64_le/2 ... word loads from a [u8]
+  @loads Defk.Builtins.loads()
   # range facts carried by values (see "range facts" below)
   @facts [:lo, :hi, :lb, :ub, :len_lo, :len_lb]
 
@@ -1024,6 +1026,18 @@ defmodule Defk.Compiler do
       else: unsupported!(node, Defk.Errors.unsupported(node, &type_in(&1, env)), env)
   end
 
+  # wrap64(expr): the masked-arithmetic tree of expr wrapped to the low 64
+  # bits as a signed i64 (Defk.Bits.wrap64/1); a leaf is returned as it is
+  defp lower_expr({:wrap64, _, [x]}, env) do
+    if Defk.Masked.tree_node(x) do
+      lower_masked(x, -1, "wrap64/1", env)
+    else
+      {s, v} = lower_expr(x, env)
+      int!(v, x, "wrap64/1")
+      {s, v}
+    end
+  end
+
   # :math.sqrt(x) etc. map onto the builtins
   defp lower_expr({{:., _, [:math, fun]}, m, args}, env) when fun in [:pow | @math1],
     do: lower_call(fun, args, m, env)
@@ -1419,9 +1433,70 @@ defmodule Defk.Compiler do
     do: length(args) == Defk.Builtins.bitwise_arity(Defk.Builtins.bitwise_fun(op))
 
   defp lower_bitwise(f, label, args, node, env) do
-    {stmts, vals} = Enum.map(args, &lower_expr(&1, env)) |> Enum.unzip()
-    Enum.zip_with(vals, args, &int!(&1, &2, label))
-    {stmts, bitwise_val(f, vals, args, node, env)}
+    with :band <- f, {expr, mask} <- Defk.Masked.split(args) do
+      lower_masked(expr, mask, label, env)
+    else
+      _ ->
+        {stmts, vals} = Enum.map(args, &lower_expr(&1, env)) |> Enum.unzip()
+        Enum.zip_with(vals, args, &int!(&1, &2, label))
+        {stmts, bitwise_val(f, vals, args, node, env)}
+    end
+  end
+
+  # Masked arithmetic (Defk.Masked): the tree of + - * neg bsl under a mask
+  # 2^k - 1 is computed in uint64_t, which wraps modulo 2^64 without an
+  # overflow check, and masked once; its leaves are lowered as usual. The low
+  # k bits are those of Elixir's exact result, so nothing can raise but the
+  # leaves. A mask m gives a value in 0..m; -1 stands for wrap64/1, the
+  # i64 bit pattern of the low 64 bits.
+  defp lower_masked(expr, mask, label, env) do
+    {s, c} = wrapped(expr, {expr, label}, nil, env)
+
+    v =
+      if mask == -1,
+        do: val("((int64_t)#{c})", :i64),
+        else: Map.merge(val("((int64_t)(#{c} & UINT64_C(#{mask})))", :i64), %{lo: 0, hi: mask})
+
+    {s, v}
+  end
+
+  # {s, uint64_t C expression}; `top` is the masked expression and the
+  # band's label, `parent` the operator taking `ast` (for errors)
+  defp wrapped(ast, top, parent, env) do
+    case Defk.Masked.tree_node(ast) do
+      nil ->
+        {s, v} = lower_expr(ast, env)
+        v.t == :i64 || masked_operand!(v, ast, top, parent)
+        {s, "((uint64_t)#{v.c})"}
+
+      {:pos, a} ->
+        wrapped(a, top, parent, env)
+
+      {:neg, a} ->
+        {s, c} = wrapped(a, top, "-", env)
+        {s, "(UINT64_C(0) - #{c})"}
+
+      {:bsl, a, n} ->
+        {s, c} = wrapped(a, top, :bsl, env)
+        {s, if(n >= 64, do: "(UINT64_C(0) & #{c})", else: "(#{c} << #{n})")}
+
+      {op, a, b} ->
+        cop = %{add: "+", sub: "-", mul: "*"}[op]
+        {sa, ca} = wrapped(a, top, cop, env)
+        {sb, cb} = wrapped(b, top, cop, env)
+        {[sa, sb], "(#{ca} #{cop} #{cb})"}
+    end
+  end
+
+  # the error the same expression gets without the mask: an f64 makes the
+  # masked expression f64, which band rejects; a bool is rejected by + - *
+  @spec masked_operand!(term(), term(), term(), term()) :: no_return()
+  defp masked_operand!(v, ast, {top, label}, parent) do
+    cond do
+      parent == :bsl -> int!(v, ast, "bsl/2")
+      v.t == :f64 -> int!(v, top, label)
+      true -> numeric!(v, ast, parent || label)
+    end
   end
 
   defp bitwise_val(:bnot, [a], _args, _node, _env),
@@ -1535,6 +1610,21 @@ defmodule Defk.Compiler do
     Map.merge(val("(#{a.c}).len", :i64), facts)
   end
 
+  # u64_le(bytes, i) and the other word loads (Defk.Builtins.loads/0): an
+  # unaligned load of w bytes at byte offset i, bounds-checked unless
+  # i + w <= len(bytes) is proven. u64 gives the i64 bit pattern.
+  defp builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], _node, _) when f in @loads do
+    w = Defk.Builtins.load_width(f)
+
+    c =
+      if in_bounds?(a, i, w),
+        do: "defk_#{f}_at((#{a.c}).data + #{i.c})",
+        else: "defk_#{f}(ctx, #{a.c}, #{i.c})"
+
+    facts = if w < 8, do: %{lo: 0, hi: Bitwise.bsl(1, 8 * w) - 1}, else: %{}
+    Map.merge(val(c, :i64), facts)
+  end
+
   defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:div, :rem],
     do: val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
 
@@ -1616,14 +1706,24 @@ defmodule Defk.Compiler do
     bxor: "two integers",
     bsl: "two integers",
     bsr: "two integers",
-    bnot: "an integer"
+    bnot: "an integer",
+    wrap64: "an integer",
+    u64_le: "a [u8] array and an i64 byte offset",
+    u64_be: "a [u8] array and an i64 byte offset",
+    u32_le: "a [u8] array and an i64 byte offset",
+    u32_be: "a [u8] array and an i64 byte offset",
+    u16_le: "a [u8] array and an i64 byte offset",
+    u16_be: "a [u8] array and an i64 byte offset"
   }
 
   @spec builtin_arguments!(term(), term(), term()) :: no_return()
   defp builtin_arguments!(name, vals, {_, _, args} = node) do
     sig = Enum.map_join(vals, ", ", &fmt(&1.t))
     ts = Enum.map(vals, & &1.t)
-    arity = if name in [:div, :rem, :min, :max, :pow | @bitwise -- [:bnot]], do: 2, else: 1
+
+    arity =
+      if name in [:div, :rem, :min, :max, :pow | @loads ++ (@bitwise -- [:bnot])], do: 2, else: 1
+
     takes = "#{name}/#{arity} takes #{@builtin_takes[name]}"
 
     err!(
@@ -2521,8 +2621,10 @@ defmodule Defk.Compiler do
 
   defp u8_val(c), do: Map.merge(val(c, :i64), %{lo: 0, hi: 255})
 
-  # 0 <= i < len(a)
-  defp in_bounds?(a, i) do
+  # 0 <= i < len(a); with a width w (a word load), 0 <= i and i + w <= len(a)
+  defp in_bounds?(a, i, w \\ 1) do
+    i = if w == 1, do: i, else: %{lo: i[:lo], hi: add(i[:hi], w - 1), ub: shift(ub(i), w - 1)}
+
     below? =
       Map.get(ub(i), a.c, 0) < 0 or
         (is_integer(a[:len_lo]) and is_integer(i[:hi]) and i[:hi] < a[:len_lo]) or

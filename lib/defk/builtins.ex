@@ -8,8 +8,10 @@ defmodule Defk.Builtins do
   # i64 -> i64 bitwise, as Elixir's Bitwise; each also has an operator form
   @bitwise [:band, :bor, :bxor, :bnot, :bsl, :bsr]
   @bitwise_ops %{&&&: :band, |||: :bor, "^^^": :bxor, "~~~": :bnot, <<<: :bsl, >>>: :bsr}
+  # [u8], i64 -> i64 word loads: unsigned w-byte integers at a byte offset
+  @loads [:u64_le, :u64_be, :u32_le, :u32_be, :u16_le, :u16_be]
   @all [:len, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
-         @math1 ++ [:pow] ++ @bitwise ++ [:alloc]
+         @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ [:alloc]
 
   @doc "Every builtin name."
   def all, do: @all
@@ -29,6 +31,14 @@ defmodule Defk.Builtins do
   @doc "The arity of bitwise builtin `f`."
   def bitwise_arity(:bnot), do: 1
   def bitwise_arity(_f), do: 2
+
+  @doc "The word loads from a [u8] (u64_le/2, u32_be/2, ...)."
+  def loads, do: @loads
+
+  @doc "The width in bytes of word load `f`."
+  def load_width(f) when f in [:u64_le, :u64_be], do: 8
+  def load_width(f) when f in [:u32_le, :u32_be], do: 4
+  def load_width(f) when f in [:u16_le, :u16_be], do: 2
 
   @doc "Whether `name` is a builtin."
   def builtin?(name), do: name in @all

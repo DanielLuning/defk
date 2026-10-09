@@ -329,6 +329,8 @@ wrong types is [`builtin-arguments`](#builtin-arguments).
 | `exp(x)`, `sin(x)`, `cos(x)` | a number | `f64` | |
 | `pow(a, b)` | two numbers | `f64`, like `:math.pow/2` (`pow(2, 10)` is `1024.0`) | |
 | `alloc(type, n)` | an element type and an `i64` length | a new zero-filled array | see [Arrays](#6-arrays) |
+| `wrap64(expr)` | an `i64` expression | the low 64 bits of its exact result as a signed `i64`, as `Defk.Bits.wrap64/1` | see [Masked arithmetic](#masked-arithmetic) |
+| `u64_le(b, i)`, `u32_le`, `u16_le`, `u64_be`, `u32_be`, `u16_be` | a `[u8]` and an `i64` byte offset | `i64`: the unsigned word at `i` (`u64` as its signed bit pattern) | see [Word loads](#word-loads) |
 
 `length/1`, `byte_size/1` and `tuple_size/1` are
 [`unknown-function`](#unknown-function) with the hint to use `len/1`.
@@ -351,6 +353,69 @@ are rejected ([operand-type](#operand-type)). `band` with a constant mask
 gives the compiler a range: `table[band(h, 255)]` skips its bounds check
 against a 256-element array. Elixir 1.20 deprecates `~~~` and `^^^`; prefer
 `bnot/1` and `bxor/2`. (defk-w38)
+
+### Masked arithmetic
+
+**Supported:** integer arithmetic inside `band(expr, m)`, where `m` is an
+integer literal (or an integer module attribute) equal to 2^k - 1 for
+1 <= k <= 63 (`255`, `0xFFFFFFFF`, `0x7FFFFFFFFFFFFFFF`), and inside
+`wrap64(expr)`, the 64-bit wrap. This is how hashes and checksums wrap:
+
+```elixir
+defk fnv1a(bytes :: [u8]) :: i64 do
+  for b <- bytes, reduce: 2_166_136_261 do
+    h -> band(bxor(h, b) * 16_777_619, 0xFFFFFFFF)
+  end
+end
+```
+
+The rule, the same in native code and Elixir mode:
+
+- The **wrapped tree** is the contiguous tree of `+`, `-` (binary and
+  unary), unary `+`, `*`, and `bsl` (in any spelling: `<<<`,
+  `Bitwise.bsl/2`) by a non-negative integer literal, directly under the
+  mask (or directly inside `wrap64`). Either `band` operand may be the mask
+  (`band(255, x + y)`), and `x &&& m` and `Bitwise.band(x, m)` work the
+  same.
+- Every other expression inside it is a **leaf**: a variable, a literal, an
+  array read, a word load, a call, `div`/`rem`, `bsr`, `bor`/`bxor`, a
+  `bsl` by a non-literal count, and another `band` (whose own mask governs
+  its own tree). A leaf is lowered as usual, with its own checks, and its
+  `i64` value enters the tree. So `band(x * y + rem(x * y, 7), 255)` wraps
+  the outer `*` and `+` but raises if the `x * y` inside `rem` overflows.
+- The tree is computed with wrapping 64-bit machine arithmetic, with no
+  overflow check, and the mask is applied once. Every tree operation is
+  arithmetic modulo 2^64, so the low k bits are those of the exact result:
+  for k <= 63 the value is Elixir's `band` of the bignum, and nothing in the
+  tree raises (`band(x + y, 255)` with `x + y` past the `i64` limit gives
+  Elixir's answer).
+- `wrap64(expr)` gives the low 64 bits of the exact result as a signed
+  `i64` (two's complement). Its Elixir meaning is the function
+  `Defk.Bits.wrap64/1` (`<<r::signed-64>> = <<x::64>>`), which Elixir mode
+  calls on the exact result and which you can call from plain Elixir for the
+  same value: `Defk.Bits.wrap64(h * 1_099_511_628_211 + b)`. `wrap64` of a
+  leaf (`wrap64(x)`) is `x`. There is no 64-bit `band` mask: 2^64 - 1 is
+  not an `i64` literal ([`integer-literal`](#integer-literal)), and
+  `band(expr, -1)` is Elixir's identity, an ordinary `band` whose operand is
+  checked.
+- A mask `m >= 0` gives a value in `0..m`, so `table[band(h * 31 + b, 255)]`
+  skips its bounds check against a 256-element array.
+- A `band` whose mask is not a literal 2^k - 1, such as `band(x * y, 254)`,
+  `band(x * y, -1)` or `band(x * y, m)` with a variable `m`, is an ordinary
+  `band`: its operand is checked arithmetic and raises on `i64` overflow.
+
+FNV-1a 64 with `wrap64`, its offset basis 0xCBF29CE484222325 written
+as its `i64` bit pattern:
+
+```elixir
+defk fnv1a64(bytes :: [u8]) :: i64 do
+  for b <- bytes, reduce: -3_750_763_034_362_895_579 do
+    h -> wrap64(bxor(h, b) * 1_099_511_628_211)
+  end
+end
+```
+
+(defk-n4r.2)
 
 ### Module attributes
 
@@ -521,6 +586,45 @@ The check is left out where the compiler proves the index in range, for
 example `i <- 0..(n - 1)//1` with `n = min(len(a), len(b))`, a
 `for x <- a` generator, or a `[u8]` value indexing a 256-element `alloc`. That
 changes speed, never results.
+
+### Word loads
+
+**Supported:** `u64_le(bytes, i)`, `u32_le(bytes, i)`, `u16_le(bytes, i)`
+and the big-endian `u64_be`, `u32_be`, `u16_be` read the unsigned 8-, 4- or
+2-byte integer at byte offset `i` of a `[u8]`, as Elixir's
+
+```elixir
+<<_::binary-size(i), x::little-unsigned-size(64), _::binary>> = bytes
+```
+
+- `bytes` must be a `[u8]` and `i` an `i64`
+  ([`builtin-arguments`](#builtin-arguments) otherwise).
+- The result is an `i64`. `u32_*` and `u16_*` are exact (0..2^32 - 1,
+  0..65535). **`u64_*` returns the 64 bits as a signed `i64`**: a value with
+  the top bit set is negative (`u64_le(<<255, 255, 255, 255, 255, 255, 255,
+  255>>, 0)` is `-1`), in native code and Elixir mode alike: the builtin is
+  defined as the signed reinterpretation of the word, `Defk.Bits.wrap64/1`
+  of the unsigned value (see [Limits](#12-limits)). Mix it into a hash with
+  masked arithmetic or `wrap64`, where only the bits matter.
+- `i < 0` or `i + width > len(bytes)` raises `Enum.OutOfBoundsError` with
+  index `i`, like `a[i]`: "8-byte load at index 5 out of bounds for array of
+  length 8".
+- The check is left out where the compiler proves `0 <= i` and
+  `i + width <= len(bytes)`, as in `for i <- 0..(len(b) - 8)//1` (or
+  `//8`) followed by `u64_le(b, i)`. A `u16_*` value indexes a
+  65536-element `alloc` without a check.
+- The load is unaligned and compiles to one machine load (plus a byte swap
+  for the other byte order).
+
+```elixir
+defk sum_words(b :: [u8]) :: i64 do
+  for i <- 0..(len(b) - 8)//8, reduce: 0 do
+    acc -> wrap64(acc + u64_le(b, i))
+  end
+end
+```
+
+(defk-n4r.2)
 
 ### Allocating
 
@@ -900,6 +1004,9 @@ and replace everything from the first `###` heading of this section to the
 end of the section with its output (`test/language_doc_test.exs` fails until
 they match).
 
+Compiling 2 files (.ex)
+Compiling 6 files (.ex)
+Generated defk app
 Compiling 2 files (.ex)
 ### kernel-head
 
@@ -1601,7 +1708,7 @@ end
 A kernel calls builtins and the other kernels in its module.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr) and the kernels in this module, which are inlined
+- why: a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be) and the kernels in this module, which are inlined
 - hint: define it as a kernel in this module, or compute it in Elixir and pass the result in
 
 Rejected:
@@ -2676,6 +2783,7 @@ bug.
 | `trunc/1`, `round/1` of a float outside the `i64` range | a bignum | `ArithmeticError` "trunc/1: ... does not fit in i64" |
 | an integer literal outside `i64`, including `-9223372036854775808` | a bignum | compile error [`integer-literal`](#integer-literal) |
 | a module attribute holding an integer outside `i64`, read in a kernel | a bignum | compile error [`integer-literal`](#integer-literal) |
+| u64 loads (`u64_le/2`, `u64_be/2`) return the bit pattern as `i64` | `x::unsigned-64` gives up to 2^64 - 1 | a word with the top bit set is a negative `i64` (see [Word loads](#word-loads)) |
 | an `i64` argument outside `i64` | any integer | `ArgumentError` "argument N (name) must be an integer fitting in i64" |
 | an `f64` argument that is an integer outside `i64` | converts | `ArgumentError` "argument N (name) must be a number" |
 | a `[u8]` write of a value outside 0..255 | `<<300::8>>` wraps | `ArgumentError` "value 300 does not fit in u8" |
