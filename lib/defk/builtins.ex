@@ -10,8 +10,10 @@ defmodule Defk.Builtins do
   @bitwise_ops %{&&&: :band, |||: :bor, "^^^": :bxor, "~~~": :bnot, <<<: :bsl, >>>: :bsr}
   # [u8], i64 -> i64 word loads: unsigned w-byte integers at a byte offset
   @loads [:u64_le, :u64_be, :u32_le, :u32_be, :u16_le, :u16_be]
+  # i64 -> i64 bit builtins with a plain Elixir meaning in Defk.Bits
+  @bits [:mulhi, :clz, :ctz, :popcount, :rotl64, :rotr64]
   @all [:len, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
-         @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ [:alloc]
+         @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ [:alloc] ++ @bits
 
   @doc "Every builtin name."
   def all, do: @all
@@ -39,6 +41,13 @@ defmodule Defk.Builtins do
   def load_width(f) when f in [:u64_le, :u64_be], do: 8
   def load_width(f) when f in [:u32_le, :u32_be], do: 4
   def load_width(f) when f in [:u16_le, :u16_be], do: 2
+
+  @doc "The bit builtins (mulhi/2, clz/1, ctz/1, popcount/1, rotl64/2, rotr64/2)."
+  def bits, do: @bits
+
+  @doc "The arity of bit builtin `f`."
+  def bits_arity(f) when f in [:clz, :ctz, :popcount], do: 1
+  def bits_arity(_f), do: 2
 
   @doc "Whether `name` is a builtin."
   def builtin?(name), do: name in @all

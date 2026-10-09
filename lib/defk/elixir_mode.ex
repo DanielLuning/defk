@@ -43,6 +43,7 @@ defmodule Defk.ElixirMode do
   @bitwise Defk.Builtins.bitwise()
   @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
   @loads Defk.Builtins.loads()
+  @bits Defk.Builtins.bits()
 
   @doc """
   Runs `fun` with this process's kernel calls in `mode` (`:native` or
@@ -468,6 +469,13 @@ defmodule Defk.ElixirMode do
 
   defp builtin(:len, [a], [{:arr, e}], m), do: {call(:"len_#{e}", [a], m), :i64}
   defp builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: {call(f, [a, i], m), :i64}
+
+  defp builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl64, :rotr64],
+    do: {remote(Defk.Bits, f, [a, b], m), :i64}
+
+  defp builtin(f, [a], [:i64], m) when f in @bits,
+    do: {remote(Defk.Bits, f, [a], m), :i64}
+
   defp builtin(f, [a, b], [:i64, :i64], m) when f in [:div, :rem], do: {call(f, [a, b], m), :i64}
   defp builtin(:float, [a], [:i64], m), do: {{{:., gm(m), [:erlang, :float]}, gm(m), [a]}, :f64}
   defp builtin(:float, [a], [:f64], _m), do: {a, :f64}

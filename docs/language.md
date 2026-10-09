@@ -330,6 +330,9 @@ wrong types is [`builtin-arguments`](#builtin-arguments).
 | `pow(a, b)` | two numbers | `f64`, like `:math.pow/2` (`pow(2, 10)` is `1024.0`) | |
 | `alloc(type, n)` | an element type and an `i64` length | a new zero-filled array | see [Arrays](#6-arrays) |
 | `wrap64(expr)` | an `i64` expression | the low 64 bits of its exact result as a signed `i64`, as `Defk.Bits.wrap64/1` | see [Masked arithmetic](#masked-arithmetic) |
+| `mulhi(a, b)` | two `i64` | `i64`: the high 64 bits of the unsigned 128-bit product of the u64 bit patterns, as `Defk.Bits.mulhi/2` | see [Bit builtins](#bit-builtins) |
+| `clz(x)`, `ctz(x)`, `popcount(x)` | an `i64` | `i64` in 0..64: leading zeros, trailing zeros (64 for 0), set bits of the u64 pattern | see [Bit builtins](#bit-builtins) |
+| `rotl64(x, n)`, `rotr64(x, n)` | two `i64` | `i64`: the 64-bit pattern of `x` rotated by `band(n, 63)` | see [Bit builtins](#bit-builtins) |
 | `u64_le(b, i)`, `u32_le`, `u16_le`, `u64_be`, `u32_be`, `u16_be` | a `[u8]` and an `i64` byte offset | `i64`: the unsigned word at `i` (`u64` as its signed bit pattern) | see [Word loads](#word-loads) |
 
 `length/1`, `byte_size/1` and `tuple_size/1` are
@@ -353,6 +356,28 @@ are rejected ([operand-type](#operand-type)). `band` with a constant mask
 gives the compiler a range: `table[band(h, 255)]` skips its bounds check
 against a 256-element array. Elixir 1.20 deprecates `~~~` and `^^^`; prefer
 `bnot/1` and `bxor/2`. (defk-w38)
+
+### Bit builtins
+
+`mulhi(a, b)`, `clz(x)`, `ctz(x)`, `popcount(x)`, `rotl64(x, n)` and
+`rotr64(x, n)` work on the u64 bit pattern of an `i64` and return an `i64`
+(a pattern, so a value with the top bit set is negative). Each is a plain
+function in `Defk.Bits` with a doctest, which Elixir mode calls, so both
+modes give the same value:
+
+- `mulhi` is the high 64 bits of the unsigned 128-bit product, as
+  `band(bsr(ua * ub, 64), 2^64 - 1)` on the unsigned values, then
+  `Defk.Bits.wrap64/1`. It is the half of a 64x64 multiply that
+  `wrap64(a * b)` drops (xxh3, Murmur3-128).
+- `clz` and `ctz` count leading and trailing zero bits: 0 to 64, and 64 for 0
+  (the C builtins are undefined there; the kernel guards it).
+- `popcount` counts set bits: 0 to 64. The three counts give the compiler the
+  range 0..64.
+- `rotl64` and `rotr64` rotate the 64-bit pattern by `band(n, 63)`, so `n`
+  may be any `i64`, negative included.
+
+Operands must be `i64`; `f64` and `bool` are rejected
+([builtin-arguments](#builtin-arguments)). None of them can raise. (defk-52v.6)
 
 ### Masked arithmetic
 
@@ -1007,6 +1032,7 @@ they match).
 Compiling 2 files (.ex)
 Compiling 6 files (.ex)
 Generated defk app
+Compiling 2 files (.ex)
 Compiling 2 files (.ex)
 ### kernel-head
 
@@ -1708,7 +1734,7 @@ end
 A kernel calls builtins and the other kernels in its module.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be) and the kernels in this module, which are inlined
+- why: a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, mulhi, clz, ctz, popcount, rotl64, rotr64) and the kernels in this module, which are inlined
 - hint: define it as a kernel in this module, or compute it in Elixir and pass the result in
 
 Rejected:
