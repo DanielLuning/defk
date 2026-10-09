@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-sgw.4"
@@ -12,8 +12,8 @@
   ],
   "parent": "defk-sgw",
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Draft docs/verdict.md with the pre-registered go/no-go rule",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:58Z"
+  "updated_at": "2026-10-09T20:47:49Z"
 }
