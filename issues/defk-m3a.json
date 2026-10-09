@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-09T17:10:45Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Build cache key omits the ERTS version and the C compiler",
   "type": "task",
-  "updated_at": "2026-10-09T17:10:47Z"
+  "updated_at": "2026-10-09T20:02:17Z"
 }
