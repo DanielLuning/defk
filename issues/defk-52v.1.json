@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-w38"
+  ],
   "blocks": [],
   "created": "2026-10-09T19:47:32Z",
   "description": "Tier 1. Anchor: ex_keccak wraps the tiny-keccak crate; Ethereum's Keccak-256 (original padding 0x01) is not in :crypto, which has only the FIPS SHA-3 variants (padding 0x06) where OpenSSL provides them. Reference: the Keccak team's reference and FIPS 202 test vectors; tiny-keccak is plain Rust with no SIMD, so parity is the expectation.\n\nKernel: `keccak256(msg :: [u8]) :: [u8]` (32-byte alloc), with the sponge over a 25-lane [i64] state (u64 lanes as i64 bit patterns), the 24-round Keccak-f[1600] permutation (theta, rho, pi, chi, iota) written with bxor, rotates and the round constants as a module attribute. A `sha3_256` twin differs only in the padding byte and is checked against :crypto.hash(:sha3_256, _). Absorb loop over 136-byte blocks: a byte loop with u64_le loads.\n\nElixir baseline: the fastest pure Elixir/Erlang Keccak on Hex (check `sha3` and `keccakf1600` packages; measure both), marked :optimized; :crypto's sha3_256 reported beside as the hardware-backed ceiling for the SHA-3 variant. Realistic size: 32 B to 1 KB messages (hashing addresses, transactions) measured as a batch of 10k per call and per single call, and one 16 MB message.\n\nExpected verdict: good vs pure Elixir; parity with ex_keccak reported beside it.\n\nNeeds: defk-w38, defk-n4r.2 (u64 loads, wrapping ops; rotates by bsl/bsr/bor under a 2^64-1 mask or a `rotl64` builtin), defk-ivt (24 round constants, 25 rotation offsets).\n\nDone when: FIPS 202 and Ethereum vectors pass, agreement holds against ex_keccak for random inputs and against Elixir mode, the verdict is measured and the README gets the row.",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Keccak-256 and SHA-3 from scratch vs ex_keccak (tiny-keccak) and :crypto",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:35Z"
+  "updated_at": "2026-10-09T19:47:37Z"
 }
