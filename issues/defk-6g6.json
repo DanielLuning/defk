@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Accepted with -fno-builtin: the narrow -fno-builtin-sin/-cos flags did not stop the __sincos_stret fusion, and the same flag also stopped pow(x, 2.0) -\u003e x*x and pow(x, 0.5) -\u003e sqrt substitutions found by the probes. Cost: sum -0.71%, dot -0.16%, count_primes +0.15%, count_primes_early +2.30% best-of (noisy; a second run +0.88%; its hot loop calls no builtin). Over the 2% hardening bar on one noisy kernel, but this flag is correctness under the one rule, not optional hardening, so it stays.",
+      "timestamp": "2026-10-09T20:48:33Z"
+    }
+  ],
   "priority": 1,
   "status": "in_progress",
   "title": "cos and sin of one argument in a loop fuse into sincos, diverging from :math.sin in the last bit",
   "type": "bug",
-  "updated_at": "2026-10-09T20:34:02Z"
+  "updated_at": "2026-10-09T20:48:33Z"
 }
