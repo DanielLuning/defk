@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-x15.1",
     "defk-x15.4",
@@ -14,8 +14,8 @@
   "labels": [],
   "parent": "defk-x15",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "ADRs for out-of-bounds decisions",
   "type": "task",
-  "updated_at": "2026-10-09T09:30:33Z"
+  "updated_at": "2026-10-09T10:15:55Z"
 }
