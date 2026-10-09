@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-human"
   ],
+  "comments": [
+    {
+      "text": "ready-for-human: the diff is the owner's uncommitted experiment; an agent should not revert it unasked. Once the decision is recorded here it becomes ready-for-agent.",
+      "timestamp": "2026-10-09T17:10:49Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Resolve the uncommitted DEFK_EXP compile-timing instrumentation in lib/defk.ex and lib/defk/build.ex",
   "type": "task",
-  "updated_at": "2026-10-09T17:10:47Z"
+  "updated_at": "2026-10-09T17:10:49Z"
 }
