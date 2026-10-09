@@ -890,10 +890,7 @@ defmodule Defk.Compiler do
       end
 
     # all?: halt with false at the first false; any?: halt with true at the first true
-    {init, kw} =
-      if f == :all?,
-        do: {true, [do: {:cont, true}, else: {:halt, false}]},
-        else: {false, [do: {:halt, true}, else: {:cont, false}]}
+    {init, kw} = Defk.Builtins.bool_reduce(f)
 
     lower_reduce_while(src, init, x, {:_, m, nil}, {:if, m, [pred, kw]}, env, m)
   end

@@ -15,4 +15,13 @@ defmodule Defk.Builtins do
 
   @doc "Whether `name` is a builtin."
   def builtin?(name), do: name in @all
+
+  # Enum.all?/any? with a predicate are the same fold with a different bool
+  # accumulator: {init, if kw} for `reduce_while` over the predicate.
+  @doc "The {init, if kw} that lowers Enum.all?/any? to a bool-accumulator reduce."
+  def bool_reduce(f) when f in [:all?, :any?] do
+    if f == :all?,
+      do: {true, [do: {:cont, true}, else: {:halt, false}]},
+      else: {false, [do: {:halt, true}, else: {:cont, false}]}
+  end
 end

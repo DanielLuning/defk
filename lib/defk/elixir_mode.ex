@@ -301,10 +301,7 @@ defmodule Defk.ElixirMode do
       {with_pre(pre, {dot, gm(m), [srcq, {:fn, fm, [{:->, am, [[gen_pat(x)], pq]}]}]}), :bool}
     else
       # the kernel's meaning: a reduce_while with a bool accumulator
-      {init, kw} =
-        if f == :all?,
-          do: {true, [do: {:cont, true}, else: {:halt, false}]},
-          else: {false, [do: {:halt, true}, else: {:cont, false}]}
+      {init, kw} = Defk.Builtins.bool_reduce(f)
 
       reduce_while(src, init, x, {:_, m, nil}, {:if, m, [pred, kw]}, env, m)
     end
