@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T09:29:52Z",
+  "description": "Get the mix ci alias (compile --warnings-as-errors, format, test, credo --strict, dialyzer, ex_dna --max-clones 0, reach.check) passing without blanket suppressions.\n\nSplit: (a) truthful fixes (dialyzer specs, shared helper for the clone, genuine complexity extractions), (b) calibrated thresholds and site-level false-positive suppressions, each justified by an ADR so the decision can be revisited.\n\nCurrent state: compile/format/test/reach pass; credo, dialyzer and ex_dna fail. Per-case investigation is complete (see children).",
+  "id": "defk-x15",
+  "labels": [],
+  "priority": 1,
+  "status": "open",
+  "title": "Make mix ci green honestly (dialyzer, ex_dna, credo) and document out-of-bounds decisions",
+  "type": "epic",
+  "updated_at": "2026-10-09T09:29:52Z"
+}
