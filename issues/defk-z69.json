@@ -9,6 +9,12 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Implemented by defk-auo: tuple-return-call retired, a tuple-returning kernel can be called and destructured.",
+      "timestamp": "2026-10-09T22:05:54Z"
+    }
+  ],
   "priority": 3,
   "status": "closed",
   "title": "Kernels returning tuples cannot be called from other kernels (tuple-return-call)",
