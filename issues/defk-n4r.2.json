@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-w38"
   ],
@@ -21,8 +21,8 @@
   ],
   "parent": "defk-n4r",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Word loads from [u8] and wrapping u64 arithmetic for hashes",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:41Z"
+  "updated_at": "2026-10-09T21:09:52Z"
 }
