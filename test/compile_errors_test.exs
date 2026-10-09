@@ -125,15 +125,15 @@ defmodule Defk.CompileErrorsTest do
 
              why: a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read
              hint: pass the values as separate arguments, or pack them into an array before the call
-             (defk unsupported-map; mix run -e 'Defk.Errors.explain!("unsupported-map")')\
+             (defk unsupported-map: docs/language.md#unsupported-map)\
              """
     end
 
-    test "the footer never names docs/language.md while that file is absent" do
-      refute File.exists?("docs/language.md")
+    test "the footer names the code's anchor in docs/language.md" do
+      assert File.exists?("docs/language.md")
       msg = compile("defk f(x :: i64) :: i64 do\n  m = %{a: x}\n  x\nend", "Footer")
-      refute msg =~ "docs/language.md"
-      assert msg =~ "(defk unsupported-map; mix run -e"
+      assert msg =~ "(defk unsupported-map: docs/language.md#unsupported-map)"
+      refute msg =~ "explain!"
     end
 
     test "explain!/1 prints the registry entry and rejects unknown codes" do
