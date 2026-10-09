@@ -12,9 +12,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Merged. Side findings filed: defk-fzp (Elixir mode in Mix.install scripts), defk-8qs (scheduler placement of short kernel tasks), defk-id9 (select arms with rem).",
+      "timestamp": "2026-10-09T21:19:52Z"
+    }
+  ],
   "priority": 2,
   "status": "closed",
   "title": "Example: Monte Carlo slot RTP simulation with the kernel running :rand's exsss generator",
   "type": "task",
-  "updated_at": "2026-10-09T21:19:51Z"
+  "updated_at": "2026-10-09T21:19:52Z"
 }
