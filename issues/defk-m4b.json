@@ -5,7 +5,9 @@
   "created": "2026-10-09T22:03:23Z",
   "description": "Seen by the defk-auo agent on 2026-10-10: the bench_test timing tests failed in one full `mix test` run under heavy machine load (8 agents) and passed on rerun. Timing assertions in a unit test are a flake source; make the tests structural (assert the shape of the JSON and the verdict arithmetic on fixed inputs) and move any wall-clock assertion behind `@tag :timing` excluded by default, or give it a wide margin. Done when the file has no assertion that depends on how fast the machine is.",
   "id": "defk-m4b",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "priority": 4,
   "status": "open",
   "title": "test/bench_test.exs timing tests are flaky under load",
