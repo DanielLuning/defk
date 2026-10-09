@@ -1,6 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [
+    "defk-cmr",
     "defk-ivt",
     "defk-n4r.2",
     "defk-n4r.4",
@@ -18,5 +19,5 @@
   "status": "open",
   "title": "Inflate (RFC 1951) and PNG decode from scratch vs :zlib and image libraries",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:40Z"
+  "updated_at": "2026-10-09T19:47:41Z"
 }

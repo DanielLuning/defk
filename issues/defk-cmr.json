@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [
+    "defk-52v.7",
     "defk-9p6.16",
     "defk-dki",
     "defk-ooq",
@@ -17,5 +18,5 @@
   "status": "open",
   "title": "Add the bitstring accumulator",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:53Z"
+  "updated_at": "2026-10-09T19:47:41Z"
 }
