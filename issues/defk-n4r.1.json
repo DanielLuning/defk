@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T18:40:51Z",
+  "description": "Build the two things every later step measures against.\n\n1. Generator: examples/one_brc/gen.exs producing the 1brc file format (`\u003cstation\u003e;\u003ctemp\u003e\\n`, 413 stations from the upstream weather_stations list, temperatures -99.9..99.9 with one decimal, Gaussian around each station's mean) for N rows, deterministic by seed. Check it against the upstream CreateMeasurements.java format (https://github.com/gunnarmorling/1brc/blob/main/src/main/java/dev/morling/onebrc/CreateMeasurements.java). Default N = 100M (development size); the full 1B is a flag.\n2. Baseline: the fastest pure-Elixir solution we can write, following examples/README.md \"Measuring correctly\": try at least (a) :file.pread chunks + binary pattern matching with a map accumulator, (b) the same with :ets, (c) Task.async_stream over chunks with per-task maps merged at the end, (d) :binary.split vs byte-by-byte matching, (e) parsing the temperature as an integer x10 instead of a float. Keep the measurements in the example header. Read the Elixir Forum 1BRC threads first and credit what you reuse (the research ticket under defk-dtw collects them).\n3. A correctness check: a reference answer for a seed computed independently (e.g. from the generator's own stations, or a trivially slow Enum implementation on a small N) and the output format `{station=min/mean/max, ...}` sorted by name, as upstream specifies.\n\nReport end to end: wall time from file on disk to the formatted output string, schedulers used, peak memory (`:erlang.memory`), on the development size. Mark the baseline :optimized only after (a)-(e) are measured.\n\nDone when: gen.exs and examples/one_brc/elixir.exs exist, the header records the variants tried with numbers, and the result matches the reference for two seeds.",
+  "id": "defk-n4r.1",
+  "labels": [],
+  "parent": "defk-n4r",
+  "priority": 2,
+  "status": "open",
+  "title": "1BRC: data generator and optimized pure-Elixir baseline",
+  "type": "task",
+  "updated_at": "2026-10-09T18:40:51Z"
+}
