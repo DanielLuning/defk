@@ -16,11 +16,15 @@
     {
       "text": "Triage (defk-sgw plan): needs-triage. The threshold and warn-vs-error choice is undecided. Not required for the verdict ('Which open runtime issues are safety gaps?' ruled it compile-time cost); decide when multi-clause kernels (defk-u9c) and helper kernels make deep call graphs likely.",
       "timestamp": "2026-10-06T09:13:43Z"
+    },
+    {
+      "text": "The 1BRC kernel (defk-n4r.6) inlines parse, hash, probe and compare helpers from several sites; it is the first workload likely to show code-size growth. Record generated C lines and .so size there.",
+      "timestamp": "2026-10-09T18:40:55Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Guard against code-size blowup from inlined kernel calls",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:59Z"
+  "updated_at": "2026-10-09T18:40:55Z"
 }
