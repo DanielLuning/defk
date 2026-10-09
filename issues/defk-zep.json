@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T21:55:15Z",
+  "description": "From examples/keccak.exs (defk-52v.1): writing the round row by row instead of \"all 25 rotates, then all of chi\" took 16 MB from 40 ms to 27 ms, and rebinding a temporary (`e = bxor(a6, d1)` then rotating `e`) instead of writing it inline put it back to 39 ms, even with `yield: false`. The author could not explain it from the generated C. Likely cause: the 25 lanes plus temporaries exceed the register file, and the compiler's emission (every binding a fresh C local that is also a frame-spill candidate; `(void)` discards; the order of statements) changes clang's register allocation. The kernel runs at 0.55x of ex_keccak (tiny-keccak, plain Rust), so there is a real gap to close.\n\nInvestigate with the fast-path report idea (defk-6cn) or by reading the assembly of the two orderings: count spills (stack stores in the hot loop), check whether declaring every local at kernel top (decl_locals) with `= {0}` and the `F-\u003e` spill list affects clang's liveness, and whether `yield: false` kernels could declare locals at first use. Record what the two orderings compile to and whether a compiler change (e.g. emitting `const` temporaries, or scoping locals to the block that binds them) recovers the faster ordering regardless of source order.\n\nDone when: the cause is documented in the ticket, and either a compiler change lands with the Keccak example at or near ex_keccak's speed, or the result is recorded as a limit with the recommended source ordering in docs/language.md.",
+  "id": "defk-zep",
+  "labels": [],
+  "priority": 4,
+  "status": "open",
+  "title": "Keccak-f[1600] permutation: statement order and temporaries change speed by 1.5x (register spills)",
+  "type": "task",
+  "updated_at": "2026-10-09T21:55:15Z"
+}
