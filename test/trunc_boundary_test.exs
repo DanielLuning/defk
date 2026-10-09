@@ -12,6 +12,7 @@ end
 
 defmodule Defk.TruncBoundaryTest do
   use ExUnit.Case, async: true
+  use Defk.Properties
 
   alias Defk.TruncBoundaryTest.K
 
@@ -44,4 +45,7 @@ defmodule Defk.TruncBoundaryTest do
                Defk.Test.assert_agrees(K, unquote(fun), [@pos_2p63_below])
     end
   end
+
+  # every f64, including the doubles either side of -2^63 and 2^63 (defk-ne6)
+  agreement(K, [:trunc_f, :round_f])
 end

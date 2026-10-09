@@ -70,6 +70,7 @@ end
 
 defmodule Defk.SelectTest do
   use ExUnit.Case, async: true
+  use Defk.Properties
 
   alias Defk.SelectTest.K
 
@@ -142,4 +143,23 @@ defmodule Defk.SelectTest do
     c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
     assert c =~ "defk_add_i64_s(&"
   end
+
+  # ---------------------------------------------------- agreement properties --
+  # Every kernel here against its Elixir mode (defk-ne6): arms that overflow
+  # only when taken, on any i64; loop counts bounded (the i64 maximum raises
+  # before the loop starts).
+
+  defp counted, do: fixed_list([G.i64(-5..2_000, [@min, 0x7FFFFFFFFFFFFFFF]), G.i64()])
+
+  agreement(K,
+    count_if: [args: counted()],
+    square_unless: [],
+    next_or_neg: [],
+    cmp_arms: [],
+    cond_count: [args: counted()],
+    cond_square: [],
+    cond_later: [],
+    odd?: [],
+    cond_calls: []
+  )
 end

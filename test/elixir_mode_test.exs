@@ -6,21 +6,8 @@
 
 Code.require_file("../examples/fuzzy_search/lib/fuzzy_search/kernels.ex", __DIR__)
 
-defmodule Defk.ElixirModeTest.Catalog do
-  # The catalog's kernels live in scripts that also install deps and run a
-  # benchmark; compile only their modules.
-  @scripts ~w(geo_nearest rolling_stats image_blur poor_list_data poor_tiny_calls _template)
-
-  def load do
-    for name <- @scripts do
-      file = Path.expand("../examples/#{name}.exs", __DIR__)
-      {:__block__, _, top} = Code.string_to_quoted!(File.read!(file), file: file)
-      for {:defmodule, _, _} = mod <- top, do: Code.compile_quoted(mod, file)
-    end
-  end
-end
-
-Defk.ElixirModeTest.Catalog.load()
+# The catalog's kernel modules (Geo.Kernels, Rolling.Kernels, ...) are
+# loaded by test_helper.exs (Defk.Catalog).
 
 defmodule Defk.ElixirModeTest.Agree do
   import ExUnit.Assertions

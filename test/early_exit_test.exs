@@ -232,6 +232,8 @@ defmodule Defk.EarlyExitTest do
 
   alias Defk.EarlyExitTest.K
 
+  use Defk.Properties
+
   @moduletag timeout: 120_000
 
   defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
@@ -468,4 +470,84 @@ defmodule Defk.EarlyExitTest do
                "the branches of this case have different types: i64, f64"
     end
   end
+
+  # ---------------------------------------------------- agreement properties --
+  # Every kernel here against its Elixir mode (defk-ne6). Trip counts are
+  # bounded, except where the loop stops early for every i64 (first_div,
+  # prime?, classify_until stop within a few thousand steps on every edge
+  # value); the i64 maximum stays in as an edge, since its range raises
+  # before the loop starts.
+
+  @min -0x8000000000000000
+  @max 0x7FFFFFFFFFFFFFFF
+
+  defp trips(n), do: G.i64(-5..n, [@min, @max])
+
+  # [n, stop]: stop mostly inside the loop
+  defp with_stop(n_gen) do
+    bind(n_gen, fn n ->
+      m = min(max(n, -5), 5_000)
+      fixed_list([constant(n), frequency([{3, integer(-1..max(m + 1, -1))}, {1, G.i64()}])])
+    end)
+  end
+
+  defp nest3, do: with_stop(trips(150))
+  defp sum_first_divs, do: fixed_list([trips(400)])
+  defp first_div, do: fixed_list([G.i64(-10..20_000, G.i64_edges())])
+  defp abs_sum_until, do: fixed_list([trips(400), G.i64()])
+  defp all_any, do: fixed_list([trips(1_000), G.i64()])
+  defp primes, do: fixed_list([G.i64(-1_000..10_000_000_000, G.i64_edges())])
+  defp find_many, do: fixed_list([G.array(:i64, max_length: 300), G.i64(-2..20, [@min, @max])])
+  defp case_partial, do: fixed_list([one_of([member_of([1, 2]), G.i64()])])
+  defp case_loop, do: fixed_list([trips(2_000), G.i64()])
+
+  defp sum_until do
+    bind(G.array(:i64, max_length: 300), fn a ->
+      len = div(byte_size(a), 8)
+      n = G.i64(-2..(len + 3), [@min, @max])
+
+      bind(with_stop(n), fn [n, stop] ->
+        fixed_list([constant(a), constant(stop), constant(n)])
+      end)
+    end)
+  end
+
+  agreement(K,
+    nest3: [args: nest3()],
+    nest3_nb: [args: nest3()],
+    sum_first_divs: [args: sum_first_divs()],
+    sum_first_divs_nb: [args: sum_first_divs()],
+    first_div: [args: first_div()],
+    first_div_nb: [args: first_div()],
+    abs_sum_until: [args: abs_sum_until()],
+    abs_sum_until_nb: [args: abs_sum_until()],
+    classify_until: [],
+    classify_until_nb: [],
+    all_any: [args: all_any()],
+    all_any_nb: [args: all_any()],
+    prime?: [args: primes()],
+    "prime?_nb": [args: primes()],
+    find_at_least: [],
+    find_at_least_nb: [],
+    find_many: [args: find_many()],
+    find_many_nb: [args: find_many()],
+    until_negative: [],
+    sum_until: [args: sum_until()],
+    sum_until_nb: [args: sum_until()],
+    case_val: [],
+    case_val_nb: [],
+    case_pin: [],
+    case_pin_nb: [],
+    case_bool: [],
+    case_bool_nb: [],
+    case_partial: [args: case_partial()],
+    case_partial_nb: [args: case_partial()],
+    case_partial_bool: [],
+    case_partial_bool_nb: [],
+    case_loop: [args: case_loop()],
+    case_loop_nb: [args: case_loop()],
+    case_sel: [],
+    case_sel_nb: [],
+    case_stmt: []
+  )
 end

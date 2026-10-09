@@ -211,6 +211,8 @@ defmodule Defk.ResumeTest do
   alias Defk.ResumeTest.K
   alias FuzzySearch.Kernels, as: F
 
+  use Defk.Properties
+
   defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
   defp f64s(list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
 
@@ -408,4 +410,57 @@ defmodule Defk.ResumeTest do
     e = assert_raise CompileError, fn -> Code.compile_string(src) end
     assert Exception.message(e) =~ "ping/1 calls itself through pong/1"
   end
+
+  # ---------------------------------------------------- agreement properties --
+  # Every kernel here against its Elixir mode (defk-ne6). Trip counts are
+  # bounded, with the i64 maximum as the one cheap edge (its range raises
+  # before the loop starts); array elements are mostly small, so the
+  # arithmetic gets past the first overflow.
+
+  @min -0x8000000000000000
+  @max 0x7FFFFFFFFFFFFFFF
+
+  defp small, do: G.i64(-1_000..1_000)
+  defp reps(n), do: G.i64(-2..n, [@min, @max])
+  defp small_array(max), do: G.array(:i64, of: small(), max_length: max, strip: false)
+
+  defp at_or_any(n_gen) do
+    bind(n_gen, fn n ->
+      fixed_list([
+        constant(n),
+        frequency([{3, integer((min(n, 50) - 2)..(min(n, 50) + 2))}, {1, G.i64()}])
+      ])
+    end)
+  end
+
+  defp mix, do: fixed_list([small_array(32), reps(4)])
+  defp deep, do: fixed_list([G.alloc_len(8, -3..25)])
+  defp flat, do: fixed_list([G.array(:f64), reps(3)])
+  defp calls, do: fixed_list([small_array(24), reps(3)])
+  defp calls_raise, do: at_or_any(G.i64(-2..8, [@min, @max]))
+
+  agreement(K,
+    mix: [args: mix()],
+    mix_nb: [args: mix()],
+    deep: [args: deep()],
+    deep_nb: [args: deep()],
+    flat: [args: flat()],
+    flat_nb: [args: flat()],
+    calls: [args: calls()],
+    calls_nb: [args: calls()],
+    calls_raise: [args: calls_raise()],
+    calls_raise_nb: [args: calls_raise()],
+    weights: [args: fixed_list([G.array(:i64, of: small()), G.i64()])],
+    dot_mod: [],
+    keep?: [],
+    chain: [args: fixed_list([G.i64(-3..40, [@min, @max]), G.i64()])],
+    # loops at most 5 * 3_544 times for any i64 arguments
+    level2: [max_runs: 50],
+    level3: [args: fixed_list([G.i64(-10..5_000, [@min, @max])])],
+    fail_at: [args: at_or_any(G.i64())]
+  )
+
+  agreement(Defk.ResumeTest.Lost,
+    two_loops: [args: fixed_list([G.i64(-5..5_000, [@min, @max])])]
+  )
 end
