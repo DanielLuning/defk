@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T09:30:22Z",
+  "description": "Mechanical: errors.ex:1261 head pattern [[_,_|_]=list]; compiler.ex:1944,1897 match?([_],…); compiler.ex:1391 match?([_,_],ts); elixir_mode_test.exs:350 count_until(…,6)\u003e=6; :707 direct setup!; :344 __info__; comparison_test float underscores; reorder aliases at elixir_mode_test.exs:307. Leave compile_errors_test.exs:259 length==10.\nSuppress with a comment (false positives, each needs ADR): cond fixtures select_test.exs:39 / early_exit_test.exs:77; dbg+IO.inspect elixir_mode_test.exs:290,294; Path.expand priv defk.ex:19 / build.ex:5 (compile-time resource).",
+  "id": "defk-x15.5",
+  "labels": [],
+  "parent": "defk-x15",
+  "priority": 2,
+  "status": "open",
+  "title": "Credo: mechanical fixes and site suppressions",
+  "type": "task",
+  "updated_at": "2026-10-09T09:30:22Z"
+}
