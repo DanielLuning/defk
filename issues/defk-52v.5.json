@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T19:47:33Z",
+  "description": "Tier 1, needs nothing: radix-2 iterative FFT, direct and FFT-based convolution, and polyphase resampling are loops over [f64] with sin/cos/sqrt, all in today's subset. People wrap fftw or use Nx for these; on Nerves and in audio/metrics pipelines a yielding, dependency-free kernel is attractive.\n\nKernels: `fft(re :: [f64], im :: [f64]) :: {[f64], [f64]}` for power-of-two n (a non-power-of-two length raises; Bluestein is a follow-up), with bit-reversal permutation and precomputed twiddles in an alloc'd array; `convolve(a, b) :: [f64]` direct for small b, via fft for large; `resample(x :: [f64], up :: i64, down :: i64) :: [f64]` with a windowed-sinc filter built in the kernel.\n\nElixir baselines: pure Elixir with tuples or :array for the butterfly loop (first pass, then optimise); Nx.fft on the binary backend and on EXLA reported beside (the Nx-boundary research, docs/research/nx-boundary.md, says where Nx is the right answer: large batched transforms).\n\nBit-exactness: the twiddle factors must be computed the same way in both modes (:math.cos/sin in Elixir mode, cos/sin from libm natively) and libm's cos is not guaranteed identical to the BEAM's... it is the same libm on the same machine, so agreement should hold; if it does not, document it as the first float limit of this kind and compare with a tolerance in the example (not in the agreement property).\n\nRealistic size: n = 1024 to 1M points; measure 4096 (audio frame) and 1M.\n\nExpected verdict: good vs pure Elixir; marginal vs Nx binary backend; poor vs EXLA for large n.\n\nDone when: agreement holds (or the libm limit is documented), verdicts measured, README row added.",
+  "id": "defk-52v.5",
+  "labels": [],
+  "parent": "defk-52v",
+  "priority": 3,
+  "status": "open",
+  "title": "FFT, convolution and resampling over [f64] vs Nx and pure Elixir",
+  "type": "task",
+  "updated_at": "2026-10-09T19:47:33Z"
+}
