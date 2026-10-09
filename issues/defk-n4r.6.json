@@ -9,6 +9,7 @@
     "defk-w38"
   ],
   "blocks": [
+    "defk-52v.13",
     "defk-n4r.7",
     "defk-n4r.9"
   ],
@@ -29,5 +30,5 @@
   "status": "open",
   "title": "1BRC kernel example at the development size (100M rows)",
   "type": "task",
-  "updated_at": "2026-10-09T18:41:56Z"
+  "updated_at": "2026-10-09T19:47:43Z"
 }

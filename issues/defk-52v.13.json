@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-n4r.6"
+  ],
   "blocks": [],
   "created": "2026-10-09T19:47:34Z",
   "description": "Tier 2. Encoding is the 1BRC machinery turned around: a hash table over an alloc'd [i64] mapping 4-byte windows to positions, a match-finding loop with u32 loads, and a bounded output (LZ4_compressBound(n) = n + n/255 + 16; snappy's max is 32 + n + n/6), so alloc the bound and return {out, len}. Both reference encoders are plain C at level 1 (lz4 default, snappy has one level); parity is the expectation and compression ratio must match the reference's \"fast\" level bit-for-bit only if the same match policy is used, otherwise report the ratio beside the speed.\n\nBlocked by defk-n4r.6 (the hash-table pattern proven on 1BRC), defk-w38, defk-n4r.2, defk-n4r.4.\n\nExpected verdict: parity with the NIFs, good vs any Elixir baseline (there is none worth using; write a first-pass one for the record).\n\nDone when: the kernel's output decodes with the reference library and with the decode ticket's kernel, ratios and speeds recorded, README row added.",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "LZ4 and Snappy block encode from scratch (hash table over arrays, after 1BRC)",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:36Z"
+  "updated_at": "2026-10-09T19:47:43Z"
 }
