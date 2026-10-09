@@ -23,11 +23,15 @@
     {
       "text": "Per review of wave 1 (defk-vku): when bitwise operators land, add vku's targeted hint for `(1 \u003c\u003c\u003c n) - 1` with n reaching 64 overflowing i64 (hint: the mask is often redundant when the value already fits n bits, or use masked arithmetic with a constant mask), with a test.",
       "timestamp": "2026-10-07T14:47:02Z"
+    },
+    {
+      "text": "Promoted in importance by the 1BRC epic defk-n4r: it blocks word loads (defk-n4r.2) and the 1BRC kernel (defk-n4r.6); every byte-level text workload needs it. Consider raising to P1.",
+      "timestamp": "2026-10-09T18:40:55Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Support bitwise operators in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:53Z"
+  "updated_at": "2026-10-09T18:40:55Z"
 }
