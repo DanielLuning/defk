@@ -1,6 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [
+    "defk-n4r.2",
     "defk-w38"
   ],
   "blocks": [],
@@ -15,5 +16,5 @@
   "status": "open",
   "title": "Keccak-256 and SHA-3 from scratch vs ex_keccak (tiny-keccak) and :crypto",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:37Z"
+  "updated_at": "2026-10-09T19:47:38Z"
 }

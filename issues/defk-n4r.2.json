@@ -4,6 +4,7 @@
     "defk-w38"
   ],
   "blocks": [
+    "defk-52v.1",
     "defk-9p6.18",
     "defk-9p6.20",
     "defk-n4r.6"
@@ -19,5 +20,5 @@
   "status": "open",
   "title": "Word loads from [u8] and wrapping u64 arithmetic for hashes",
   "type": "task",
-  "updated_at": "2026-10-09T19:21:04Z"
+  "updated_at": "2026-10-09T19:47:38Z"
 }
