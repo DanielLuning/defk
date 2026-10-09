@@ -5,10 +5,12 @@
   "created": "2026-10-09T17:10:44Z",
   "description": "lib/defk/divergences.ex is an all-no-op stub: `list/0` and `registry/0` return %{}, `has_divergences?/0` is false, `match?/3` is false, `explain/1` is \"\", `generate_page!/1` returns :ok without writing anything. Nothing calls it. It was added in the defk-63k scaffolding commit (eeb6230) as a placeholder for the registry that ticket specifies: \"Defk.Divergences registry: matcher, explanation, ticket per entry; the checker skips matching cases; it generates the divergence page; done for the verdict requires it empty.\"\n\nDecide and do one of:\n(a) implement it as specified: entries are %{match: (mod, fun, args -\u003e boolean), explanation: String.t, ticket: \"defk-xxx\"}; Defk.Test.assert_agrees skips a case that matches an entry and reports it as a known divergence; `mix run -e 'Defk.Divergences.generate_page!()'` writes docs/divergences.md; a test asserts the page is up to date; the verdict (defk-sgw.5) requires the registry empty.\n(b) delete the module, since the current policy is \"each divergence is a bug to remove or turn into a limit\" (CONTEXT.md) and limits are documented in docs/language.md, not a registry.\n\nRecommendation: (a) only if the agreement properties (sibling ticket) surface divergences that cannot be fixed before the verdict; otherwise (b). Either way the dead stub should not stay.\n\nDone when: the module is either implemented with a test and wired into assert_agrees, or removed, and README/CONTEXT.md reflect the choice.",
   "id": "defk-813",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "priority": 2,
   "status": "open",
   "title": "Implement the Defk.Divergences registry per defk-63k, or delete the stub",
   "type": "task",
-  "updated_at": "2026-10-09T17:10:44Z"
+  "updated_at": "2026-10-09T17:10:46Z"
 }
