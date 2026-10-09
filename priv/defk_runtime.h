@@ -402,8 +402,11 @@ static inline int64_t defk_abs_i64(defk_ctx *ctx, int64_t a) {
  */
 #ifdef DEFK_NO_FLOAT_CHECKS
 #define DEFK_FINITE(x) 1
+#define DEFK_NONFIN(x) 0
 #else
 #define DEFK_FINITE(x) DEFK_LIKELY(isfinite(x))
+/* !isfinite(x) as one unordered compare, which clang vectorises as a mask */
+#define DEFK_NONFIN(x) (!(__builtin_fabs(x) <= 0x1.fffffffffffffp+1023))
 #endif
 
 __attribute__((noreturn, cold)) static void defk_nonfinite(defk_ctx *ctx, double a, char op,
@@ -595,6 +598,39 @@ static inline double defk_in_f64(defk_ctx *ctx, double x, int64_t i) {
 static inline double defk_get_in_f64(defk_ctx *ctx, defk_arr_f64 a, int64_t i) {
   return defk_in_f64(ctx, defk_get_f64(ctx, a, i), i);
 }
+
+/*
+ * Flat strips (defk-6tt). A branch per float operation stops clang from
+ * vectorising a flat loop, so the compiler runs a flat strip whose only
+ * possible errors are float checks (+ - * /, sqrt, log, exp, pow, [f64] input
+ * reads) with a flag instead: it #defines each checked helper below to its
+ * DEFK_NF_ form for that copy of the body, which ORs "inf or NaN" into the
+ * block-local defk_nf (no branch, no call) and computes the same value. The
+ * flag is tested once at the strip's end; if set, the strip is replayed from
+ * its snapshot with the raising forms, which raise at the first failing
+ * operation in Elixir's order. Every value the flagged form computes is the
+ * checked form's value: a NaN or inf it lets through only flows into more
+ * flagged operations, plain comparisons and array writes the replay redoes.
+ */
+static inline double defk_nf_r(int *nf, double r) {
+  *nf |= DEFK_NONFIN(r);
+  return r;
+}
+#define DEFK_NF_fadd(C, A, B) defk_nf_r(&defk_nf, (double)(A) + (double)(B))
+#define DEFK_NF_fsub(C, A, B) defk_nf_r(&defk_nf, (double)(A) - (double)(B))
+#define DEFK_NF_fmul(C, A, B) defk_nf_r(&defk_nf, (double)(A) * (double)(B))
+#define DEFK_NF_fdiv(C, A, B) defk_nf_r(&defk_nf, (double)(A) / (double)(B))
+#define DEFK_NF_in_f64(C, X, I) defk_nf_r(&defk_nf, (X))
+/* sqrt and log of a finite argument are inf or NaN exactly where the checked
+   forms raise (a < 0.0, a <= 0.0) */
+#define DEFK_NF_sqrt(C, A) defk_nf_r(&defk_nf, sqrt(A))
+#define DEFK_NF_log(C, A) defk_nf_r(&defk_nf, log(A))
+#define DEFK_NF_exp(C, A) defk_nf_r(&defk_nf, exp(A))
+#define DEFK_NF_pow(C, A, B) defk_nf_r(&defk_nf, pow((A), (B)))
+/* a float expression's single check (float_tree in the compiler): raise
+   through its replay, or in a flagged strip, flag and skip the replay */
+#define DEFK_FCHECK(B) if (DEFK_UNLIKELY(B))
+#define DEFK_NF_FCHECK(B) defk_nf |= (B); if (0)
 
 static inline uint8_t defk_to_u8(defk_ctx *ctx, int64_t v) {
   if (DEFK_UNLIKELY(v < 0 || v > 255)) defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in u8", (long long)v);

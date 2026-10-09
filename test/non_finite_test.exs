@@ -132,6 +132,40 @@ defmodule Defk.NonFiniteTest.K do
       true -> y - x
     end
   end
+
+  # flat loops whose only checks are float checks run each strip with a flag
+  # and replay a failed strip with the raising checks (defk-6tt): an
+  # element-wise map writing its output, a reduce, and two accumulators
+  defk scale(a :: [f64], k :: f64) :: [f64] do
+    out = alloc(f64, len(a))
+
+    for i <- 0..(len(a) - 1)//1 do
+      out[i] = a[i] * k
+    end
+
+    out
+  end
+
+  defk dot(a :: [f64], b :: [f64]) :: f64 do
+    n = min(len(a), len(b))
+
+    for i <- 0..(n - 1)//1, reduce: 0.0 do
+      acc -> acc + a[i] * b[i]
+    end
+  end
+
+  defk moments(a :: [f64]) :: {f64, f64} do
+    for x <- a, reduce: {0.0, 0.0} do
+      {s, q} -> {s + x, q + x * x}
+    end
+  end
+
+  # a numerator keeps an inf or NaN too, and 1.0 / 0.0 makes one
+  defk halving(a :: [f64]) :: f64 do
+    for x <- a, reduce: 0.0 do
+      acc -> acc / 2.0 + 1.0 / x
+    end
+  end
 end
 
 defmodule Defk.NonFiniteTest do
@@ -149,6 +183,9 @@ defmodule Defk.NonFiniteTest do
   defp raises(fun, args, module, reason) do
     assert {:raise, %^module{} = e} = agrees(fun, args)
     assert Defk.Test.reason(e) == reason
+    # raised by the failing operation itself, also after a flagged strip's
+    # replay (never its fallback, which names no operation)
+    refute e.message == "float result is inf or NaN"
     e
   end
 
@@ -275,6 +312,82 @@ defmodule Defk.NonFiniteTest do
     assert c =~ "defk_fmul_s(&"
   end
 
+  # DEFK_STRIP: positions in the first strip, at its end and in the next one
+  @strip 2048
+
+  defp positions(n),
+    do: Enum.uniq(for p <- [0, 1, @strip - 1, @strip, @strip + 1, n - 1], p < n, do: p)
+
+  defp with_bad(n, at, bad, fill \\ 0.5),
+    do: pack(for i <- 0..(n - 1), do: if(i == at, do: bad, else: fill))
+
+  defp flagged_strips(force?) do
+    K.__defk_force_yields__(force?)
+
+    try do
+      # short loops (one plain loop, < DEFK_STRIP trips) and strips
+      for n <- [100, 2 * @strip + 3], p <- positions(n) do
+        non_finite(:scale, [with_bad(n, p, 1.0e308), 10.0])
+        e = non_finite_input(:scale, [with_bad(n, p, :nan), 1.0])
+        assert e.message =~ "at index #{p}"
+
+        # the first error in program order wins: element p before element p + 1
+        a =
+          pack(
+            for i <- 0..(n - 1), do: if(i == p, do: :inf, else: if(i > p, do: 1.0e308, else: 1.0))
+          )
+
+        e = non_finite_input(:scale, [a, 10.0])
+        assert e.message =~ "at index #{p}"
+
+        a =
+          pack(
+            for i <- 0..(n - 1), do: if(i == p, do: 1.0e308, else: if(i > p, do: :nan, else: 1.0))
+          )
+
+        non_finite(:scale, [a, 10.0])
+
+        ones = with_bad(n, -1, nil, 1.0)
+        non_finite(:dot, [with_bad(n, p, 1.0e200), with_bad(n, p, 1.0e200)])
+        e = non_finite_input(:dot, [ones, with_bad(n, p, :neg_inf)])
+        assert e.message =~ "at index #{p}"
+        # the sum overflows at p and stays inf: raised at p, not at the end
+        big = pack(for i <- 0..(n - 1), do: if(i < p, do: 0.0, else: 1.0e308))
+        if p + 1 < n, do: non_finite(:dot, [big, with_bad(n, -1, nil, 2.0)])
+
+        non_finite(:moments, [with_bad(n, p, 1.0e200)])
+        e = non_finite_input(:moments, [with_bad(n, p, :nan)])
+        assert e.message =~ "at index #{p}"
+        non_finite(:halving, [with_bad(n, p, 0.0)])
+        e = non_finite_input(:halving, [with_bad(n, p, :inf)])
+        assert e.message =~ "at index #{p}"
+      end
+
+      n = 2 * @strip + 3
+      assert {:ok, out} = agrees(:scale, [with_bad(n, -1, nil, 1.0e300), 10.0])
+      assert byte_size(out) == 8 * n
+      assert {:ok, _} = agrees(:dot, [with_bad(n, -1, nil, 1.0e150), with_bad(n, 7, 1.0e-300)])
+      assert {:ok, _} = agrees(:moments, [with_bad(n, -1, nil, 1.0e150)])
+    after
+      K.__defk_force_yields__(false)
+    end
+  end
+
+  test "a failing flagged strip raises the first error, at any position" do
+    flagged_strips(false)
+  end
+
+  test "a failing flagged strip raises the first error under forced yields" do
+    flagged_strips(true)
+  end
+
+  test "flat float loops run flagged, with the accumulator checked once per strip" do
+    c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
+    assert c =~ "#define defk_fmul DEFK_NF_fmul"
+    assert c =~ ~r/goto defk_rp\d+;/
+    assert c =~ ~r/defk_nf \| DEFK_NONFIN\(v_acc_\d+\)/
+  end
+
   # ---------------------------------------------------- agreement properties --
 
   agreement(K,
@@ -306,6 +419,16 @@ defmodule Defk.NonFiniteTest do
     mixed: [],
     safe_div: [],
     scale_unless: [],
-    cond_ratio: []
+    cond_ratio: [],
+    scale: [args: fixed_list([one_of([G.array(:f64), G.array_non_finite()]), G.f64()])],
+    dot: [
+      args:
+        fixed_list([
+          one_of([G.array(:f64), G.array_non_finite()]),
+          one_of([G.array(:f64), G.array_non_finite()])
+        ])
+    ],
+    moments: [args: fixed_list([one_of([G.array(:f64), G.array_non_finite()])])],
+    halving: [args: fixed_list([one_of([G.array(:f64), G.array_non_finite()])])]
   )
 end
