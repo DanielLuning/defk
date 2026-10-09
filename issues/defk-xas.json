@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-09T20:03:40Z",
   "created": "2026-10-09T17:10:45Z",
   "description": "Two README inconsistencies found in the 2026-10-09 review:\n1. README.md line 16 says \"Needs Elixir ≥ 1.18\" but mix.exs declares `elixir: \"~\u003e 1.20\"`, and the examples' Mix.install path inherits that. Either lower mix.exs to the real minimum (JSON is stdlib from 1.18, which Defk.Bench uses; check nothing else needs 1.20 by compiling under 1.18 if available) or change the README to ≥ 1.20. The Results table already says \"Elixir 1.20\".\n2. The \"Piece | File\" table under \"What it is\" omits lib/defk/bench.ex (measurement and the DEFK_RESULT line), lib/defk/builtins.ex (the builtin list shared by the compiler, Elixir mode and the errors), lib/defk/test.ex + lib/defk/ex_unit/case.ex (agreement helpers), lib/defk/divergences.ex (see its own ticket) and test/support/generators.ex.\n\nDone when: README and mix.exs state the same minimum Elixir version, and the file table lists every module under lib/ with one line each.",
   "id": "defk-xas",
@@ -9,8 +10,8 @@
     "ready-for-agent"
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "README: Elixir version requirement contradicts mix.exs; file table incomplete",
   "type": "bug",
-  "updated_at": "2026-10-09T20:02:17Z"
+  "updated_at": "2026-10-09T20:03:40Z"
 }
