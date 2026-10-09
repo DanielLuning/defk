@@ -39,6 +39,7 @@ So far:
   - rolling sensor statistics
   - nearest of 500k locations
   - 1080p image blur
+  - FFT and convolution over audio-sized f64 signals (63–91× an optimised Elixir baseline)
   - a fuzzy-search web service, where `/health` latency stays at Elixir levels while a blocking NIF pushes it to ~80 ms p99
 - **Where Elixir is the right choice:**
   - data that arrives as lists (defk ≈3× slower)
