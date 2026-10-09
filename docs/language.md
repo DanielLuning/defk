@@ -506,10 +506,7 @@ Each of these is a compile error with a code; the code's entry in
 | lists, `++`, `--` | [`unsupported-list`](#unsupported-list) |
 | `fn`, captures `&f/1` (except the `fn` of `Enum.reduce_while/3`, `Enum.all?/2`, `Enum.any?/2`) | [`unsupported-fn`](#unsupported-fn), [`fn-argument`](#fn-argument) |
 | the pipe `\|>` | [`pipe`](#pipe) (the hint shows the nested call) |
-<<<<<<< HEAD
-=======
 | a module attribute holding a list, tuple, map, atom or `nil`, or not defined above the kernel | [`attribute-value`](#attribute-value), [`undefined-attribute`](#undefined-attribute) |
->>>>>>> defk-ivt/module-attributes
 | building a bitstring `<<...>>` | [`bitstring-build`](#bitstring-build) (planned) |
 | binary patterns `<<a, b, rest::binary>> = arr` | [`bitstring-match`](#bitstring-match) |
 | calls to other modules (`Enum.sum/1`, `Enum.map/2`, `String.*`, `:math.tan/1`, ...) | [`unsupported-call`](#unsupported-call), [`enum-reduce`](#enum-reduce) and [`enum-find`](#enum-find) (planned) |
