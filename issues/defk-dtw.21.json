@@ -10,9 +10,15 @@
     "wayfinder:research"
   ],
   "parent": "defk-dtw",
+  "comments": [
+    {
+      "text": "Recommendation: a SAT solver is a good defk example as a bounded CDCL kernel, filed as a defk-52v rewrite (Tier 1 by constructs, Tier 2 by size), anchored on picosat_elixir (NIF, normal scheduler, measured 3.9 s scheduler block at n=300) and simple_sat (pure Elixir, no unit propagation, exponential: first-pass only), and measured on Ash's real job in batch form: Crux.satisfying_scenarios (1 + V solves per scenario, 7 to 1,548 calls per authorization on Ash-shaped formulas) run in one kernel call. Per call, Ash formulas are 6-109 vars / 13-371 clauses and picosat solves them in 4-82 us, as cheap as packing the CNF (~31 us), so a per-call drop-in is a guidance entry expected marginal at P=4 (~27 vars) and good (provisional) only at P=12 (~105 vars). Pre-registered expected verdicts vs an optimized Elixir solver: S1 per-call P=4 marginal; S2 per-call P=12 good (provisional); S3 batch scenarios P=12 good (Crux+Elixir DPLL 588-953 ms vs Crux+picosat 101-108 ms); S4 random 3-SAT n=200 ratio 4.26 good; S5 responsiveness at n=300 reported beside. Agreement: kernel vs Elixir mode exact (pinned tie-breaks, deterministic schedule); vs anchors same SAT/UNSAT status plus a model that satisfies every clause; batch scenarios as an equivalent cover, since Crux's scenario sets differ by solver (measured). Minimal additions: defk-n4r.4 (helpers write arrays by returning them; suggest a single state arena), then defk-ivt; defk-w38 optional; learned clauses fit a fixed alloc'd arena with PicoSAT-style reduce, so defk-cmr, defk-n4r.3 and defk-sve are not needed. Branch research/sat-solver, file docs/research/sat-solver.md (commit 8cfe5f3).",
+      "timestamp": "2026-10-09T21:15:37Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Is a SAT solver a good defk example: simple_sat's job, or a picosat reimplementation?",
   "type": "task",
-  "updated_at": "2026-10-09T20:47:50Z"
+  "updated_at": "2026-10-09T21:15:37Z"
 }
