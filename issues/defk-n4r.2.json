@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-w38"
+  ],
   "blocks": [],
   "created": "2026-10-09T18:40:51Z",
   "description": "Two builtins the byte-scanning and hashing loops need, both with an exact Elixir meaning so the one rule holds.\n\n1. Word loads: `u64_le(bytes, i)`, `u32_le(bytes, i)` (and `_be` variants) read 8/4 bytes at byte offset i from a [u8] as an unsigned integer. Elixir meaning: `\u003c\u003c_::binary-size(i), x::little-unsigned-64, _::binary\u003e\u003e = bytes` (Elixir mode uses binary_part + match). Bounds: raises Enum.OutOfBoundsError when i + width \u003e len, same as a[i]; the range-fact machinery should elide the check when i + 8 \u003c= len is provable (extend in_bounds? with a width). Native: an unaligned load via memcpy into a uint64_t (clang emits one mov). Result type: u64 values do not fit i64, so either (a) return i64 with the top bit reinterpreted and document it as a limit, or (b) add u64 as a scalar type. Decide with the next point.\n2. Wrapping (masked) arithmetic: CONTEXT.md already defines \"masked arithmetic\" as `band(expr, 2^k - 1)` computed with wrapping machine arithmetic giving Elixir's exact result. Implement that lowering for k \u003c= 64 once defk-w38 lands: inside a band with a 2^k-1 mask, + - * are emitted unchecked (C unsigned wraparound) and the mask applied; Elixir mode computes the bignum and masks it, so they agree. This is what FNV-1a, xxhash-style and multiply-shift hashes need. Rejecting `band(x, m)` with a non-power-of-two-minus-one m is not needed; it just gets the checked form.\n\nBlocked by defk-w38 (bitwise operators).\n\nDone when: a `hash_fnv1a(bytes :: [u8]) :: i64` catalog kernel agrees with its Elixir mode under the agreement properties, loads near the end of the array raise identically in both modes, and a flat loop using u64_le still vectorises or at least costs no more than the byte loop (measure in the fast-path report or by timing).",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Word loads from [u8] and wrapping u64 arithmetic for hashes",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:52Z"
+  "updated_at": "2026-10-09T18:40:53Z"
 }
