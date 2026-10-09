@@ -1,18 +1,23 @@
 # Hot code upgrade with suspended kernel frames (defk-nbl).
 #
-# A kernel is started, suspended between two of its yields
-# (:erlang.suspend_process/1 only takes effect once the NIF has rescheduled
-# itself), and its module is recompiled with a different body and frame
-# layout. The suspended kernel must finish in the library it started in, each
-# library must destroy only its own frames, and new calls must run the new
-# code. `old_stats` is a fun created by the old module instance, so it reads
-# the old library's counters after the upgrade.
+# A kernel is started and suspended in the middle of a run, its module is
+# recompiled with a different body and frame layout, and the suspended kernel
+# must finish in the library it started in, each library must destroy only its
+# own frames, and new calls must run the new code. `old_stats` is a fun
+# created by the old module instance, so it reads the old library's counters
+# after the upgrade.
+#
+# Suspending is racy (defk-vvy): :erlang.suspend_process/1 only takes effect
+# once the kernel next hands control back to the VM, so under load it can land
+# only after the whole run has already completed. start_suspended therefore
+# retries until it actually catches the kernel between two yields.
 
 defmodule Defk.UpgradeTest do
   use ExUnit.Case, async: false
 
-  # long enough (~0.5 s) that the kernel is certainly still running when it is
-  # suspended, with an easy closed form for the answer
+  # long enough (~0.5 s) that a kernel almost always completes the run only
+  # after start_suspended has suspended it, with an easy closed form for the
+  # answer
   @n 1_000_000_000
   @timeout 30_000
 
@@ -61,16 +66,66 @@ defmodule Defk.UpgradeTest do
 
   defp spin_a(n), do: div(n, 7) * 21 + Enum.sum(0..(rem(n, 7) - 1)//1)
 
-  # start mod.spin(@n) in a process and suspend it between two yields
-  defp start_suspended(mod) do
+  # Start mod.spin(@n) in a process and suspend it in the middle of a run.
+  #
+  # :erlang.suspend_process/2 only takes effect once the kernel next hands
+  # control back to the VM, and where that happens is a race: usually a few
+  # yields into the ~0.5 s run (one frame live), but under load sometimes only
+  # after the whole run has already completed (frames_live == 0, the process
+  # caught in its tail). The second landing exercises nothing an upgrade cares
+  # about, so start_suspended retries until it catches the kernel mid-run,
+  # resuming the slipped process afterwards so it finishes and exits. `base`
+  # keeps the "has it yielded yet" wait honest across retries: the yields
+  # counter is module-global, and a previous attempt that ran to completion
+  # already set it > 0.
+  defp start_suspended(mod, retries \\ 8)
+
+  defp start_suspended(_mod, 0), do: flunk("could not suspend the kernel mid-run")
+
+  defp start_suspended(mod, retries) do
+    stats = mod.stats_fun()
+    base = stats.().yields
     parent = self()
     pid = spawn(fn -> send(parent, {:spin, self(), mod.spin(@n)}) end)
-    stats = mod.stats_fun()
-    wait_until(fn -> stats.().yields > 0 end)
-    true = :erlang.suspend_process(pid)
-    assert Process.alive?(pid)
-    assert %{frames_live: 1, promotions: 1} = stats.()
-    {pid, stats}
+    wait_until(fn -> stats.().yields > base end)
+
+    suspended =
+      try do
+        :erlang.suspend_process(pid)
+      catch
+        # the process ran to completion and exited before the request latched
+        :error, :badarg -> false
+      end
+
+    received =
+      receive do
+        {:spin, ^pid, _} -> true
+      after
+        0 -> false
+      end
+
+    %{frames_live: frames_live} = stats.()
+
+    if suspended and frames_live == 1 and not received and Process.alive?(pid) do
+      assert %{frames_live: 1} = stats.()
+      {pid, stats}
+    else
+      # The kernel finished before (or while) the suspension took effect, and
+      # may already have exited: the latch caught nothing worth testing. Resume
+      # it if it is still parked so it sends its result and exits, drain that
+      # result, and try a fresh spawn.
+      if Process.alive?(pid), do: :erlang.resume_process(pid)
+
+      unless received do
+        receive do
+          {:spin, ^pid, _} -> :ok
+        after
+          @timeout -> :ok
+        end
+      end
+
+      start_suspended(mod, retries - 1)
+    end
   end
 
   defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + @timeout) do
@@ -129,7 +184,8 @@ defmodule Defk.UpgradeTest do
     assert_receive {:spin, ^pid, result}, @timeout
     assert result == spin_a(@n)
     wait_until(fn -> stats.().frames_live == 0 end)
-    assert %{frames_live: 0, promotions: 1} = mod.__defk_stats__()
+    # (promotions may be > 1 if start_suspended retried)
+    assert %{frames_live: 0} = mod.__defk_stats__()
   end
 
   test "killing a kernel suspended across an upgrade frees its frame in the old library" do
