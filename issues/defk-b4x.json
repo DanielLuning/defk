@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-09T21:48:57Z",
   "created": "2026-10-09T21:27:45Z",
   "description": "Three examples written today (fft.exs, image_ops.exs, geohash_crc.exs) needed to reject bad input (a non-power-of-two length, odd dimensions, a bad precision or alphabet byte) and had no way to say so: each works around it with `_ = alloc(f64, -1)` or `div(1, 0)` to force an exception whose message is about something else. A kernel author would write `raise ArgumentError, \"n must be a power of two\"` first, and it has an exact Elixir meaning.\n\nScope: `raise Module, \"literal message\"` and `raise Module` (default message), `Module` in {ArgumentError, ArithmeticError}; `raise \"msg\"` as RuntimeError; the message is a string literal (interpolation is rejected with a rewrite: \"put the value in Elixir, before or after the call\"). Used as a statement anywhere a statement goes (inside if/cond/case arms too), and as the tail of a reduce_while fn arm? (no: keep statements only; a `raise` as an expression value is rejected with the hint \"raise is a statement\"). Natively: defk_fail with a new kind per module (the existing DEFK_E_ARG/ARITH kinds for ArgumentError/ArithmeticError, a new one for RuntimeError) and the literal message; Elixir mode: the raise itself. The normalised reason (Defk.Test.reason/1) for a user raise is {:user, message} so agreement compares the message. In a select-compiled if/cond, an arm that raises is not speculated (the arm has a statement, so select?/1 already refuses it).\n\nTests: both modes via assert_agrees for each module and the default message; raise inside a yielding loop under forced yields; raise in a case arm; the interpolation rewrite; raise as a value rejected. Docs: docs/language.md section 7 entry and the error section regenerated; README \"Language\" bullet; update the three examples to use it (fft.exs, image_ops.exs, geohash_crc.exs) and drop their workaround comments.\n\nDone when: the three examples raise with a real message, agreement holds, and the suite is green.",
   "id": "defk-b4x",
@@ -9,8 +10,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "raise in a kernel: raise ArgumentError, \"literal message\" and raise ArithmeticError",
   "type": "task",
-  "updated_at": "2026-10-09T21:36:59Z"
+  "updated_at": "2026-10-09T21:48:57Z"
 }
