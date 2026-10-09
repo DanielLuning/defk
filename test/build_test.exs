@@ -1,5 +1,5 @@
 defmodule Defk.BuildTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   @env %{erts: "15.2.1", cc: "cc", cc_version: "Apple clang version 17.0.0"}
   @src "int f(void) { return 1; }"
@@ -31,5 +31,60 @@ defmodule Defk.BuildTest do
 
   test "the convenience wrapper is stable within a run" do
     assert Defk.Build.cache_key(@src) == Defk.Build.cache_key(@src)
+  end
+
+  describe "environment" do
+    setup do
+      saved = Map.new(["CC", "ERTS_INCLUDE_DIR"], &{&1, System.get_env(&1)})
+
+      on_exit(fn ->
+        for {k, v} <- saved, do: if(v, do: System.put_env(k, v), else: System.delete_env(k))
+      end)
+    end
+
+    test "a missing compiler raises the actionable error and leaves no .so" do
+      cc = Path.join(System.tmp_dir!(), "defk-no-such-cc-#{System.unique_integer([:positive])}")
+      System.put_env("CC", cc)
+      mod = "Defk.BuildTest.NoCc#{System.unique_integer([:positive])}"
+
+      error =
+        assert_raise CompileError, fn ->
+          Code.compile_string("""
+          defmodule #{mod} do
+            use Defk
+            defk f(x :: i64) :: i64, do: x + 1
+          end
+          """)
+        end
+
+      msg = Exception.message(error)
+      assert msg =~ "error: cannot compile #{mod}: C compiler `#{cc}` not found"
+      assert msg =~ "why: a kernel is compiled to native code at build time"
+      assert msg =~ "xcode-select --install"
+      assert msg =~ "apt install build-essential"
+      assert msg =~ "apk add build-base"
+      assert msg =~ "(defk no-c-compiler: "
+
+      dir = Path.join(Mix.Project.build_path(), "defk")
+      assert Path.wildcard(Path.join(dir, "#{mod}-*.so")) == []
+    end
+
+    test "ERTS_INCLUDE_DIR overrides the include dir" do
+      System.delete_env("ERTS_INCLUDE_DIR")
+      default = Defk.Build.erts_include()
+      assert default =~ "erts-"
+
+      dir = Path.join(System.tmp_dir!(), "defk-erts-include")
+      System.put_env("ERTS_INCLUDE_DIR", dir)
+      assert Defk.Build.erts_include() == dir
+
+      with_override = Defk.Build.cache_key(@src)
+      System.delete_env("ERTS_INCLUDE_DIR")
+      refute with_override == Defk.Build.cache_key(@src)
+      System.put_env("ERTS_INCLUDE_DIR", dir)
+
+      System.put_env("ERTS_INCLUDE_DIR", "")
+      assert Defk.Build.erts_include() == default
+    end
   end
 end

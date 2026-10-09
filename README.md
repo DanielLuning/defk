@@ -13,7 +13,7 @@ mix test                      # resumed kernels match yield: false, incl. a forc
                               # reloading a module while a kernel is suspended
 ```
 
-Needs Elixir ≥ 1.20 (OTP 29 tested) and a C compiler (`cc`, or set `CC`).
+Needs Elixir ≥ 1.20 (OTP 29 tested) and a C compiler (`cc`, or set `CC`; set `ERTS_INCLUDE_DIR` to build against another ERTS's headers, as with elixir_make).
 
 ## Purpose: help Elixir, not compete with it
 
