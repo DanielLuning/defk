@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-09T21:56:18Z",
   "created": "2026-10-09T21:19:51Z",
   "description": "Found while writing examples/monte_carlo_rtp.exs (defk-9p6.17). In a script run with `elixir script.exs` that uses Mix.install, `Mix.Project.get()` is nil, so Defk.ElixirMode.setup!/2 (lib/defk/elixir_mode.ex) treats the environment as neither :dev nor :test, refuses `config :defk, mode: :elixir`, and the message says the mode is \"not nil\" (or similar), which does not tell the author what to do. The catalog scripts are exactly where an author wants to run the Elixir-mode agreement check (`Mod.__defk_elixir__/2`), and today they must fall back to `MIX_ENV=test mix run`.\n\nFix: decide the rule for scripts: with no Mix project, treat the environment as :dev (Elixir mode allowed when configured, never a default), or expose an explicit opt-in such as `use Defk, elixir_mode: true` / `Application.put_env(:defk, :elixir_mode, true)` honoured in __before_compile__. Make the error message name the real condition (\"no Mix project: Elixir mode is compiled in :test or when ...\") with the rewrite. Then let examples run their agreement check via `__defk_elixir__/2` in the script itself and update examples/README.md \"Adding an example\" to say so.\n\nDone when: a Mix.install script can compile Elixir mode on request, the error for an unsupported environment names the condition and the fix, a test covers the no-project path (Mix.Project.get() nil can be simulated in a test by calling setup! with a stubbed env or by a child `elixir` process), and one example uses it.",
   "id": "defk-fzp",
@@ -9,8 +10,8 @@
     "ready-for-agent"
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Elixir mode cannot be compiled in a Mix.install script: setup! sees no Mix project and gives a misleading error",
   "type": "bug",
-  "updated_at": "2026-10-09T21:51:26Z"
+  "updated_at": "2026-10-09T21:56:18Z"
 }
