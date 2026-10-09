@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-w38"
+  ],
   "blocks": [],
   "created": "2026-10-09T19:47:32Z",
   "description": "Tier 1, and the first \"untrusted input\" entry: a decoder that cannot overflow because every write is bounds-checked (or proven), where the reference C decoders have had out-of-bounds CVEs. Anchors: snappyer (NIF over the snappy C++ library), lz4 (Elixir NIF over liblz4). Both references are plain C/C++ without SIMD, so parity is the expectation.\n\nKernels:\n- `snappy_decode(src :: [u8]) :: [u8]`: the varint preamble gives the uncompressed length, so alloc it; then the tag loop (literal, copy-1/2/4) with overlapping-copy semantics for matches (byte-by-byte copy when offset \u003c length, as the spec requires). A malformed stream raises ArgumentError at the offending offset.\n- `lz4_block_decode(src :: [u8], max_out :: i64) :: {[u8], i64}`: the LZ4 block format carries no decompressed size, so the caller passes the bound (as liblz4's LZ4_decompress_safe does); returns the buffer and the length, Elixir takes binary_part. The LZ4 frame format (content size field, optional) can be a thin Elixir wrapper later.\n\nElixir baseline: there is no pure-Elixir LZ4/Snappy on Hex worth using; write the straightforward binary-matching decoder and mark it :first_pass, then optimise (binary_part copies for matches, iodata output). Report the NIFs beside.\n\nRealistic size: 4 KB to 4 MB blocks (Kafka batches, RocksDB/LevelDB blocks, caches). Also run the fuzz-style agreement: random bytes must raise in both modes or produce identical output, never crash the VM (this is the safety claim; pair with defk-7dm fault containment).\n\nExpected verdict: good vs the Elixir baseline; parity with the NIFs.\n\nNeeds: defk-w38 (minor: tag bit fields), defk-n4r.2 (u16/u32 little-endian loads), defk-n4r.4 (copy helpers writing the output), bounds-check elimination for the proven-in-range copy loop (fast-path report, defk-6cn, to see what stayed).\n\nDone when: both decoders pass the reference libraries' outputs on a corpus (compress with the NIF, decode with the kernel), the fuzz agreement runs under forced yields, verdicts measured, README row added.",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "LZ4 and Snappy block decode from scratch vs lz4 and snappyer NIFs",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:35Z"
+  "updated_at": "2026-10-09T19:47:38Z"
 }
