@@ -1,6 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [
+    "defk-n4r.2",
     "defk-w38"
   ],
   "blocks": [],
@@ -15,5 +16,5 @@
   "status": "open",
   "title": "argon2id from scratch vs argon2_elixir, with the yield and memory story",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:40Z"
+  "updated_at": "2026-10-09T19:47:41Z"
 }

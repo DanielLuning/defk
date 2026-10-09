@@ -8,6 +8,7 @@
     "defk-52v.2",
     "defk-52v.3",
     "defk-52v.7",
+    "defk-52v.9",
     "defk-9p6.18",
     "defk-9p6.20",
     "defk-n4r.6"
@@ -23,5 +24,5 @@
   "status": "open",
   "title": "Word loads from [u8] and wrapping u64 arithmetic for hashes",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:40Z"
+  "updated_at": "2026-10-09T19:47:41Z"
 }
