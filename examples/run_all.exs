@@ -12,7 +12,9 @@ dir = __DIR__
 files =
   dir
   |> File.ls!()
-  |> Enum.filter(&(String.ends_with?(&1, ".exs") and &1 != "run_all.exs" and not String.starts_with?(&1, "_")))
+  |> Enum.filter(
+    &(String.ends_with?(&1, ".exs") and &1 != "run_all.exs" and not String.starts_with?(&1, "_"))
+  )
   |> Enum.sort()
 
 results =
@@ -28,14 +30,31 @@ results =
 
       _ ->
         IO.puts("FAILED (exit #{status})\n" <> out)
-        %{"example" => Path.rootname(file), "expected" => "?", "verdict" => "crashed", "correct" => false}
+
+        %{
+          "example" => Path.rootname(file),
+          "expected" => "?",
+          "verdict" => "crashed",
+          "correct" => false
+        }
     end
   end
 
 pad = fn v, n -> String.pad_trailing(to_string(v), n) end
-num = fn nil -> "-"; x -> to_string(x) end
 
-IO.puts("\n" <> pad.("example", 26) <> pad.("expected", 14) <> pad.("measured", 14) <> pad.("speedup", 10) <> pad.("elixir ms", 11) <> pad.("defk ms", 10) <> pad.("baseline", 12) <> "ok")
+num = fn
+  nil -> "-"
+  x -> to_string(x)
+end
+
+IO.puts(
+  "\n" <>
+    pad.("example", 26) <>
+    pad.("expected", 14) <>
+    pad.("measured", 14) <>
+    pad.("speedup", 10) <>
+    pad.("elixir ms", 11) <> pad.("defk ms", 10) <> pad.("baseline", 12) <> "ok"
+)
 
 bad =
   for r <- results, reduce: 0 do
@@ -66,4 +85,5 @@ if provisional != [] do
       "(#{Enum.map_join(provisional, ", ", & &1["example"])})"
   )
 end
+
 if bad > 0, do: System.halt(1)

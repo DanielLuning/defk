@@ -57,19 +57,31 @@ defmodule Rolling.Elixir do
   # window), tail recursion, no window queue.
   def mean_std(bin, w) do
     <<head::binary-size(^w * 8), rest::binary>> = bin
-    {s, q} = for <<v::float-64-native <- head>>, reduce: {0.0, 0.0}, do: ({s, q} -> {s + v, q + v * v})
+
+    {s, q} =
+      for <<v::float-64-native <- head>>, reduce: {0.0, 0.0}, do: ({s, q} -> {s + v, q + v * v})
+
     mean = s / w
     walk(rest, bin, w, s, q, [mean], [std(q, w, mean)])
   end
 
-  defp walk(<<v::float-64-native, rest::binary>>, <<old::float-64-native, trail::binary>>, w, s, q, means, stds) do
+  defp walk(
+         <<v::float-64-native, rest::binary>>,
+         <<old::float-64-native, trail::binary>>,
+         w,
+         s,
+         q,
+         means,
+         stds
+       ) do
     s = s + v - old
     q = q + v * v - old * old
     mean = s / w
     walk(rest, trail, w, s, q, [mean | means], [std(q, w, mean) | stds])
   end
 
-  defp walk(<<>>, _trail, _w, _s, _q, means, stds), do: {:lists.reverse(means), :lists.reverse(stds)}
+  defp walk(<<>>, _trail, _w, _s, _q, means, stds),
+    do: {:lists.reverse(means), :lists.reverse(stds)}
 
   defp std(q, w, mean), do: :math.sqrt(max(q / w - mean * mean, 0.0))
 end
@@ -77,7 +89,11 @@ end
 # 1M readings: a slow wave plus deterministic noise
 n = 1_000_000
 w = 60
-input = for i <- 1..n, into: <<>>, do: <<20.0 + 5 * :math.sin(i / 500) + rem(i * 7919, 13) / 10::float-64-native>>
+
+input =
+  for i <- 1..n,
+      into: <<>>,
+      do: <<20.0 + 5 * :math.sin(i / 500) + rem(i * 7919, 13) / 10::float-64-native>>
 
 check = fn ->
   {means, stds} = Rolling.Elixir.mean_std(input, w)
