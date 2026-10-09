@@ -1,7 +1,8 @@
 {
   "assignee": "",
   "blocked_by": [
-    "defk-52v.7"
+    "defk-52v.7",
+    "defk-6ag"
   ],
   "blocks": [],
   "created": "2026-10-09T19:47:34Z",
@@ -15,5 +16,5 @@
   "status": "open",
   "title": "Baseline JPEG decode from scratch (after inflate; untrusted-input decoder)",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:42Z"
+  "updated_at": "2026-10-09T19:47:43Z"
 }
