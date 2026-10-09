@@ -2623,5 +2623,5 @@ unspecified. The exception can then differ between a kernel and Elixir mode.
 
 ## 14. Changes in flight
 
-Written against `main` at the merge of defk-ne6. Two tickets change the
-language on their own branches; each adds its entries here when it lands:
+None at the moment: every construct above is on `main`. A feature ticket that
+changes the language adds its entries here while its branch is open.
