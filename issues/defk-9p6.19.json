@@ -14,9 +14,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Merged. Findings filed: defk-f4n (compile error crash for macro-defined kernels), defk-upc (range facts for constant multiples), defk-ktw (large alloc zero-fill without safepoint).",
+      "timestamp": "2026-10-09T21:33:27Z"
+    }
+  ],
   "priority": 2,
   "status": "closed",
   "title": "Target workload: base64, hex and base58 codecs vs fast64, b64fast and ex_base58",
   "type": "task",
-  "updated_at": "2026-10-09T21:33:25Z"
+  "updated_at": "2026-10-09T21:33:27Z"
 }
