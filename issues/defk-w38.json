@@ -33,6 +33,10 @@
     {
       "text": "Promoted in importance by the 1BRC epic defk-n4r: it blocks word loads (defk-n4r.2) and the 1BRC kernel (defk-n4r.6); every byte-level text workload needs it. Consider raising to P1.",
       "timestamp": "2026-10-09T18:40:55Z"
+    },
+    {
+      "text": "Now also blocks the Monte Carlo (defk-9p6.17), hash-chain (defk-9p6.18), codec (defk-9p6.19), hash (defk-9p6.20), CSV loader (defk-9p6.21) and UTF-8 (defk-9p6.22) catalog entries: eleven tickets in total. Recommend P1.",
+      "timestamp": "2026-10-09T19:21:05Z"
     }
   ],
   "priority": 3,
