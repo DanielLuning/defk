@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [
+    "defk-52v.1",
     "defk-9p6.14",
     "defk-9p6.16",
     "defk-9p6.19",
@@ -19,5 +20,5 @@
   "status": "open",
   "title": "Module attributes as constants in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T19:21:04Z"
+  "updated_at": "2026-10-09T19:47:39Z"
 }
