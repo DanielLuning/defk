@@ -2,7 +2,8 @@
   "assignee": "",
   "blocked_by": [
     "defk-x15.1",
-    "defk-x15.2"
+    "defk-x15.2",
+    "defk-x15.3"
   ],
   "blocks": [],
   "created": "2026-10-09T09:30:22Z",
@@ -14,5 +15,5 @@
   "status": "open",
   "title": "Verify mix ci green and tests unchanged",
   "type": "task",
-  "updated_at": "2026-10-09T09:30:31Z"
+  "updated_at": "2026-10-09T09:30:32Z"
 }

@@ -2,7 +2,8 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [
-    "defk-x15.4"
+    "defk-x15.4",
+    "defk-x15.7"
   ],
   "created": "2026-10-09T09:30:21Z",
   "description": "Genuine decompositions only (per-clause complexity, Credo core checks):\n- compiler.ex:931 lower_expr comparison clause (21) -\u003e compare_c/4\n- compiler.ex:2050 case_arms (20) -\u003e case_clause_head/2 + case_test_cond/…\n- elixir_mode.ex:571 finish (18, nest :625) -\u003e render_arms/3\n- defk.ex:39 __before_compile__ (18, nest :62) -\u003e render_stubs + render_elixir_definitions (count inflated by generated defs in quote)\n- compiler.ex:2319 emit_entry (12) -\u003e split five glued if-yields? emitters\n- compiler.ex:1383 builtin_arguments! (10, nest :1403) -\u003e argument_fix/3\n- compiler.ex:243 parse_kernel (13, nest :282) -\u003e parse_params/1\nKeep single decision tables (range_limit, byte_fields, segment, case_pattern, branch_type!, guard_safe!, parse_for).",
@@ -13,5 +14,5 @@
   "status": "open",
   "title": "Credo: extract helpers to lower genuine complexity",
   "type": "task",
-  "updated_at": "2026-10-09T09:30:30Z"
+  "updated_at": "2026-10-09T09:30:32Z"
 }
