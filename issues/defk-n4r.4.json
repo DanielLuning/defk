@@ -13,9 +13,15 @@
     "needs-triage"
   ],
   "parent": "defk-n4r",
+  "comments": [
+    {
+      "text": "Decision update after reading defk-dtw.18: drop option (b), the mut marker. The project already decided that a write to a parameter array that is never returned is a compile error, so the construct is: an inlined helper may write to a parameter array only if it returns that array (alone or in a tuple), and the caller rebinds it: `{slots, arena, stats, n} = insert(slots, arena, stats, ...)`. Compiler: in inline/4, a parameter bound to an owned argument stays owned when the callee returns it (return-input-array no longer applies to an owned argument); a write to a parameter that is not returned raises the dtw.18 error with the rewrite. Elixir mode needs no new threading: the callee returns the new binary as any value. This keeps the one rule: Elixir value semantics, no in-place mutation visible through another name. Relabel ready-for-agent once defk-auo confirms copy-on-aliased-write does not change the owned-argument rule.",
+      "timestamp": "2026-10-09T18:41:56Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Helper kernels can write to arrays their caller allocated",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:54Z"
+  "updated_at": "2026-10-09T18:41:56Z"
 }
