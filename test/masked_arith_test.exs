@@ -28,16 +28,16 @@ defmodule Defk.MaskedArithTest.K do
     end
   end
 
-  defk mul32(x :: i64, y :: i64) :: i64, do: band(x * y, 0xFFFFFFFF)
-  defk mul_plain(x :: i64, y :: i64) :: i64, do: x * y
-  defk add8(x :: i64, y :: i64) :: i64, do: band(x + y, 255)
-  defk add8_left(x :: i64, y :: i64) :: i64, do: band(255, x + y)
-  defk add8_op(x :: i64, y :: i64) :: i64, do: (x + y) &&& 255
-  defk add8_remote(x :: i64, y :: i64) :: i64, do: Bitwise.band(x - y, 0xFF)
-  defk wrap64(x :: i64, y :: i64) :: i64, do: band(x * y + x - y * y, -1)
-  defk wrap63(x :: i64, y :: i64) :: i64, do: band(x * y - x, 0x7FFFFFFFFFFFFFFF)
-  defk neg_shift(x :: i64, y :: i64) :: i64, do: band(-x + (y <<< 13) - bsl(x, 64) + +y, 0xFFFF)
-  defk k1(x :: i64, y :: i64) :: i64, do: band(x * y, 1)
+  defk(mul32(x :: i64, y :: i64) :: i64, do: band(x * y, 0xFFFFFFFF))
+  defk(mul_plain(x :: i64, y :: i64) :: i64, do: x * y)
+  defk(add8(x :: i64, y :: i64) :: i64, do: band(x + y, 255))
+  defk(add8_left(x :: i64, y :: i64) :: i64, do: band(255, x + y))
+  defk(add8_op(x :: i64, y :: i64) :: i64, do: x + y &&& 255)
+  defk(add8_remote(x :: i64, y :: i64) :: i64, do: Bitwise.band(x - y, 0xFF))
+  defk(wrap64(x :: i64, y :: i64) :: i64, do: band(x * y + x - y * y, -1))
+  defk(wrap63(x :: i64, y :: i64) :: i64, do: band(x * y - x, 0x7FFFFFFFFFFFFFFF))
+  defk(neg_shift(x :: i64, y :: i64) :: i64, do: band(-x + (y <<< 13) - bsl(x, 64) + +y, 0xFFFF))
+  defk(k1(x :: i64, y :: i64) :: i64, do: band(x * y, 1))
 
   defk nested(x :: i64, y :: i64) :: i64 do
     band(band(x * y, 0xFFFF) * band(x + y, 0xFF) * x + 1, 0xFFFFFF)
@@ -45,21 +45,27 @@ defmodule Defk.MaskedArithTest.K do
 
   # a leaf is checked: div by zero raises, and the product inside rem/2 is
   # outside the tree (it overflows and raises)
-  defk leaf_div(x :: i64, y :: i64) :: i64, do: band(div(x, y) * 3, 255)
-  defk leaf_rem(x :: i64, y :: i64) :: i64, do: band(x * y + rem(x * y, 7), 255)
+  defk(leaf_div(x :: i64, y :: i64) :: i64, do: band(div(x, y) * 3, 255))
+  defk(leaf_rem(x :: i64, y :: i64) :: i64, do: band(x * y + rem(x * y, 7), 255))
   # bsr is a leaf, exact
-  defk leaf_bsr(x :: i64, y :: i64) :: i64, do: band(bsr(x, 3) * y, 0xFFFF)
+  defk(leaf_bsr(x :: i64, y :: i64) :: i64, do: band(bsr(x, 3) * y, 0xFFFF))
   # a bsl by a non-literal count is a leaf, checked
-  defk leaf_bsl(x :: i64, n :: i64) :: i64, do: band(bsl(x, n) + 1, 255)
+  defk(leaf_bsl(x :: i64, n :: i64) :: i64, do: band(bsl(x, n) + 1, 255))
 
   # not masks: checked
-  defk not_mask(x :: i64, y :: i64) :: i64, do: band(x * y, 254)
-  defk var_mask(x :: i64, y :: i64, m :: i64) :: i64, do: band(x * y, m)
+  defk(not_mask(x :: i64, y :: i64) :: i64, do: band(x * y, 254))
+  defk(var_mask(x :: i64, y :: i64, m :: i64) :: i64, do: band(x * y, m))
 
   # in the arms of a select
   defk pick(c :: bool, x :: i64, y :: i64) :: i64 do
     if c, do: band(x * y, 255), else: x + y
   end
+
+  # a module attribute is its literal (defk-ivt)
+  @mask32 0xFFFFFFFF
+  @all_ones -1
+  defk(attr_mask(x :: i64, y :: i64) :: i64, do: band(x * y, @mask32))
+  defk(attr_wrap(x :: i64, y :: i64) :: i64, do: band(x * y, @all_ones))
 
   # the masked result's range drops the bounds check
   defk lookup(x :: i64, y :: i64) :: i64 do
@@ -149,11 +155,19 @@ defmodule Defk.MaskedArithTest do
       agrees(:mul_plain, [x, y])
     end
 
+    for x <- @values, y <- @values do
+      assert agrees(:attr_mask, [x, y]) == {:ok, band(x * y, 0xFFFFFFFF)}
+      assert agrees(:attr_wrap, [x, y]) == {:ok, s64(x * y)}
+    end
+
     assert K.add8(@max, 1) == 0
     assert K.mul32(@max, @max) == 1
     # 2^63 + -2^63 - 1, though 2^63 alone is not an i64
     assert K.wrap64(@min, -1) == -1
-    assert_raise ArithmeticError, "i64 overflow in #{@max} * #{@max}", fn -> K.mul_plain(@max, @max) end
+
+    assert_raise ArithmeticError, "i64 overflow in #{@max} * #{@max}", fn ->
+      K.mul_plain(@max, @max)
+    end
   end
 
   test "leaves are checked: div, rem, a bsl by a variable count" do
@@ -259,6 +273,8 @@ defmodule Defk.MaskedArithTest do
     not_mask: [],
     var_mask: [],
     pick: [],
-    lookup: []
+    lookup: [],
+    attr_mask: [],
+    attr_wrap: []
   )
 end

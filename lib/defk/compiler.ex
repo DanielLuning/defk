@@ -1707,7 +1707,10 @@ defmodule Defk.Compiler do
   defp builtin_arguments!(name, vals, {_, _, args} = node) do
     sig = Enum.map_join(vals, ", ", &fmt(&1.t))
     ts = Enum.map(vals, & &1.t)
-    arity = if name in [:div, :rem, :min, :max, :pow | @loads ++ @bitwise -- [:bnot]], do: 2, else: 1
+
+    arity =
+      if name in [:div, :rem, :min, :max, :pow | @loads ++ (@bitwise -- [:bnot])], do: 2, else: 1
+
     takes = "#{name}/#{arity} takes #{@builtin_takes[name]}"
 
     err!(

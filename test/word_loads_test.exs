@@ -8,15 +8,19 @@
 defmodule Defk.WordLoadsTest.K do
   use Defk
 
-  defk u64_le_f(b :: [u8], i :: i64) :: i64, do: u64_le(b, i)
-  defk u64_be_f(b :: [u8], i :: i64) :: i64, do: u64_be(b, i)
-  defk u32_le_f(b :: [u8], i :: i64) :: i64, do: u32_le(b, i)
-  defk u32_be_f(b :: [u8], i :: i64) :: i64, do: u32_be(b, i)
-  defk u16_le_f(b :: [u8], i :: i64) :: i64, do: u16_le(b, i)
-  defk u16_be_f(b :: [u8], i :: i64) :: i64, do: u16_be(b, i)
+  defk(u64_le_f(b :: [u8], i :: i64) :: i64, do: u64_le(b, i))
+  defk(u64_be_f(b :: [u8], i :: i64) :: i64, do: u64_be(b, i))
+  defk(u32_le_f(b :: [u8], i :: i64) :: i64, do: u32_le(b, i))
+  defk(u32_be_f(b :: [u8], i :: i64) :: i64, do: u32_be(b, i))
+  defk(u16_le_f(b :: [u8], i :: i64) :: i64, do: u16_le(b, i))
+  defk(u16_be_f(b :: [u8], i :: i64) :: i64, do: u16_be(b, i))
+
+  # a binary module attribute is a read-only [u8] (defk-ivt)
+  @magic <<0x7F, "ELF", 2, 1, 1, 0>>
+  defk(magic(i :: i64) :: i64, do: u32_be(@magic, i))
 
   # a load as an operand of checked arithmetic: the u64 bit pattern overflows
-  defk u64_plus(b :: [u8], i :: i64, x :: i64) :: i64, do: u64_le(b, i) + x
+  defk(u64_plus(b :: [u8], i :: i64, x :: i64) :: i64, do: u64_le(b, i) + x)
 end
 
 # offsets proven in range: no bounds check
@@ -69,6 +73,8 @@ defmodule Defk.WordLoadsTest do
   use Defk.Properties
 
   alias Defk.WordLoadsTest.{K, Proven, Short}
+
+  @max_i64 0x7FFFFFFFFFFFFFFF
 
   @loads [
     {:u64_le_f, 8, :little},
@@ -139,6 +145,8 @@ defmodule Defk.WordLoadsTest do
     assert K.u32_be_f(<<0x12, 0x34, 0x56, 0x78>>, 0) == 0x12345678
     assert K.u16_le_f(ones, 6) == 0xFFFF
     assert K.u16_be_f(<<0x12, 0x34>>, 0) == 0x1234
+    assert agrees(:magic, [0]) == {:ok, 0x7F454C46}
+    assert {:raise, %Enum.OutOfBoundsError{index: 5}} = agrees(:magic, [5])
 
     # the bit pattern is an i64 like any other: checked arithmetic on it raises
     assert {:raise, %ArithmeticError{}} = agrees(:u64_plus, [ones <> <<0x7F>>, 1, 1])
@@ -248,6 +256,7 @@ defmodule Defk.WordLoadsTest do
     u32_be_f: [args: offset_args()],
     u16_le_f: [args: offset_args()],
     u16_be_f: [args: offset_args()],
+    magic: [args: fixed_list([G.i64(-2..8, [@max_i64])])],
     u64_plus: [args: bind(offset_args(), fn args -> map(G.i64(), &(args ++ [&1])) end)]
   )
 
