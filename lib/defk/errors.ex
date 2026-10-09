@@ -849,12 +849,11 @@ defmodule Defk.Errors do
     ])
   end
 
-  defp footer(code) do
-    if @language_doc_exists do
-      "(defk #{code}: #{docs(code)})"
-    else
-      "(defk #{code}; mix run -e 'Defk.Errors.explain!(\"#{code}\")')"
-    end
+  # defined for the form in force at compile time, so neither branch is dead
+  if @language_doc_exists do
+    defp footer(code), do: "(defk #{code}: #{docs(code)})"
+  else
+    defp footer(code), do: "(defk #{code}; mix run -e 'Defk.Errors.explain!(\"#{code}\")')"
   end
 
   # ------------------------------------------------------------ rendering --
