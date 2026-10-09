@@ -77,6 +77,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 | Piece | File |
 |---|---|
 | `defk` macro and stub generation | `lib/defk.ex` |
+| Module attributes read in kernel bodies, inlined as constants | `lib/defk/attributes.ex` |
 | Type checker and C codegen | `lib/defk/compiler.ex` |
 | Compile error codes and format | `lib/defk/errors.ex` |
 | C build, cached by source hash | `lib/defk/build.ex` |
@@ -98,6 +99,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 - `case` on an `i64` or `bool`: integer literals, `true`/`false`, `^pinned`, `_` or a variable, each with an optional guard. Used as a value or a statement.
 - Operators: `a[i]`, `out[i] = v` (only on `alloc/2` arrays), `+ - * /`, `div`, `rem`, comparisons, `and`/`or`/`not`, and bitwise on `i64`: `band`/`bor`/`bxor`/`bnot`/`bsl`/`bsr` (also as `&&& ||| ^^^ ~~~ <<< >>>` or `Bitwise.band/2` and so on, no `import Bitwise` needed).
 - Builtins: `len`, `min`, `max`, `abs`, `float`, `trunc`, `round`, `sqrt`, `exp`, `log`, `sin`, `cos`, `pow` (also as `:math.*`), plus calls to other kernels (inlined).
+- Module attributes as constants: `@name` holding an integer, float or boolean is inlined as that literal (also as a `case` pattern, in a guard, as a range bound, or a `band` mask that elides bounds checks); one holding a binary is a read-only `[u8]`. The value is the one where the kernel is defined, as in a `def`.
 
 **Elixir mode** (tests and debugging only): each kernel body is also compiled to
 plain Elixir with the kernel's limits applied, so the two can be checked for
@@ -154,7 +156,7 @@ These are deliberate, to keep defk small for now.
 - No recursion (rejected at compile time). Kernel calls are inlined, so the generated code grows with the number of call sites along each call chain.
 - inf/NaN are allowed inside a kernel; a non-finite *returned* float raises.
 - An array may be returned only if it was created with `alloc/2`. Arrays can't flow through `if`/`cond` branches.
-- No maps, lists or strings.
+- No maps, lists or strings (a binary module attribute is a read-only `[u8]`).
 - Early exit only through `Enum.reduce_while` and `Enum.all?/any?`. Every tail of the `fn` must be a literal `{:cont, acc}` or `{:halt, acc}` (through `if`/`cond`/`case`). There is no `while`/`break`, and `{:halt, acc}` in a `for ..., reduce:` is not early exit, as in Elixir. No `Enum.find`/`find_index` (no `nil`).
 - `case` matches only `i64`/`bool` subjects against literals, variables and pins (no floats, tuples or ranges). An error inside a guard (overflow, `rem` by zero) raises, where Elixir would fail that clause. Kernel calls are rejected in guards, as Elixir rejects them.
 - Array writes alias: `b = a` then `a[i] = x` is visible through `b`.

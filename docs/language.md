@@ -344,6 +344,57 @@ gives the compiler a range: `table[band(h, 255)]` skips its bounds check
 against a 256-element array. Elixir 1.20 deprecates `~~~` and `^^^`; prefer
 `bnot/1` and `bxor/2`. (defk-w38)
 
+### Module attributes
+
+**Supported:** `@name` in a kernel body reads a module attribute as a
+constant, with the value it has where the kernel is defined, as in a `def`
+(an attribute redefined after the kernel does not change it). The value is
+inlined when the module compiles, the same in native code and Elixir mode:
+
+| Attribute value | In the kernel |
+|---|---|
+| an integer in `i64` | that integer literal, `i64` |
+| a float | that float literal, `f64` |
+| `true`, `false` | that boolean literal |
+| a binary | a read-only `[u8]` array of its bytes, kept in the kernel's static data |
+
+An integer, float or boolean attribute works wherever its literal does: in
+arithmetic, as a range bound or step, as a `case` pattern
+(`case x do @lim -> ... end`) and in a guard. A mask attribute gives the
+compiler the same range as a literal mask, so with `@mask 255`,
+`table[band(h, @mask)]` skips its bounds check against a 256-element array.
+
+```elixir
+@s16_min -32_768
+@s16_max 32_767
+@table <<0, 1, 3, 7, 15, 31, 63, 127>>
+
+defk clip(x :: i64) :: i64 do
+  min(max(x, @s16_min), @s16_max)
+end
+
+defk ones(i :: i64) :: i64 do
+  @table[band(i, 7)]
+end
+```
+
+A binary attribute is an array like an input array: it can be indexed (a
+read out of range raises `Enum.OutOfBoundsError`), measured with `len/1`,
+iterated with `for c <- @table`, bound to a variable and passed to a kernel.
+It cannot be written ([`read-only-array`](#read-only-array)) or returned
+([`return-input-array`](#return-input-array)), and it is not a `case`
+pattern. Its bytes are compiled into the NIF, so a large table makes the
+library larger, not the call slower.
+
+**Unsupported:** an attribute that is not defined above the kernel
+([`undefined-attribute`](#undefined-attribute)), an integer outside `i64`
+([`integer-literal`](#integer-literal), a limit), and any other value: a
+list, tuple, map, atom, `nil`, or a bitstring that is not whole bytes
+([`attribute-value`](#attribute-value)). An accumulating attribute
+(`Module.register_attribute(__MODULE__, :a, accumulate: true)`) is a list. A
+list of bytes packs into a binary attribute (`@table <<1, 2, 4>>`); the error
+shows that rewrite. (defk-ivt)
+
 ### What is not an expression
 
 Each of these is a compile error with a code; the code's entry in
@@ -357,8 +408,7 @@ Each of these is a compile error with a code; the code's entry in
 | lists, `++`, `--` | [`unsupported-list`](#unsupported-list) |
 | `fn`, captures `&f/1` (except the `fn` of `Enum.reduce_while/3`, `Enum.all?/2`, `Enum.any?/2`) | [`unsupported-fn`](#unsupported-fn), [`fn-argument`](#fn-argument) |
 | the pipe `\|>` | [`pipe`](#pipe) (the hint shows the nested call) |
-| module attributes `@name` | [`module-attribute`](#module-attribute) (planned) |
-| `band`, `bor`, `<<<`, ... and `Bitwise.*` | [`bitwise`](#bitwise) (planned) |
+| a module attribute holding a list, tuple, map, atom or `nil`, or not defined above the kernel | [`attribute-value`](#attribute-value), [`undefined-attribute`](#undefined-attribute) |
 | building a bitstring `<<...>>` | [`bitstring-build`](#bitstring-build) (planned) |
 | binary patterns `<<a, b, rest::binary>> = arr` | [`bitstring-match`](#bitstring-match) |
 | calls to other modules (`Enum.sum/1`, `Enum.map/2`, `String.*`, `:math.tan/1`, ...) | [`unsupported-call`](#unsupported-call), [`enum-reduce`](#enum-reduce) and [`enum-find`](#enum-find) (planned) |
@@ -839,6 +889,7 @@ and replace everything from the first `###` heading of this section to the
 end of the section with its output (`test/language_doc_test.exs` fails until
 they match).
 
+Compiling 2 files (.ex)
 ### kernel-head
 
 A kernel head is `name(arg :: type, ...) :: return_type`.
@@ -1274,32 +1325,6 @@ Write instead:
 ```elixir
 defk f(x :: i64, y :: i64) :: i64 do
   x + y
-end
-```
-
-### module-attribute
-
-Module attributes as constants are planned.
-
-- kind: not supported yet (planned)
-- why: a kernel body is compiled on its own, and reading module attributes as constants is planned
-- hint: write the value as a literal for now
-
-Rejected:
-
-```elixir
-@scale 3
-
-defk f(x :: i64) :: i64 do
-  x * @scale
-end
-```
-
-Write instead:
-
-```elixir
-defk f(x :: i64) :: i64 do
-  x * 3
 end
 ```
 
@@ -2573,6 +2598,60 @@ defk f(x :: i64) :: i64 do
 end
 ```
 
+### undefined-attribute
+
+A module attribute read in a kernel is defined before the kernel.
+
+- kind: a mistake to fix (in the kernel or the build)
+- why: a kernel reads @name as a def does: the attribute's value where the kernel is defined, inlined as a constant
+- hint: define the attribute above the kernel, or pass the value as a parameter
+
+Rejected:
+
+```elixir
+defk f(x :: i64) :: i64 do
+  x * @scale
+end
+```
+
+Write instead:
+
+```elixir
+@scale 3
+
+defk f(x :: i64) :: i64 do
+  x * @scale
+end
+```
+
+### attribute-value
+
+A module attribute read in a kernel holds an integer (in i64), a float, a boolean or a binary.
+
+- kind: outside the kernel subset (permanent)
+- why: a kernel inlines an attribute as a constant: a number or boolean as its literal, a binary as a read-only [u8]; other terms such as lists, tuples, maps and atoms are BEAM terms it cannot hold
+- hint: pass the value as a parameter; pack a list of bytes into a binary attribute
+
+Rejected:
+
+```elixir
+@table [1, 2, 4, 8]
+
+defk f(i :: i64) :: i64 do
+  i + @table
+end
+```
+
+Write instead:
+
+```elixir
+@table <<1, 2, 4, 8>>
+
+defk f(i :: i64) :: i64 do
+  @table[i]
+end
+```
+
 ## 12. Limits
 
 Every case where a kernel raises or refuses to compile where Elixir would have
@@ -2585,6 +2664,7 @@ bug.
 | `div(-9223372036854775808, -1)` | `9223372036854775808` | `ArithmeticError` "i64 overflow in div/2" |
 | `trunc/1`, `round/1` of a float outside the `i64` range | a bignum | `ArithmeticError` "trunc/1: ... does not fit in i64" |
 | an integer literal outside `i64`, including `-9223372036854775808` | a bignum | compile error [`integer-literal`](#integer-literal) |
+| a module attribute holding an integer outside `i64`, read in a kernel | a bignum | compile error [`integer-literal`](#integer-literal) |
 | an `i64` argument outside `i64` | any integer | `ArgumentError` "argument N (name) must be an integer fitting in i64" |
 | an `f64` argument that is an integer outside `i64` | converts | `ArgumentError` "argument N (name) must be a number" |
 | a `[u8]` write of a value outside 0..255 | `<<300::8>>` wraps | `ArgumentError` "value 300 does not fit in u8" |

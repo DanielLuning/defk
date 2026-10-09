@@ -33,15 +33,26 @@ defmodule Defk do
   end
 
   defmacro defk(head, opts \\ [], body) do
-    kernel = %{head: head, opts: opts, body: Keyword.get(body, :do), line: __CALLER__.line}
+    body = Keyword.get(body, :do)
+    kernel = %{head: head, opts: opts, body: body, line: __CALLER__.line}
 
+    # the module attributes the body reads, valued here as a def's would be
     quote do
-      @defk_kernels unquote(Macro.escape(kernel))
+      @defk_kernels Map.put(
+                      unquote(Macro.escape(kernel)),
+                      :attrs,
+                      unquote(Defk.Attributes.capture(body))
+                    )
     end
   end
 
   defmacro __before_compile__(env) do
-    kernels = env.module |> Module.get_attribute(:defk_kernels) |> Enum.reverse()
+    kernels =
+      env.module
+      |> Module.get_attribute(:defk_kernels)
+      |> Enum.reverse()
+      |> Enum.map(&Defk.Attributes.inline/1)
+
     # Elixir mode: compiled in :test, and wherever it is the configured mode
     {mode, elixir?} = Defk.ElixirMode.setup!(Module.get_attribute(env.module, :defk_mode), env)
     nif_name = if elixir?, do: &Defk.ElixirMode.native_name/1, else: & &1

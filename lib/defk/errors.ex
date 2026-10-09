@@ -46,7 +46,7 @@ defmodule Defk.Errors do
 
   # ------------------------------------------------------------- registry --
   # Retired codes, never reused: "bitwise" (the operators are supported since
-  # defk-w38).
+  # defk-w38), "module-attribute" (attributes are constants since defk-ivt).
 
   @codes [
     # -- kernel definitions
@@ -229,16 +229,6 @@ defmodule Defk.Errors do
       hint: "bind it before this point, or pass it in as a parameter",
       example: "defk f(x :: i64) :: i64 do\n  x + y\nend",
       rewrite: "defk f(x :: i64, y :: i64) :: i64 do\n  x + y\nend"
-    },
-    %{
-      code: "module-attribute",
-      kind: :planned,
-      summary: "Module attributes as constants are planned.",
-      why:
-        "a kernel body is compiled on its own, and reading module attributes as constants is planned",
-      hint: "write the value as a literal for now",
-      example: "@scale 3\n\ndefk f(x :: i64) :: i64 do\n  x * @scale\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  x * 3\nend"
     },
     %{
       code: "tuple-binding",
@@ -757,6 +747,28 @@ defmodule Defk.Errors do
         "a mask (1 <<< n) - 1 can be computed in i64 for n <= 62; write the 63-bit one as 0x7FFFFFFFFFFFFFFF, and drop a mask that the value already fits",
       example: "defk f(x :: i64) :: i64 do\n  band(x, (1 <<< 63) - 1)\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  band(x, 0x7FFFFFFFFFFFFFFF)\nend"
+    },
+    # -- module attributes
+    %{
+      code: "undefined-attribute",
+      kind: :error,
+      summary: "A module attribute read in a kernel is defined before the kernel.",
+      why:
+        "a kernel reads @name as a def does: the attribute's value where the kernel is defined, inlined as a constant",
+      hint: "define the attribute above the kernel, or pass the value as a parameter",
+      example: "defk f(x :: i64) :: i64 do\n  x * @scale\nend",
+      rewrite: "@scale 3\n\ndefk f(x :: i64) :: i64 do\n  x * @scale\nend"
+    },
+    %{
+      code: "attribute-value",
+      kind: :subset,
+      summary:
+        "A module attribute read in a kernel holds an integer (in i64), a float, a boolean or a binary.",
+      why:
+        "a kernel inlines an attribute as a constant: a number or boolean as its literal, a binary as a read-only [u8]; other terms such as lists, tuples, maps and atoms are BEAM terms it cannot hold",
+      hint: "pass the value as a parameter; pack a list of bytes into a binary attribute",
+      example: "@table [1, 2, 4, 8]\n\ndefk f(i :: i64) :: i64 do\n  i + @table\nend",
+      rewrite: "@table <<1, 2, 4, 8>>\n\ndefk f(i :: i64) :: i64 do\n  @table[i]\nend"
     }
   ]
 
@@ -1155,10 +1167,6 @@ defmodule Defk.Errors do
   defp form({:|>, _, [_, _]} = node) do
     {"pipe", "the pipe operator |> is not in the kernel subset",
      rewrite: Macro.to_string(unpipe(node))}
-  end
-
-  defp form({:@, _, [{name, _, ctx}]}) when is_atom(name) and is_atom(ctx) do
-    {"module-attribute", "module attributes such as @#{name} are not supported yet", []}
   end
 
   # map.field

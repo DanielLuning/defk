@@ -832,6 +832,19 @@ defmodule Defk.Compiler do
     end
   end
 
+  # a module attribute that Defk.Attributes.inline/1 did not turn into a
+  # literal: a binary is a read-only [u8] in static storage, as an input array
+  defp lower_expr({:@, _, [{name, _, ctx}]} = node, _env) when is_atom(name) and is_atom(ctx) do
+    case Defk.Attributes.of(node) do
+      {:ok, b} when is_binary(b) ->
+        view = "((defk_arr_u8){(uint8_t *)#{c_bytes(b)}, #{byte_size(b)}})"
+        {[], Map.put(val(view, {:arr, :u8}), :len_lo, byte_size(b))}
+
+      _ ->
+        attribute!(node)
+    end
+  end
+
   defp lower_expr({:__block__, _, _} = b, env), do: lower_block(b, env)
 
   defp lower_expr(tuple, env) when is_tuple(tuple) and tuple_size(tuple) == 2,
@@ -2242,6 +2255,15 @@ defmodule Defk.Compiler do
           do: {:any, same},
           else: {:any, &rename_var(&1, v, subj)}
 
+      {{:@, _, _} = p, _} ->
+        match?({:ok, b} when is_binary(b), Defk.Attributes.of(p)) || attribute!(p)
+
+        err!(
+          p,
+          "case-pattern",
+          "the case pattern #{Macro.to_string(p)}, a binary, is not in the kernel subset"
+        )
+
       {p, _} when is_integer(p) or is_boolean(p) ->
         err!(
           p,
@@ -2305,6 +2327,10 @@ defmodule Defk.Compiler do
 
       {op, _, args} when op in @guard_ops and is_list(args) ->
         Enum.each(args, &guard_safe!/1)
+
+      {:@, _, _} = a ->
+        match?({:ok, b} when is_binary(b), Defk.Attributes.of(a)) || attribute!(a)
+        err!(a, "case-guard", "#{Macro.to_string(a)}, a binary, is not allowed in a case guard")
 
       {:in, _, [x, list]} = other when is_list(list) and list != [] ->
         rewrite =
@@ -2682,6 +2708,65 @@ defmodule Defk.Compiler do
 
   # ------------------------------------------------------ more rejections --
 
+  # The bytes of `b` as a C string literal of octal escapes, 64 bytes a line.
+  defp c_bytes(""), do: ~s("")
+
+  defp c_bytes(b) do
+    b
+    |> :binary.bin_to_list()
+    |> Enum.chunk_every(64)
+    |> Enum.map_join("\n", fn bytes ->
+      ~s(") <>
+        Enum.map_join(bytes, &("\\" <> String.pad_leading(Integer.to_string(&1, 8), 3, "0"))) <>
+        ~s(")
+    end)
+  end
+
+  # A module attribute whose value is not in the kernel subset: undefined
+  # where the kernel is defined, an integer outside i64, or a value that is
+  # not a number, a boolean or a binary.
+  @spec attribute!(term()) :: no_return()
+  defp attribute!({:@, _, [{name, _, _}]} = node) do
+    case Defk.Attributes.of(node) do
+      :undefined ->
+        err!(
+          node,
+          "undefined-attribute",
+          "@#{name} is not defined where this kernel is defined"
+        )
+
+      {:ok, n} when is_integer(n) ->
+        err!(node, "integer-literal", "@#{name} is #{n}, which does not fit in i64",
+          hint: "use a value that fits, or a float attribute and compute in f64"
+        )
+
+      {:ok, v} ->
+        err!(
+          node,
+          "attribute-value",
+          "@#{name} is #{Defk.Attributes.describe(v)}, which is not in the kernel subset",
+          attribute_fix(name, v)
+        )
+    end
+  end
+
+  # a list of bytes packs into a binary attribute, read as a [u8]
+  defp attribute_fix(name, v) when is_list(v) and v != [] do
+    if Enum.all?(v, &(is_integer(&1) and &1 in 0..255)) do
+      bin = inspect(:erlang.list_to_binary(v), binaries: :as_binaries, limit: :infinity)
+
+      [
+        hint:
+          "pack it into a binary attribute and index it as a [u8], or pass it as an array parameter",
+        rewrite: "@#{name} #{bin}"
+      ]
+    else
+      [hint: "pass it as an array parameter ([i64] or [f64])"]
+    end
+  end
+
+  defp attribute_fix(_name, _v), do: []
+
   @spec not_an_array!(term(), term(), term()) :: no_return()
   defp not_an_array!(node, arr, a) do
     err!(
@@ -2694,8 +2779,9 @@ defmodule Defk.Compiler do
   # copying input array `arr` into a writable array from alloc/2
   defp copy_rewrite(arr, {:arr, e}) do
     a = Macro.to_string(arr)
+    copy = String.trim_leading(a, "@") <> "_copy"
 
-    "#{a}_copy = alloc(#{e}, len(#{a}))\n\nfor i <- 0..(len(#{a}) - 1)//1 do\n  #{a}_copy[i] = #{a}[i]\nend\n"
+    "#{copy} = alloc(#{e}, len(#{a}))\n\nfor i <- 0..(len(#{a}) - 1)//1 do\n  #{copy}[i] = #{a}[i]\nend\n"
   end
 
   @spec cond_without_true!(term()) :: no_return()
