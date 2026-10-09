@@ -334,7 +334,7 @@ static inline double defk_log(defk_ctx *ctx, double a) {
   return log(a);
 }
 static inline int64_t defk_trunc(defk_ctx *ctx, double a) {
-  if (DEFK_UNLIKELY(!(a > -9.2233720368547758e18 && a < 9.2233720368547758e18)))
+  if (DEFK_UNLIKELY(!(a >= -0x1p63 && a < 0x1p63)))
     defk_fail(ctx, DEFK_E_ARITH, "trunc/1: %g does not fit in i64", a);
   return (int64_t)a;
 }
