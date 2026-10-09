@@ -936,11 +936,13 @@ defmodule Defk.Errors do
   defp indent(line), do: "    " <> line
 
   defp frame(d) do
-    loc = "#{relative(d.file)}:#{d.line}#{if d.col, do: ":#{d.col}"}"
+    loc =
+      "#{relative(d.file)}#{if d.line > 0, do: ":#{d.line}"}#{if d.line > 0 and d.col, do: ":#{d.col}"}"
+
     fun = with {name, arity} <- d.fun, do: ": #{inspect(d.module)}.#{name}/#{arity}"
 
     case d.text do
-      nil ->
+      text when is_nil(text) or is_nil(d.col) ->
         "error: #{d.what}\n└─ #{loc}#{fun}"
 
       text ->
@@ -977,6 +979,7 @@ defmodule Defk.Errors do
       nil ->
         case start(ctx) do
           nil -> {0, nil, 1, nil}
+          {line, nil} -> {line, nil, 1, nil}
           {line, col} -> find_literal(lines, line, col, node) || place(lines, line, col, ctx)
         end
     end
@@ -1008,7 +1011,8 @@ defmodule Defk.Errors do
 
   defp source_line(_, _), do: nil
 
-  defp place(lines, line, nil, _node), do: {line, nil, 1, nil} |> with_text(lines)
+  # a node from a macro has a line but no column: no caret, no text, no width
+  defp place(_lines, line, nil, _node), do: {line, nil, 1, nil}
 
   defp place(lines, line, col, node) do
     case source_line(lines, line) do
@@ -1020,8 +1024,6 @@ defmodule Defk.Errors do
         {line, col, width, text}
     end
   end
-
-  defp with_text({line, col, width, _}, lines), do: {line, col, width, source_line(lines, line)}
 
   # The columns of `node` on its first line: the longest slice from its start
   # (or an opening bracket just before it) that parses back to the node. A node
