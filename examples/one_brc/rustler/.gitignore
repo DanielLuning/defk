@@ -1,0 +1,8 @@
+_build/
+deps/
+target/
+Cargo.lock
+mix.lock
+*.so
+priv/
+priv/

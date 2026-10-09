@@ -652,6 +652,15 @@ defmodule Defk.Compiler do
     end
   end
 
+  # raise Module, "literal" / raise Module / raise "literal": the exception
+  # Elixir would raise, its message a C string literal (see "raise")
+  defp lower_stmt({:raise, _, args} = node, env) when is_list(args) do
+    {mod, msg} = Defk.Raise.parse!(node, &err!/4)
+    msg = Defk.Raise.message(mod, msg)
+    kind = Defk.Raise.kind(mod)
+    {"defk_user_raise(ctx, #{kind}, #{Defk.Raise.c_string(msg)}, #{byte_size(msg)});\n", env}
+  end
+
   defp lower_stmt(e, env) do
     {s, v} = lower_expr(e, env)
     {[s, discard(v)], env}
@@ -1602,6 +1611,9 @@ defmodule Defk.Compiler do
       rewrite: if(is_binary(rewrite), do: rewrite)
     )
   end
+
+  # a raise is a statement: it has no value to give
+  defp lower_call(:raise, args, m, _env), do: Defk.Raise.value!({:raise, m, args}, &err!/4)
 
   defp lower_call(name, args, m, env) do
     node = {name, m, args}
@@ -2637,6 +2649,9 @@ defmodule Defk.Compiler do
     {ss, arms, cenv} = case_arms(subject, clauses, node, env)
     [ss, branch_chain(arms, cenv, &lower_tail(&1, &2, leaf))]
   end
+
+  defp tail_expr({:raise, m, args}, _env, _leaf) when is_list(args),
+    do: Defk.Raise.value!({:raise, m, args}, &err!/4)
 
   defp tail_expr(other, _env, _leaf) do
     err!(

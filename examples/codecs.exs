@@ -64,8 +64,8 @@
 # leading zero bytes, up to 64 KB) round-trip and match Base / :binary / both
 # base58 packages; about 4,500 corrupted or truncated encodings give the same
 # outcome as Base.decode64!, :binary.decode_hex and the Elixir base58 (all
-# ArgumentError); every kernel also agrees with its Elixir mode (a second copy
-# compiled with Elixir mode, Codecs.KernelsEM) on the small inputs and every
+# ArgumentError); every kernel also agrees with its Elixir mode (`elixir_mode: true`,
+# Codecs.Kernels.__defk_elixir__/2) on the small inputs and every
 # bad input.
 #
 # Measured (M-series Mac, OTP 29, Elixir 1.20, best of 15; three runs):
@@ -103,9 +103,9 @@ Mix.install([
 ])
 
 defmodule Codecs.Source do
-  # The kernels, as a `use` block so the script can compile them twice: once
-  # natively (Codecs.Kernels, what is measured) and once with Elixir mode
-  # (Codecs.KernelsEM, for the agreement check only).
+  # The kernels, as a `use` block for Codecs.Kernels, compiled with
+  # `elixir_mode: true` (native by default; `__defk_elixir__/2` is the
+  # agreement check's oracle).
   defmacro __using__(_) do
     quote location: :keep do
       @b64 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
@@ -439,27 +439,9 @@ defmodule Codecs.Tables do
 end
 
 defmodule Codecs.Kernels do
-  use Defk
+  use Defk, elixir_mode: true
   use Codecs.Source
 end
-
-# Elixir mode is compiled only in :test (or with `config :defk, mode:
-# :elixir`); a stub project in :test makes this second copy carry it.
-defmodule Codecs.MixStub do
-  use Mix.Project
-  def project, do: [app: :codecs_stub, version: "0.1.0"]
-end
-
-prev_env = Mix.env()
-Mix.env(:test)
-
-defmodule Codecs.KernelsEM do
-  use Defk
-  use Codecs.Source
-end
-
-Mix.env(prev_env)
-Mix.ProjectStack.pop()
 
 defmodule Codecs.Calls do
   # The kernels as a caller uses them: binaries in, binaries out.
@@ -580,7 +562,7 @@ defmodule Codecs.Elixir do
   defp v(c), do: raise(ArgumentError, "non-alphabet character found: #{inspect(<<c>>)}")
 end
 
-alias Codecs.{Calls, Kernels, KernelsEM}
+alias Codecs.{Calls, Kernels}
 alias Codecs.Elixir, as: Ex
 
 # ---------------------------------------------------------------- agreement --
@@ -598,7 +580,7 @@ end
 # a kernel and its Elixir mode: identical values or the same exception module
 em_agrees = fn name, args ->
   outcome.(fn -> apply(Kernels, name, args) end) ==
-    outcome.(fn -> KernelsEM.__defk_elixir__(name, args) end)
+    outcome.(fn -> Kernels.__defk_elixir__(name, args) end)
 end
 
 # random bytes of every length 0..64 (so every 1-3 byte tail), some with
@@ -953,7 +935,7 @@ r58 =
 # the recommendation for hex is the BIF either way (see the header)
 for r <- [r16, r58],
     not r.correct or
-      (r.verdict != r.expected and not (r.example == "hex" and r.verdict == :marginal)) do
+      (r.verdict != r.expected and not (r.example == "codecs_hex" and r.verdict == :marginal)) do
   IO.puts("#{r.example}: verdict #{r.verdict}, expected #{r.expected}, correct #{r.correct}")
   System.halt(1)
 end

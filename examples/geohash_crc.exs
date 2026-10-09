@@ -120,7 +120,7 @@ defmodule GeoCrc.Source do
       end
 
       # Precision 1..12 (the 60 bits of a precision-12 hash are the most a double
-      # carries); anything else raises ArithmeticError through the div below.
+      # carries); anything else raises ArgumentError.
       # Each coordinate is quantised once, `trunc((x - min) / span * 2^bits)`
       # clamped to the grid, and the two integers are interleaved (longitude
       # first), instead of bisecting bit by bit. The division can round a value
@@ -129,8 +129,10 @@ defmodule GeoCrc.Source do
       # makes the result the bisection's, bit for bit (the script checks every
       # cell edge of a precision-3 grid and the doubles on either side).
       defk geohash_encode(lat :: [f64], lon :: [f64], precision :: i64) :: [u8] do
-        ok = max(0, min(min(13 - precision, precision), 1))
-        n = min(len(lat), len(lon)) * div(1, ok)
+        if precision < 1 or precision > 12,
+          do: raise(ArgumentError, "geohash_encode: precision must be 1..12")
+
+        n = min(len(lat), len(lon))
         out = alloc(u8, n * precision)
         alphabet = alloc(u8, 32)
 
@@ -182,11 +184,13 @@ defmodule GeoCrc.Source do
       # de-interleaved (bit compaction) into its two cell indices and the centre is
       # `(index + 0.5) * cell - min`, which is exact (a short dyadic fraction
       # of 180 or 360), so it equals the bisection's `(lo + hi) / 2` bit for bit.
-      # A byte outside the alphabet raises ArithmeticError, like the package
-      # raises.
+      # A byte outside the alphabet raises ArgumentError (the package raises
+      # ArithmeticError).
       defk geohash_decode(hashes :: [u8], precision :: i64) :: {[f64], [f64]} do
-        ok = max(0, min(min(13 - precision, precision), 1))
-        n = div(len(hashes), precision) * div(1, ok)
+        if precision < 1 or precision > 12,
+          do: raise(ArgumentError, "geohash_decode: precision must be 1..12")
+
+        n = div(len(hashes), precision)
         lat = alloc(f64, n)
         lon = alloc(f64, n)
         # alphabet value + 1 by byte; 0 marks a byte that is not in the alphabet
@@ -210,7 +214,8 @@ defmodule GeoCrc.Source do
             for j <- 0..(precision - 1)//1, reduce: 0 do
               z ->
                 t = rev[hashes[i * precision + j]]
-                bor(bsl(z, 5), div(1, min(t, 1)) * (t - 1))
+                if t == 0, do: raise(ArgumentError, "geohash_decode: a byte is not in the alphabet")
+                bor(bsl(z, 5), t - 1)
             end
 
           li = if nlon == nlat, do: compact(z), else: compact(bsr(z, 1))
@@ -624,7 +629,7 @@ bad_raises =
     Kernels.geohash_decode("abc", 3)
     false
   rescue
-    ArithmeticError -> true
+    e in ArgumentError -> e.message == "geohash_decode: a byte is not in the alphabet"
   end
 
 # Every cell edge of a precision-3 grid (7 latitude and 8 longitude bits), and

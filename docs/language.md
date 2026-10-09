@@ -553,7 +553,8 @@ Each of these is a compile error with a code; the code's entry in
 | binary patterns `<<a, b, rest::binary>> = arr` | [`bitstring-match`](#bitstring-match) |
 | calls to other modules (`Enum.sum/1`, `Enum.map/2`, `String.*`, `:math.tan/1`, ...) | [`unsupported-call`](#unsupported-call), [`enum-reduce`](#enum-reduce) and [`enum-find`](#enum-find) (planned) |
 | a range as a value (`r = 1..10`), `x in [1, 2, 3]`, `**`, a match used as a value | [`unsupported-expression`](#unsupported-expression) |
-| `unless`, `with`, `try`, `receive`, `raise`, `throw`, `send`, `spawn`, ... | [`unsupported-construct`](#unsupported-construct) |
+| `unless`, `with`, `try`, `receive`, `reraise`, `throw`, `send`, `spawn`, ... | [`unsupported-construct`](#unsupported-construct) |
+| `raise` with an interpolated or computed message, of another module, or used as a value | [`raise-message`](#raise-message), [`raise-module`](#raise-module), [`raise-value`](#raise-value) (see [`raise`](#raise)) |
 | a call to a function that is neither a builtin nor a kernel of this module (`while`, `length`) | [`unknown-function`](#unknown-function) |
 
 ### Unsupported, write this instead
@@ -907,6 +908,40 @@ end
   ([`enum-reduce`](#enum-reduce)) or `Enum.find`/`find_index`
   ([`enum-find`](#enum-find)) yet.
 
+### `raise`
+
+**Supported with restrictions:** `raise Module, "message"`, `raise Module`
+and `raise "message"`, with `Module` one of `ArgumentError`,
+`ArithmeticError` and `RuntimeError`. It raises what Elixir would: the
+exception with that message, or the module's default message for
+`raise Module` ("argument error", "bad argument in arithmetic expression",
+"runtime error"), and `raise "message"` is a `RuntimeError`.
+
+```elixir
+defk fft_size(n :: i64) :: i64 do
+  if n < 1 or band(n, n - 1) != 0, do: raise(ArgumentError, "n must be a power of two")
+  ctz(n)
+end
+```
+
+- **A statement**, anywhere a statement goes: in a block before its value, in
+  `if`/`case` statements, in a branch before the branch's value, in a loop
+  body, and in an `Enum.reduce_while/3` `fn` before its tail. A `raise` as a
+  value (`x = raise ...`, the last expression of a kernel, or a value
+  branch that only raises, `if ok, do: v, else: raise(...)`) is
+  [`raise-value`](#raise-value): write the check as a statement first,
+  `if not ok, do: raise(...)`, then the value. A `cond` whose arms only
+  raise needs a value in each; write the checks as `if` statements instead.
+- **The message is a string literal**, of any length and any bytes (also
+  `raise Module, message: "..."`). Interpolation and computed messages are
+  [`raise-message`](#raise-message): the message is a C string in the
+  kernel's static storage. Put the value in Elixir, before or after the
+  call. Other modules are [`raise-module`](#raise-module).
+- Natively the exception is raised in the calling process like the
+  kernel's own errors, after its buffers are freed, also from inside a
+  yielding loop or an inlined call. In Elixir mode it is the `raise` itself,
+  so both give the same exception with the same message.
+
 ### Blocks
 
 Every block that needs a value ends in an expression; an empty block is
@@ -975,7 +1010,8 @@ including ordinary `def`s of the kernel's own module, are not callable
   1 ms ticker).
 - **Errors are exceptions.** Every runtime error in this document is raised in
   the calling process as an ordinary Elixir exception (`ArithmeticError`,
-  `ArgumentError`, `Enum.OutOfBoundsError`, `CaseClauseError`), after the
+  `ArgumentError`, `Enum.OutOfBoundsError`, `CaseClauseError`, and
+  `RuntimeError` from a kernel's own [`raise`](#raise)), after the
   kernel's own buffers are freed. Catch it like any other.
 - **Process death.** A process killed while its kernel is suspended between
   steps frees the kernel's frame and arrays (`__defk_stats__().frames_live`
@@ -1009,7 +1045,13 @@ How to run it:
   and `:test` (any other environment is a compile error).
 - `Defk.ElixirMode.with_mode(:elixir, fun)` (or `:native`) switches the
   calling process for modules compiled with Elixir mode.
-- Elixir mode is always compiled in `:test`. There every kernel's NIF is
+- `use Defk, elixir_mode: true` compiles Elixir mode into that module in any
+  environment, including a `Mix.install` script run with `elixir script.exs`
+  (no Mix project, where `config :defk, mode: :elixir` is refused with an
+  error naming the condition). The default call path stays native; call
+  `Mod.__defk_elixir__/2` or use `Defk.ElixirMode.with_mode/2` to run Elixir
+  mode. Scripts use this for their agreement check.
+- Without the option, Elixir mode is compiled in `:test`. There every kernel's NIF is
   registered as `__defk_native_<name>__` and the public function checks the
   process's mode on each call, so measure speed in `:dev` or `:prod`.
 - `Defk.Test.assert_agrees(Mod, :fun, args)` runs a call both ways and asserts
@@ -2674,7 +2716,7 @@ end
 
 ### unsupported-construct
 
-A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and raise are not in the kernel subset.
+A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and throw are not in the kernel subset.
 
 - kind: outside the kernel subset (permanent)
 - why: a kernel uses a fixed set of Elixir forms: =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2
@@ -2832,6 +2874,83 @@ Write instead:
 defk f(i :: i64) :: i64 do
   t = <<1, 2, 44>>
   t[i]
+end
+```
+
+### raise-value
+
+`raise` in a kernel is a statement: it cannot be a value, the last expression of a kernel or of a branch that gives one.
+
+- kind: a mistake to fix (in the kernel or the build)
+- why: a kernel's values are numbers, booleans, tuples and arrays; a raise has no value to give, so it goes where a statement goes
+- hint: raise is a statement; put it before the value: `if not ok, do: raise(...)` on its own line, then the value
+
+Rejected:
+
+```elixir
+defk f(x :: i64) :: i64 do
+  if x >= 0, do: x * 2, else: raise(ArgumentError, "x must not be negative")
+end
+```
+
+Write instead:
+
+```elixir
+defk f(x :: i64) :: i64 do
+  if x < 0, do: raise(ArgumentError, "x must not be negative")
+  x * 2
+end
+```
+
+### raise-message
+
+A kernel's `raise` message is a string literal: no interpolation or computed value.
+
+- kind: outside the kernel subset (permanent)
+- why: the message is a C string in the kernel's static storage, so it is known when the kernel compiles; formatting a value would need a BEAM binary
+- hint: a kernel raises with a literal message: put the value in Elixir, before or after the call
+
+Rejected:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  if n < 1, do: raise(ArgumentError, "bad length #{n}")
+  n
+end
+```
+
+Write instead:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  if n < 1, do: raise(ArgumentError, "length must be positive")
+  n
+end
+```
+
+### raise-module
+
+A kernel raises ArgumentError, ArithmeticError or RuntimeError.
+
+- kind: outside the kernel subset (permanent)
+- why: the runtime builds the exception natively, for the modules whose only field is the message
+- hint: use ArgumentError, ArithmeticError or RuntimeError
+
+Rejected:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  if n < 1, do: raise(KeyError, "no such key")
+  n
+end
+```
+
+Write instead:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  if n < 1, do: raise(ArgumentError, "no such key")
+  n
 end
 ```
 
