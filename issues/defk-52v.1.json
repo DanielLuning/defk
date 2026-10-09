@@ -13,9 +13,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-52v",
+  "comments": [
+    {
+      "text": "Merged. Follow-up: defk-zep (register spills in the permutation; 0.55x of ex_keccak).",
+      "timestamp": "2026-10-09T21:55:15Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Keccak-256 and SHA-3 from scratch vs ex_keccak (tiny-keccak) and :crypto",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:39Z"
+  "updated_at": "2026-10-09T21:55:15Z"
 }
