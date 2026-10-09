@@ -358,7 +358,6 @@ Each of these is a compile error with a code; the code's entry in
 | `fn`, captures `&f/1` (except the `fn` of `Enum.reduce_while/3`, `Enum.all?/2`, `Enum.any?/2`) | [`unsupported-fn`](#unsupported-fn), [`fn-argument`](#fn-argument) |
 | the pipe `\|>` | [`pipe`](#pipe) (the hint shows the nested call) |
 | module attributes `@name` | [`module-attribute`](#module-attribute) (planned) |
-| `band`, `bor`, `<<<`, ... and `Bitwise.*` | [`bitwise`](#bitwise) (planned) |
 | building a bitstring `<<...>>` | [`bitstring-build`](#bitstring-build) (planned) |
 | binary patterns `<<a, b, rest::binary>> = arr` | [`bitstring-match`](#bitstring-match) |
 | calls to other modules (`Enum.sum/1`, `Enum.map/2`, `String.*`, `:math.tan/1`, ...) | [`unsupported-call`](#unsupported-call), [`enum-reduce`](#enum-reduce) and [`enum-find`](#enum-find) (planned) |
