@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T17:10:45Z",
+  "description": "docs/beam-nifs.md (defk-7w2, 2026-10-06) anchors its claims to `file:line` references that have drifted since the credo/dialyzer refactors (defk-x15, 2026-10-09). Checked 2026-10-09:\n- \"`lib/defk/compiler.ex:1925`\" and \":1908\" for the two enif_schedule_nif calls: now lines 2467 and 2437.\n- \"the safepoint macro is `lib/defk/compiler.ex:1870`\": now 2405.\n- \"`priv/defk_runtime.h:395-397`\" for DEFK_SLICE_US: now 425. \"409-430\" for defk_tick: now 443 onwards.\n- The remaining ~15 references (defk_bind, defk_promote, defk_raise, defk_finish, the allocation table rows, guard_fn lines) are off by similar amounts.\n\nFix: replace each `file:line` with the symbol it points at (`defk_tick` in priv/defk_runtime.h, `sp_macro/2` in lib/defk/compiler.ex, `step_fn/3`, ...) so the document does not rot with every refactor; where a line range genuinely helps, keep it as \"around `symbol`\". Add a short note at the top saying references are by symbol name. Optionally a test or `mix ci` step that greps the doc for `\\.(ex|h):\\d+` and fails if any remain.\n\nDone when: the document has no `file:line` references, every named symbol exists (grep), and `mix ci` is green.",
+  "id": "defk-x4u",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "docs/beam-nifs.md cites stale line numbers; reference symbols instead",
+  "type": "task",
+  "updated_at": "2026-10-09T17:10:45Z"
+}
