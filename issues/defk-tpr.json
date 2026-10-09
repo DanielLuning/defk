@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T17:10:44Z",
+  "description": "Every kernel compile error ends with \"(defk \u003ccode\u003e: docs/language.md#\u003ccode\u003e)\" (Defk.Errors, `@docs \"docs/language.md#\"`, and `docs/1`). docs/ contains only adr/, agents/ and beam-nifs.md; writing language.md is defk-sgw.1, still open. So the best-designed part of the devex (64 coded errors with rewrites) currently ends with a broken pointer, which the devex cold test (defk-sgw.3) will hit.\n\nTwo acceptable outcomes:\n1. defk-sgw.1 lands with one anchor per code in Defk.Errors.codes/0 (the registry already has summary, why, hint, example and rewrite per code, so the reference section can be generated from it), plus a test that every code has an anchor in the file. This ticket then closes with it.\n2. Until then, the footer points at something that exists: e.g. \"(defk \u003ccode\u003e; `mix run -e 'IO.puts Defk.Errors.explain!(\"\u003ccode\u003e\")'`)\" with a small `explain!/1` that prints the registry entry, or simply \"(defk \u003ccode\u003e)\" with the docs link added back when the file exists.\n\nRecommended: do (2) now as a small change in Defk.Errors with a test that the rendered footer never names a path that is missing from the repo; keep the dependency on defk-sgw.1 for (1).\n\nDone when: no rendered compile error references a file that does not exist in the repo, verified by a test.",
+  "id": "defk-tpr",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Compile error footers link to docs/language.md, which does not exist yet",
+  "type": "bug",
+  "updated_at": "2026-10-09T17:10:44Z"
+}
