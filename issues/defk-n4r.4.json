@@ -7,6 +7,7 @@
     "defk-52v.2",
     "defk-52v.3",
     "defk-52v.7",
+    "defk-52v.9",
     "defk-n4r.6"
   ],
   "created": "2026-10-09T18:40:51Z",
@@ -26,5 +27,5 @@
   "status": "open",
   "title": "Helper kernels can write to arrays their caller allocated",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:40Z"
+  "updated_at": "2026-10-09T19:47:41Z"
 }
