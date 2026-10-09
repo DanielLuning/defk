@@ -16,11 +16,15 @@
     {
       "text": "Breadcrumb — external NIF memory-pattern review (2026-10-08): four general patterns reviewed against defk. (1) Arena/bump allocation: does not apply to today's subset (no recursion, no per-node malloc; locals in registers), but the goal — one owner, bulk free on any exit — is already built (ctx-\u003eowned + defk_finish releases on raise, yield completion and process death). Recipe for expansion candidates with trees/graphs. (2) enif_resource for long-lived state: already decided against for state in defk-dtw.9 (binaries in/out); resources used for yield frames with per-.so types (README design decision 8). (3) Yield-state context struct: already built — frame resource, resume through loop headers, hot upgrade; the advice's reliance on enif_consume_timeslice alone is deliberately rejected (it reports at return only and cannot preempt a mid-loop kernel; defk uses wall-clock safepoints plus consume_timeslice for accounting at defk_runtime.h). (4) Zero-copy enif_alloc_binary output: README design decision 1, already done (defk allocates at the alloc/2 site, which also handles early-exit sizes). Forward hooks: defk-cmr already specs a doubling growable buffer; arena/resource recipes belong in the verdict's 'Where defk could grow'.",
       "timestamp": "2026-10-08T08:19:12Z"
+    },
+    {
+      "text": "Expansion candidate 'kernel-owned resources' from ADR-0001 now has its exploration plan: epic defk-sve, with the exploration/probably-not line stated in its description.",
+      "timestamp": "2026-10-09T19:47:44Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Wayfinder: roadmap to a defk verdict (kernel subset, runtime contract, devex)",
   "type": "epic",
-  "updated_at": "2026-10-08T08:19:12Z"
+  "updated_at": "2026-10-09T19:47:44Z"
 }
