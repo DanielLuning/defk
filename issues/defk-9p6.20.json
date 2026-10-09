@@ -14,9 +14,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Merged. Findings filed: defk-z69 (calling tuple-returning kernels), defk-qx3 (binary attributes duplicated per inlined site). rotl64 (defk-52v.6) landed after this branched: the 14 rotlN helpers can collapse to it.",
+      "timestamp": "2026-10-09T21:40:28Z"
+    }
+  ],
   "priority": 2,
   "status": "closed",
   "title": "Target workload: non-cryptographic hashes (xxHash64, Murmur3, SipHash, CRC32C) vs murmur, xxhash, siphash and crc32cer",
   "type": "task",
-  "updated_at": "2026-10-09T21:40:27Z"
+  "updated_at": "2026-10-09T21:40:28Z"
 }
