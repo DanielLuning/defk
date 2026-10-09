@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-09T22:05:37Z",
   "created": "2026-10-05T11:18:39Z",
   "description": "Tensor-shaped work should go to Nx/EXLA. Naive defk matmul vs Nx to document the boundary of defk's niche.",
   "id": "defk-9p6.3",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Example: matrix multiply vs Nx (expected: use Nx)",
   "type": "task",
-  "updated_at": "2026-10-09T21:51:25Z"
+  "updated_at": "2026-10-09T22:05:37Z"
 }
