@@ -65,6 +65,7 @@ tried yet.
 | [`poor_tiny_calls.exs`](poor_tiny_calls.exs) | One kernel call per element inside `Enum.map`; the call overhead exceeds the work | 0.38–0.43× | optimised |
 | [`out_of_scope_word_count.exs`](out_of_scope_word_count.exs) | Strings in, a map out; kernels can't build BEAM terms, and the compiler refuses | not expressible | n/a |
 | [`poor_substring_search.exs`](poor_substring_search.exs) | Find a 64-byte needle in a 16 MB binary with a Horspool kernel; `:binary.match/2` is already Boyer-Moore in C (multi-pattern: `:binary.matches/2` with a compiled pattern) | 1.03–1.11× (marginal; found and absent alike, 7 GB/s each side) | optimised |
+| [`utf8_valid.exs`](utf8_valid.exs) | Validate a 16 MB UTF-8 binary with a Hoehrmann DFA kernel, as bandit_native wraps simdutf8 to do; `String.valid?/1` and `:unicode.characters_to_binary/1` are C already (a SIMD validator is a wrapper job) | 1.05–1.09× at 16 MB (marginal; 0.57 vs 0.52 GB/s, `String.valid?` 0.27 GB/s); 0.6× at 64 KB, 0.0 vs 0.002 ms at 1 KB (call cost) | optimised |
 
 Also not what defk is for (no script needed):
 
