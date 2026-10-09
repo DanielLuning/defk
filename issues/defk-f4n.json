@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T21:33:25Z",
+  "description": "Found while writing examples/codecs.exs (defk-9p6.19). When a kernel is defined by a macro (a `use` that quotes a `defk`), the AST nodes have no column metadata, and rendering any compile error in that kernel crashes with ArithmeticError \"nil - 1\" in Defk.Errors.frame/1 (the caret computation `String.duplicate(\" \", d.col - 1)` with col nil), hiding the real error. Repro: a module with `defmacro __using__(_), do: quote(do: (use Defk; defk f(a :: i64) :: {i64, i64} do if a \u003e 0, do: {a, 1}, else: {0, a} end))` and a second module that `use`s it: the branch-tuple error should render; instead the compiler crashes.\n\nFix: `locate/3` and `place/4` already handle a node without a column (`{line, nil, 1, nil}`); `frame/1` must take the `nil` column path (no caret line, location `file:line`) consistently, and `start/1` should fall back to the enclosing kernel head's position when a node has a line but no column. Add a test in test/compile_errors_test.exs that defines a kernel through a macro and asserts the rendered error names the code and the kernel without a crash, for both an expression error and a head error.\n\nDone when: the macro-defined kernel's error renders, and every registry example still renders with a caret when it has a column.",
+  "id": "defk-f4n",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Compile error rendering crashes (nil - 1 in Defk.Errors.frame/1) when the kernel is defined inside a quote",
+  "type": "bug",
+  "updated_at": "2026-10-09T21:33:25Z"
+}
