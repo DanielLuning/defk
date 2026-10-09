@@ -127,14 +127,14 @@ defmodule Defk.CompileRewritesTest do
 
   defp check(:rewrite, msg, rw, fixed) do
     assert is_binary(msg)
-    assert [_] = Regex.scan(~r/^\(defk [a-z0-9-]+: /m, msg), msg
+    assert [_] = Regex.scan(~r/^\(defk [a-z0-9-]+[:;] /m, msg), msg
     assert rw, "no rewrite in:\n#{msg}"
     assert fixed == :ok, "the rewrite does not compile:\n#{rw}\n\n#{fixed}"
   end
 
   defp check(:none, msg, rw, _fixed) do
     assert is_binary(msg)
-    assert [_] = Regex.scan(~r/^\(defk [a-z0-9-]+: /m, msg), msg
+    assert [_] = Regex.scan(~r/^\(defk [a-z0-9-]+[:;] /m, msg), msg
     assert rw == nil, "unexpected rewrite:\n#{rw}"
   end
 

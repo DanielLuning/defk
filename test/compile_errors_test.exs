@@ -45,7 +45,7 @@ defmodule Defk.CompileErrorsTest do
 
   defp codes(msg),
     do:
-      Regex.scan(~r/^\(defk ([a-z0-9-]+): docs\/language\.md#\1\)$/m, msg)
+      Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg)
       |> Enum.map(&Enum.at(&1, 1))
 
   defp whats(msg), do: Regex.scan(~r/^error: (.*)$/m, msg) |> Enum.map(&Enum.at(&1, 1))
@@ -121,8 +121,25 @@ defmodule Defk.CompileErrorsTest do
 
              why: a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read
              hint: pass the values as separate arguments, or pack them into an array before the call
-             (defk unsupported-map: docs/language.md#unsupported-map)\
+             (defk unsupported-map; mix run -e 'Defk.Errors.explain!("unsupported-map")')\
              """
+    end
+
+    test "the footer never names docs/language.md while that file is absent" do
+      refute File.exists?("docs/language.md")
+      msg = compile("defk f(x :: i64) :: i64 do\n  m = %{a: x}\n  x\nend", "Footer")
+      refute msg =~ "docs/language.md"
+      assert msg =~ "(defk unsupported-map; mix run -e"
+    end
+
+    test "explain!/1 prints the registry entry and rejects unknown codes" do
+      out = ExUnit.CaptureIO.capture_io(fn -> Defk.Errors.explain!("unsupported-map") end)
+      assert out =~ Defk.Errors.fetch!("unsupported-map").summary
+      assert out =~ "rewrite:"
+
+      assert_raise ArgumentError, ~r/unknown defk error code/, fn ->
+        Defk.Errors.explain!("no-such-code")
+      end
     end
 
     test "the six prototype cases" do
