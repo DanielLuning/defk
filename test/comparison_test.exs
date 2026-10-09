@@ -104,11 +104,11 @@ defmodule Defk.ComparisonTest do
       1.5,
       2.0,
       -2.5,
-      9.007199254740992e15,
-      -9.007199254740992e15,
-      9.223372036854776e18,
-      -9.223372036854776e18,
-      4.611686018427388e18,
+      9.007_199_254_740_992e15,
+      -9.007_199_254_740_992e15,
+      9.223_372_036_854_776e18,
+      -9.223_372_036_854_776e18,
+      4.611_686_018_427_388e18,
       1.0e300,
       -1.0e300
     ]
@@ -135,11 +135,11 @@ defmodule Defk.ComparisonTest do
              {false, true, false, true, true, true, false, false}
 
     # i64_max rounds up to 2^63
-    assert K.cmp_if(@i64_max, 9.223372036854776e18) ==
+    assert K.cmp_if(@i64_max, 9.223_372_036_854_776e18) ==
              {false, true, false, true, true, true, false, false}
 
     # i64_min is exactly -2^63
-    assert K.cmp_if(@i64_min, -9.223372036854776e18) ==
+    assert K.cmp_if(@i64_min, -9.223_372_036_854_776e18) ==
              {false, true, true, false, false, true, false, true}
 
     assert K.cmp_if(0, -0.0) == {false, true, true, false, false, true, false, true}
@@ -165,7 +165,7 @@ defmodule Defk.ComparisonTest do
     xs = [@two53 - 1, @two53, @two53 + 1, @i64_max, @i64_min, 0, -1]
     bin = for x <- xs, into: <<>>, do: <<x::64-signed-native>>
 
-    for t <- [@two53 * 1.0, 9.223372036854776e18, -9.223372036854776e18, 0.0, -0.0, 0.5] do
+    for t <- [@two53 * 1.0, 9.223_372_036_854_776e18, -9.223_372_036_854_776e18, 0.0, -0.0, 0.5] do
       assert agree(:count_below, [bin, t]) == Enum.count(xs, &(&1 < t))
     end
   end

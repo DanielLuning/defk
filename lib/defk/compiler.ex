@@ -1383,7 +1383,7 @@ defmodule Defk.Compiler do
   @spec argument_fix(term(), [atom()], [term()]) :: keyword()
   defp argument_fix(name, ts, args) do
     cond do
-      name in [:div, :rem] and length(ts) == 2 and Enum.all?(ts, &(&1 in [:i64, :f64])) ->
+      name in [:div, :rem] and match?([_, _], ts) and Enum.all?(ts, &(&1 in [:i64, :f64])) ->
         conv =
           Enum.zip_with(args, ts, fn a, t -> if t == :f64, do: {:trunc, [], [a]}, else: a end)
 
@@ -1888,7 +1888,7 @@ defmodule Defk.Compiler do
       err!(
         init_ast,
         "accumulator-shape",
-        "the accumulator #{Macro.to_string(pat)} has #{length(pats)} element#{if length(pats) == 1, do: "", else: "s"}, #{what} #{Macro.to_string(init_ast)} has #{length(inits)}"
+        "the accumulator #{Macro.to_string(pat)} has #{length(pats)} element#{if match?([_], pats), do: "", else: "s"}, #{what} #{Macro.to_string(init_ast)} has #{length(inits)}"
       )
 
     accs =
@@ -1935,7 +1935,7 @@ defmodule Defk.Compiler do
       err!(
         at,
         "accumulator-shape",
-        "#{what} gives #{length(results)} value#{if length(results) == 1, do: "", else: "s"}, the accumulator has #{length(accs)}"
+        "#{what} gives #{length(results)} value#{if match?([_], results), do: "", else: "s"}, the accumulator has #{length(accs)}"
       )
 
     items = tuple_items(at) || List.duplicate(at, length(accs))
@@ -2649,17 +2649,15 @@ defmodule Defk.Compiler do
     if numeric?(va) and numeric?(vb) do
       compare_numeric_c(op, va, vb, node)
     else
-      cond do
-        va.t == :bool and vb.t == :bool and op in [:==, :!=, :===, :!==] ->
-          "(#{va.c} #{cop(op)} #{vb.c})"
-
-        true ->
-          err!(
-            node,
-            "operand-type",
-            "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
-            hint: "compare two numbers or two booleans"
-          )
+      if va.t == :bool and vb.t == :bool and op in [:==, :!=, :===, :!==] do
+        "(#{va.c} #{cop(op)} #{vb.c})"
+      else
+        err!(
+          node,
+          "operand-type",
+          "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
+          hint: "compare two numbers or two booleans"
+        )
       end
     end
   end

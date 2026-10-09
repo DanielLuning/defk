@@ -35,7 +35,11 @@ defmodule Defk.SelectTest.K do
     end
   end
 
+  # a one-branch cond is a distinct kernel shape (the else branch can still
+  # overflow); the minimal form is the point of the fixture
+  # credo:disable-for-next-line Credo.Check.Refactor.CondStatements
   defk cond_square(keep :: bool, x :: i64) :: i64 do
+    # credo:disable-for-next-line Credo.Check.Refactor.CondStatements
     cond do
       keep -> x
       true -> x * x

@@ -74,6 +74,8 @@ defmodule Defk.EarlyExitTest.K do
           {:halt, {acc, seen}}
 
         r when r < 10 ->
+          # one-branch cond as an early-exit sink; the shape is the fixture
+          # credo:disable-for-next-line Credo.Check.Refactor.CondStatements
           cond do
             r == 1 -> {:cont, {acc + 1000, seen + 1}}
             true -> {:cont, {acc + r, seen + 1}}

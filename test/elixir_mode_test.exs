@@ -287,10 +287,14 @@ defmodule Defk.ElixirModeTest.K do
   end
 
   defk debug(x :: i64, a :: [f64]) :: f64 do
+    # dbg and IO.inspect must compile and run in Elixir mode: exercising them
+    # here, deliberately.
+    # credo:disable-for-next-line Credo.Check.Warning.Dbg
     y = dbg(x * 2)
 
     s =
       for v <- a, reduce: 0.0 do
+        # credo:disable-for-next-line Credo.Check.Warning.IoInspect
         acc -> IO.inspect(acc + v, label: "acc")
       end
 
@@ -304,8 +308,8 @@ defmodule Defk.ElixirModeTest do
   import ExUnit.CaptureIO
   import Defk.ElixirModeTest.Agree
 
-  alias Defk.ElixirModeTest.K
   alias Defk.EarlyExitTest.K, as: E
+  alias Defk.ElixirModeTest.K
   alias Defk.ResumeTest.K, as: R
   alias Defk.SelectTest.K, as: S
 
@@ -341,13 +345,13 @@ defmodule Defk.ElixirModeTest do
     for mod <- [Defk.EarlyExitTest, Defk.SelectTest] do
       test "every #{inspect(mod)} test body passes with its kernels in Elixir mode" do
         tests =
-          for {f, 1} <- apply(unquote(mod), :__info__, [:functions]),
+          for {f, 1} <- unquote(mod).__info__(:functions),
               name = Atom.to_string(f),
               String.starts_with?(name, "test "),
               name not in @native_only,
               do: f
 
-        assert length(tests) >= 6
+        assert Enum.count_until(tests, 7) >= 6
 
         for t <- tests do
           Defk.ElixirMode.with_mode(:elixir, fn -> apply(unquote(mod), t, [%{}]) end)
@@ -704,7 +708,7 @@ defmodule Defk.ElixirModeTest do
       assert Defk.ElixirMode.setup!(:elixir, env) == {:elixir, true}
 
       assert_raise CompileError, ~r/unknown mode :fast/, fn ->
-        apply(Defk.ElixirMode, :setup!, [:fast, env])
+        Defk.ElixirMode.setup!(:fast, env)
       end
 
       for {mix_env, expect} <- [dev: {:native, false}, prod: {:native, false}] do

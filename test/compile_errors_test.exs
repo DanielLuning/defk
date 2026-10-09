@@ -256,7 +256,7 @@ defmodule Defk.CompileErrorsTest do
       body = Enum.map_join(1..12, "\n", &"  v#{&1} = :a#{&1}")
       msg = compile("defk f(x :: i64) :: i64 do\n#{body}\n  x\nend", "Cap")
       assert msg =~ ": 12 kernel compile errors\n"
-      assert length(codes(msg)) == 10
+      assert Enum.count_until(codes(msg), 11) == 10
       assert msg =~ ~r/\n\n2 more not shown; fix these first$/
     end
 

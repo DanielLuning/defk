@@ -2,6 +2,8 @@ defmodule Defk.Build do
   @moduledoc false
   # Compile generated C with the system C compiler, cached by hash.
 
+  # compile-time attribute for the same reason as lib/defk.ex
+  # credo:disable-for-next-line ExSlop.Check.Warning.PathExpandPriv
   @priv Path.expand("../../priv", __DIR__)
 
   # -ffp-contract=off: never fuse a*b+c into an FMA, whose single rounding

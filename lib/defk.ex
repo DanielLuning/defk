@@ -16,6 +16,10 @@ defmodule Defk do
   (passed as binaries in native byte order), tuples as return values.
   """
 
+  # compile-time attribute: the defk app is not loaded when this module is
+  # compiled, so Application.app_dir/2 (which reads :code.priv_dir) cannot
+  # answer yet; a source-relative path is the only honest option.
+  # credo:disable-for-next-line ExSlop.Check.Warning.PathExpandPriv
   @runtime_h Path.expand("../priv/defk_runtime.h", __DIR__)
 
   defmacro __using__(_opts) do

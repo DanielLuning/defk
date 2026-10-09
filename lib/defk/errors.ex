@@ -1257,8 +1257,7 @@ defmodule Defk.Errors do
      rewrite: fold_rewrites(src, if(fun == :sum, do: :+, else: :*), zero)}
   end
 
-  defp call_rejection("Enum", fun, [list], _node)
-       when fun in [:min, :max] and is_list(list) and length(list) >= 2 do
+  defp call_rejection("Enum", fun, [[_, _ | _] = list], _node) when fun in [:min, :max] do
     rewrite = list |> Enum.reduce(&{fun, [], [&2, &1]}) |> Macro.to_string()
 
     {"unsupported-call", "Enum.#{fun}/1 over a list is not in the kernel subset",
