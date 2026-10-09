@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-x15.6"
+  ],
   "created": "2026-10-09T09:30:21Z",
   "description": "All 19 dialyzer findings are truthful, not bugs.\n- mix.exs: plt_add_apps [:ex_unit, :mix] (Mix.* unknown_function; :mix is genuinely loaded at mix compile).\n- Add '@spec ... :: no_return()' to the 14 reject helpers (err!/3 and /4, unsupported!/3, return_input_array!/2, unsupported_pattern!/3, bitstring_match!/1, builtin_arguments!/3, unknown_function!/4, recursion!/3, not_an_array!/3, cond_without_true!/1, case_form!/1, fn_argument!/3, for_collect!/6, generator_pattern!/1). no_return() matches inferred none(); better than nowarn because a future returning clause becomes a caught spec violation.\n- compiler.ex:50 anon fun: prefer inlining the try/catch at that call site (no per-fun spec possible); use @dialyzer nowarn_function on compile/4 only if inlining is worse.",
   "id": "defk-x15.1",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Dialyzer: add no_return specs, :mix plt, fix anon-fun warning",
   "type": "task",
-  "updated_at": "2026-10-09T09:30:21Z"
+  "updated_at": "2026-10-09T09:30:31Z"
 }
