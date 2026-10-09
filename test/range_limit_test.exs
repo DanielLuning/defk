@@ -62,6 +62,7 @@ end
 
 defmodule Defk.RangeLimitTest do
   use ExUnit.Case, async: true
+  use Defk.Properties
   alias Defk.RangeLimitTest.K
 
   @max 0x7FFF_FFFF_FFFF_FFFF
@@ -126,4 +127,48 @@ defmodule Defk.RangeLimitTest do
     # a limit even when a halt would end the loop first
     limit(fn -> both(:first_over, [1, @max]) end)
   end
+
+  # ---------------------------------------------------- agreement properties --
+  # Every kernel here against its Elixir mode (defk-ne6). A range runs at
+  # most a few thousand steps, anywhere in the i64 range: the far end is the
+  # near one plus a bounded number of steps, clamped to the i64 limits, so
+  # ranges ending at or next to them come up often.
+
+  defp clamp(x), do: x |> max(@min) |> min(@max)
+
+  # [a, b] with b = a + d, |d| <= span (d's sign from `dir`: 1, -1 or either)
+  defp near(dir, span) do
+    bind(G.i64(), fn a ->
+      d =
+        case dir do
+          1 -> integer(0..span)
+          -1 -> integer(-span..0)
+          0 -> integer(-span..span)
+        end
+
+      fixed_list([constant(a), map(d, &clamp(a + &1))])
+    end)
+  end
+
+  # [a, b, k]: about m steps of k (any i64, 0 included) from a
+  defp stepped do
+    bind(tuple({G.i64(), G.i64(), integer(-3..3_000), integer(-2..2)}), fn {a, k, m, j} ->
+      fixed_list([constant(a), constant(clamp(a + k * m + j)), constant(k)])
+    end)
+  end
+
+  # a reduce_while that halts past 100: a from where it gets there soon
+  defp first_over do
+    fixed_list([G.i64(-3_000..3_000, [@max, @max - 1, 2 ** 62, 2 ** 53 + 1, 2 ** 31]), G.i64()])
+  end
+
+  agreement(K,
+    wrap: [],
+    count_up: [args: near(1, 9_000)],
+    count_down: [args: near(-1, 9_000)],
+    count_step: [args: stepped()],
+    count_auto: [args: near(0, 3_000)],
+    first_over: [args: first_over()],
+    sum_len: []
+  )
 end

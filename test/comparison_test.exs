@@ -40,6 +40,7 @@ end
 
 defmodule Defk.ComparisonTest do
   use ExUnit.Case, async: true
+  use Defk.Properties
 
   alias Defk.ComparisonTest.K
 
@@ -169,4 +170,10 @@ defmodule Defk.ComparisonTest do
       assert agree(:count_below, [bin, t]) == Enum.count(xs, &(&1 < t))
     end
   end
+
+  # ---------------------------------------------------- agreement properties --
+  # Every kernel here against its Elixir mode (defk-ne6), on the i64 and f64
+  # edge values: 2^53 and 2^63 and their neighbours, signed zeros.
+
+  agreement(K, [:cmp_if, :cmp_fi, :cmp_ff, :cmp_ii, :minmax_f, :minmax_i, :count_below])
 end

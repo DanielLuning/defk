@@ -49,6 +49,7 @@ end
 
 defmodule Defk.AllocTest do
   use ExUnit.Case, async: true
+  use Defk.Properties
   alias Defk.AllocTest.K
 
   @i64_max 0x7FFF_FFFF_FFFF_FFFF
@@ -181,4 +182,33 @@ defmodule Defk.AllocTest do
   rescue
     e -> {:raise, e}
   end
+
+  # ---------------------------------------------------- agreement properties --
+  # Every kernel here against its Elixir mode (defk-ne6), at lengths that are
+  # small, negative, or at or past the alloc limit (Defk.Generators.alloc_len:
+  # never one a real allocator might grant), and indices around them.
+
+  defp len_and_index(esz) do
+    bind(G.alloc_len(esz), fn n ->
+      m = min(max(n, 0), 100)
+      fixed_list([constant(n), frequency([{3, integer(-2..(m + 2))}, {1, G.i64()}])])
+    end)
+  end
+
+  defp at do
+    bind(G.array(:i64), fn a ->
+      len = div(byte_size(a), 8)
+      fixed_list([constant(a), frequency([{3, integer(-2..(len + 2))}, {1, G.i64()}])])
+    end)
+  end
+
+  agreement(K,
+    big: [args: len_and_index(8)],
+    len_f64: [args: fixed_list([G.alloc_len(8)])],
+    len_i64: [args: fixed_list([G.alloc_len(8)])],
+    len_u8: [args: fixed_list([G.alloc_len(1)])],
+    two: [args: fixed_list([G.alloc_len(8)])],
+    at: [args: at()],
+    put_at: [args: len_and_index(8)]
+  )
 end
