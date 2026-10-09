@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-52v.1",
@@ -51,8 +51,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Support bitwise operators in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:44Z"
+  "updated_at": "2026-10-09T20:47:49Z"
 }
