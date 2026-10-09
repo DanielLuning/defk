@@ -18,11 +18,15 @@
     {
       "text": "The agreement properties (defk-ne6) found four instances of this, tagged @tag :divergence in the suite (excluded by default, run with mix test --only divergence): (1) Examples.Kernels.scale(\u003c\u003c1.0e308::float-64-native\u003e\u003e, 10.0): native returns an array holding inf, Elixir mode raises ArithmeticError. (2) Examples.Kernels.sum(\u003c\u003c0x7FF0000000000000::64-native\u003e\u003e): native raises ArithmeticError \"kernel produced a non-finite float\" at return, Elixir mode raises ArgumentError (:non_finite_input) at the read. (3) Rolling.Kernels.mean_std(\u003c\u003c1.0e200::float-64-native\u003e\u003e, 1): native returns NaN in the output, Elixir mode raises. (4) Geo.Kernels.nearest([1.7e308], [0.0], [0.0], -1.7e308, 0.0, 1): native returns [-1], Elixir mode raises ArithmeticError. The main properties bound floats to 1e100-1e150 until this is fixed; lift those bounds when closing.",
       "timestamp": "2026-10-09T20:33:21Z"
+    },
+    {
+      "text": "From defk-6g6 probes: pow(negative, 0.5) written into an output array gives NaN natively while Elixir mode raises (the scalar form raises in both). Covered by this ticket: a non-finite result must raise at the op, whether or not it is stored.",
+      "timestamp": "2026-10-09T20:48:33Z"
     }
   ],
   "priority": 1,
   "status": "in_progress",
   "title": "Raise on non-finite floats like Elixir",
   "type": "task",
-  "updated_at": "2026-10-09T20:47:49Z"
+  "updated_at": "2026-10-09T20:48:33Z"
 }
