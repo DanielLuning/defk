@@ -9,6 +9,10 @@ code and runtime header, and in README design decisions; file and line are
 given where practical. Where something is defk's reasoning rather than an OTP
 requirement, it says so. Where a fact is not settled, it says that too.
 
+Code references in this document cite symbols by name rather than line number,
+so they survive refactors; where a line range conveys essential context, it is
+kept as "around `symbol`".
+
 Vocabulary is `CONTEXT.md`'s: a **kernel** is a function written in the kernel
 subset and compiled to native code (a kernel is compiled to one NIF library,
 but a NIF is any native function); the **runtime contract** is what a kernel
@@ -51,8 +55,8 @@ documentation calls yielding "always preferred over the other alternatives".
   return value", and it "only schedules the NIF for future execution" — the
   current call returns immediately, the scheduler runs other processes, then
   the continuation runs. defk uses it in both wrappers: once to hand off a
-  first call that yielded (`lib/defk/compiler.ex:1925`) and once per resumed
-  step (`lib/defk/compiler.ex:1908`).
+  first call that yielded (`promote/2` in lib/defk/compiler.ex) and once per resumed
+  step (`step_fn/3` in lib/defk/compiler.ex).
 - **`enif_consume_timeslice` is return-time accounting only.** It reports how
   much of the process's timeslice the call has used and returns `1` when the
   slice is exhausted, at which point "the NIF is to return as soon as
@@ -63,10 +67,10 @@ documentation calls yielding "always preferred over the other alternatives".
   `enif_consume_timeslice` to *charge* the time: every loop back-edge counts
   against a budget, `defk_tick` reads `enif_monotonic_time` and adapts that
   budget so the clock is read every `DEFK_SLICE_US/10` … `/4`
-  (`priv/defk_runtime.h:409-430`), and a spent budget returns `0`, which makes
+  (around `defk_tick` in priv/defk_runtime.h), and a spent budget returns `0`, which makes
   the loop return `DEFK_YIELD`. `DEFK_SLICE_US` is 250 µs
-  (`priv/defk_runtime.h:395-397`); the safepoint macro is
-  `lib/defk/compiler.ex:1870`. `bench/tick_gap.exs` measures the worst
+  (`DEFK_SLICE_US` in priv/defk_runtime.h); the safepoint macro is
+  `sp_macro/2` in lib/defk/compiler.ex. `bench/tick_gap.exs` measures the worst
   scheduler gap and `bench/yield_cost.exs` the throughput cost.
 
 **Dirty schedulers are not used.** OTP defines a dirty NIF as one that
@@ -88,7 +92,7 @@ reading rather than an OTP rule:
    module under a running kernel.
 
 Every generated NIF is registered with flag `0` (a normal NIF)
-(`lib/defk/compiler.ex:1936`); no source in this repo schedules a dirty job.
+(`emit_init/3` in lib/defk/compiler.ex); no source in this repo schedules a dirty job.
 
 ## 2. Lifecycles
 
@@ -104,15 +108,15 @@ environment and a fresh `argv`.
 
 **Heap binaries move, so every entry rebinds.** Binaries of at most 64 bytes
 live on the calling process's heap, and GC between two steps can move them.
-The comment above `defk_bind` (`priv/defk_runtime.h:194-199`) states the rule:
+The comment above `defk_bind` (`defk_bind` in priv/defk_runtime.h) states the rule:
 bind on *every* entry — the first call and each resume — because "heap
 binaries can move during GC between yields". The generated entry does exactly
-that for each array argument (`lib/defk/compiler.ex:1854`), and
+that for each array argument (`bind_params/2` in lib/defk/compiler.ex), and
 `test/heap_binary_yield_test.exs` forces a GC mid-kernel to prove a resume
 reads the moved binary rather than the address the previous step held.
 A misaligned input (a sub-binary at an odd offset) is copied once into an
 owned binary and that copy slot is remembered across resumes
-(`priv/defk_runtime.h:217-221`, `F->copy`).
+(around `defk_bind` in priv/defk_runtime.h, `F->copy`).
 
 The kernel body builds no terms: it computes on off-heap memory in
 `ctx->owned`, and terms are made at the boundary from the current environment
@@ -121,10 +125,10 @@ first yield.
 
 **Process death frees the frame.** A kernel starts on a C stack frame and is
 copied into a resource only on its first yield (README design decision 4;
-`defk_promote`, `priv/defk_runtime.h:546-555`). If the process dies while
+around `defk_promote` in priv/defk_runtime.h). If the process dies while
 suspended, the resource destructor runs: `defk_frame_dtor` calls
 `defk_finish`, releasing every owned buffer, and decrements `frames_live`
-(`priv/defk_runtime.h:121-126`).
+(around `defk_frame_dtor` in priv/defk_runtime.h).
 
 **Resource keep/release rules** (OTP): a resource is destructed when the last
 reference is removed; each `enif_alloc_resource` or `enif_keep_resource` must
@@ -133,16 +137,16 @@ be balanced by an `enif_release_resource`; references made by
 are no guarantees exactly when the destructor of an unreferenced resource is
 called". defk's `defk_promote` releases its allocation reference immediately
 after making the term, so only the term keeps the frame alive
-(`priv/defk_runtime.h:551`).
+(`defk_promote` in priv/defk_runtime.h).
 
 ## 3. Memory constructs
 
 | Construct | Ownership | Good for | Bad for | defk's stance |
 |---|---|---|---|---|
-| `enif_alloc` / `enif_free` | Caller owns the raw block; nothing frees it if you forget | Scratch memory with one obvious owner and one free site | Anything that must be cleaned up when a process dies or a raise happens | Used only for the `ctx->owned` table itself (`enif_realloc` `priv/defk_runtime.h:135`, `enif_free` `:109`); never for kernel data |
-| `enif_alloc_binary` + `enif_make_binary` | Owned until `enif_make_binary` transfers it to a term (or `enif_release_binary`) | Output buffers whose size is known before the term exists; can be kept between NIF calls | Small one-shot outputs (heap allocation is cheaper); leaks if neither release nor transfer happens | The output path for every array: `defk_own` allocates (`priv/defk_runtime.h:141`), `defk_make_arr` transfers (`:183`). README design decision 1 |
-| `enif_make_new_binary` | Creates the owning term in one step; the data is mutable only until the NIF returns | Small outputs and error messages, when you do not need to reallocate or outlive the call | Cannot be kept between NIF calls, cannot be reallocated — so no growable buffers | The message binary in `defk_raise` (`priv/defk_runtime.h:472`) and the empty-array edge case (`:190`) |
-| `enif_alloc_resource` | Refcounted object with a destructor; a term handle via `enif_make_resource` | Long-lived native state that must be cleaned up by the GC on any exit path | Per-call values: refcounting, destructor rules, and hot-upgrade complexity | Used only for the suspended frame (`defk_promote`, `priv/defk_runtime.h:546-555`), with a resource type per loaded library (§6). Not for kernel state — see ADR-0001 |
+| `enif_alloc` / `enif_free` | Caller owns the raw block; nothing frees it if you forget | Scratch memory with one obvious owner and one free site | Anything that must be cleaned up when a process dies or a raise happens | Used only for the `ctx->owned` table itself (`enif_realloc` in `defk_own`, `enif_free` in `defk_release_owned`); never for kernel data |
+| `enif_alloc_binary` + `enif_make_binary` | Owned until `enif_make_binary` transfers it to a term (or `enif_release_binary`) | Output buffers whose size is known before the term exists; can be kept between NIF calls | Small one-shot outputs (heap allocation is cheaper); leaks if neither release nor transfer happens | The output path for every array: `defk_own` allocates (`defk_own` in priv/defk_runtime.h), `defk_make_arr` transfers (in `defk_make_arr`). README design decision 1 |
+| `enif_make_new_binary` | Creates the owning term in one step; the data is mutable only until the NIF returns | Small outputs and error messages, when you do not need to reallocate or outlive the call | Cannot be kept between NIF calls, cannot be reallocated — so no growable buffers | The message binary in `defk_raise` (in `defk_raise`) and the empty-array edge case (in `defk_make_arr`) |
+| `enif_alloc_resource` | Refcounted object with a destructor; a term handle via `enif_make_resource` | Long-lived native state that must be cleaned up by the GC on any exit path | Per-call values: refcounting, destructor rules, and hot-upgrade complexity | Used only for the suspended frame (around `defk_promote` in priv/defk_runtime.h), with a resource type per loaded library (§6). Not for kernel state — see ADR-0001 |
 
 **Ideas layer.** A review of four general NIF memory patterns against defk is
 recorded as a breadcrumb comment on `defk-dtw` dated **2026-10-08**
@@ -175,31 +179,31 @@ recipes belong in the verdict's *Where defk could grow*.
 returned from a NIF"; OTP guarantees it is raised when the NIF returns "even
 if the NIF attempts to return a non-exception term instead". defk builds the
 Elixir exception struct as a map and returns it
-(`defk_raise`, `priv/defk_runtime.h:455-483`): `ArithmeticError`,
+(in `defk_raise` in priv/defk_runtime.h): `ArithmeticError`,
 `Enum.OutOfBoundsError`, `CaseClauseError`, `ArgumentError`, `RuntimeError`.
 
 **`sigsetjmp` discipline.** An error inside a kernel does not unwind through
 the generated frames; it `siglongjmp`s to a `setjmp` taken at the NIF
 boundary.
-`defk_ctx.jb` is the jump buffer (`priv/defk_runtime.h:47`), and README design
+`defk_ctx.jb` is the jump buffer (in `defk_ctx` typedef), and README design
 decision 6 records why `sigsetjmp(jb, 0)` and not `setjmp`: plain `setjmp`
 saves the signal mask on macOS, a syscall costing 160 ns per call. The jump
 target lives in a separate `noinline` function so the `setjmp` frame does not
-pessimise the kernel body (`lib/defk/compiler.ex:1898-1900`):
+pessimise the kernel body (in `guard_fn/2`):
 `guard_<n>` takes the jump and calls `run_<n>`, which contains no `setjmp`.
 
 **Release owned on every error path.** Anything the call allocated is in
 `ctx->owned` and must be released before the NIF returns, on success and on
-failure alike — `defk_finish` (`priv/defk_runtime.h:114-119`). It runs in both
+failure alike — `defk_finish` (in `defk_finish`). It runs in both
 wrappers immediately before a raise is constructed: `step_` for a resumed
-kernel (`lib/defk/compiler.ex:1909`) and `nif_` for a first call
-(`lib/defk/compiler.ex:1929`). Process death is covered by the frame
+kernel (`step_fn/3` in lib/defk/compiler.ex) and `nif_` for a first call
+(`nif_fn/3` in lib/defk/compiler.ex). Process death is covered by the frame
 destructor (§2). `test/raise_cleanup_test.exs` checks both frames, including
 that the bytes are gone from `:erlang.memory(:binary)`.
 
 **Nothing unwinds across the NIF boundary.** A raise is a value built and
 returned from the boundary, not a C unwind leaving the library: `defk_fail`
-jumps to `guard_` *inside* the same call (`priv/defk_runtime.h:64-72`),
+jumps to `guard_` *inside* the same call (in `defk_fail`),
 `guard_` returns `DEFK_ERR`, the wrapper releases and raises. The order is
 release, then raise — never the reverse.
 
@@ -250,14 +254,14 @@ will explain. URL in §8.
 **One `.so` per source hash.** `Defk.Build.build!/3` hashes the C flags, the
 generated C and `priv/defk_runtime.h`, and names the artifact
 `<Module>-<first 10 hex>` under `_build/<env>/defk/`
-(`lib/defk/build.ex:15-16`); an existing file is not rebuilt
-(`lib/defk/build.ex:18`), so the library is content-addressed and a
+(in `build!/3` in lib/defk/build.ex); an existing file is not rebuilt
+(in `build!/3` in lib/defk/build.ex), so the library is content-addressed and a
 reload of identical source maps to the same image. The compiler is the system
-`cc` or `$CC` (ADR-0002; `lib/defk/build.ex:20-27`).
+`cc` or `$CC` (ADR-0002; around `build!/3` in lib/defk/build.ex).
 
 **Loading.** The stub module declares `@on_load :__defk_load__` and calls
 `:erlang.load_nif(lib, 0)` with that absolute build path
-(`lib/defk.ex:79-81`); `Mod.__defk_lib__/0` returns it (`lib/defk.ex:85`).
+(around `__defk_load__` in lib/defk.ex); `Mod.__defk_lib__/0` returns it (`__defk_lib__` in lib/defk.ex).
 Known limitation: a `mix release` does not copy `_build/<env>/defk`, so a
 release is not relocatable until the `.so` ships in `priv/` — see
 `examples/release_debian/README.md` and ticket `defk-n8f`.
@@ -266,12 +270,12 @@ release is not relocatable until the `.so` ships in `priv/` — see
 decision 8: recompiling a module builds a new `.so`; a yielded kernel
 reschedules *its own* library's step function, and ERTS keeps that library
 mapped until the continuation returns. The comment above `defk_open_rt`
-(`priv/defk_runtime.h:506-523`) spells out the mechanism:
+(around `defk_open_rt` in priv/defk_runtime.h) spells out the mechanism:
 
 - Each loaded library image opens its **own frame resource type**, named after
-  the address of one of its statics (`priv/defk_runtime.h:524-529`), in
-  `defk_load` / `defk_upgrade` (`:530-540`, registered through `ERL_NIF_INIT`
-  at `lib/defk/compiler.ex:1943`).
+  the address of one of its statics (around `defk_open_rt` in priv/defk_runtime.h), in
+  `defk_load` / `defk_upgrade` (registered in priv/defk_runtime.h through `ERL_NIF_INIT`
+  in `emit_init/3` in lib/defk/compiler.ex).
 - A newer library therefore never takes over an older library's frames: each
   destroys its own frames with the `defk_ctx` layout it was built with, and
   stays loaded while any exist.
