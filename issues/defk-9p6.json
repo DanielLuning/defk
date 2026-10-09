@@ -10,11 +10,15 @@
     {
       "text": "Ordering rule for new catalog entries (owner, 2026-10-09): we do not exclude a job on principle because the BEAM or a library already does it; every plausible job gets an entry with a pre-registered expected verdict, so the catalog guides people. Priority goes to what defk can make better: expected-good entries with a real anchor first (P2), guidance entries where Elixir or a BIF is expected to win second (P3-P4). The text workloads from docs/research/string-workloads.md (defk-dtw.20) and the Monte Carlo and hash-chain jobs are filed under this rule below.",
       "timestamp": "2026-10-09T19:21:01Z"
+    },
+    {
+      "text": "Sibling epics filed 2026-10-09: defk-52v (from-scratch kernels where people wrap a library; Tier 1 and 2 entries are catalog examples too, parented there to keep the rewrite question in one place) and defk-sve (kernel-owned state: exploration then decision). The rewrite boundary table lives in defk-52v.14.",
+      "timestamp": "2026-10-09T19:47:43Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Example catalog: where defk is (and is not) the right tool",
   "type": "epic",
-  "updated_at": "2026-10-09T19:21:01Z"
+  "updated_at": "2026-10-09T19:47:43Z"
 }
