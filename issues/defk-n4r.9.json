@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T18:40:52Z",
+  "description": "The pre-registered measurement. Before running: write the rule down in the example header (verdict thresholds from examples/README.md: good \u003e= 2x over the optimized baseline; realistic size 1B rows; what is reported beside it: Rustler comparison, tick gap, peak memory, schedulers). Then, on the quiet-machine profile (defk-sgw.4 describes it): generate the 1B-row file (~13 GB; needs ~30 GB free with the output), run baseline, defk and the Rustler variants, best of 3 each, and record everything in examples/one_brc/README.md and as a DEFK_RESULT line that run_all.exs skips by default (a 1B run is minutes, not a CI check).\n\nAlso record: the generated C size and compile time for the kernel module (defk-6ag), the number of yields and promotions (__defk_stats__), and whether the result changes with DEFK_STRIP/DEFK_SLICE_US defaults.\n\nHuman-run because it needs the quiet machine and the disk space, and because the verdict is written by the owner.\n\nDone when: examples/one_brc/README.md states the verdict with the numbers, and docs/language.md (defk-sgw.1) lists the constructs 1BRC added.",
+  "id": "defk-n4r.9",
+  "labels": [],
+  "parent": "defk-n4r",
+  "priority": 2,
+  "status": "open",
+  "title": "1BRC: full-size run (1B rows) on a quiet machine and the workload verdict",
+  "type": "task",
+  "updated_at": "2026-10-09T18:40:52Z"
+}
