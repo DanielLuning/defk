@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-52v.1",
@@ -22,8 +22,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Module attributes as constants in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:42Z"
+  "updated_at": "2026-10-09T21:01:39Z"
 }
