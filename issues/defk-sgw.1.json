@@ -15,9 +15,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-sgw",
+  "comments": [
+    {
+      "text": "When this lands, generate the per-code reference section from Defk.Errors.codes/0 and add a test that every code has an anchor; defk-tpr tracks the broken footer link until then.",
+      "timestamp": "2026-10-09T17:10:49Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Write docs/language.md: the kernel subset reference",
   "type": "task",
-  "updated_at": "2026-10-09T17:10:48Z"
+  "updated_at": "2026-10-09T17:10:49Z"
 }
