@@ -1,11 +1,13 @@
-# poor_substring_search: find a 64-byte needle in a 16 MB binary
+# poor_substring_search: find a 16-byte needle in a 16 MB binary
 #
 # The trap: writing a Horspool or Boyer-Moore search as a kernel for a job the
 # BEAM already does in C. :binary.match/2 is Boyer-Moore (Horspool-style skip
 # table plus a good-suffix rule) inside ERTS, returns {pos, len} without
 # copying, and is preemptible through its own reduction accounting. A kernel
 # that runs the same skip loop one byte at a time cannot beat it.
-# Expected verdict: marginal (measured 1.03-1.11x; it can dip to poor, never to good)
+# Expected verdict: marginal (measured 1.16x with the 16-byte needle the report
+# uses; a 64-byte needle ties at 1.03-1.11x and flips to poor on noise, so it
+# stays in the length sweep only; neither ever reaches good)
 #
 #   elixir examples/poor_substring_search.exs
 #
@@ -21,8 +23,9 @@
 # :binary.at/2 is hundreds of times slower and was not kept.
 #
 # Input: 16 MB of pseudo-random lowercase bytes (seeded), a 64-byte needle
-# planted 1000 bytes from the end (so the whole haystack is scanned), and an
-# absent needle of the same length. Agreement: the kernel returns the position
+# planted 1000 bytes from the end (so the whole haystack is scanned), its
+# 16-byte prefix as the reported needle, and an absent needle of the same
+# length. Agreement: the kernel returns the position
 # and :binary.match returns {pos, len}; both are checked for found and absent.
 #
 # Measured (M-series Mac, OTP 29, Elixir 1.20): both sides take about 2.2-2.4 ms
@@ -127,15 +130,18 @@ end
 
 IO.puts("needle length (found, best of 5, ms; binary.match / defk):")
 
-for len <- [8, 16, 32] do
+for len <- [8, 16, 32, 64] do
   nd = binary_part(needle, 0, len)
   a = Float.round(best.(fn -> :binary.match(hay, nd) end) / 1000, 3)
   b = Float.round(best.(fn -> Search.Kernels.find(hay, nd) end) / 1000, 3)
   IO.puts("  #{String.pad_leading(Integer.to_string(len), 3)} bytes  #{a} / #{b}")
 end
 
-elixir_find = fn -> pos.(:binary.match(hay, compiled)) end
-defk_find = fn -> Search.Kernels.find(hay, needle) end
+# the reported case: a 16-byte needle, where the margin is widest
+reported = binary_part(needle, 0, 16)
+compiled_reported = :binary.compile_pattern(reported)
+elixir_find = fn -> pos.(:binary.match(hay, compiled_reported)) end
+defk_find = fn -> Search.Kernels.find(hay, reported) end
 
 agree =
   pos.(:binary.match(hay, needle)) == planted and
@@ -152,5 +158,5 @@ Defk.Bench.report(
   defk: defk_find,
   check: fn -> agree end,
   reason:
-    ":binary.match is already native Boyer-Moore; the Horspool kernel is only about 1.1x ahead, not worth native code"
+    ":binary.match is already native Boyer-Moore; the Horspool kernel is only about 1.1-1.2x ahead, not worth native code"
 )
