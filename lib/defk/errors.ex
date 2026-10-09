@@ -46,7 +46,10 @@ defmodule Defk.Errors do
 
   # ------------------------------------------------------------- registry --
   # Retired codes, never reused: "bitwise" (the operators are supported since
-  # defk-w38), "module-attribute" (attributes are constants since defk-ivt).
+  # defk-w38), "module-attribute" (attributes are constants since defk-ivt),
+  # "read-only-array" (an input array is copied before a write since
+  # defk-auo), "tuple-return-call" (a kernel returning a tuple is called from
+  # kernels since defk-auo).
 
   @codes [
     # -- kernel definitions
@@ -133,13 +136,12 @@ defmodule Defk.Errors do
       code: "return-input-array",
       kind: :planned,
       summary:
-        "A returned array is one the kernel created with alloc/2; returning an input array is planned.",
+        "A returned array is one the kernel created with alloc/2 or wrote; returning an unwritten input array is planned.",
       why:
-        "a kernel returns arrays it allocated itself; handing an input array back to the caller is planned",
-      hint: "copy it into an array from alloc/2 and return that",
+        "a kernel returns arrays it owns: one from alloc/2, or an input array it wrote, which is a copy; handing an unwritten input array back to the caller is planned",
+      hint: "return the input itself from the Elixir caller, which already holds it",
       example: "defk f(a :: [f64]) :: [f64] do\n  a\nend",
-      rewrite:
-        "defk f(a :: [f64]) :: [f64] do\n  out = alloc(f64, len(a))\n\n  for i <- 0..(len(a) - 1)//1 do\n    out[i] = a[i]\n  end\n\n  out\nend"
+      rewrite: "defk f(a :: [f64]) :: f64 do\n  a[0]\nend"
     },
     %{
       code: "empty-block",
@@ -311,18 +313,6 @@ defmodule Defk.Errors do
       rewrite: "defk f(x :: [i64]) :: i64 do\n  x[0]\nend"
     },
     %{
-      code: "read-only-array",
-      kind: :planned,
-      summary:
-        "Only arrays created with alloc/2 are written; writing to an input array is planned.",
-      why:
-        "an input array is the caller's binary, and a kernel never changes a value the caller holds",
-      hint: "copy it into an array from alloc/2 and write that",
-      example: "defk f(a :: [f64]) :: [f64] do\n  a[0] = 1.0\n  a\nend",
-      rewrite:
-        "defk f(a :: [f64]) :: [f64] do\n  out = alloc(f64, len(a))\n\n  for i <- 0..(len(a) - 1)//1 do\n    out[i] = a[i]\n  end\n\n  out[0] = 1.0\n  out\nend"
-    },
-    %{
       code: "nested-tuple",
       kind: :subset,
       summary: "Tuples don't nest.",
@@ -374,18 +364,6 @@ defmodule Defk.Errors do
         "defk g(a :: i64, b :: i64) :: i64 do\n  a + b\nend\n\ndefk f(x :: i64) :: i64 do\n  g({x, x})\nend",
       rewrite:
         "defk g(a :: i64, b :: i64) :: i64 do\n  a + b\nend\n\ndefk f(x :: i64) :: i64 do\n  g(x, x)\nend"
-    },
-    %{
-      code: "tuple-return-call",
-      kind: :subset,
-      summary: "A kernel that returns a tuple is called from Elixir only.",
-      why:
-        "a kernel's tuple result becomes a BEAM tuple, and inside a kernel a tuple can't be held as one value",
-      hint: "split it into kernels that return one value each",
-      example:
-        "defk g(x :: i64) :: {i64, i64} do\n  {x, x + 1}\nend\n\ndefk f(x :: i64) :: i64 do\n  {a, b} = g(x)\n  a + b\nend",
-      rewrite:
-        "defk g_lo(x :: i64) :: i64 do\n  x\nend\n\ndefk g_hi(x :: i64) :: i64 do\n  x + 1\nend\n\ndefk f(x :: i64) :: i64 do\n  g_lo(x) + g_hi(x)\nend"
     },
     %{
       code: "recursion",
@@ -765,10 +743,37 @@ defmodule Defk.Errors do
       summary:
         "A module attribute read in a kernel holds an integer (in i64), a float, a boolean or a binary.",
       why:
-        "a kernel inlines an attribute as a constant: a number or boolean as its literal, a binary as a read-only [u8]; other terms such as lists, tuples, maps and atoms are BEAM terms it cannot hold",
+        "a kernel inlines an attribute as a constant: a number or boolean as its literal, a binary as a [u8] that a write copies first; other terms such as lists, tuples, maps and atoms are BEAM terms it cannot hold",
       hint: "pass the value as a parameter; pack a list of bytes into a binary attribute",
       example: "@table [1, 2, 4, 8]\n\ndefk f(i :: i64) :: i64 do\n  i + @table\nend",
       rewrite: "@table <<1, 2, 4, 8>>\n\ndefk f(i :: i64) :: i64 do\n  @table[i]\nend"
+    },
+    %{
+      code: "array-rebind-in-loop",
+      kind: :error,
+      summary:
+        "An array variable read after a loop is not bound again inside the loop body; write its elements instead.",
+      why:
+        "as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` is what changes the array for the rest of the kernel",
+      hint:
+        "write the array's elements in the loop (a[i] = v), or give the array bound inside the loop a new name",
+      example:
+        "defk f(n :: i64) :: [i64] do\n  a = alloc(i64, n)\n\n  for i <- 0..(n - 1)//1 do\n    a = alloc(i64, n)\n    a[i] = i\n  end\n\n  a\nend",
+      rewrite:
+        "defk f(n :: i64) :: [i64] do\n  a = alloc(i64, n)\n\n  for i <- 0..(n - 1)//1 do\n    a[i] = i\n  end\n\n  a\nend"
+    },
+    %{
+      code: "write-not-returned",
+      kind: :error,
+      summary: "A kernel called from another kernel returns every array parameter it writes.",
+      why:
+        "arrays are values: a write gives the callee's parameter a new array, and the caller sees it only if the callee returns it and the caller binds it",
+      hint:
+        "return the array (in a tuple with the other results) and bind it again at the call: {out, n} = fill(out, ...)",
+      example:
+        "defk fill(out :: [i64], v :: i64) :: i64 do\n  out[0] = v\n  v\nend\n\ndefk f(n :: i64) :: [i64] do\n  out = alloc(i64, n)\n  _ = fill(out, 7)\n  out\nend",
+      rewrite:
+        "defk fill(out :: [i64], v :: i64) :: {[i64], i64} do\n  out[0] = v\n  {out, v}\nend\n\ndefk f(n :: i64) :: [i64] do\n  out = alloc(i64, n)\n  {out, _} = fill(out, 7)\n  out\nend"
     }
   ]
 

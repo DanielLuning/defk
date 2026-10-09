@@ -180,7 +180,8 @@ defmodule Defk.Compiler do
   # Whether the statements in `src` compile in `env`; nothing is recorded.
   defp compiles?(src, env) do
     case Code.string_to_quoted(src) do
-      {:ok, ast} -> probe(fn -> lower_stmts(ast, env) end) != :error
+      # the statements are lowered in the block of the statement env is at
+      {:ok, ast} -> probe(fn -> stmt_list(exprs(ast), live_after(exprs(ast)), env) end) != :error
       _ -> false
     end
   end
@@ -391,14 +392,15 @@ defmodule Defk.Compiler do
     Process.put(:defk_nloops, 0)
     Process.put(:defk_nhalts, 0)
     Process.put(:defk_halts_emitted, 0)
+    Process.put(:defk_writes, [])
 
     vars =
       Map.new(k.params, fn {p, t} ->
         c = "p_#{sanitize(p)}"
-        {p, %{c: c, t: t, owned: false, var: c}}
+        {p, Map.merge(%{c: c, t: t, owned: false, var: c}, array_ids(t))}
       end)
 
-    env = %{vars: vars, sigs: sigs, inlining: [{k.name, k.arity}]}
+    env = Map.merge(%{vars: vars, sigs: sigs, inlining: [{k.name, k.arity}]}, scope(MapSet.new()))
     {stmts, val} = lower_block(k.body, env)
     {ret_stmts, ret_vals} = coerce_return(val, k)
 
@@ -443,7 +445,7 @@ defmodule Defk.Compiler do
     err!(
       at,
       "return-input-array",
-      "#{k.name}/#{k.arity} returns #{Macro.to_string(at)}, an array it didn't create with alloc/2; returning an input array is not supported yet"
+      "#{k.name}/#{k.arity} returns #{Macro.to_string(at)}, an input array it never writes; returning an unwritten input array is not supported yet"
     )
   end
 
@@ -524,10 +526,25 @@ defmodule Defk.Compiler do
   defp exprs({:__block__, _, es}), do: es
   defp exprs(e), do: [e]
 
-  # A block whose last expression is its value.
-  defp lower_block(ast, env), do: do_block(exprs(ast), env)
+  # A block whose last expression is its value. It is nested in the statement
+  # `env` is at (see "array values"), or is a kernel's body.
+  defp lower_block(ast, env) do
+    es = exprs(ast)
+    {init, [last]} = Enum.split(es, -1)
+    lives = live_after(es)
+    {s1, env} = stmt_list(init, lives, nested(env))
 
-  defp do_block([{:=, _, [{{:., _, [Access, :get]}, _, [arr, _]}, _]} = last], _env) do
+    {s2, v} =
+      in_ctx(last, fn ->
+        {sh, env} = enter(last, List.last(lives), env)
+        {s, v} = last_value(last, env)
+        {[sh, s], v}
+      end)
+
+    {[s1, s2], v}
+  end
+
+  defp last_value({:=, _, [{{:., _, [Access, :get]}, _, [arr, _]}, _]} = last, _env) do
     err!(
       last,
       "write-as-value",
@@ -536,29 +553,32 @@ defmodule Defk.Compiler do
     )
   end
 
-  defp do_block([{:=, _, [lhs, rhs]} = last], env) do
-    in_ctx(last, fn ->
-      match?({:<<>>, _, _}, lhs) && bitstring_match!(last)
-      {s, v} = lower_expr(rhs, env)
-      {s2, _} = bind(lhs, v, env, last)
-      {[s, s2], v}
-    end)
+  defp last_value({:=, _, [lhs, rhs]} = last, env) do
+    match?({:<<>>, _, _}, lhs) && bitstring_match!(last)
+    {s, v} = lower_expr(rhs, env)
+    {s2, _} = bind(lhs, v, env, last)
+    {[s, s2], v}
   end
 
-  defp do_block([last], env), do: in_ctx(last, fn -> lower_expr(last, env) end)
+  defp last_value(last, env), do: lower_expr(last, env)
 
-  defp do_block([e | rest], env) do
-    {s1, env} = recover(e, env, fn -> lower_stmt(e, env) end)
-    {s2, v} = do_block(rest, env)
-    {[s1, s2], v}
+  # A block evaluated only for effect, nested like lower_block's.
+  defp lower_stmts(ast, env) do
+    es = exprs(ast)
+    stmt_list(es, live_after(es), nested(env))
   end
 
-  # A block evaluated only for effect.
-  defp lower_stmts(ast, env), do: lower_stmt_list(exprs(ast), env)
+  # statements `es` of one block; `lives` has the names read after each
+  defp stmt_list(es, lives, env) do
+    Enum.zip(es, lives)
+    |> Enum.reduce({[], env}, fn {e, live}, {acc, env} ->
+      {s, env} =
+        recover(e, env, fn ->
+          {sh, env} = enter(e, live, env)
+          {s, env} = lower_stmt(e, env)
+          {[sh, s], env}
+        end)
 
-  defp lower_stmt_list(es, env) do
-    Enum.reduce(es, {[], env}, fn e, {acc, env} ->
-      {s, env} = recover(e, env, fn -> lower_stmt(e, env) end)
       {[acc, s], env}
     end)
   end
@@ -580,18 +600,9 @@ defmodule Defk.Compiler do
 
   # --------------------------------------------------------- statements ----
 
-  defp lower_stmt({:=, _, [{{:., _, [Access, :get]}, _, [arr, idx]} = target, rhs]} = write, env) do
+  defp lower_stmt({:=, _, [{{:., _, [Access, :get]}, _, [arr, idx]} = target, rhs]}, env) do
     {sa, a} = lower_expr(arr, env)
     match?({:arr, _}, a.t) || not_an_array!(target, arr, a)
-
-    a.owned ||
-      err!(
-        target,
-        "read-only-array",
-        "writing to #{Macro.to_string(arr)}, an array the kernel didn't create with alloc/2, is not supported yet",
-        rewrite: copy_rewrite(arr, a.t) <> "\n" <> Macro.to_string(write)
-      )
-
     {si, i} = lower_expr(idx, env)
     i = coerce!(i, :i64, idx, "array index")
     {sv, v} = lower_expr(rhs, env)
@@ -605,12 +616,17 @@ defmodule Defk.Compiler do
         :u8 -> "defk_to_u8(ctx, #{coerce!(v, :i64, rhs, stored).c})"
       end
 
+    # value semantics: the array is copied first if another binding may still
+    # see its buffer (see "array values")
+    {sc, a, env} = before_write(arr, a, env)
+    a[:id] && Process.put(:defk_writes, [{a.id, target} | Process.get(:defk_writes)])
+
     store =
       if in_bounds?(a, i),
         do: "(#{a.c}).data[#{i.c}] = #{vc};\n",
         else: "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
 
-    {[sa, si, sv, store], env}
+    {[sa, si, sv, sc, store], env}
   end
 
   defp lower_stmt({:=, _, [lhs, rhs]} = match, env) do
@@ -642,7 +658,8 @@ defmodule Defk.Compiler do
   defp lower_stmt({:for, _, args} = ast, env) do
     case parse_for(args, ast, env) do
       {quals, nil, body} ->
-        loops = lower_quals(quals, env, fn env -> elem(lower_stmts(body, env), 0) end)
+        lenv = loop_env(env, ast)
+        loops = lower_quals(quals, lenv, fn env -> elem(lower_stmts(body, env), 0) end)
         {loops, env}
 
       _reduce ->
@@ -678,9 +695,9 @@ defmodule Defk.Compiler do
           rewrite: "{#{names}} = #{rhs}"
         )
 
-      # arrays are references: alias the binding instead of copying the view
-      match?({:arr, _}, v.t) and v[:var] != nil ->
-        {[], put_var(env, name, v)}
+      match?({:arr, _}, v.t) ->
+        name in env.guard && array_rebind_in_loop!(var, match)
+        bind_array(name, v, env)
 
       true ->
         c = fresh(name, v.t)
@@ -806,6 +823,356 @@ defmodule Defk.Compiler do
   defp tuple_items({:{}, _, items}), do: items
   defp tuple_items(_), do: nil
 
+  # -------------------------------------------------------- array values ---
+  # Arrays are values, as in Elixir (defk-i2e): a write `a[i] = v` gives `a`
+  # a new array from the write on, through enclosing branches and loops, and
+  # every other variable keeps what it had. Natively a write is in place on
+  # a's buffer when no other binding that may see that buffer is read later
+  # (static copy-on-write, no reference count); otherwise the buffer is first
+  # copied into one the kernel owns (defk_copy_* in priv/defk_runtime.h).
+  #
+  # An array value carries:
+  #   owned - its buffer is the kernel's (alloc/2 or a copy), not the caller's
+  #           binary or a binary attribute, which are never written
+  #   buf   - the buffer's identity: bindings with the same buf may share it
+  #   id    - the binding's identity, for a variable's value
+  #   fin   - every element is finite (alloc/2 and what the kernel wrote); an
+  #           input's elements, also in a copy of it, are checked when read
+  # An owned array bound to a variable has a C local no other binding uses, so
+  # copying it in place (`v = defk_copy(v)`) changes that variable only, and
+  # the copy is seen after the branch or loop the write is in. An input array
+  # bound to a variable stays the parameter's C local, which is re-bound after
+  # every resume, until it is copied into a new local.
+  #
+  # Liveness is per block, by name: a binding is live after a statement if
+  # its name is read later in the block before being bound again (live_after/1),
+  # or it was live where the enclosing construct started (env.out). A
+  # construct's bindings that are read anywhere in its statement are live for
+  # its nested blocks (env.nest), which covers later iterations of a loop and
+  # the rest of the statement; this is conservative, so it may copy where
+  # Elixir would not need to. Inside a callee, what the caller reads after the
+  # call is live.
+  #
+  # Where copies go:
+  #   * at a write `a[i] = v`: when a is an input array, or a binding that
+  #     shares a's buffer is live after the write
+  #   * before a statement whose branches or loop bodies write a variable
+  #     bound outside them (hoist/3), on the same test made for the whole
+  #     statement: so a loop copies once, before it starts, not per iteration
+  #   * before a loop over an array that its body writes (snapshot_writes/2)
+  # A swap `{a, b} = {b, a}` or `b = a` copies no elements.
+  #
+  # The env keys for this (scope/1):
+  #   out        - {id, buf} live after the current block
+  #   live       - {id, buf} live after the current statement
+  #   nest       - {id, buf} live for blocks nested in the current statement
+  #   live_names - the names read after the current statement in its block
+  #   stmt       - the current statement
+  #   guard      - array names a loop body must not bind again (read after it)
+  #   loop       - the innermost loop construct
+  #   depth      - block nesting, to check that an input array is copied in
+  #                the block it is bound in
+
+  defp scope(outer) do
+    %{
+      out: outer,
+      nest: outer,
+      live: outer,
+      live_names: MapSet.new(),
+      stmt: nil,
+      guard: MapSet.new(),
+      loop: nil,
+      depth: 0
+    }
+  end
+
+  # the env of a block nested in the statement `env` is at
+  defp nested(env), do: %{env | out: env.nest, depth: env.depth + 1}
+
+  # a parameter is bound in the kernel's body block (depth 1)
+  defp array_ids({:arr, _}), do: %{id: make_ref(), buf: make_ref(), fin: false, depth: 1}
+  defp array_ids(_t), do: %{}
+
+  # The names read in `ast`, over-approximated: every variable in it, in any
+  # branch or loop body, except the ones a match binds.
+  defp reads(ast), do: ast |> read_counts() |> Map.keys() |> MapSet.new()
+
+  defp read_counts(ast) do
+    {_, counts} =
+      Macro.prewalk(ast, %{}, fn
+        # the variables a match binds are not read
+        {:=, m, [_lhs, rhs]} = e, acc ->
+          {if(write?(e), do: e, else: {:__block__, m, [rhs]}), acc}
+
+        {n, _, ctx} = v, acc when is_atom(n) and is_atom(ctx) ->
+          {v, Map.update(acc, n, 1, &(&1 + 1))}
+
+        other, acc ->
+          {other, acc}
+      end)
+
+    counts
+  end
+
+  # names read in statement `stmt` outside `node`, a part of it
+  defp reads_outside(nil, _node), do: MapSet.new()
+
+  defp reads_outside(stmt, node) do
+    inner = read_counts(node)
+    for {n, c} <- read_counts(stmt), c > Map.get(inner, n, 0), into: MapSet.new(), do: n
+  end
+
+  defp write?({:=, _, [{{:., _, [Access, :get]}, _, _}, _]}), do: true
+  defp write?(_), do: false
+
+  # the names statement `e` binds in its block
+  defp binds({:=, _, [lhs, _]} = e), do: if(write?(e), do: MapSet.new(), else: reads(lhs))
+  defp binds(_e), do: MapSet.new()
+
+  defp stmt_reads({:=, _, [_, rhs]} = e), do: if(write?(e), do: reads(e), else: reads(rhs))
+  defp stmt_reads(e), do: reads(e)
+
+  # for each statement of a block, the names read after it in the block
+  defp live_after(es) do
+    {lives, _} =
+      List.foldr(es, {[], MapSet.new()}, fn e, {acc, live} ->
+        {[live | acc], live |> MapSet.difference(binds(e)) |> MapSet.union(stmt_reads(e))}
+      end)
+
+    lives
+  end
+
+  # {id, buf} of the array bindings of `names` in env
+  defp pairs(env, names) do
+    for n <- names, %{buf: buf, id: id} <- [env.vars[n]], into: MapSet.new(), do: {id, buf}
+  end
+
+  # another live binding may see array a's buffer
+  defp shared?(a, live) do
+    buf = a[:buf]
+    buf != nil and Enum.any?(live, fn {id, b} -> b == buf and id != a[:id] end)
+  end
+
+  # Before statement `e` of a block, `live` the names read after it: copy
+  # what its nested writes need (hoist/3), then note what is live.
+  defp enter(e, live, env) do
+    names = MapSet.difference(live, binds(e))
+    {sh, env} = hoist(e, names, env)
+    live = MapSet.union(pairs(env, names), env.out)
+    nest = MapSet.union(live, pairs(env, reads(e)))
+    {sh, %{env | stmt: e, live: live, live_names: names, nest: nest}}
+  end
+
+  # A variable bound outside the branches and loop bodies of `e` and written
+  # in them is copied before `e` if it is an input array, or if another
+  # binding of its buffer is read in `e` or after it. Inside, it is then the
+  # only binding of an owned buffer, so its writes are in place, and a loop
+  # copies once. An input array written in a branch is copied even when the
+  # branch is not taken.
+  defp hoist(e, names, env) do
+    seen = MapSet.union(names, reads(e))
+
+    Enum.reduce(nested_writes(e), {[], env}, fn n, {acc, env} ->
+      case env.vars do
+        %{^n => %{buf: _} = b} ->
+          if not b.owned or shared?(b, MapSet.union(pairs(env, seen), env.out)) do
+            {s, env} = copy_var(n, b, env)
+            {[acc, s], env}
+          else
+            {acc, env}
+          end
+
+        _ ->
+          {acc, env}
+      end
+    end)
+  end
+
+  # the names of the arrays written inside statement `e`, not by `e` itself,
+  # leaving out a name bound again inside before the write
+  defp nested_writes(e) do
+    if write?(e), do: [], else: e |> writes_in(MapSet.new()) |> Enum.uniq()
+  end
+
+  defp writes_in({:__block__, _, es}, shadow) when is_list(es) do
+    {ws, _} =
+      Enum.flat_map_reduce(es, shadow, fn e, sh ->
+        ws = writes_in(e, sh)
+        {ws, if(match?({:=, _, _}, e), do: MapSet.union(sh, binds(e)), else: sh)}
+      end)
+
+    ws
+  end
+
+  defp writes_in({:=, _, [{{:., _, [Access, :get]}, _, [arr, idx]}, rhs]}, shadow) do
+    own =
+      case arr do
+        {n, _, ctx} when is_atom(n) and is_atom(ctx) -> if n in shadow, do: [], else: [n]
+        _ -> []
+      end
+
+    own ++ writes_in([arr, idx, rhs], shadow)
+  end
+
+  defp writes_in({:->, _, [pats, body]}, shadow),
+    do: writes_in(body, MapSet.union(shadow, reads(pats)))
+
+  defp writes_in({a, b}, shadow), do: writes_in(a, shadow) ++ writes_in(b, shadow)
+  defp writes_in(l, shadow) when is_list(l), do: Enum.flat_map(l, &writes_in(&1, shadow))
+  defp writes_in({h, _, args}, shadow) when is_list(args), do: writes_in([h | args], shadow)
+  defp writes_in(_ast, _shadow), do: []
+
+  defp copy_var(name, b, env) do
+    {s, nb} = copied(b, name)
+    {s, %{env | vars: Map.put(env.vars, name, nb)}}
+  end
+
+  # {stmts, value}: array `a` copied into a buffer of the kernel's own, in
+  # place when `a` is an owned array in a C local (no other binding uses it),
+  # else into a new C local
+  defp copied(a, base) do
+    {:arr, e} = a.t
+
+    if a.owned and a[:var] != nil do
+      {"#{a.c} = defk_copy_#{e}(ctx, #{a.c});\n", Map.put(a, :buf, make_ref())}
+    else
+      c = fresh(base, a.t)
+      len = if a[:var], do: %{len_lb: Map.put(len_lb(a), a.c, 0)}, else: %{}
+
+      b =
+        a
+        |> Map.drop([:pure_read])
+        |> Map.merge(%{c: c, var: c, owned: true, buf: make_ref()})
+        |> Map.merge(len)
+
+      {"#{c} = defk_copy_#{e}(ctx, #{a.c});\n", b}
+    end
+  end
+
+  # `arr[i] = v` with `arr`'s value `a`: {stmts, the array written, env}
+  defp before_write(arr, a, env) do
+    if a.owned and not shared?(a, env.live) do
+      {[], a, env}
+    else
+      case arr do
+        {n, _, ctx} when is_atom(n) and is_atom(ctx) ->
+          # an input array written in a nested block was copied before the
+          # statement holding that block (hoist/3), so this new C local is
+          # bound in the block the variable is
+          (a.owned or a[:depth] == env.depth) ||
+            raise "defk bug: input array #{n} written in a nested block was not copied first"
+
+          {s, b} = copied(a, n)
+          {s, b, %{env | vars: Map.put(env.vars, n, b)}}
+
+        _ ->
+          {s, b} = copied(a, "arr")
+          {s, b, env}
+      end
+    end
+  end
+
+  defp bind_array(name, v, env) do
+    {s, b} = array_binding(name, v, env.depth)
+    {s, put_var(env, name, b)}
+  end
+
+  # {stmts, binding} for `name = v`, `v` an array
+  defp array_binding(name, v, depth) do
+    ids = %{id: make_ref(), buf: v[:buf] || make_ref(), fin: v[:fin] || false, depth: depth}
+
+    cond do
+      # an input array stays in the C local it came in, re-bound after a resume
+      not v.owned and v[:var] != nil ->
+        {[], Map.merge(v, ids)}
+
+      # a call's result in its temporary is this binding's alone
+      v.owned and v[:var] != nil and v[:id] == nil ->
+        {[], Map.merge(v, ids)}
+
+      # a C local of its own (two words, no elements copied)
+      true ->
+        c = fresh(name, v.t)
+        len = if v[:var], do: %{len_lb: Map.put(len_lb(v), v.c, 0)}, else: %{}
+
+        b =
+          v
+          |> Map.take(@facts)
+          |> Map.merge(%{c: c, t: v.t, owned: v.owned, var: c})
+          |> Map.merge(ids)
+          |> Map.merge(len)
+
+        {"#{c} = #{v.c};\n", b}
+    end
+  end
+
+  # The env a loop's generators, filters and body are lowered in: what its
+  # statement reads stays live (for the next iteration), and the arrays read
+  # after the loop must not be bound again inside it.
+  defp loop_env(env, node) do
+    live = MapSet.new(env.live, &elem(&1, 0))
+    guard = for {n, %{id: id}} <- env.vars, id in live, into: env.guard, do: n
+    %{env | live: env.nest, guard: guard, loop: node}
+  end
+
+  # A generator walks array `a` while its loop writes a variable sharing a's
+  # buffer: that variable is copied first (in place: it is owned).
+  defp snapshot_writes(%{owned: true, buf: buf}, %{loop: loop} = env) when loop != nil do
+    loop
+    |> writes_in(MapSet.new())
+    |> Enum.uniq()
+    |> Enum.reduce({[], env}, fn n, {acc, env} ->
+      case env.vars do
+        %{^n => %{buf: ^buf} = b} ->
+          {s, env} = copy_var(n, b, env)
+          {[acc, s], env}
+
+        _ ->
+          {acc, env}
+      end
+    end)
+  end
+
+  defp snapshot_writes(_a, env), do: {[], env}
+
+  # dtw.18: a callee that writes an array parameter must return it, or the
+  # write is lost to the caller (valid Elixir that does nothing)
+  defp unreturned_writes!(k, params, returned) do
+    ids = for v <- returned, v[:id], do: v.id
+    writes = Enum.reverse(Process.get(:defk_writes))
+
+    for {p, id} <- params,
+        id not in ids,
+        {^id, at} <- Enum.take(Enum.filter(writes, &(elem(&1, 0) == id)), 1) do
+      last = k.body |> exprs() |> List.last()
+      items = tuple_items(last) || [last]
+      name = "#{k.name}"
+
+      err!(
+        at,
+        "write-not-returned",
+        "#{k.name}/#{k.arity} writes to its array parameter #{p} but doesn't return it, so the caller never sees the write",
+        hint:
+          "return the array, and bind it again where #{name} is called: {#{p}, ...} = #{name}(#{p}, ...)",
+        rewrite: Macro.to_string({:{}, [], [{p, [], nil} | items]})
+      )
+    end
+
+    :ok
+  end
+
+  @spec array_rebind_in_loop!(term(), term()) :: no_return()
+  defp array_rebind_in_loop!({name, _, _} = var, match) do
+    rhs = with {:=, _, [_, rhs]} <- match, do: Macro.to_string(rhs)
+
+    err!(
+      var,
+      "array-rebind-in-loop",
+      "the array #{name} is bound again inside this loop body and read after the loop, where it is still the array from before the loop",
+      rewrite: "#{name}_iter = #{rhs}"
+    )
+  end
+
   # -------------------------------------------------------- expressions ----
   # lower_expr(ast, env) :: {c_statements, value}
   # value :: %{c: c_expr, t: type, owned: bool, var: cname | nil}
@@ -841,7 +1208,7 @@ defmodule Defk.Compiler do
     case Defk.Attributes.of(node) do
       {:ok, b} when is_binary(b) ->
         view = "((defk_arr_u8){(uint8_t *)#{c_bytes(b)}, #{byte_size(b)}})"
-        {[], Map.put(val(view, {:arr, :u8}), :len_lo, byte_size(b))}
+        {[], Map.merge(val(view, {:arr, :u8}), %{len_lo: byte_size(b), buf: make_ref()})}
 
       _ ->
         attribute!(node)
@@ -865,11 +1232,12 @@ defmodule Defk.Compiler do
     get =
       cond do
         # an f64 from an input array may hold inf or NaN bits: the read raises
-        # (defk-i00); an alloc/2 array holds only what the kernel wrote
-        e == :f64 and not a.owned and in_bounds?(a, i) ->
+        # (defk-i00); an alloc/2 array holds only what the kernel wrote (fin),
+        # a copy of an input array still holds the input's bits
+        e == :f64 and not a[:fin] and in_bounds?(a, i) ->
           "defk_in_f64(ctx, (#{a.c}).data[#{i.c}], #{i.c})"
 
-        e == :f64 and not a.owned ->
+        e == :f64 and not a[:fin] ->
           "defk_get_in_f64(ctx, #{a.c}, #{i.c})"
 
         in_bounds?(a, i) ->
@@ -1546,7 +1914,7 @@ defmodule Defk.Compiler do
   defp lower_call(:alloc, [{e, _, ctx}, n], _m, env) when e in @elems and is_atom(ctx) do
     {s, v} = lower_expr(n, env)
     v = coerce!(v, :i64, n, "alloc/2 length")
-    arr = %{c: "defk_alloc_#{e}(ctx, #{v.c})", t: {:arr, e}, owned: true, var: nil}
+    arr = %{c: "defk_alloc_#{e}(ctx, #{v.c})", t: {:arr, e}, owned: true, var: nil, fin: true}
     {s, Map.merge(arr, %{len_lo: v[:lo], len_lb: lb(v)})}
   end
 
@@ -1665,13 +2033,6 @@ defmodule Defk.Compiler do
 
     case Map.get(env.sigs, {name, arity}) do
       %{} = k ->
-        match?({:tuple, _}, k.ret) &&
-          err!(
-            node,
-            "tuple-return-call",
-            "#{name}/#{arity} returns the tuple #{fmt(k.ret)}, and calling it from a kernel is not in the kernel subset"
-          )
-
         inline(k, vals, node, env)
 
       nil ->
@@ -1791,13 +2152,14 @@ defmodule Defk.Compiler do
     key = {k.name, k.arity}
     key in env.inlining && recursion!(key, node, env)
 
-    # bind each argument to a parameter once; array views are aliased like `b = a`
+    # bind each argument to a parameter once, as `p = arg` binds it
     {binds, vars} =
       Enum.zip_with([vals, k.params, args], fn [v, {p, t}, a] ->
         v = coerce!(v, t, a, "argument #{p} of #{k.name}/#{k.arity}")
 
-        if match?({:arr, _}, t) and v.var != nil do
-          {[], {p, %{v | owned: false}}}
+        if match?({:arr, _}, t) do
+          {s, b} = array_binding(p, v, 1)
+          {s, {p, b}}
         else
           c = fresh(p, t)
 
@@ -1807,19 +2169,55 @@ defmodule Defk.Compiler do
       end)
       |> Enum.unzip()
 
-    cenv = %{vars: Map.new(vars), sigs: env.sigs, inlining: [key | env.inlining]}
+    # the bindings the caller still reads after the call stay live in the callee
+    outer = MapSet.union(env.live, pairs(env, reads_outside(env.stmt, node)))
+
+    cenv =
+      Map.merge(
+        %{vars: Map.new(vars), sigs: env.sigs, inlining: [key | env.inlining]},
+        scope(outer)
+      )
+
+    params = for {p, {:arr, _}} <- k.params, do: {p, cenv.vars[p].id}
 
     # the callee's rejections are reported in the callee
-    {sb, [{c, t}]} =
+    {sb, rets} =
       in_kernel(k, fn ->
-        {sb, v} = lower_block(k.body, cenv)
-        {[], ret} = coerce_return(v, k)
-        {sb, ret}
+        prev = Process.put(:defk_writes, [])
+
+        try do
+          {sb, v} = lower_block(k.body, cenv)
+          {[], ret} = coerce_return(v, k)
+          unreturned_writes!(k, params, Map.get(v, :elems, [v]))
+          {sb, Enum.zip(ret, Map.get(v, :elems, [v]))}
+        after
+          Process.put(:defk_writes, prev)
+        end
       end)
 
-    # a temporary, so the result is computed here and not where it is used
-    tmp = fresh("#{k.name}_ret", t)
-    {[binds, sb, "#{tmp} = #{c};\n"], %{val(tmp, t, tmp) | owned: true}}
+    # temporaries, so the result is computed here and not where it is used; a
+    # returned array keeps its buffer, which may be an argument's
+    {ss, results} =
+      Enum.map(rets, fn {{c, t}, v} ->
+        tmp = fresh("#{k.name}_ret", t)
+        r = %{val(tmp, t, tmp) | owned: true}
+
+        r =
+          if match?({:arr, _}, t),
+            do: Map.merge(r, %{buf: v[:buf] || make_ref(), fin: v[:fin] || false}),
+            else: r
+
+        {"#{tmp} = #{c};\n", r}
+      end)
+      |> Enum.unzip()
+
+    result =
+      case {k.ret, results} do
+        {{:tuple, ts}, elems} -> %{t: {:tuple, ts}, elems: elems}
+        {_, [r]} -> r
+      end
+
+    {[binds, sb, ss], result}
   end
 
   defp in_kernel(k, fun) do
@@ -2044,13 +2442,21 @@ defmodule Defk.Compiler do
 
     {:arr, e} = a.t
 
+    # The generator walks the array as it is now. A variable written in the
+    # loop that shares its buffer is copied before the loop, and the loop walks
+    # the old buffer under a C local of its own; only an owned buffer can be
+    # shared with a written variable (an input one was copied before the loop
+    # statement, see hoist/3), so that local stays valid across a resume.
+    # Iterating an input array while writing it copies it twice.
+    {sw, env} = snapshot_writes(a, env)
+
     # reference the view by variable so it is re-bound after a resume
     {s, arr} =
-      if a[:var] do
+      if a[:var] && sw == [] do
         {s, a.c}
       else
         tmp = fresh("arr", a.t)
-        {[s, "#{tmp} = #{a.c};\n"], tmp}
+        {[s, "#{tmp} = #{a.c};\n", sw], tmp}
       end
 
     k = fresh("k", :i64)
@@ -2062,7 +2468,7 @@ defmodule Defk.Compiler do
     in_loop(fn id ->
       {body, flat?} = lower_quals_tracked(rest, env, inner)
       read = "#{arr}.data[#{k}]"
-      read = if e == :f64 and not a.owned, do: "defk_in_f64(ctx, #{read}, #{k})", else: read
+      read = if e == :f64 and not a[:fin], do: "defk_in_f64(ctx, #{read}, #{k})", else: read
       body = ["#{x} = #{read};\n", body, "#{k} += 1;\n"]
 
       strip = %{
@@ -2198,7 +2604,7 @@ defmodule Defk.Compiler do
       [sb, assign_accs(accs, res, last_expr(body), "the reduce body")]
     end
 
-    {[si, lower_quals(quals, env, inner)], acc_result(accs)}
+    {[si, lower_quals(quals, loop_env(env, node), inner)], acc_result(accs)}
   end
 
   # Enum.reduce_while(src, init, fn x, acc -> ... end) is the loop of
@@ -2230,7 +2636,8 @@ defmodule Defk.Compiler do
     end
 
     inner = fn genv -> lower_tail(body, acc_env(accs, genv), leaf) end
-    loops = lower_quals([{:<-, m, [x, src]}], env, inner)
+    loop = {:for, m, [{:<-, m, [x, src]}, [do: body]]}
+    loops = lower_quals([{:<-, m, [x, src]}], loop_env(env, loop), inner)
     halt = if Process.delete({:defk_halted, id}), do: "#{label}:;\n", else: []
     {[si, loops, halt], acc_result(accs)}
   end
@@ -2329,10 +2736,18 @@ defmodule Defk.Compiler do
   # {:cont, acc} or {:halt, acc}, or an if/cond/case whose branches end in one.
   # `leaf.(tag, acc_ast, env)` emits a tail tuple.
   defp lower_tail(ast, env, leaf) do
-    {init, [last]} = Enum.split(exprs(ast), -1)
+    es = exprs(ast)
+    {init, [last]} = Enum.split(es, -1)
+    lives = live_after(es)
+    {s, env} = stmt_list(init, lives, nested(env))
 
-    {s, env} = lower_stmt_list(init, env)
-    [s, in_ctx(last, fn -> tail_expr(last, env, leaf) end)]
+    [
+      s,
+      in_ctx(last, fn ->
+        {sh, env} = enter(last, List.last(lives), env)
+        [sh, tail_expr(last, env, leaf)]
+      end)
+    ]
   end
 
   defp tail_expr({tag, v}, env, leaf) when tag in [:cont, :halt], do: leaf.(tag, v, env)
@@ -2828,8 +3243,39 @@ defmodule Defk.Compiler do
         to_term(c, t)
 
       many ->
-        "enif_make_tuple(env, #{length(many)}#{Enum.map(many, fn {c, t} -> ", " <> to_term(c, t) end)})"
+        if Enum.count(many, &match?({_, {:arr, _}}, &1)) < 2,
+          do: plain_tuple(many),
+          else: shared_tuple(many)
     end
+  end
+
+  defp plain_tuple(many),
+    do:
+      "enif_make_tuple(env, #{length(many)}#{Enum.map(many, fn {c, t} -> ", " <> to_term(c, t) end)})"
+
+  defp shared_tuple(many) do
+    # two elements may be one buffer (`{a, b}` after `b = a`): its binary
+    # is handed over once and both elements are that term
+    {decls, _} =
+      many
+      |> Enum.with_index()
+      |> Enum.map_reduce([], fn {{c, t}, i}, arrays ->
+        r = "defk_r#{i}"
+
+        if match?({:arr, _}, t) do
+          term =
+            Enum.reduce(arrays, to_term(c, t), fn {pc, pr}, rest ->
+              "(#{c}).data == (#{pc}).data ? #{pr} : #{rest}"
+            end)
+
+          {"ERL_NIF_TERM #{r} = #{term}; ", [{c, r} | arrays]}
+        else
+          {"ERL_NIF_TERM #{r} = #{to_term(c, t)}; ", arrays}
+        end
+      end)
+
+    terms = Enum.map_join(0..(length(many) - 1), &", defk_r#{&1}")
+    "({ #{decls}enif_make_tuple(env, #{length(many)}#{terms}); })"
   end
 
   # setjmp lives in a separate frame so it does not pessimise the kernel body
@@ -3020,14 +3466,6 @@ defmodule Defk.Compiler do
       "not-an-array",
       "#{Macro.to_string(node)} indexes #{Macro.to_string(arr)}, which is #{type_name(a)}, not an array"
     )
-  end
-
-  # copying input array `arr` into a writable array from alloc/2
-  defp copy_rewrite(arr, {:arr, e}) do
-    a = Macro.to_string(arr)
-    copy = String.trim_leading(a, "@") <> "_copy"
-
-    "#{copy} = alloc(#{e}, len(#{a}))\n\nfor i <- 0..(len(#{a}) - 1)//1 do\n  #{copy}[i] = #{a}[i]\nend\n"
   end
 
   @spec cond_without_true!(term()) :: no_return()

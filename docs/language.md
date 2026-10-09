@@ -180,8 +180,8 @@ as `reduce:` and `Enum.reduce_while` accumulators, and as the result. A
 variable cannot hold a tuple ([`tuple-binding`](#tuple-binding)), tuples do not
 nest ([`nested-tuple`](#nested-tuple)), a branch cannot give one
 ([`branch-tuple`](#branch-tuple)), a call cannot take one
-([`tuple-argument`](#tuple-argument)), and a kernel that returns one cannot be
-called from another kernel ([`tuple-return-call`](#tuple-return-call)).
+([`tuple-argument`](#tuple-argument)), and a call to a kernel that returns
+one is destructured at once (`{out, n} = fill(out, v)`).
 
 An array's **element type** is `f64`, `i64` or `u8`. Reading a `[u8]` element
 gives an `i64` in 0..255.
@@ -454,9 +454,9 @@ end
 A binary attribute is an array like an input array: it can be indexed (a
 read out of range raises `Enum.OutOfBoundsError`), measured with `len/1`,
 iterated with `for c <- @table`, bound to a variable and passed to a kernel.
-It cannot be written ([`read-only-array`](#read-only-array)) or returned
-([`return-input-array`](#return-input-array)), and it is not a `case`
-pattern. Its bytes are compiled into the NIF, so a large table makes the
+A write copies it first, like an input array's ([Copies](#copies)); it
+cannot be returned unwritten ([`return-input-array`](#return-input-array)),
+and it is not a `case` pattern. Its bytes are compiled into the NIF, so a large table makes the
 library larger, not the call slower.
 
 **Unsupported:** an attribute that is not defined above the kernel
@@ -544,7 +544,8 @@ value, as in Elixir.
   evaluated, so `_ = x * x` raises on overflow as Elixir would.
 - **Tuple destructuring:** `{a, b} = expr`, where `expr` gives a tuple (a
   tuple literal, a `reduce:` with a tuple accumulator, an
-  `Enum.reduce_while`). `{a, b} = {b, a}` swaps. The sizes must match
+  `Enum.reduce_while`, a call to a kernel that returns one). `{a, b} = {b, a}`
+  swaps. The sizes must match
   ([`tuple-size`](#tuple-size)).
 - **Unsupported:** binding a whole tuple to one variable
   ([`tuple-binding`](#tuple-binding)), other patterns such as lists and maps
@@ -552,10 +553,16 @@ value, as in Elixir.
   ([`bitstring-match`](#bitstring-match)), a match used as a value
   (`x = y = 1`, [`unsupported-expression`](#unsupported-expression)), and an
   undefined variable ([`undefined-variable`](#undefined-variable)).
-- **Arrays are references.** `b = a` names the same array; it copies nothing.
-  Today a write through one name is visible through the other, where Elixir
-  would keep `b` unchanged: see [Arrays](#aliasing) and
-  [Known divergences](#13-known-divergences).
+- **Arrays are values.** `b = a` binds `b` to the array `a` has; a later
+  write to `a` gives `a` a new array and leaves `b` as it was, as in Elixir
+  (see [Copies](#copies) for what that costs: usually nothing).
+- **An array variable bound again inside a loop body** is, as in Elixir,
+  gone after the loop. Reading it after the loop would give the array from
+  before the loop, which is never what the code means, so it is a compile
+  error ([`array-rebind-in-loop`](#array-rebind-in-loop)): write the array's
+  elements instead (`a[i] = v`, which does carry over), or use a new name
+  inside the loop. Binding it again in an `if` or `case` branch follows
+  Elixir's scoping like any variable.
 
 ## 6. Arrays
 
@@ -642,14 +649,19 @@ all zero. A malformed call is [`alloc-form`](#alloc-form).
 
 ### Writing
 
-**Supported with restrictions:** `out[i] = v` is a statement that stores `v`
-at index `i` (bounds-checked like a read).
+**Supported:** `a[i] = v` is a statement that stores `v` at index `i`
+(bounds-checked like a read). It is the one array construct that is not
+Elixir syntax, and its meaning is Elixir's value semantics: **the write gives
+`a` a new array, from the write on, through the enclosing branches and loops;
+every other variable keeps the array it had.** Elixir mode compiles it to
+`a = put(a, i, v)` and threads `a` out of each branch and loop as an
+accumulator.
 
-- Only arrays the kernel created are writable: the result of `alloc/2`, or an
-  array returned by a called kernel. Writing to an input array, or to an array
-  parameter inside a called kernel, is
-  [`read-only-array`](#read-only-array) (not supported yet); its rewrite
-  copies the input into an `alloc` first.
+- Any array variable can be written: one from `alloc/2`, a kernel's input
+  array, a binary module attribute, an array a called kernel returned, or an
+  array parameter of a called kernel (which must then return it, see
+  [Calls to other kernels](#calls-to-other-kernels)). The caller's binary is
+  never changed.
 - The stored value must have the element type: `[f64]` takes an `f64` or an
   `i64` (widened), `[i64]` takes an `i64`, `[u8]` takes an `i64`
   ([`type-mismatch`](#type-mismatch) otherwise).
@@ -672,12 +684,85 @@ defk histogram(bytes :: [u8]) :: [i64] do
 end
 ```
 
+An input array is written the same way; here a HyperLogLog register update:
+
+```elixir
+defk update(regs :: [u8], idx :: [i64], ranks :: [i64]) :: [u8] do
+  for k <- 0..(len(idx) - 1)//1 do
+    j = idx[k]
+    regs[j] = max(regs[j], ranks[k])
+  end
+
+  regs
+end
+```
+
+```elixir
+iex> regs = <<0, 3, 1, 0>>
+iex> M.update(regs, <<0::64-native, 2::64-native>>, <<2::64-native, 5::64-native>>)
+<<2, 3, 5, 0>>
+iex> regs
+<<0, 3, 1, 0>>
+```
+
+### Copies
+
+A write is in place, with no copy, when nothing else can see the array's
+buffer afterwards. The compiler decides this from the code, with no reference
+count at run time, and copies the buffer once, into an array the kernel owns,
+where it cannot prove that:
+
+- **An input array** (or a binary attribute) is copied before its first write.
+  A write inside a loop or branch copies before that loop or branch statement
+  starts, once, and also when the branch is not taken; the loop then writes
+  the copy in place.
+- **Another variable with the same buffer is read after the write** (`b = a`
+  earlier, `b` read later): the written variable gets a copy before the
+  write, or before the loop or branch statement holding the write. Inside a
+  loop, "later" includes the next iterations, so `b = a` in a loop body with
+  `a` written and `b` read after it copies on every iteration.
+- **A loop over an array its body writes** (`for x <- a do a[j] = ... end`)
+  walks the array as it was when the loop started: the written variable is
+  copied before the loop. Walking an input array while writing it copies it
+  twice.
+- **A called kernel writes its array parameter** while the caller still reads
+  the array it passed (after the call, or in a later iteration): the callee
+  copies. When the caller rebinds the result instead
+  (`{out, n} = fill(out, v)`), the callee writes the caller's array in place.
+
+Renaming copies nothing: `b = a`, a swap `{prev, cur} = {cur, prev}`, passing
+an array to a kernel and returning one are each a pointer move. So does a
+write when the old array is not read again:
+
+```elixir
+defk snapshot(n :: i64) :: {f64, f64} do
+  a = alloc(f64, n)
+  b = a
+  a[0] = 1.0
+  {a[0], b[0]}
+end
+```
+
+```elixir
+iex> M.snapshot(1)
+{1.0, 0.0}
+```
+
+Here `a` is copied at the write, because `b` is read after it; without the
+`b[0]`, there is no copy. The test of "read after" is by variable name
+through the rest of the block, and for a loop or branch, everything its whole
+statement reads: it is conservative, so a kernel may copy where Elixir would
+not have to (for example when `b` is read only in the other branch of an
+`if`). Copies are not reported; `Mod.__defk_source__/0` shows them as
+`defk_copy_*` calls. Like `alloc`, every copy lives until the kernel returns.
+
 ### Returning
 
 **Supported with restrictions:** a kernel may return an array it created
-(alone or in a result tuple); it reaches the caller as a binary without a
-copy. Returning an input array is
-[`return-input-array`](#return-input-array) (not supported yet).
+or wrote (alone or in a result tuple); it reaches the caller as a binary
+without a copy. Returning an input array it never writes is
+[`return-input-array`](#return-input-array) (not supported yet); the caller
+already has it.
 
 Arrays cannot be the value of an `if`, `cond` or `case`
 ([`array-in-branch`](#array-in-branch), not supported yet), nor a `reduce:`
@@ -689,30 +774,8 @@ or `Enum.reduce_while` accumulator
 An array argument is read in place, without a copy. A binary whose data is not
 aligned to the element size (for example a sub-binary at an odd byte offset)
 is copied once, into an aligned buffer, when the kernel starts. Either way the
-caller's binary is never changed.
-
-### Aliasing
-
-`b = a` and passing `a` to a called kernel name the same array. Today a write
-through `a` after `b = a` is visible through `b`:
-
-```elixir
-defk alias_w(n :: i64) :: f64 do
-  a = alloc(f64, n)
-  b = a
-  a[0] = 1.0
-  b[0]
-end
-```
-
-```elixir
-iex> M.alias_w(1)
-1.0
-```
-
-Elixir (and Elixir mode) give `0.0`. This is a divergence, being removed by
-defk-auo (copy on an aliased write). Until then, do not write to an array
-while another variable still names it.
+caller's binary is never changed: a write copies it first (see
+[Copies](#copies)).
 
 ## 7. Control flow
 
@@ -877,14 +940,19 @@ end
   sites along each call chain.
 - Arguments are converted like a result: an `i64` widens to an `f64`
   parameter, anything else must match ([`type-mismatch`](#type-mismatch)).
-- An array argument is passed by reference and is read-only in the callee. An
-  array the callee returns is a new array the caller may write and return.
+- An array argument is passed without a copy. A callee that writes an array
+  parameter must return it, alone or in a result tuple, and the caller
+  binds the result: `{out, n} = fill(out, v)`. A write to a parameter the
+  callee does not return would be lost to the caller (valid Elixir that does
+  nothing), so it is a compile error
+  ([`write-not-returned`](#write-not-returned)). See [Copies](#copies) for
+  when the callee's write copies.
 - Recursion, direct or through other kernels, is
   [`recursion`](#recursion): write it as a `for ..., reduce:` or
   `Enum.reduce_while/3` loop.
-- A kernel that returns a tuple cannot be called from a kernel
-  ([`tuple-return-call`](#tuple-return-call)), and a tuple cannot be an
-  argument ([`tuple-argument`](#tuple-argument)).
+- A call to a kernel that returns a tuple is destructured at once
+  (`{a, b} = f(x)`); a tuple cannot be an argument
+  ([`tuple-argument`](#tuple-argument)).
 - A rejection inside the callee is reported once, in the callee.
 
 ### Builtins and other calls
@@ -959,9 +1027,9 @@ When to use it:
 - To test a kernel: Elixir mode is the oracle for what the same code gives in
   Elixir, so a property test can compare the two on generated inputs.
 
-Arrays have value semantics in Elixir mode (a write rebuilds the binary), which
-is why the aliasing divergence of [section 6](#aliasing) shows up as a
-disagreement.
+Arrays have value semantics in Elixir mode (a write rebuilds the binary), as
+they do natively ([section 6](#writing)), where the compiler copies a buffer
+only when the write would otherwise be visible elsewhere.
 
 ## 11. Compile errors
 
@@ -1004,10 +1072,6 @@ and replace everything from the first `###` heading of this section to the
 end of the section with its output (`test/language_doc_test.exs` fails until
 they match).
 
-Compiling 2 files (.ex)
-Compiling 6 files (.ex)
-Generated defk app
-Compiling 2 files (.ex)
 ### kernel-head
 
 A kernel head is `name(arg :: type, ...) :: return_type`.
@@ -1203,11 +1267,11 @@ end
 
 ### return-input-array
 
-A returned array is one the kernel created with alloc/2; returning an input array is planned.
+A returned array is one the kernel created with alloc/2 or wrote; returning an unwritten input array is planned.
 
 - kind: not supported yet (planned)
-- why: a kernel returns arrays it allocated itself; handing an input array back to the caller is planned
-- hint: copy it into an array from alloc/2 and return that
+- why: a kernel returns arrays it owns: one from alloc/2, or an input array it wrote, which is a copy; handing an unwritten input array back to the caller is planned
+- hint: return the input itself from the Elixir caller, which already holds it
 
 Rejected:
 
@@ -1220,14 +1284,8 @@ end
 Write instead:
 
 ```elixir
-defk f(a :: [f64]) :: [f64] do
-  out = alloc(f64, len(a))
-
-  for i <- 0..(len(a) - 1)//1 do
-    out[i] = a[i]
-  end
-
-  out
+defk f(a :: [f64]) :: f64 do
+  a[0]
 end
 ```
 
@@ -1647,38 +1705,6 @@ defk f(x :: [i64]) :: i64 do
 end
 ```
 
-### read-only-array
-
-Only arrays created with alloc/2 are written; writing to an input array is planned.
-
-- kind: not supported yet (planned)
-- why: an input array is the caller's binary, and a kernel never changes a value the caller holds
-- hint: copy it into an array from alloc/2 and write that
-
-Rejected:
-
-```elixir
-defk f(a :: [f64]) :: [f64] do
-  a[0] = 1.0
-  a
-end
-```
-
-Write instead:
-
-```elixir
-defk f(a :: [f64]) :: [f64] do
-  out = alloc(f64, len(a))
-
-  for i <- 0..(len(a) - 1)//1 do
-    out[i] = a[i]
-  end
-
-  out[0] = 1.0
-  out
-end
-```
-
 ### nested-tuple
 
 Tuples don't nest.
@@ -1808,43 +1834,6 @@ end
 
 defk f(x :: i64) :: i64 do
   g(x, x)
-end
-```
-
-### tuple-return-call
-
-A kernel that returns a tuple is called from Elixir only.
-
-- kind: outside the kernel subset (permanent)
-- why: a kernel's tuple result becomes a BEAM tuple, and inside a kernel a tuple can't be held as one value
-- hint: split it into kernels that return one value each
-
-Rejected:
-
-```elixir
-defk g(x :: i64) :: {i64, i64} do
-  {x, x + 1}
-end
-
-defk f(x :: i64) :: i64 do
-  {a, b} = g(x)
-  a + b
-end
-```
-
-Write instead:
-
-```elixir
-defk g_lo(x :: i64) :: i64 do
-  x
-end
-
-defk g_hi(x :: i64) :: i64 do
-  x + 1
-end
-
-defk f(x :: i64) :: i64 do
-  g_lo(x) + g_hi(x)
 end
 ```
 
@@ -2747,7 +2736,7 @@ end
 A module attribute read in a kernel holds an integer (in i64), a float, a boolean or a binary.
 
 - kind: outside the kernel subset (permanent)
-- why: a kernel inlines an attribute as a constant: a number or boolean as its literal, a binary as a read-only [u8]; other terms such as lists, tuples, maps and atoms are BEAM terms it cannot hold
+- why: a kernel inlines an attribute as a constant: a number or boolean as its literal, a binary as a [u8] that a write copies first; other terms such as lists, tuples, maps and atoms are BEAM terms it cannot hold
 - hint: pass the value as a parameter; pack a list of bytes into a binary attribute
 
 Rejected:
@@ -2767,6 +2756,81 @@ Write instead:
 
 defk f(i :: i64) :: i64 do
   @table[i]
+end
+```
+
+### array-rebind-in-loop
+
+An array variable read after a loop is not bound again inside the loop body; write its elements instead.
+
+- kind: a mistake to fix (in the kernel or the build)
+- why: as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` is what changes the array for the rest of the kernel
+- hint: write the array's elements in the loop (a[i] = v), or give the array bound inside the loop a new name
+
+Rejected:
+
+```elixir
+defk f(n :: i64) :: [i64] do
+  a = alloc(i64, n)
+
+  for i <- 0..(n - 1)//1 do
+    a = alloc(i64, n)
+    a[i] = i
+  end
+
+  a
+end
+```
+
+Write instead:
+
+```elixir
+defk f(n :: i64) :: [i64] do
+  a = alloc(i64, n)
+
+  for i <- 0..(n - 1)//1 do
+    a[i] = i
+  end
+
+  a
+end
+```
+
+### write-not-returned
+
+A kernel called from another kernel returns every array parameter it writes.
+
+- kind: a mistake to fix (in the kernel or the build)
+- why: arrays are values: a write gives the callee's parameter a new array, and the caller sees it only if the callee returns it and the caller binds it
+- hint: return the array (in a tuple with the other results) and bind it again at the call: {out, n} = fill(out, ...)
+
+Rejected:
+
+```elixir
+defk fill(out :: [i64], v :: i64) :: i64 do
+  out[0] = v
+  v
+end
+
+defk f(n :: i64) :: [i64] do
+  out = alloc(i64, n)
+  _ = fill(out, 7)
+  out
+end
+```
+
+Write instead:
+
+```elixir
+defk fill(out :: [i64], v :: i64) :: {[i64], i64} do
+  out[0] = v
+  {out, v}
+end
+
+defk f(n :: i64) :: [i64] do
+  out = alloc(i64, n)
+  {out, _} = fill(out, 7)
+  out
 end
 ```
 
@@ -2796,6 +2860,9 @@ bug.
 | recursion, direct or mutual | runs | compile error [`recursion`](#recursion) |
 | every construct in [What is not an expression](#what-is-not-an-expression) | runs | a compile error with its code |
 | code size: each call to a kernel is inlined | one function | the generated code grows with the number of call sites along each call chain (no error) |
+| an array variable bound again inside a loop body and read after the loop | the binding is gone after the loop | compile error [`array-rebind-in-loop`](#array-rebind-in-loop) |
+| a called kernel writing an array parameter it does not return | the write is lost | compile error [`write-not-returned`](#write-not-returned) |
+| memory of arrays written in a loop while another variable still reads them | the old binaries are garbage collected | each copy (see [Copies](#copies)) lives until the kernel returns |
 | the C compiler is needed at build time | | compile error [`no-c-compiler`](#no-c-compiler) |
 
 ## 13. Known divergences
@@ -2804,9 +2871,9 @@ A divergence is a different value or behaviour without raising; the one rule
 does not allow any. The `Defk.Divergences` registry is still a placeholder
 (defk-813), so this list is kept by hand. Each entry is a bug with a ticket.
 
-| Divergence | Elixir and Elixir mode | Kernel on `main` | Ticket |
-|---|---|---|---|
-| A write through an array visible through another variable naming it (`b = a; a[0] = 1.0; b[0]`) | `b` keeps its value (`0.0`) | `1.0` | defk-auo |
+None at the moment. (The last, an array write visible through another
+variable naming the same array, was removed by giving arrays value semantics,
+[section 6](#writing).)
 
 Related, though not a divergence (both sides raise): when both operands of an
 operator can raise, as in `a[i] + b * c`, Elixir raises the left one's error;
