@@ -163,7 +163,7 @@ That is a defk bug or a broken toolchain, not a kernel error.
 | Type | Inside a kernel | As an argument | As a result |
 |---|---|---|---|
 | `i64` | a signed 64-bit integer | an integer in -2^63..2^63-1; anything else (a float, a bignum) raises `ArgumentError` "argument N (name) must be an integer fitting in i64" | an integer |
-| `f64` | a double | a float, or an integer that fits in `i64` (converted to a float); anything else raises `ArgumentError` "argument N (name) must be a number" | a float; a non-finite one raises `ArithmeticError` "kernel produced a non-finite float" |
+| `f64` | a double | a float, or an integer that fits in `i64` (converted to a float); anything else raises `ArgumentError` "argument N (name) must be a number" | a float, always finite: any operation that would make inf or NaN raised first |
 | `bool` | `true` or `false` | `true` or `false`; anything else (including `nil`) raises `ArgumentError` "argument N (name) must be a boolean" | `true` or `false` |
 | `[f64]`, `[i64]`, `[u8]` | an array of that element type | a binary of packed native-endian elements; not a binary, or a byte size that is not a multiple of the element size, raises `ArgumentError` | a binary of packed native-endian elements |
 | `{t1, t2, ...}` | see below | not allowed ([`tuple-parameter`](#tuple-parameter)) | a tuple |
@@ -260,9 +260,17 @@ a zero divisor (`0`, `0.0` or `-0.0`) raises `ArithmeticError`.
 
 Float operations are evaluated as written, in IEEE double precision, with no
 fused multiply-add, reassociation or fast-math, so a finite result is bit for
-bit Elixir's. Elixir raises `ArithmeticError` at a float operation that would
-give inf or NaN; a kernel on `main` raises only when such a value is returned
-as an `f64` result (see [Known divergences](#13-known-divergences)).
+bit Elixir's. A float operation whose result would be inf or NaN raises `ArithmeticError`
+at that operation, as Elixir does: `1.0e308 * 10.0`, `x / 0.0`, `0.0 / 0.0`,
+`sqrt(-1.0)`, `log(0.0)`, `exp(1000.0)`, `:math.pow(10.0, 400.0)`. This holds
+even when the value would never be returned. Underflow to `0.0` or a subnormal
+does not raise. An `[f64]` input element whose bits are inf or NaN raises
+`ArgumentError` when it is read; elements never read don't. An `if`/`cond` arm
+that isn't taken never raises. Messages differ from Elixir's (they name the
+operation, not the line); run the kernel in Elixir mode to find the line.
+(defk-i00; the checks cost 17-24% on float reductions and about 2x on a
+vectorised elementwise loop today, see README "Known limitations" and
+defk-6tt.)
 
 ### Comparisons
 
@@ -2607,8 +2615,6 @@ does not allow any. The `Defk.Divergences` registry is still a placeholder
 | Divergence | Elixir and Elixir mode | Kernel on `main` | Ticket |
 |---|---|---|---|
 | A write through an array visible through another variable naming it (`b = a; a[0] = 1.0; b[0]`) | `b` keeps its value (`0.0`) | `1.0` | defk-auo |
-| A float operation that gives inf or NaN inside the kernel (`exp(1000.0)`, `x * x` for a huge `x`, `pow(-8.0, 0.5)`) | `ArithmeticError` at that operation | no error unless the value reaches an `f64` result, which raises `ArithmeticError` "kernel produced a non-finite float"; stored in a returned array or compared, it is used as is (`exp(1000.0) > 1.0` is `true`) | defk-i00 |
-| An `[f64]` input element whose bits are inf or NaN | Elixir mode raises `ArgumentError` when it is read | read as is | defk-i00 |
 
 Related, though not a divergence (both sides raise): when both operands of an
 operator can raise, as in `a[i] + b * c`, Elixir raises the left one's error;
@@ -2619,9 +2625,3 @@ unspecified. The exception can then differ between a kernel and Elixir mode.
 
 Written against `main` at the merge of defk-ne6. Two tickets change the
 language on their own branches; each adds its entries here when it lands:
-
-- **defk-i00**, non-finite floats raise like Elixir: an inf or NaN produced
-  inside a kernel raises `ArithmeticError`, and a non-finite input element
-  read raises `ArgumentError`. It removes the first two
-  [divergences](#13-known-divergences) and updates
-  [Float arithmetic](#float-arithmetic).
