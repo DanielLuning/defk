@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-x15.7"
+  ],
   "created": "2026-10-09T09:30:21Z",
   "description": "The ~12-line clone between elixir_mode.ex:304 and compiler.ex:873 is the {init, kw} recipe for Enum.all?/any?. It is a shared semantic fact (agreement invariant), not twinned algorithms — backends stay separate.\nAdd Defk.Builtins.bool_reduce/1 (:all? / :any? returning {init, kw}) and call it at both sites. Defk.Builtins is the established cross-backend shared-fact module. Keep --max-clones 0.",
   "id": "defk-x15.2",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "ExDNA: extract shared Enum.all?/any? accumulator recipe",
   "type": "task",
-  "updated_at": "2026-10-09T09:30:21Z"
+  "updated_at": "2026-10-09T09:30:31Z"
 }
