@@ -707,8 +707,12 @@ defmodule Defk.ElixirModeTest do
       assert Defk.ElixirMode.setup!(:native, env) == {:native, true}
       assert Defk.ElixirMode.setup!(:elixir, env) == {:elixir, true}
 
+      # apply, not a direct call: :fast is deliberately out of the tuple, the
+      # compiler would type-warn against setup!'s inferred {native, elixir}
+      # contract, and this test exists to prove the runtime rejection path.
       assert_raise CompileError, ~r/unknown mode :fast/, fn ->
-        Defk.ElixirMode.setup!(:fast, env)
+        # credo:disable-for-next-line Credo.Check.Refactor.Apply
+        apply(Defk.ElixirMode, :setup!, [:fast, env])
       end
 
       for {mix_env, expect} <- [dev: {:native, false}, prod: {:native, false}] do
