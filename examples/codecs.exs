@@ -935,7 +935,7 @@ r58 =
 # the recommendation for hex is the BIF either way (see the header)
 for r <- [r16, r58],
     not r.correct or
-      (r.verdict != r.expected and not (r.example == "hex" and r.verdict == :marginal)) do
+      (r.verdict != r.expected and not (r.example == "codecs_hex" and r.verdict == :marginal)) do
   IO.puts("#{r.example}: verdict #{r.verdict}, expected #{r.expected}, correct #{r.correct}")
   System.halt(1)
 end
