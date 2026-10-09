@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-09T20:21:59Z",
   "created": "2026-10-09T20:15:54Z",
   "description": "Found while writing examples/fft.exs (defk-52v.5). In the kernel subset `_ = expr` (and `_name = expr`) compiles to nothing when `expr` is a pure C expression: `bind/4` in lib/defk/compiler.ex returns `{[], env}` for underscore-prefixed names, emitting the right-hand side's statements but dropping its value expression, so a call like `alloc(f64, -1)` (whose raise lives in the expression `defk_alloc_f64(ctx, -1)`), an out-of-bounds read `_ = a[len(a)]`, or an overflowing `_ = x * x` is never executed. Elixir mode evaluates the expression and raises. A divergence: the kernel silently continues where Elixir raises. The FFT example works around it by routing its length check through `ore = alloc(f64, if(ok, do: n, else: -1))`, which should be simplified once fixed.\n\nFix: in `bind/4`, for an underscore-prefixed name emit the discard form (`(void)(expr);`, as `discard/1` already does for statement expressions) instead of `[]`, so the expression is evaluated for its effects; tuples (`%{elems: _}`) discard each element. Check `lower_stmt` for the plain expression-statement path and `do_block` for `_ = rhs` as a block's last expression (its value is still the block's value). Confirm clang keeps the evaluation: defk_alloc_* and the checked arithmetic helpers have side effects (longjmp), so `(void)` keeps them; a pure arithmetic expression with no possible raise may legitimately be dropped.\n\nTests: in both modes (Defk.Test.assert_agrees) `_ = alloc(f64, -1)` raises ArgumentError, `_ = a[len(a)]` raises Enum.OutOfBoundsError, `_ = big * big` raises ArithmeticError, and `_x = f(a)` where f is a kernel with a raising loop raises; plus one test that a harmless `_ = x + 1` still compiles without a C warning (defk-5dd territory: `-Wall` with `(void)` is fine).\n\nDone when: the four cases agree, the FFT example's workaround is reverted to a plain `_ = alloc(f64, -1)` guard (or better, the example's comment is updated), and the suite is green.",
   "id": "defk-776",
@@ -9,8 +10,8 @@
     "ready-for-agent"
   ],
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "A value bound to _ is never evaluated: _ = alloc(f64, -1) does not raise natively",
   "type": "bug",
-  "updated_at": "2026-10-09T20:17:15Z"
+  "updated_at": "2026-10-09T20:21:59Z"
 }
