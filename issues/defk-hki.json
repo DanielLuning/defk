@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T22:02:11Z",
+  "description": "defk-6tt (merged 2026-10-10) recovered dot, cosine and scale to within noise of the unchecked loop by accumulating a branchless non-finite flag per flat strip and replaying the strip on failure. It covers a strip only when, with the float checks taken out, no other check remains in the body (no bounds check, no i64 overflow check, no input write). Rolling mean_std (examples/rolling_stats.exs) fails that test: its strip has index arithmetic with overflow checks and array reads with bounds checks that can be elided only partly, so it keeps the per-operation float checks and stays at about +30% (bench/float_checks.exs). The author tried testing the flag before each remaining check (so the first error in program order still wins) and measured +41%, so it was taken out. Loops that can exit early through reduce_while (`:exits`) are also excluded.\n\nTwo directions, measure both: (1) widen the strip condition: when the remaining checks are only bounds checks that range facts could elide (defk-upc widens those facts) the strip becomes flaggable for free; the mean_std kernel's `x[i - w]` read with `i \u003e= w` from an `if` is exactly a fact the compiler does not carry yet (conditional facts from the guarding `if`); (2) make every check in a strip branchless: bounds and overflow checks also OR into flags (`__builtin_add_overflow` already yields a flag; the bounds check is a compare), with one replay for any failure, which keeps program order because the replay runs the fully checked body from the strip start; the cost is a few more ORs per element, not a branch. (2) is general; (1) is the cheap win for this kernel.\n\nDone when: mean_std measures within 10% of unchecked in bench/float_checks.exs, the non-finite raise-order tests and the resume tests still pass, and the README numbers are updated.",
+  "id": "defk-hki",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Strips with mixed checks (bounds, overflow, float) keep per-operation float checks: rolling mean_std still +30%",
+  "type": "task",
+  "updated_at": "2026-10-09T22:02:11Z"
+}
