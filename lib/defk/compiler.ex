@@ -1026,6 +1026,18 @@ defmodule Defk.Compiler do
       else: unsupported!(node, Defk.Errors.unsupported(node, &type_in(&1, env)), env)
   end
 
+  # wrap64(expr): the masked-arithmetic tree of expr wrapped to the low 64
+  # bits as a signed i64 (Defk.Bits.wrap64/1); a leaf is returned as it is
+  defp lower_expr({:wrap64, _, [x]}, env) do
+    if Defk.Masked.tree_node(x) do
+      lower_masked(x, -1, "wrap64/1", env)
+    else
+      {s, v} = lower_expr(x, env)
+      int!(v, x, "wrap64/1")
+      {s, v}
+    end
+  end
+
   # :math.sqrt(x) etc. map onto the builtins
   defp lower_expr({{:., _, [:math, fun]}, m, args}, env) when fun in [:pow | @math1],
     do: lower_call(fun, args, m, env)
@@ -1435,8 +1447,8 @@ defmodule Defk.Compiler do
   # 2^k - 1 is computed in uint64_t, which wraps modulo 2^64 without an
   # overflow check, and masked once; its leaves are lowered as usual. The low
   # k bits are those of Elixir's exact result, so nothing can raise but the
-  # leaves. A -1 mask (k = 64) gives the i64 bit pattern; any other mask m
-  # gives a value in 0..m.
+  # leaves. A mask m gives a value in 0..m; -1 stands for wrap64/1, the
+  # i64 bit pattern of the low 64 bits.
   defp lower_masked(expr, mask, label, env) do
     {s, c} = wrapped(expr, {expr, label}, nil, env)
 
@@ -1695,6 +1707,7 @@ defmodule Defk.Compiler do
     bsl: "two integers",
     bsr: "two integers",
     bnot: "an integer",
+    wrap64: "an integer",
     u64_le: "a [u8] array and an i64 byte offset",
     u64_be: "a [u8] array and an i64 byte offset",
     u32_le: "a [u8] array and an i64 byte offset",

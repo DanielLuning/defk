@@ -1,12 +1,13 @@
 defmodule Defk.Masked do
   @moduledoc false
   # Masked arithmetic (CONTEXT.md): integer arithmetic written inside
-  # `band(expr, 2^k - 1)`, 1 <= k <= 64, which a kernel computes with
+  # `band(expr, 2^k - 1)`, 1 <= k <= 63, which a kernel computes with
   # wrapping machine arithmetic and which still gives Elixir's exact result.
   # One rule for the compiler and Elixir mode, so both wrap the same nodes:
   #
-  #   * the mask is an integer literal 2^k - 1 for 1 <= k <= 63, or -1 for
-  #     k = 64 (2^64 - 1 is no i64 literal; band(x, -1) is "wrap to 64 bits")
+  #   * the mask is an integer literal 2^k - 1 for 1 <= k <= 63 (band(x, -1)
+  #     is an ordinary band: Elixir's identity); wrap64(expr) wraps the same
+  #     tree to the low 64 bits as a signed i64 (Defk.Bits.wrap64/1)
   #   * the wrapped tree is the contiguous tree of `+`, `-` (binary and
   #     unary), unary `+`, `*` and `bsl` by a non-negative integer literal
   #     directly under the mask; anything else in it (a variable, a literal, a
@@ -17,13 +18,14 @@ defmodule Defk.Masked do
   # Every tree operation is a ring operation modulo 2^64 (bsl by n is a
   # multiplication by 2^n), so the low k bits of the wrapped result are the
   # low k bits of the exact result: band of the bignum, which is what Elixir
-  # computes. For k = 64 the result is the i64 bit pattern of those bits.
+  # computes. wrap64 gives the i64 bit pattern of the low 64 bits, which is
+  # Defk.Bits.wrap64/1 of the exact result.
 
   @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
 
   @doc """
   For the arguments of a band/2, `{expr, mask}` when one argument is a mask
-  2^k - 1 (or -1) and the other the root of a wrapped tree; otherwise nil.
+  2^k - 1 (1 <= k <= 63) and the other the root of a wrapped tree; otherwise nil.
   """
   def split([a, b]) do
     cond do
@@ -60,7 +62,6 @@ defmodule Defk.Masked do
 
   defp mask?(ast) do
     case int(ast) do
-      -1 -> true
       m when is_integer(m) and m > 0 -> Bitwise.band(m, m + 1) == 0 and m <= 0x7FFFFFFFFFFFFFFF
       _ -> false
     end

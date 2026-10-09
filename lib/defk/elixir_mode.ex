@@ -381,6 +381,13 @@ defmodule Defk.ElixirMode do
     {{dot, m, [q | rest]}, t}
   end
 
+  # wrap64(expr): the same tree, exact, then Defk.Bits.wrap64/1, which a
+  # kernel author can call from Elixir for the same value
+  defp expr({:wrap64, m, [x]}, env) do
+    {q, _} = wrapped(x, env)
+    {remote(Defk.Bits, :wrap64, [q], m), :i64}
+  end
+
   defp expr({{:., _, [:math, fun]}, m, args}, env), do: fun_call(fun, args, m, env)
 
   # band(a, b), a &&& b, Bitwise.band(a, b) and :erlang.band(a, b) (the
@@ -412,12 +419,10 @@ defmodule Defk.ElixirMode do
 
   # Masked arithmetic (Defk.Masked): the tree under the mask is Elixir's own
   # + - * on bignums, unchecked, and the mask is Bitwise.band of the exact
-  # result; a -1 mask wraps it to the signed 64-bit pattern (Ops.wrap64), as
-  # the kernel's i64 result. Leaves are checked as usual.
+  # result. Leaves are checked as usual.
   defp masked(expr, mask, m, env) do
     {q, _} = wrapped(expr, env)
-    q = if mask == -1, do: call(:wrap64, [q], m), else: remote(Bitwise, :band, [q, mask], m)
-    {q, :i64}
+    {remote(Bitwise, :band, [q, mask], m), :i64}
   end
 
   defp wrapped(ast, env) do

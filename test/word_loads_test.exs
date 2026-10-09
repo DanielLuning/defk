@@ -30,7 +30,7 @@ defmodule Defk.WordLoadsTest.Proven do
   # every 8-byte window, wrapped to 64 bits
   defk windows(b :: [u8]) :: i64 do
     for i <- 0..(len(b) - 8)//1, reduce: 0 do
-      acc -> band(acc + u64_le(b, i), -1)
+      acc -> wrap64(acc + u64_le(b, i))
     end
   end
 
@@ -63,7 +63,7 @@ defmodule Defk.WordLoadsTest.Short do
 
   defk windows(b :: [u8]) :: i64 do
     for i <- 0..(len(b) - 7)//1, reduce: 0 do
-      acc -> band(acc + u64_le(b, i), -1)
+      acc -> wrap64(acc + u64_le(b, i))
     end
   end
 end

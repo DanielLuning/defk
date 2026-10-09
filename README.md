@@ -99,7 +99,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 - `case` on an `i64` or `bool`: integer literals, `true`/`false`, `^pinned`, `_` or a variable, each with an optional guard. Used as a value or a statement.
 - Operators: `a[i]`, `out[i] = v` (only on `alloc/2` arrays), `+ - * /`, `div`, `rem`, comparisons, `and`/`or`/`not`, and bitwise on `i64`: `band`/`bor`/`bxor`/`bnot`/`bsl`/`bsr` (also as `&&& ||| ^^^ ~~~ <<< >>>` or `Bitwise.band/2` and so on, no `import Bitwise` needed).
 - Builtins: `len`, `min`, `max`, `abs`, `float`, `trunc`, `round`, `sqrt`, `exp`, `log`, `sin`, `cos`, `pow` (also as `:math.*`), plus calls to other kernels (inlined).
-- Masked arithmetic: `+ - *` and `bsl` by a literal directly inside `band(expr, 2^k - 1)` wrap like machine arithmetic and give Elixir's exact masked result without raising; `band(expr, -1)` wraps to the 64-bit pattern (for hashes such as FNV-1a).
+- Masked arithmetic: `+ - *` and `bsl` by a literal directly inside `band(expr, 2^k - 1)` wrap like machine arithmetic and give Elixir's exact masked result without raising; `wrap64(expr)` wraps the same tree to the low 64 bits as a signed i64, as `Defk.Bits.wrap64/1` does in Elixir (for hashes such as FNV-1a).
 - Word loads: `u64_le(bytes, i)`, `u32_le`, `u16_le` and the `_be` variants read an unsigned word at a byte offset of a `[u8]` (one unaligned load; `u64` comes back as its signed i64 bit pattern).
 - Module attributes as constants: `@name` holding an integer, float or boolean is inlined as that literal (also as a `case` pattern, in a guard, as a range bound, or a `band` mask that elides bounds checks); one holding a binary is a read-only `[u8]`. The value is the one where the kernel is defined, as in a `def`.
 

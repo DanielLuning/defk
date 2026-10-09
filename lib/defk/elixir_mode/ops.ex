@@ -61,12 +61,6 @@ defmodule Defk.ElixirMode.Ops do
   def wbsl(_a, n) when n >= 64, do: 0
   def wbsl(a, n), do: Bitwise.bsl(a, n)
 
-  # band(expr, -1): the low 64 bits of the exact result as a signed i64
-  def wrap64(x) do
-    <<r::signed-64>> = <<x::64>>
-    r
-  end
-
   defp shifted(:overflow, f, a, n), do: raise(ArithmeticError, "i64 overflow in #{f}(#{a}, #{n})")
   defp shifted(r, _f, _a, _n), do: r
 
@@ -135,8 +129,8 @@ defmodule Defk.ElixirMode.Ops do
   # word loads from a [u8]: the unsigned w-byte integer at byte offset i, as
   # <<_::binary-size(i), x::little-unsigned-size(w * 8), _::binary>> = a;
   # u64 is the i64 bit pattern (signed), as the kernel returns it
-  def u64_le(a, i), do: wrap64(:binary.decode_unsigned(word(a, i, 8), :little))
-  def u64_be(a, i), do: wrap64(:binary.decode_unsigned(word(a, i, 8), :big))
+  def u64_le(a, i), do: Defk.Bits.wrap64(:binary.decode_unsigned(word(a, i, 8), :little))
+  def u64_be(a, i), do: Defk.Bits.wrap64(:binary.decode_unsigned(word(a, i, 8), :big))
   def u32_le(a, i), do: :binary.decode_unsigned(word(a, i, 4), :little)
   def u32_be(a, i), do: :binary.decode_unsigned(word(a, i, 4), :big)
   def u16_le(a, i), do: :binary.decode_unsigned(word(a, i, 2), :little)

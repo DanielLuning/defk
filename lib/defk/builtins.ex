@@ -11,7 +11,7 @@ defmodule Defk.Builtins do
   # [u8], i64 -> i64 word loads: unsigned w-byte integers at a byte offset
   @loads [:u64_le, :u64_be, :u32_le, :u32_be, :u16_le, :u16_be]
   @all [:len, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
-         @math1 ++ [:pow] ++ @bitwise ++ @loads ++ [:alloc]
+         @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ [:alloc]
 
   @doc "Every builtin name."
   def all, do: @all

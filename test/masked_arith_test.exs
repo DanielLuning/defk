@@ -1,7 +1,9 @@
 # Masked arithmetic (defk-n4r.2, CONTEXT.md): the + - * neg bsl tree directly
 # under band(expr, 2^k - 1) is computed with wrapping machine arithmetic and
 # masked once, which gives Elixir's exact result (band of the bignum) and
-# never raises; band(expr, -1) wraps to the 64-bit pattern. Anything else in
+# never raises; wrap64(expr) wraps the same tree to the 64-bit pattern
+# (Defk.Bits.wrap64/1), while band(expr, -1) is Elixir's identity, checked
+# like any band whose operand is not a 2^k - 1 mask. Anything else in
 # the tree is a leaf and is checked as usual; a mask that is not 2^k - 1 gets
 # the checked form.
 
@@ -11,7 +13,7 @@ defmodule Defk.MaskedArithTest.K do
   # FNV-1a 64: offset basis 0xCBF29CE484222325 as its i64 bit pattern
   defk fnv1a64(b :: [u8]) :: i64 do
     for x <- b, reduce: -3_750_763_034_362_895_579 do
-      h -> band(bxor(h, x) * 1_099_511_628_211, -1)
+      h -> wrap64(bxor(h, x) * 1_099_511_628_211)
     end
   end
 
@@ -24,7 +26,7 @@ defmodule Defk.MaskedArithTest.K do
   # FNV-style mixing a word at a time, tail bytes ignored
   defk word_hash(b :: [u8]) :: i64 do
     for i <- 0..(len(b) - 8)//8, reduce: -3_750_763_034_362_895_579 do
-      h -> band(bxor(h, u64_le(b, i)) * 1_099_511_628_211 + bsl(h, 5), -1)
+      h -> wrap64(bxor(h, u64_le(b, i)) * 1_099_511_628_211 + bsl(h, 5))
     end
   end
 
@@ -34,7 +36,10 @@ defmodule Defk.MaskedArithTest.K do
   defk(add8_left(x :: i64, y :: i64) :: i64, do: band(255, x + y))
   defk(add8_op(x :: i64, y :: i64) :: i64, do: x + y &&& 255)
   defk(add8_remote(x :: i64, y :: i64) :: i64, do: Bitwise.band(x - y, 0xFF))
-  defk(wrap64(x :: i64, y :: i64) :: i64, do: band(x * y + x - y * y, -1))
+  defk(wrap_poly(x :: i64, y :: i64) :: i64, do: wrap64(x * y + x - y * y))
+  defk(wrap_leaf(x :: i64) :: i64, do: wrap64(x))
+  # band with -1 is Elixir's identity: the product is checked
+  defk(band_ones(x :: i64, y :: i64) :: i64, do: band(x * y, -1))
   defk(wrap63(x :: i64, y :: i64) :: i64, do: band(x * y - x, 0x7FFFFFFFFFFFFFFF))
   defk(neg_shift(x :: i64, y :: i64) :: i64, do: band(-x + (y <<< 13) - bsl(x, 64) + +y, 0xFFFF))
   defk(k1(x :: i64, y :: i64) :: i64, do: band(x * y, 1))
@@ -65,7 +70,7 @@ defmodule Defk.MaskedArithTest.K do
   @mask32 0xFFFFFFFF
   @all_ones -1
   defk(attr_mask(x :: i64, y :: i64) :: i64, do: band(x * y, @mask32))
-  defk(attr_wrap(x :: i64, y :: i64) :: i64, do: band(x * y, @all_ones))
+  defk(attr_ones(x :: i64, y :: i64) :: i64, do: band(x * y, @all_ones))
 
   # the masked result's range drops the bounds check
   defk lookup(x :: i64, y :: i64) :: i64 do
@@ -86,6 +91,8 @@ defmodule Defk.MaskedArithTest do
   @max 0x7FFFFFFFFFFFFFFF
   @values [0, 1, -1, 2, 255, 256, -256, 2 ** 32, 2 ** 32 - 1, 2 ** 62, -(2 ** 62)] ++
             [@min, @min + 1, @max, @max - 1, 0x5555555555555555, 3_037_000_500]
+
+  doctest Defk.Bits
 
   defp agrees(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
 
@@ -142,7 +149,18 @@ defmodule Defk.MaskedArithTest do
       assert agrees(:add8_left, [x, y]) == {:ok, band(x + y, 255)}
       assert agrees(:add8_op, [x, y]) == {:ok, band(x + y, 255)}
       assert agrees(:add8_remote, [x, y]) == {:ok, band(x - y, 255)}
-      assert agrees(:wrap64, [x, y]) == {:ok, s64(x * y + x - y * y)}
+      assert agrees(:wrap_poly, [x, y]) == {:ok, Defk.Bits.wrap64(x * y + x - y * y)}
+      assert agrees(:wrap_leaf, [x]) == {:ok, x}
+
+      expect = if (x * y) in @min..@max, do: {:ok, x * y}, else: :overflow
+
+      for f <- [:band_ones, :attr_ones] do
+        case {agrees(f, [x, y]), expect} do
+          {{:raise, %ArithmeticError{} = e}, :overflow} -> assert Defk.Test.reason(e) == :overflow
+          {got, want} -> assert got == want
+        end
+      end
+
       assert agrees(:wrap63, [x, y]) == {:ok, band(x * y - x, @max)}
       assert agrees(:k1, [x, y]) == {:ok, band(x * y, 1)}
 
@@ -157,13 +175,12 @@ defmodule Defk.MaskedArithTest do
 
     for x <- @values, y <- @values do
       assert agrees(:attr_mask, [x, y]) == {:ok, band(x * y, 0xFFFFFFFF)}
-      assert agrees(:attr_wrap, [x, y]) == {:ok, s64(x * y)}
     end
 
     assert K.add8(@max, 1) == 0
     assert K.mul32(@max, @max) == 1
     # 2^63 + -2^63 - 1, though 2^63 alone is not an i64
-    assert K.wrap64(@min, -1) == -1
+    assert K.wrap_poly(@min, -1) == -1
 
     assert_raise ArithmeticError, "i64 overflow in #{@max} * #{@max}", fn ->
       K.mul_plain(@max, @max)
@@ -242,7 +259,10 @@ defmodule Defk.MaskedArithTest do
     msg = rejection("band(bsl(y, 3) + x, 255)", "x :: i64, y :: f64")
     assert whats(msg) == ["bsl/2 takes integers, and y is f64"]
 
-    # 2^64 - 1 is no i64 literal: -1 is the 64-bit mask
+    msg = rejection("wrap64(x * 1.5)", "x :: i64")
+    assert whats(msg) == ["wrap64/1 takes integers, and x * 1.5 is f64"]
+
+    # 2^64 - 1 is no i64 literal: wrap64/1 is the 64-bit wrap
     msg = rejection("band(x * x, 0xFFFFFFFFFFFFFFFF)", "x :: i64")
     assert codes(msg) == ["integer-literal"]
   end
@@ -261,7 +281,9 @@ defmodule Defk.MaskedArithTest do
     add8_left: [],
     add8_op: [],
     add8_remote: [],
-    wrap64: [],
+    wrap_poly: [],
+    wrap_leaf: [],
+    band_ones: [],
     wrap63: [],
     neg_shift: [],
     k1: [],
@@ -275,6 +297,6 @@ defmodule Defk.MaskedArithTest do
     pick: [],
     lookup: [],
     attr_mask: [],
-    attr_wrap: []
+    attr_ones: []
   )
 end
