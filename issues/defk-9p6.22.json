@@ -5,11 +5,13 @@
   "created": "2026-10-09T19:21:02Z",
   "description": "Ranked #6 in docs/research/string-workloads.md, filed as a guidance entry. Anchors: bandit_native (wraps simdutf8 for WebSocket text frames), jsont's validation option; Bandit itself uses String.valid?. Measured in the research (single run, 16 MiB): String.valid? 463 MB/s, :unicode.characters_to_binary 2 GB/s.\n\nDesign: `valid_utf8?(bytes :: [u8]) :: bool` as the standard DFA (Bjoern Hoehrmann's table, 256 + 9*16 entries built in the kernel or as a module attribute) with a byte loop; agreement against :unicode.characters_to_binary/1 (error vs binary) over random and crafted inputs (overlongs, surrogates, truncated sequences). Elixir baseline: the two BIF-backed calls, :optimized by definition. Realistic size: 1 KB to 16 MB frames.\n\nExpected verdict: marginal (a scalar DFA in C runs ~1 GB/s, the BIF ~2 GB/s). The point of the entry is to show that a scan-only kernel competes with a C BIF and loses or ties, so people use String.valid?; a SIMD validator (simdutf8) is \"wrap a library\" territory.\n\nNeeds: defk-w38 (band/bsr for the byte classes); the table as [u8] via defk-ivt or built in-kernel today.\n\nDone when: agreement holds on the crafted set, the verdict is measured and the README \"Where Elixir is the right choice\" table gets the row.",
   "id": "defk-9p6.22",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-9p6",
   "priority": 3,
   "status": "open",
   "title": "Example: UTF-8 validation vs String.valid? and :unicode.characters_to_binary, expected marginal",
   "type": "task",
-  "updated_at": "2026-10-09T19:21:02Z"
+  "updated_at": "2026-10-09T19:21:03Z"
 }
