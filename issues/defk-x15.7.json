@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-09T09:30:22Z",
+  "description": "Run mix ci end to end until green; run the full test suite (206 tests) and confirm agreement/behaviour unchanged. Confirm no blanket disables were added and every suppression is ADR-backed.",
+  "id": "defk-x15.7",
+  "labels": [],
+  "parent": "defk-x15",
+  "priority": 2,
+  "status": "open",
+  "title": "Verify mix ci green and tests unchanged",
+  "type": "task",
+  "updated_at": "2026-10-09T09:30:22Z"
+}
