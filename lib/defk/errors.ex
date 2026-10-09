@@ -845,7 +845,7 @@ defmodule Defk.Errors do
           "",
           "why: #{entry.why}",
           "hint: #{entry.hint}",
-          "(defk #{entry.code}: #{docs(entry.code)})"
+          footer(entry.code)
         ],
         "\n"
       )

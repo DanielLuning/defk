@@ -63,7 +63,7 @@ defmodule Defk.BuildTest do
       assert msg =~ "xcode-select --install"
       assert msg =~ "apt install build-essential"
       assert msg =~ "apk add build-base"
-      assert msg =~ "(defk no-c-compiler: "
+      assert msg =~ "(defk no-c-compiler"
 
       dir = Path.join(Mix.Project.build_path(), "defk")
       assert Path.wildcard(Path.join(dir, "#{mod}-*.so")) == []
