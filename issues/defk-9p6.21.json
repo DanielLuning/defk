@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-w38"
+  ],
   "blocks": [],
   "created": "2026-10-09T19:21:02Z",
   "description": "Ranked #5 in docs/research/string-workloads.md. The research's key finding: a kernel that only scans (finds delimiters, returns offsets) cannot beat :binary's BIFs and leaves Elixir building the sub-binaries anyway; it pays only as a fused loader that parses the numeric fields straight into packed [f64]/[i64] columns the next kernel (or Nx) consumes. Anchors: rusty_csv (quotes 3.5-18.6x, SIMD scan then serial term building), ecsv (chunked C), jaxon.\n\nDesign: `load_columns(csv :: [u8], ncols :: i64) :: {[f64], i64}` for a numeric CSV (no quotes, fixed column count; a quoted field is a documented limit that raises), returning the packed values in row-major order and the row count; the Elixir side slices columns with binary_part. JSON: a flat array of numbers only, same shape. Realistic size: 10-500 MB files (metrics exports, ML feature tables).\n\nElixir baseline: NimbleCSV.RFC4180.parse_string + String.to_float into a binary with iodata, and a hand-written binary-matching parser; mark :optimized after both.\n\nDesign question (why needs-triage): output length is data-dependent (rows unknown up front). Options: two-pass (count newlines, alloc, parse; the count pass is a flat loop at memory speed), or a growable [i64]/[f64] output construct, which no other workload in the two surveys needs. Recommend two-pass and record the cost of the first pass beside the verdict; open a construct ticket only if the pass costs more than ~20%.\n\nNeeds: defk-w38 (fast digit parsing uses band/bsr tricks, optional), defk-4ai for [i32] offsets only if offsets are returned.\n\nExpected verdict: good for the fused loader on numeric data; the header states plainly that general CSV/JSON parsing to terms stays with NimbleCSV/Jason.\n\nDone when: agreement with NimbleCSV-derived values holds (bit-exact floats via the same String.to_float semantics: define the accepted number grammar and reject the rest), the verdict is measured and the README gets the row.",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Example: fused CSV/JSON numeric loader into packed columns vs NimbleCSV",
   "type": "task",
-  "updated_at": "2026-10-09T19:21:03Z"
+  "updated_at": "2026-10-09T19:21:04Z"
 }
