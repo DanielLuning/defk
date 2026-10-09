@@ -883,7 +883,6 @@ defmodule Defk.Compiler do
   #   depth      - block nesting, to check that an input array is copied in
   #                the block it is bound in
 
-  @spec scope(MapSet.t()) :: map()
   defp scope(outer) do
     %{
       out: outer,
@@ -2246,11 +2245,13 @@ defmodule Defk.Compiler do
     # the bindings the caller still reads after the call stay live in the callee
     outer = MapSet.union(env.live, pairs(env, reads_outside(env.stmt, node)))
 
+    # scope/1 takes the empty set at both call sites (dialyzer treats a
+    # MapSet built by union as opaque and the literal as structural); the
+    # caller's live sets are merged in afterwards
     cenv =
-      Map.merge(
-        %{vars: Map.new(vars), sigs: env.sigs, inlining: [key | env.inlining]},
-        scope(outer)
-      )
+      %{vars: Map.new(vars), sigs: env.sigs, inlining: [key | env.inlining]}
+      |> Map.merge(scope(MapSet.new()))
+      |> Map.merge(%{out: outer, nest: outer, live: outer})
 
     params = for {p, {:arr, _}} <- k.params, do: {p, cenv.vars[p].id}
 
