@@ -1,9 +1,7 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [
-    "defk-i00"
-  ],
+  "blocks": [],
   "created": "2026-10-09T20:15:54Z",
   "description": "Found while writing examples/fft.exs (defk-52v.5). A kernel loop that computes both `cos(a)` and `sin(a)` for the same `a` is compiled by clang into one call to the platform sincos (Darwin: `__sincos_stret`). Its sin differs from libm's `sin`, and so from `:math.sin` and Elixir mode, in the last bit for some arguments: 7 of 2048 twiddles at n = 4096, 2380 of 524288 at n = 2^20. That is a divergence (CONTEXT.md): the kernel returns a different value without raising. The example works around it with two separate loops, one for cos and one for sin (see the comment in FFT.Kernels.fft), which should be undone once this is fixed.\n\nFix: stop clang from treating libm calls as builtins it may fuse or substitute. `-fno-builtin-sin -fno-builtin-cos` (or `-fno-builtin` for the whole unit, measured for cost) in Defk.Build's @cflags; the cache key already covers the flags. Audit the other libm builtins the subset exposes (exp, log, pow, sqrt, fabs, round) for similar substitutions under the current flags (pow(x, 0.5) -\u003e sqrt, pow(x, 2.0) -\u003e x*x, exp/log identities): with -ffp-contract=off and no fast-math most are off, but verify by reading the generated assembly of a probe kernel or by an agreement property with edge-biased floats.\n\nTest: an agreement property (Defk.Test.assert_agrees with the Defk.Generators f64 edge mix, once defk-ne6 lands) over a kernel that computes {cos(a), sin(a)} in one loop for 4096 arguments and returns both arrays; it must be bit-exact with Elixir mode. Also a unit test with the exact twiddle arguments from the FFT example at n = 4096.\n\nOnly checked on macOS/arm64 so far; Linux glibc also has sincos, so the fix must be a flag, not a Darwin special case.\n\nDone when: the property passes bit-exact, the FFT example's two loops are merged back into one with the comment removed, the measured cost of the flag is recorded in the @cflags comment (as the hardening flags were), and docs/language.md or README Known limitations states that libm functions match Elixir's bit for bit.",
   "id": "defk-6g6",
@@ -14,5 +12,5 @@
   "status": "open",
   "title": "cos and sin of one argument in a loop fuse into sincos, diverging from :math.sin in the last bit",
   "type": "bug",
-  "updated_at": "2026-10-09T20:15:54Z"
+  "updated_at": "2026-10-09T20:17:15Z"
 }
