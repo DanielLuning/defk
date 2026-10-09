@@ -22,6 +22,7 @@
     "defk-n4r.6",
     "defk-wlu"
   ],
+  "closed_at": "2026-10-09T20:59:49Z",
   "created": "2026-10-05T18:11:36Z",
   "description": "Kernels have no band/bor/bxor/bnot/bsl/bsr (Bitwise module, or the Erlang :erlang.band/2 etc. forms), so hashing and checksum algorithms (CRC32, xxHash, FNV) can't be written; this blocks the checksum example defk-9p6.2. Support them on i64 with Elixir semantics: bsl/bsr are arithmetic with negative shift reversing direction, bsl on i64 must raise or match Elixir for results outside i64 (Elixir has bignums; decide: raise ArithmeticError on overflow like + - *), bnot is two's complement. Accept both `import Bitwise` operator forms (\u0026\u0026\u0026, |||, ^^^, \u003c\u003c\u003c, \u003e\u003e\u003e, ~~~) and band/2-style calls. Tests compare with Elixir, including negative values and shift edge cases (shift \u003e= 64, negative shift).",
   "id": "defk-w38",
@@ -55,8 +56,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Support bitwise operators in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T20:58:53Z"
+  "updated_at": "2026-10-09T20:59:49Z"
 }
