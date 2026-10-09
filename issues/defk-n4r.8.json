@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-n4r.9"
@@ -12,8 +12,8 @@
   ],
   "parent": "defk-n4r",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "1BRC: Rustler reference implementation for the native comparison",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:54Z"
+  "updated_at": "2026-10-09T21:51:25Z"
 }
