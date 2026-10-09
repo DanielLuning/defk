@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-09T22:01:39Z",
   "created": "2026-10-05T11:34:31Z",
   "description": "Its 'good' verdict is provisional until the Elixir side is as fast as we can make it. Ideas: Walk packed binaries with binary matching instead of a tuple list; coarse grid / bounding-box prefilter applied to BOTH sides (it is an algorithmic trick, not a defk feature). Record alternatives tried; set baseline: :optimized. If Elixir comes within 2x, the verdict becomes marginal and Elixir is the recommendation: record that as a result.",
   "id": "defk-9p6.7",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Optimise the Elixir baseline: geo_nearest",
   "type": "task",
-  "updated_at": "2026-10-09T21:51:25Z"
+  "updated_at": "2026-10-09T22:01:39Z"
 }
