@@ -15,6 +15,7 @@
     "defk-n4r.5",
     "defk-sgw.3"
   ],
+  "closed_at": "2026-10-09T21:14:52Z",
   "created": "2026-10-06T09:08:21Z",
   "description": "Kernels can't read module attributes today (`x + @lim` fails with 'undefined variable lim'). Allow integer and float module attributes, inlined at compile time as literals; any other attribute value is a compile error in the kernel compile error format. Needed by PCM (@s16_max/@s16_min) and Gorilla (@mask64; masked arithmetic in defk-wlu already assumes `band(expr, @mask64)`).\n\nEach accepted convenience construct needs: an Elixir-mode meaning, agreement tests (Defk.Case, both modes), and a docs/language.md entry. Decided in 'Which convenience constructs do the six target workloads need?' (defk-dtw.18); sketches on branch prototype/defk-dtw.18-sketches (prototypes/convenience_sketches.exs).\n\nDone when @attr works in any expression position including band masks and case/guard literals, both modes agree, and language.md lists the allowed value types.",
   "id": "defk-ivt",
@@ -22,8 +23,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Module attributes as constants in kernels",
   "type": "task",
-  "updated_at": "2026-10-09T21:01:39Z"
+  "updated_at": "2026-10-09T21:14:52Z"
 }
