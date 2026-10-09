@@ -14,11 +14,15 @@
     {
       "text": "Breadcrumb from defk-t11.2 (2026-10-08): the window this ticket must close is wider than 'a non-finite returned float'. A kernel can compute a NaN, compare an integer against it, and return a bool - no non-finite float ever reaches the exit check, so nothing raises today. Probe: defk probe(i :: i64) :: {bool,bool,bool,bool} with f = 1.0e308 * 10.0 - 1.0e308 * 10.0 inside returns {false, false, true, true} natively, i.e. 1 \u003e NaN and 1 \u003e= NaN are true, while Elixir cannot even get there: every producer (0.0/0.0, 1.0e308*10.0, sqrt(-1.0), log(0.0), exp(1000.0)) raises ArithmeticError at the op. So the observable divergence is native returning a value where Elixir raises, plus the control flow the wrong 1 \u003e NaN picks before exit. defk_cmp_i64_f64 returns 1 for NaN (documented in priv/defk_runtime.h as 'NaN compares below every integer'), which makes \u003c and \u003c= false as Elixir would but \u003e and \u003e= true; a single int cannot represent unordered, so agreeing on all four needs the codegen to add a guard, not a change to the helper. Spec scope for t11.2 was explicitly NaN-free. Decide here whether the nf flag is checked before any comparison can observe the NaN, or add a Defk.Divergences entry.",
       "timestamp": "2026-10-08T13:28:08Z"
+    },
+    {
+      "text": "The agreement properties (defk-ne6) found four instances of this, tagged @tag :divergence in the suite (excluded by default, run with mix test --only divergence): (1) Examples.Kernels.scale(\u003c\u003c1.0e308::float-64-native\u003e\u003e, 10.0): native returns an array holding inf, Elixir mode raises ArithmeticError. (2) Examples.Kernels.sum(\u003c\u003c0x7FF0000000000000::64-native\u003e\u003e): native raises ArithmeticError \"kernel produced a non-finite float\" at return, Elixir mode raises ArgumentError (:non_finite_input) at the read. (3) Rolling.Kernels.mean_std(\u003c\u003c1.0e200::float-64-native\u003e\u003e, 1): native returns NaN in the output, Elixir mode raises. (4) Geo.Kernels.nearest([1.7e308], [0.0], [0.0], -1.7e308, 0.0, 1): native returns [-1], Elixir mode raises ArithmeticError. The main properties bound floats to 1e100-1e150 until this is fixed; lift those bounds when closing.",
+      "timestamp": "2026-10-09T20:33:21Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Raise on non-finite floats like Elixir",
   "type": "task",
-  "updated_at": "2026-10-09T20:17:15Z"
+  "updated_at": "2026-10-09T20:33:21Z"
 }
