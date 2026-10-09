@@ -32,6 +32,7 @@ defmodule Defk.Errors do
   # The footer names docs/language.md only when that file exists, so no rendered
   # error points at a missing path. defk-sgw.1 writes the file; this attribute
   # then flips to true on the next compile of this module (touch it to force).
+  @external_resource Path.expand("../../docs/language.md", __DIR__)
   @language_doc_exists File.exists?(Path.expand("../../docs/language.md", __DIR__))
 
   # Rejections reported per module; later ones are counted, not shown.
