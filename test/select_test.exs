@@ -175,7 +175,7 @@ defmodule Defk.SelectTest do
   end
 
   describe "cost heuristic (defk-id9)" do
-    defp cost_c(),
+    defp cost_c,
       do: File.read!(String.replace_suffix(Defk.SelectTest.Cost.__defk_lib__(), ".so", ".c"))
 
     # the C of one kernel: from its marker comment to the next kernel's
