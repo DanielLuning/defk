@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-10T10:48:05Z",
   "created": "2026-10-09T21:33:26Z",
   "description": "Found while writing examples/codecs.exs (defk-9p6.19): in a hex encoder, `out = alloc(u8, 2 * len(a))` and then, for `i \u003c- 0..(len(a) - 1)//1`, `out[2 * i] = @hex[band(bsr(b, 4), 15)]` and `out[2 * i + 1] = ...`, the generated C keeps the bounds check on `out[2 * i]` and `out[2 * i + 1]`, the overflow check on `2 * i`, and the u8 range check on a value that was read from a `[u8]` (so already 0..255). Three separate fact gaps:\n1. Multiplication facts: `k * i` with a literal k \u003e= 0 and i carrying `lb`/`ub` facts against an array length should get `ub: {arr =\u003e k*d}` only when scaled lengths are comparable: the length of `out` is `2 * len(a)`, so `in_bounds?` needs facts of the form \"len(out) = k * len(a) + c\" (alloc records its length expression's facts: today it keeps `len_lo`/`len_lb` for `len(a) + c` shapes; extend to `k * len(a) + c`).\n2. The overflow check on `2 * i`: with i \u003c= len(a) - 1 \u003c 2^61 and k small, the product cannot overflow i64; use the `hi` bound when known (the alloc cap gives every length \u003c 2^61, so `k * i` for literal k \u003c 4 is safe; derive `hi` from `ub` facts via the 2^61 bound as range_limit already does for ranges).\n3. A value read from a `[u8]` carries lo 0, hi 255 (u8_val does this); check why the write `out[j] = v` where v came from `@hex[...]` (a binary attribute read) still emits `defk_to_u8`: the attribute read path probably returns a plain i64 without the u8 facts; give it `u8_val`.\n\nVerify with the fast-path check used in test/attributes_test.exs (grep the generated C) and measure the hex encoder before/after (examples/codecs.exs, encode alone was 1.5x; the decode side has the same shape).\n\nDone when: the hex encoder's inner loop has no bounds check, no overflow check and no u8 range check in the generated C, with tests on the C for each, and the agreement properties still pass.",
   "id": "defk-upc",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Range facts for constant multiples and alloc(2 * len): out[2 * i] keeps its bounds check",
   "type": "task",
-  "updated_at": "2026-10-10T10:41:53Z"
+  "updated_at": "2026-10-10T10:48:05Z"
 }
