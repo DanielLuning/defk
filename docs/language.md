@@ -1138,7 +1138,10 @@ end
 - **Limit:** a guard result outside `i64` (`n * n > 100` at `n = 2^40`, `abs`
   of the minimum, a `trunc` out of range) is no error in Elixir, which has
   bignums, so it does not fail the clause: it raises `ArithmeticError`, as the
-  same operation does outside a guard.
+  same operation does outside a guard. When one guard has both a zero divisor
+  and such a result, evaluated without a short-circuit between them
+  (`rem(n, y) < n * n`), the kernel raises, where Elixir mode may fail the
+  clause for the zero divisor it reaches first.
 
 ### `for`
 
