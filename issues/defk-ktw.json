@@ -12,11 +12,15 @@
     {
       "text": "Implemented (c), on branch defk-ktw/alloc-zero-safepoints. All numbers were taken UNDER LOAD (3 other agents, load average 4-5). Each is the best of 2-3 script runs, each run the min of 60 reps (15 for the large cases).\n\nTick gap (bench/tick_gap.exs, 1 scheduler, 1 ms ticker, worst gap per run; idle ~2.1 ms, yielding kernel 2.25-2.5 ms):\n- one 85 MB alloc, first run (cold pages): main 3.88 ms (3.88, 4.04 in other runs); branch 2.00-2.55 ms\n- 20 x 85 MB alloc (one call each, warm, 6.9 ms in total): main 6.70-6.92 ms; branch 1.94-2.28 ms, 25 yields/run\n- runtime of the 20-alloc run: 6.7-6.85 ms on main, 7.0 ms on the branch (it includes the ticker's turns)\n\nStrip size: with 64 KiB strips a warm 85 MB alloc was ~30% slower than one memset (461 vs 350 us). With 1 MiB strips there was no measurable difference (316-342 vs 310-336 us), so DEFK_ZERO_STRIP is 1 MiB.\n\n(b) throughput, main -\u003e branch, under load:\n- scale 1M f64: 170 -\u003e 131 us (-23%)\n- scale 10M f64: 1729 -\u003e 1454 us (-16%)\n- encode16 1 MB: 338 -\u003e 297 us (-12%)\n- encode64 1 MB and 256 KB: 222/57 vs 223/57 us, no change. The loop plus the tail writes is not a form (b) proves, so it is zeroed in strips.\n- encode64 64 MB: 15.9-16.1 ms on both\n- resize_bilinear 1080p -\u003e 480x270: within noise (1324-1406 us on the branch vs 1349-1377 on main). The out buffer has a 2-D index (not proven, zeroed in strips); xo and xf are unzeroed.\nAn upper bound for (b), from skipping every memset (unsound): scale -15-25%, encode16/encode64 1 MB -8-12%, 64 MB -2-6%, resize noise.",
       "timestamp": "2026-10-10T11:22:14Z"
+    },
+    {
+      "text": "Correctness: mix ci passes after merging main (1273 tests, 0 failures). The deep properties of the two new test files pass (95). The :timing tests pass, 3 runs out of 3; the 85 MB tick-gap test fails on main's alloc, as it should. elixir examples/run_all.exs: 19/19 behave as claimed. Follow-ups, both needs-triage: defk-i5r (prove full writes for more loop shapes) and defk-oed (other memcpy/memset done in one go in the runtime).",
+      "timestamp": "2026-10-10T11:37:17Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "A large alloc/2 zero-fills without a safepoint: 85 MB costs a 5 ms scheduler gap",
   "type": "task",
-  "updated_at": "2026-10-10T11:22:14Z"
+  "updated_at": "2026-10-10T11:37:17Z"
 }
