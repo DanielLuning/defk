@@ -223,6 +223,15 @@ defmodule Defk.ArrayAccumulatorTest.K do
     end
   end
 
+  # the same for [f32], whose input reads are checked like [f64]'s (defk-4ai);
+  # alloc(f32, len(a)) has no constant length, so finiteness is the only fact
+  # the new value loses
+  defk pick_input_f32(a :: [f32]) :: {[f32], f64} do
+    for _ <- 0..1//1, reduce: {alloc(f32, len(a)), 0.0} do
+      {acc, s} -> {a, s + acc[0]}
+    end
+  end
+
   # an accumulator named like an array read after the loop may be bound
   # again in the body: it shadows that array (no array-rebind-in-loop)
   defk shadow(n :: i64) :: {[i64], [i64]} do
@@ -362,6 +371,11 @@ defmodule Defk.ArrayAccumulatorTest do
       assert {:raise, %ArgumentError{}} = agree(:pick_input, [bad])
       assert agree(:pick_input, [f64s([2.5])]) == {:ok, {f64s([2.5]), 2.5}}
       assert {:raise, %Enum.OutOfBoundsError{}} = agree(:pick_input, [<<>>])
+      assert {:raise, %ArgumentError{}} = agree(:pick_input_f32, [<<0x7F800000::32-native>>])
+
+      assert agree(:pick_input_f32, [<<2.5::float-32-native>>]) ==
+               {:ok, {<<2.5::float-32-native>>, 2.5}}
+
       assert agree(:scaled, [f64s([1.0, 2.0]), 0.5]) == {:ok, {f64s([0.5, 1.0]), 1.5}}
     end
   end
@@ -425,6 +439,7 @@ defmodule Defk.ArrayAccumulatorTest do
     :total,
     :prefix,
     :pick_input,
+    :pick_input_f32,
     histogram_from: [args: StreamData.fixed_list([G.array(:u8), G.i64(-1..256)])],
     written_after: [args: StreamData.fixed_list([StreamData.integer(0..100)])],
     aggregate: [

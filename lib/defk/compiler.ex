@@ -3087,12 +3087,12 @@ defmodule Defk.Compiler do
 
   # a new value `r` of array accumulator `a` without a fact the body assumed
   defp lost_facts?(%{t: {:arr, e}} = a, r) do
-    (e == :f64 and a.fin and not r[:fin]) or
+    (e in [:f64, :f32] and a.fin and not r[:fin]) or
       (is_integer(a.len_lo) and not (is_integer(r[:len_lo]) and r.len_lo >= a.len_lo))
   end
 
   # an array accumulator with facts a new value may not have
-  defp facts?(%{t: {:arr, e}} = a), do: (e == :f64 and a.fin) or is_integer(a.len_lo)
+  defp facts?(%{t: {:arr, e}} = a), do: (e in [:f64, :f32] and a.fin) or is_integer(a.len_lo)
   defp facts?(_a), do: false
 
   # the compiler state a lowering changes (decls, safepoints, loop ids, ...)
