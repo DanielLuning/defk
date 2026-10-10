@@ -300,13 +300,11 @@ defmodule Defk.Clauses do
   end
 
   defp literal(v, kind, t) do
-    cond do
-      t == nil or @lit_types[t] == kind ->
-        {:lit, v}
-
-      true ->
-        {:error, "the clause pattern #{inspect(v)} never matches the #{t} parameter",
-         "a clause matches an i64 parameter with an integer and a bool with true or false; test other values in the guard"}
+    if t == nil or @lit_types[t] == kind do
+      {:lit, v}
+    else
+      {:error, "the clause pattern #{inspect(v)} never matches the #{t} parameter",
+       "a clause matches an i64 parameter with an integer and a bool with true or false; test other values in the guard"}
     end
   end
 
@@ -321,42 +319,44 @@ defmodule Defk.Clauses do
       end)
 
     subject = if subject_at, do: Enum.at(pvars, subject_at), else: true
-    head_names = Enum.map(params, &elem(&1, 0))
-
-    arms =
-      for {k, ps} <- Enum.zip(clauses, pats) do
-        guard = with {:when, _, [_, g]} <- k.head, do: g, else: (_ -> nil)
-
-        renames =
-          for {{:var, v}, p} <- Enum.zip(ps, head_names), into: %{}, do: {v, p}
-
-        renames =
-          for h <- head_names, not Map.has_key?(renames, h), into: renames, do: {h, hidden(h)}
-
-        tests =
-          for {{:lit, v}, i} <- Enum.with_index(ps), i != subject_at do
-            {:===, [], [Enum.at(pvars, i), v]}
-          end
-
-        guard =
-          case tests ++ List.wrap(guard && rename(guard, renames)) do
-            [] -> nil
-            [g | gs] -> Enum.reduce(gs, g, fn g, acc -> {:and, [], [acc, g]} end)
-          end
-          |> then(fn g -> if g == [], do: nil, else: g end)
-
-        pat =
-          case subject_at && Enum.at(ps, subject_at) do
-            {:lit, v} -> v
-            _ -> {:_, [], nil}
-          end
-
-        lhs = if guard, do: {:when, meta(k), [pat, guard]}, else: pat
-        {:->, meta(k), [[lhs], rename(k.body, renames)]}
-      end
-
+    arms = for {k, ps} <- Enum.zip(clauses, pats), do: arm(k, ps, subject_at, pvars)
     {name, arity} = key(head.head)
     {:case, [defk_clauses: {name, arity}] ++ meta(hd(clauses)), [subject, [do: arms]]}
+  end
+
+  # clause `k` with patterns `ps` as a case clause on the parameter at
+  # `subject_at` (nil: the subject is `true`)
+  defp arm(k, ps, subject_at, pvars) do
+    head_names = Enum.map(pvars, &elem(&1, 0))
+    renames = for {{:var, v}, p} <- Enum.zip(ps, head_names), into: %{}, do: {v, p}
+
+    renames =
+      for h <- head_names, not Map.has_key?(renames, h), into: renames, do: {h, hidden(h)}
+
+    tests =
+      for {{:lit, v}, i} <- Enum.with_index(ps), i != subject_at do
+        {:===, [], [Enum.at(pvars, i), v]}
+      end
+
+    guard =
+      case k.head do
+        {:when, _, [_, g]} -> [rename(g, renames)]
+        _ -> []
+      end
+
+    pat =
+      case subject_at && Enum.at(ps, subject_at) do
+        {:lit, v} -> v
+        _ -> {:_, [], nil}
+      end
+
+    lhs =
+      case tests ++ guard do
+        [] -> pat
+        [g | gs] -> {:when, meta(k), [pat, Enum.reduce(gs, g, &{:and, [], [&2, &1]})]}
+      end
+
+    {:->, meta(k), [[lhs], rename(k.body, renames)]}
   end
 
   defp meta(k), do: [line: k.line]
