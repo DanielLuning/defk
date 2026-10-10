@@ -20,9 +20,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "examples/gorilla_encode.exs on branch defk-9p6.16/gorilla-encoding (commit 59dffe2, merge of main a6d9685; mix ci green). PROVISIONAL, measured under load (HLL and defk-8qs agents running); quiet run is defk-sgw.4.\n\nRealistic size (declared in the header): 100-point blocks (Gorilla paper / Prometheus chunk size), timed as 1,000 series x 100 points, one encode call each. Other size: one 1M-point series. Inputs in :persistent_term.\n\nVerdict (DEFK_RESULT gorilla_encode, run_all reads it): Elixir 4.6-5.1 ms vs defk 2.1-2.45 ms: 1.96-2.38x, good in 7 of 8 runs (the 1.96x was best-of-7; now best-of-15). Close to the 2x bar: shared header/CRC32 code (0.27 us/block) and packing the list (~1/3 of defk's 2.1 us) weigh. NIF 5.9-7.2 ms: defk 2.7-2.9x faster (dirty-scheduler hop per call).\n1M points (gorilla_encode_1m): Elixir 41.6-44.5 ms vs defk 12.6-14.6 ms: 3.07-3.42x; NIF 31.5-33.3 ms: defk 2.3-2.5x faster. About half of defk's time is packing the list, ~6 ms the kernel.\nSweep (block size 100/630/4k/25k/160k/1M, ~1M points each): 2.25-2.5x, 3.9-4.1x, 4.5-4.7x, 3.5-3.8x, 3.1-3.4x, 2.7-3.3x; crossover 100.\nTick gap (1M points, one scheduler): Elixir max 2.0-2.5 ms, defk 2.2-2.9, NIF 2.0-2.15 (dirty CPU), all at the loaded ~2 ms floor.\n\nElixir variants (1,000x100 / 1M, ms): encode_elixir 23.6-23.9 / 330-353; one pass with bignum 64-bit patterns 15.1-15.6 / 153-156; halves+tables iolist 16.9-19.3 / ~930; two passes 4.7-4.8 / 40.7-42.6; Gorilla.Elixir (one pass, 32-bit halves, 256-entry zero-count tuples, appended bitstrings; baseline) 4.8-4.9 / 41.6-43.4; word buffer 4.6-5.0 / 40.3-40.8; defk's packed layout 5.3-5.6 / 118-122. Last three within noise.\n\nAgreement: byte-identical (creation time zeroed) across encode_elixir, the 6 variants, the NIF and defk on 53 series (bucket edges, \u003e32-bit deltas, negative/decreasing timestamps, sign flips, -0.0, extremes, ulp steps, integer values, 1M points). Kernel agrees with Elixir mode on 36 cases. Only gorilla_stream-internal disagreement: [] (encode_elixir 80-byte header, NIF \u003c\u003c\u003e\u003e).\n\nDecisions: one kernel builds both streams into one bitstring accumulator, returns {bits, ts_len, val_len}; multi-clause dod_bits helper with masks (gorilla_stream's buckets are one wider than the signed field and wrap); 64-bit XOR bits via x::64-signed and a logical shift on the u64 view instead of the 32-bit-halves split (comment on defk-oit). Pack 4 points per append (1 per append is ~3x slower). The NIF is built from source on OTP 29 (precompiled only for NIF 2.16/2.17), -O2, worked first try.\n\nFiled: defk-cao (needs-triage): a bitstring-returning kernel costs ~0.1 us more per call than a scalar one.",
+      "timestamp": "2026-10-10T12:42:59Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Target workload: Gorilla encoding vs gorilla_stream",
   "type": "task",
-  "updated_at": "2026-10-10T12:11:47Z"
+  "updated_at": "2026-10-10T12:42:59Z"
 }
