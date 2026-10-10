@@ -3,7 +3,8 @@
   "blocked_by": [],
   "blocks": [
     "defk-ulk.2",
-    "defk-ulk.3"
+    "defk-ulk.3",
+    "defk-ulk.4"
   ],
   "created": "2026-10-10T14:54:35Z",
   "description": "Measure before building anything. Output: docs/research/simd.md.\n\n- For every kernel in examples/ (and bench/), record clang's vectorisation verdict (use Defk, report: :full) and time, on arm64 (baseline, then armv8.2-a / -mcpu=native) and on real x86-64 hardware (baseline SSE2, x86-64-v2, x86-64-v3, -march=native). No emulated timings (qemu/Rosetta numbers don't count).\n- Classify what blocks vectorisation where it doesn't happen: remaining per-operation checks (e.g. defk-agp), in-order float reductions (bit-exactness, by design), early exits, gathers, index arithmetic, safepoints.\n- Check that each -march level keeps float results bit-exact with Elixir mode (FMA stays off under -ffp-contract=off? denormals? libm differences?) by running the agreement suite built at each level.\n- List the measured gaps to BIFs/NIFs (CRC, UTF-8 validation, substring search, hashes, base64) and say for each whether target flags, a hardware builtin or vector types would close it.\n- Survey prior art: Zig @Vector, Wasm SIMD128, Rust std::simd/portable_simd, Go's lack of SIMD, Julia, ISPC; Erlang/OTP's own CPU-feature handling (JIT, crypto); how Rustler/precompiled NIFs ship per-target artifacts (rustler_precompiled targets, NIF version matrix).\n\nDone when the doc has the tables and a recommendation for which of the prototype tickets are worth doing.",
