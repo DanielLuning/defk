@@ -63,8 +63,7 @@ defmodule Keys.Kernels do
     # with the last element of the heap, sift the root over the shrunk heap".
     for t <- 0..(half + n - 2)//1 do
       last = n - 1 - (t - half)
-      start = if t < half, do: half - 1 - t, else: 0
-      e = if t < half, do: n, else: last
+      {start, e} = if t < half, do: {half - 1 - t, n}, else: {0, last}
 
       if t >= half do
         top = a[0]

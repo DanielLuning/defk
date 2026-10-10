@@ -38,7 +38,7 @@ defmodule Defk.MacroKernelErrorsTest do
     msg =
       compile("""
       defk f(a :: i64) :: {i64, i64} do
-            if a > 0, do: {a, 1}, else: {0, a}
+            if a > 0, do: {a, 1}, else: {0, a, a}
           end
       """)
 
