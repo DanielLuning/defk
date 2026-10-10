@@ -1206,6 +1206,38 @@ iex> regs
 <<0, 3, 1, 0>>
 ```
 
+A count-min sketch update over `[u64]` hashes combines both: an input
+`[u64]` table bumped in place (copied once, before the first write), and a
+bucket index from a hash. `band(..., 0xFFFFFFFF)` keeps the per-row hash
+`h1 + r * h2` inside a mask, where `u64` and `i64` mix freely, and gives an
+`i64` in 0..2^32 - 1, so `rem(..., w)` takes the `i64` width (see
+[Masked arithmetic](#masked-arithmetic)). Written by the cold test
+(defk-sgw.3) from this document alone:
+
+```elixir
+defk update_many(sk :: [u64], d :: i64, w :: i64, hashes :: [u64]) :: [u64] do
+  for h <- hashes do
+    h1 = band(h, 0xFFFFFFFF)
+    h2 = bsr(h, 32)
+
+    for r <- 0..(d - 1)//1 do
+      col = rem(band(h1 + r * h2, 0xFFFFFFFF), w)
+      idx = r * w + col
+      sk[idx] = sk[idx] + 1
+    end
+  end
+
+  sk
+end
+```
+
+```elixir
+iex> sk = <<0::size(6 * 64)>>
+iex> out = M.update_many(sk, 2, 3, <<4294967297::64-native, 4294967297::64-native>>)
+iex> for <<c::64-native <- out>>, do: c
+[0, 2, 0, 0, 0, 2]
+```
+
 ### Copies
 
 A write is in place, with no copy, when nothing else can see the array's
