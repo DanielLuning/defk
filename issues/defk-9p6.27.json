@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-10T12:15:40Z",
+  "description": "Found in examples/hll_update_many.exs (defk-9p6.15). Defk.Bench.best/2 calls :erlang.garbage_collect() before each timed run; a full sweep puts the live data, including a 100k-element list of u64s (half bignums, ~500k words) the timed fun reads, into the new young heap rather than the old generation. The next minor GC inside the timed run copies the whole list (~0.6 ms here). A side that allocates little (defk: pack the list + kernel, 0.36 ms) pays it in some runs only, so best-of-7 gives 0.36-0.38 ms but the sweep's best-of-3 gave 1.06 ms in 4 of 4 runs; the Elixir side allocates enough to pay it every run. Measured with :erlang.statistics(:garbage_collection): packing 100k hashes takes ~270-460 us with 0 GCs and ~850-1100 us with 1 GC that reclaims 163 words (i.e. a copy of live data, not garbage). Options: a second garbage_collect (or a minor GC) after the full one so the inputs are promoted to the old heap, or run each timed call in a fresh process given a copy of the inputs, or document it. Either way both sides are treated alike; the question is which state is realistic (a freshly built list is young too).",
+  "id": "defk-9p6.27",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 3,
+  "status": "open",
+  "title": "Defk.Bench forced full GC leaves the caller's input list in the young heap: a minor GC copying it lands in some timed runs",
+  "type": "task",
+  "updated_at": "2026-10-10T12:15:40Z"
+}
