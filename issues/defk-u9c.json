@@ -11,9 +11,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Decisions: (1) Defk.Clauses.merge/1 runs in Defk.__before_compile__ (after attribute inlining) and turns a bodiless head plus its clauses into one kernel whose body is a case, so the compiler and Elixir mode need no new construct. Subject = the first parameter some clause matches with a literal (else the literal true); literals at other parameters become param === lit tests ANDed in front of the guard (Elixir matches before guarding, and 'and' short-circuits, so a guard error still fails the clause). (2) No copies: clause variables are renamed to the head parameter at their position in guard and body; head names a clause does not bind are renamed to a hidden name, so an unbound use is undefined-variable (reported under the user's name via meta defk_name) and a body may still bind them as fresh locals. (3) The case carries meta defk_clauses: {name, arity}; its no-match path raises %FunctionClauseError{module, function, arity} with kind/args/clauses nil (exactly what Elixir raises, checked field for field against plain defs). Natively a new runtime kind DEFK_E_FUN_CLAUSE with a static 'Elixir.Mod\\0name' string; for an inlined helper function is the helper, as for a defp. (4) Patterns: i64 literals, bool literals, variables, _; ^pin (Elixir rejects it in heads too), floats, tuples, repeated variables and wrong-typed literals are clause-pattern. Errors: clause-head (no head, or a clause before it; hint names the params after the clause variables), clause-types (types or return type on a clause), unknown-option (options on a clause), no-body (head without clauses), duplicate-kernel (two heads; now kind :error, not :planned). (5) Generated C: identical to the hand cond apart from the case's own subject local (test compares normalised C); literal dispatch is an if-chain. (6) Side fixes: generated argument variables drop a leading underscore (a _name parameter warned 'underscored variable used' in the dispatch def and __defk_elixir__ before this), and keyword options written with do: (defk f(...) :: t, yield: false, do: x) are no longer dropped. Doc example checker substitutes the alias for the module name in raise messages so FunctionClauseError can be documented. Tests: test/multi_clause_test.exs.",
+      "timestamp": "2026-10-10T10:46:22Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Multi-clause kernels with a typed function head",
   "type": "task",
-  "updated_at": "2026-10-10T10:22:49Z"
+  "updated_at": "2026-10-10T10:46:22Z"
 }
