@@ -34,7 +34,7 @@ defmodule Defk do
 
     quote do
       @defk_elixir_mode unquote(elixir_mode)
-      import Defk, only: [defk: 2, defk: 3]
+      import Defk, only: [defk: 1, defk: 2, defk: 3]
       Module.register_attribute(__MODULE__, :defk_kernels, accumulate: true)
       @defk_mode Application.compile_env(:defk, :mode, :native)
       @external_resource unquote(@runtime_h)
@@ -42,16 +42,28 @@ defmodule Defk do
     end
   end
 
+  # `defk head` and `defk head, opts` without a body: the head of a
+  # multi-clause kernel, whose clauses follow (Defk.Clauses)
+  defmacro defk(head), do: kernel(head, [], :head, __CALLER__)
+
   defmacro defk(head, opts \\ [], body) do
-    body = Keyword.get(body, :do)
-    kernel = %{head: head, opts: opts, body: body, line: __CALLER__.line}
+    if Keyword.has_key?(body, :do),
+      do: kernel(head, opts ++ Keyword.delete(body, :do), Keyword.get(body, :do), __CALLER__),
+      else: kernel(head, opts ++ body, :head, __CALLER__)
+  end
+
+  defp kernel(head, opts, body, caller) do
+    kernel =
+      if body == :head,
+        do: %{head: head, opts: opts, body: nil, line: caller.line, head?: true},
+        else: %{head: head, opts: opts, body: body, line: caller.line}
 
     # the module attributes the body reads, valued here as a def's would be
     quote do
       @defk_kernels Map.put(
                       unquote(Macro.escape(kernel)),
                       :attrs,
-                      unquote(Defk.Attributes.capture(body))
+                      unquote(Defk.Attributes.capture(kernel.body))
                     )
     end
   end
@@ -62,6 +74,7 @@ defmodule Defk do
       |> Module.get_attribute(:defk_kernels)
       |> Enum.reverse()
       |> Enum.map(&Defk.Attributes.inline/1)
+      |> Defk.Clauses.merge()
 
     # Elixir mode: compiled in :test, wherever it is the configured mode, and
     # in any module that opts in with `use Defk, elixir_mode: true`
@@ -152,7 +165,7 @@ defmodule Defk do
   defp wrappers(sigs, nif_name) do
     for %{name: name, params: params, ret: ret} <- sigs do
       specs = for {_, t} <- params, do: spec(t, :in)
-      vs = for {p, _} <- params, do: Macro.var(p, nil)
+      vs = arg_vars(params)
       call = quote do: unquote(nif_name.(name))(unquote_splicing(vs))
 
       quote do
@@ -165,7 +178,7 @@ defmodule Defk do
   defp dispatch_defs(sigs, mode, nif_name) do
     for %{name: name, params: params, ret: ret} <- sigs do
       specs = for {_, t} <- params, do: spec(t, :in)
-      vs = for {p, _} <- params, do: Macro.var(p, nil)
+      vs = arg_vars(params)
 
       quote do
         @spec unquote(name)(unquote_splicing(specs)) :: unquote(spec(ret, :out))
@@ -184,6 +197,28 @@ defmodule Defk do
           end
         end
       end
+    end
+  end
+
+  @doc false
+  # The variables a generated function passes its arguments on in: the
+  # parameter names, with a leading underscore dropped (`_scale` is used
+  # there, which Elixir warns about), numbered when that name is taken.
+  def arg_vars(params) do
+    names = MapSet.new(params, &elem(&1, 0))
+
+    for {{p, _}, i} <- Enum.with_index(params) do
+      trimmed = String.trim_leading(Atom.to_string(p), "_")
+
+      name =
+        cond do
+          trimmed == "" -> :"arg#{i}"
+          trimmed == Atom.to_string(p) -> p
+          String.to_atom(trimmed) in names -> :"#{trimmed}#{i}"
+          true -> String.to_atom(trimmed)
+        end
+
+      {name, [generated: true], nil}
     end
   end
 

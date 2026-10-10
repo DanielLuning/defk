@@ -69,7 +69,7 @@ defmodule Defk.Compiler do
             key,
             k.head,
             "duplicate-kernel",
-            "#{k.name}/#{k.arity} is defined more than once; multi-clause kernels are not supported yet"
+            "#{k.name}/#{k.arity} is defined more than once"
           )
 
           {[], seen}
@@ -337,7 +337,12 @@ defmodule Defk.Compiler do
   end
 
   defp head_name(head) do
-    call = with {:"::", _, [call, _]} <- head, do: call
+    call =
+      case head do
+        {:"::", _, [call, _]} -> call
+        {:when, _, [call, _]} -> call
+        call -> call
+      end
 
     case call do
       {name, _, args} when is_atom(name) and is_list(args) -> {name, length(args)}
@@ -354,6 +359,9 @@ defmodule Defk.Compiler do
   end
 
   # ------------------------------------------------------------ parsing ----
+
+  # a definition Defk.Clauses rejected (a clause with no head, say)
+  defp parse_kernel({%{reject: {at, code, what, opts}}, _idx}), do: err!(at, code, what, opts)
 
   defp parse_kernel({%{head: head, opts: opts, body: body}, idx}) do
     {call, ret_ast} =
@@ -1355,9 +1363,15 @@ defmodule Defk.Compiler do
   defp lower_expr({name, m, ctx}, env) when is_atom(name) and is_atom(ctx) do
     case env.vars do
       # bound by a rejected statement: this one is abandoned without a report
-      %{^name => %{t: :poison}} -> throw(:defk_poison)
-      %{^name => v} -> {[], v}
-      _ -> err!({name, m, ctx}, "undefined-variable", "undefined variable #{name}")
+      %{^name => %{t: :poison}} ->
+        throw(:defk_poison)
+
+      %{^name => v} ->
+        {[], v}
+
+      # a head parameter's name in a clause that names it otherwise (Defk.Clauses)
+      _ ->
+        err!({name, m, ctx}, "undefined-variable", "undefined variable #{m[:defk_name] || name}")
     end
   end
 
@@ -3919,10 +3933,26 @@ defmodule Defk.Compiler do
         if always?, do: {:halt, {arms, true}}, else: {:cont, {arms, seen}}
       end)
 
-    nomatch = "defk_no_clause(ctx, #{if sv.t == :bool, do: 1, else: 0}, #{c});\n"
+    nomatch = no_clause(node, sv.t, c)
     # exhaustive? is the set of literals seen unless a clause always matches
     arms = Enum.reverse(arms) ++ if(exhaustive? == true, do: [], else: [{:nomatch, nomatch}])
     {[ss, "#{c} = #{sv.c};\n"], arms, env}
+  end
+
+  # The C statement for a case no clause matches: CaseClauseError, or the
+  # FunctionClauseError of the multi-clause kernel the case stands for
+  # (Defk.Clauses), with its module and function as one static string,
+  # "Elixir.Mod\0name", and the length of the module part.
+  defp no_clause({:case, m, _}, t, c) do
+    case m[:defk_clauses] do
+      {name, arity} ->
+        mod = Atom.to_string(Process.get(:defk_module))
+        str = Defk.Raise.c_string(mod <> <<0>> <> Atom.to_string(name))
+        "defk_no_fun_clause(ctx, #{str}, #{byte_size(mod)}, #{arity});\n"
+
+      nil ->
+        "defk_no_clause(ctx, #{if t == :bool, do: 1, else: 0}, #{c});\n"
+    end
   end
 
   # A case clause as {pattern, guard, body, meta}; a clause with several

@@ -32,6 +32,7 @@
 #define DEFK_E_CASE_BOOL 5
 #define DEFK_E_RESUME 6    /* a resume missed its safepoint (a defk bug); RuntimeError */
 #define DEFK_E_RUNTIME 7   /* RuntimeError: a kernel's raise "msg" */
+#define DEFK_E_FUN_CLAUSE 8 /* FunctionClauseError: module\0function in umsg (module ulen bytes), arity in err_index */
 #define DEFK_E_USER 16     /* flag on a kind: a kernel's own raise, message in umsg/ulen */
 
 #define DEFK_LIKELY(x) __builtin_expect(!!(x), 1)
@@ -120,6 +121,19 @@ __attribute__((noreturn, cold)) static void defk_no_clause(defk_ctx *ctx, int is
   ctx->err_index = v;
   ctx->msg[0] = 0;
   ctx->err = is_bool ? DEFK_E_CASE_BOOL : DEFK_E_CASE_I64;
+  siglongjmp(ctx->jb, 1);
+}
+
+/* a multi-clause kernel with no matching clause: FunctionClauseError, like
+ * Elixir. `mod_fun` is the static "Elixir.Mod\0name", `mod_len` the length
+ * of the module part. */
+__attribute__((noreturn, cold, unused)) static void
+defk_no_fun_clause(defk_ctx *ctx, const char *mod_fun, size_t mod_len, int64_t arity) {
+  ctx->umsg = mod_fun;
+  ctx->ulen = mod_len;
+  ctx->err_index = arity;
+  ctx->msg[0] = 0;
+  ctx->err = DEFK_E_FUN_CLAUSE;
   siglongjmp(ctx->jb, 1);
 }
 
@@ -1157,6 +1171,23 @@ static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
     ERL_NIF_TERM vs[3] = {enif_make_atom(env, "Elixir.CaseClauseError"), enif_make_atom(env, "true"), term};
     ERL_NIF_TERM exc;
     enif_make_map_from_arrays(env, ks, vs, 3, &exc);
+    return enif_raise_exception(env, exc);
+  }
+  if (ctx->err == DEFK_E_FUN_CLAUSE) {
+    /* %FunctionClauseError{module:, function:, arity:}, the rest nil, as Elixir raises it */
+    ERL_NIF_TERM mod, fun, nil = enif_make_atom(env, "nil");
+    const char *name = ctx->umsg + ctx->ulen + 1;
+    enif_make_new_atom_len(env, ctx->umsg, ctx->ulen, &mod, ERL_NIF_UTF8);
+    enif_make_new_atom_len(env, name, strlen(name), &fun, ERL_NIF_UTF8);
+    ERL_NIF_TERM ks[8] = {enif_make_atom(env, "__struct__"), enif_make_atom(env, "__exception__"),
+                          enif_make_atom(env, "module"), enif_make_atom(env, "function"),
+                          enif_make_atom(env, "arity"), enif_make_atom(env, "kind"),
+                          enif_make_atom(env, "args"), enif_make_atom(env, "clauses")};
+    ERL_NIF_TERM vs[8] = {enif_make_atom(env, "Elixir.FunctionClauseError"),
+                          enif_make_atom(env, "true"), mod, fun,
+                          enif_make_int64(env, ctx->err_index), nil, nil, nil};
+    ERL_NIF_TERM exc;
+    enif_make_map_from_arrays(env, ks, vs, 8, &exc);
     return enif_raise_exception(env, exc);
   }
   int user = ctx->err & DEFK_E_USER;
