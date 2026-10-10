@@ -14,7 +14,8 @@ defmodule Defk do
 
   Types: `i64`, `f64`, `bool`, packed arrays `[f64]`, `[f32]`, `[i64]`, `[i32]`, `[i16]`, `[u8]`
   (passed as binaries in native byte order), tuples as return values, and
-  `bitstring` as a return value (the bitstring accumulator).
+  `bitstring` as a return value (the bitstring accumulator) or as the
+  parameter of a kernel that other kernels call.
   """
 
   # compile-time attribute: the defk app is not loaded when this module is
@@ -83,8 +84,11 @@ defmodule Defk do
       if elixir? or name in bits, do: Defk.ElixirMode.native_name(name), else: name
     end
 
-    {c_src, sigs} = Defk.Compiler.compile(env.module, kernels, env.file, nif_name: nif_name)
+    {c_src, all_sigs} = Defk.Compiler.compile(env.module, kernels, env.file, nif_name: nif_name)
     lib = Defk.Build.build!(env.module, c_src, env.file)
+
+    # a helper (a kernel taking a bitstring) is only inlined: no function
+    sigs = Enum.reject(all_sigs, &Defk.Bitstring.helper?/1)
 
     {wrapped, plain} = Enum.split_with(sigs, &(&1.name in bits))
 
@@ -94,7 +98,8 @@ defmodule Defk do
         else:
           render_stubs(plain) ++ native_stubs(wrapped, nif_name) ++ wrappers(wrapped, nif_name)
 
-    elixir_mode = if elixir?, do: Defk.ElixirMode.definitions(kernels, sigs, env.file), else: []
+    elixir_mode =
+      if elixir?, do: Defk.ElixirMode.definitions(kernels, all_sigs, env.file), else: []
 
     quote do
       @on_load :__defk_load__
