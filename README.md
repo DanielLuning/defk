@@ -37,7 +37,7 @@ in [`examples/README.md`](examples/README.md).
 
 So far:
 
-- **Where defk looks like it helps.** These are provisional: the Elixir baselines are first passes and still need optimising.
+- **Where defk looks like it helps.** These are provisional: the Elixir baselines are optimised, but the numbers were measured under load and wait for the quiet-machine run (defk-sgw.4).
   - rolling sensor statistics
   - nearest of 500k locations
   - 1080p image blur
@@ -208,7 +208,7 @@ The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show
 - [x] Record the purpose: Elixir first, defk only where it helps (defk-9p6.5)
 - [x] Example catalog with a scoreboard (defk-9p6.1)
 - [x] fuzzy_search example app (defk-nv1)
-- [ ] Optimise the Elixir baselines, so the `good` verdicts are no longer provisional: rolling_stats (defk-9p6.6), geo_nearest (defk-9p6.7), image_blur (defk-9p6.8), fuzzy_search (defk-9p6.9)
+- [x] Optimise the Elixir baselines, so the `good` verdicts are no longer provisional: rolling_stats (defk-9p6.6), geo_nearest (defk-9p6.7), image_blur (defk-9p6.8), fuzzy_search (defk-9p6.9)
 - [ ] Re-measure fuzzy_search, yielding against blocking, on a quiet machine (defk-klw)
 - [ ] Refresh the results table and demo numbers on a quiet machine (defk-yzw)
 - [ ] Separate code-layout noise (±3%) from real effects (defk-wnu)
