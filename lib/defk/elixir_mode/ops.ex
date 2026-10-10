@@ -235,19 +235,30 @@ defmodule Defk.ElixirMode.Ops do
   # u64 is the i64 bit pattern (signed), as the kernel returns it
   # <<acc::bitstring, v::size(n), ...>> with the bitstring accumulator's
   # limits, as the kernel checks them (defk_bits_put): a size outside 0..64,
-  # or a value outside 0..2^n - 1, which Elixir would truncate, raises
+  # or a value outside 0..2^n - 1 (-2^(n-1)..2^(n-1) - 1 for a signed
+  # segment), which Elixir would truncate, raises. A signed 0-width segment
+  # holds no bits and only 0 fits, as an unsigned one.
   def bits(acc, segs) do
     Enum.reduce(segs, acc, fn
-      {_v, n}, _acc when n not in 0..64 ->
+      {_v, n, _signed}, _acc when n not in 0..64 ->
         raise ArgumentError, "bitstring segment size #{n} is outside 0..64"
 
-      {v, n}, _acc when v < 0 or v > Bitwise.bsl(1, n) - 1 ->
+      {v, n, false}, _acc when v < 0 or v > Bitwise.bsl(1, n) - 1 ->
         raise ArgumentError, "bitstring segment value #{v} does not fit in #{n} bits"
 
-      {v, n}, acc ->
+      {v, n, false}, acc ->
         <<acc::bitstring, v::size(n)>>
+
+      {v, n, true}, acc ->
+        signed_fits?(v, n) ||
+          raise ArgumentError, "bitstring segment value #{v} does not fit in #{n} signed bits"
+
+        <<acc::bitstring, v::signed-size(n)>>
     end)
   end
+
+  defp signed_fits?(v, 0), do: v == 0
+  defp signed_fits?(v, n), do: v in -Bitwise.bsl(1, n - 1)..(Bitwise.bsl(1, n - 1) - 1)
 
   def u64_le(a, i), do: Defk.Bits.wrap64(:binary.decode_unsigned(word(a, i, 8), :little))
   def u64_be(a, i), do: Defk.Bits.wrap64(:binary.decode_unsigned(word(a, i, 8), :big))
