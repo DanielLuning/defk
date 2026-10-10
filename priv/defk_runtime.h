@@ -960,18 +960,43 @@ static inline void defk_bits_or(uint8_t *p, uint64_t pos, uint64_t v, int64_t n)
   __builtin_memcpy(q, &w, 8);
 }
 
-__attribute__((noreturn, cold, unused)) static void defk_bits_fail(defk_ctx *ctx, int64_t v, int64_t n) {
+__attribute__((noreturn, cold, unused)) static void defk_bits_fail(defk_ctx *ctx, int64_t v, int64_t n,
+                                                                    int is_signed) {
   if (n < 0 || n > 64)
     defk_fail(ctx, DEFK_E_ARG, "bitstring segment size %lld is outside 0..64", (long long)n);
-  defk_fail(ctx, DEFK_E_ARG, "bitstring segment value %lld does not fit in %lld bits",
-            (long long)v, (long long)n);
+  defk_fail(ctx, DEFK_E_ARG, "bitstring segment value %lld does not fit in %lld%s bits",
+            (long long)v, (long long)n, is_signed ? " signed" : "");
 }
 
 /* <<b::bitstring, v::size(n)>>, unsigned: v must be in 0..2^n - 1 (Elixir
    would keep the low n bits; a limit, like an array write) and n in 0..64 */
+static inline defk_bits defk_bits_append(defk_ctx *ctx, defk_bits b, uint64_t v, int64_t n);
+
 static inline defk_bits defk_bits_put(defk_ctx *ctx, defk_bits b, int64_t v, int64_t n) {
   if (DEFK_UNLIKELY((uint64_t)n > 64 || (n < 64 ? ((uint64_t)v >> n) != 0 : v < 0)))
-    defk_bits_fail(ctx, v, n);
+    defk_bits_fail(ctx, v, n, 0);
+  return defk_bits_append(ctx, b, (uint64_t)v, n);
+}
+
+/* <<b::bitstring, v::size(n)-signed>>: v must be in -2^(n-1)..2^(n-1) - 1
+   (n = 0 holds only 0; n = 64 takes every i64). The low n bits of v, as an
+   unsigned segment, are appended. The bounds are built by shifting 1 left by
+   at most 62 and negating, so there is no shift by 64 and no left shift of a
+   negative value. */
+static inline defk_bits defk_bits_put_signed(defk_ctx *ctx, defk_bits b, int64_t v, int64_t n) {
+  if (DEFK_UNLIKELY((uint64_t)n > 64)) defk_bits_fail(ctx, v, n, 1);
+  if (n == 0) {
+    if (DEFK_UNLIKELY(v != 0)) defk_bits_fail(ctx, v, n, 1);
+  } else if (n < 64) {
+    int64_t hi = (int64_t)(((uint64_t)1 << (n - 1)) - 1);
+    if (DEFK_UNLIKELY(v > hi || v < -hi - 1)) defk_bits_fail(ctx, v, n, 1);
+  }
+  uint64_t u = (uint64_t)v;
+  if (n < 64) u &= ((uint64_t)1 << n) - 1;
+  return defk_bits_append(ctx, b, u, n);
+}
+
+static inline defk_bits defk_bits_append(defk_ctx *ctx, defk_bits b, uint64_t v, int64_t n) {
   if (n == 0) return b;
   if (DEFK_UNLIKELY(!b.slot1 || defk_bits_end(ctx, b) != (uint64_t)b.nbits ||
                     ((uint64_t)b.nbits + (uint64_t)n + 7) / 8 + 8 + DEFK_BITS_HDR >
@@ -980,10 +1005,10 @@ static inline defk_bits defk_bits_put(defk_ctx *ctx, defk_bits b, int64_t v, int
   uint8_t *p = ctx->owned[b.slot1 - 1].data;
   uint64_t pos = (uint64_t)b.nbits;
   if (n > 56) {
-    defk_bits_or(p + DEFK_BITS_HDR, pos, (uint64_t)v >> 32, n - 32);
-    defk_bits_or(p + DEFK_BITS_HDR, pos + (uint64_t)(n - 32), (uint64_t)v & 0xFFFFFFFFu, 32);
+    defk_bits_or(p + DEFK_BITS_HDR, pos, v >> 32, n - 32);
+    defk_bits_or(p + DEFK_BITS_HDR, pos + (uint64_t)(n - 32), v & 0xFFFFFFFFu, 32);
   } else {
-    defk_bits_or(p + DEFK_BITS_HDR, pos, (uint64_t)v, n);
+    defk_bits_or(p + DEFK_BITS_HDR, pos, v, n);
   }
   b.nbits += n;
   uint64_t end = (uint64_t)b.nbits;

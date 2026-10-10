@@ -2585,9 +2585,9 @@ defmodule Defk.Compiler do
   # (priv/defk_runtime.h), kept in the frame across yields like any local.
   # `<<acc::bitstring, v::size(n), ...>>` evaluates acc and then every value
   # and size left to right, as Elixir does, and appends the segments in order;
-  # each append checks 0 <= n <= 64 and 0 <= v < 2^n (a limit: Elixir keeps
-  # the low n bits). A value is never changed by a later append: the runtime
-  # appends in place only to a value that ends where its buffer ends, and
+  # each append checks 0 <= n <= 64 and 0 <= v < 2^n, or -2^(n-1) <= v <
+  # 2^(n-1) for a signed segment (a limit: Elixir keeps the low n bits). A value is never changed by a
+  # later append: the runtime appends in place only to a value that ends where its buffer ends, and
   # copies an older value first. The empty binary literal `<<>>` is a [u8]
   # marked bits0, and becomes the empty bitstring where it is bound to a name
   # the kernel appends to, returned or assigned as a bitstring, or given by a
@@ -2600,18 +2600,21 @@ defmodule Defk.Compiler do
     r = fresh("bits", :bitstring)
 
     {ss, args} =
-      Enum.map_reduce(parts, [], fn {v_ast, n_ast}, acc ->
+      Enum.map_reduce(parts, [], fn {v_ast, n_ast, signed}, acc ->
         {sv, v} = lower_expr(v_ast, env)
         v = coerce!(v, :i64, v_ast, "a bitstring segment value")
         {sn, n} = lower_expr(n_ast, env)
         n = coerce!(n, :i64, n_ast, "a bitstring segment size")
         tv = fresh("seg", :i64)
         {sn, nc} = segment_size(sn, n, n_ast)
-        {[sv, "#{tv} = #{v.c};\n", sn], [{tv, nc} | acc]}
+        {[sv, "#{tv} = #{v.c};\n", sn], [{tv, nc, signed} | acc]}
       end)
 
     puts =
-      for {tv, nc} <- Enum.reverse(args), do: "#{r} = defk_bits_put(ctx, #{r}, #{tv}, #{nc});\n"
+      for {tv, nc, signed} <- Enum.reverse(args) do
+        put = if signed, do: "defk_bits_put_signed", else: "defk_bits_put"
+        "#{r} = #{put}(ctx, #{r}, #{tv}, #{nc});\n"
+      end
 
     {[sh, "#{r} = #{h.c};\n", ss, puts], val(r, :bitstring, r)}
   end
