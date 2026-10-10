@@ -2896,29 +2896,33 @@ defmodule Defk.Compiler do
   end
 
   # The statements `es` of a block, each `x = alloc(e, len)` marked (meta
-  # :defk_unzeroed, the loop's line) when the statement after it writes every
+  # :defk_unzeroed, the loop's line) when a later statement writes every
   # element of x before anything reads it. Only one form is accepted:
   #
   #     x = alloc(e, k * n)              # or alloc(e, n), k = 1
+  #     ...                              # statements that do not mention x
   #     for i <- 0..(n - 1)//1 do        # or 0..(n - 1); len(x) - 1 for k = 1
   #       ...
   #       x[k * i + c] = v               # for each c in 0..k-1 exactly once
   #       ...
   #     end
   #
-  # where the writes are statements of the body itself (not in a branch), x
-  # is not otherwise mentioned in the body (no read, no alias, no len/1), n
-  # does not mention x, and nothing in the body binds i (so each write's i
-  # is the loop's). Then each trip i writes k * i .. k * i + k - 1, and the
-  # trips 0..n-1 write all k * n elements; nothing reads x until the loop is
-  # done. Every way out of the loop before that is a raise, which frees the
-  # buffer, and a yield resumes inside the loop, so no unwritten element is
-  # ever seen. With `0..(n - 1)` (step -1 when n < 1) a trip writes x[0]
-  # first, which raises for n < 1 (k * n < k). Anything else is zeroed.
+  # where the statements in between do not mention x and bind no variable of
+  # n (so the range's n is the alloc's), the writes are statements of the
+  # loop body itself (not in a branch), x is not otherwise mentioned in the
+  # body (no read, no alias, no len/1), n does not mention x, and nothing in
+  # the body binds i (so each write's i is the loop's). Then each trip i
+  # writes k * i .. k * i + k - 1, and the trips 0..n-1 write all k * n
+  # elements; nothing reads x until the loop is done. Every way out before
+  # that is a raise, which frees the buffer, and a yield resumes where it
+  # left off with x unread, so no unwritten element is ever seen. With
+  # `0..(n - 1)` (step -1 when n < 1) a trip writes x[0] first, which raises
+  # for n < 1 (k * n < k). Anything else is zeroed.
   defp unzeroed_allocs(es) do
-    Enum.zip(es, Enum.drop(es, 1) ++ [nil])
-    |> Enum.map(fn {e, next} ->
-      case {e, unzeroed_by(e, next)} do
+    es
+    |> Enum.with_index(1)
+    |> Enum.map(fn {e, j} ->
+      case {e, unzeroed_by(e, Enum.drop(es, j))} do
         {{:=, m, [x, {:alloc, am, args}]}, line} when is_integer(line) ->
           {:=, m, [x, {:alloc, [{:defk_unzeroed, line} | am], args}]}
 
@@ -2928,12 +2932,26 @@ defmodule Defk.Compiler do
     end)
   end
 
-  # the line of the loop `next` if it writes every element of the alloc `e`
-  defp unzeroed_by(
-         {:=, _, [{x, _, xc}, {:alloc, _, [{_, _, ec}, len]}]},
-         {:for, fm, [{:<-, _, [{i, _, ic}, range]}, [do: body]]}
-       )
-       when is_atom(x) and is_atom(xc) and is_atom(ec) and is_atom(i) and is_atom(ic) and x != i do
+  # the line of the loop in `rest` (the statements after the alloc `e`) that
+  # writes every element of e's array first, or nil
+  defp unzeroed_by({:=, _, [{x, _, xc}, {:alloc, _, [{_, _, ec}, len]}]}, rest)
+       when is_atom(x) and is_atom(xc) and is_atom(ec) do
+    {between, from} = Enum.split_while(rest, &(not mentions?(&1, x)))
+    len_vars = vars(len)
+
+    with [loop | _] <- from,
+         false <- Enum.any?(between, fn s -> Enum.any?(len_vars, &binds?(s, &1)) end) do
+      writes_all(loop, x, len)
+    else
+      _ -> nil
+    end
+  end
+
+  defp unzeroed_by(_e, _rest), do: nil
+
+  # the line of `loop` if it is the accepted for that writes all of x
+  defp writes_all({:for, fm, [{:<-, _, [{i, _, ic}, range]}, [do: body]]}, x, len)
+       when is_atom(i) and is_atom(ic) and x != i do
     {k, n} =
       case len do
         {:*, _, [k, n]} when is_integer(k) and k >= 1 -> {k, n}
@@ -2956,7 +2974,7 @@ defmodule Defk.Compiler do
     if ok, do: fm[:line] || 0
   end
 
-  defp unzeroed_by(_e, _next), do: nil
+  defp writes_all(_loop, _x, _len), do: nil
 
   # `range` is 0..(n - 1)//1 or 0..(n - 1), or for k = 1 also with len(x) - 1
   defp zero_based_to({:..//, _, [0, stop, 1]}, n, x, k), do: stop_at(stop, n, x, k)
@@ -2986,6 +3004,16 @@ defmodule Defk.Compiler do
   defp strip_meta(ast), do: Macro.prewalk(ast, &Macro.update_meta(&1, fn _ -> [] end))
 
   defp mentions?(ast, x), do: count_var(ast, x) > 0
+
+  defp vars(ast) do
+    {_, vs} =
+      Macro.prewalk(ast, MapSet.new(), fn
+        {v, _, c} = t, vs when is_atom(v) and is_atom(c) -> {t, MapSet.put(vs, v)}
+        t, vs -> {t, vs}
+      end)
+
+    vs
+  end
 
   defp count_var(ast, x) do
     {_, n} =

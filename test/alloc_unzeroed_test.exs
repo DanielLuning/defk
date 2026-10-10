@@ -23,22 +23,26 @@ defmodule Defk.AllocUnzeroedTest.Shapes do
   #   step      - the range's step
   #   guard     - the writes are under `if rem(i, 3) != 0`
   #   read      - each write adds the element's old value
+  #   between   - a statement between the alloc and the loop: nil, one that
+  #               mentions neither (:unrelated), one that rebinds n so the
+  #               range ends one early (:rebind), or len(out) (:mention)
   def shapes do
     :rand.seed(:exsss, {7, 11, 13})
 
-    for j <- 1..48 do
+    for j <- 1..64 do
       k = Enum.random([1, 1, 2, 2, 3])
       cs = Enum.take_random(0..k, Enum.random(1..(k + 1)))
-      cs = if :rand.uniform(4) == 1, do: Enum.shuffle(Enum.to_list(0..(k - 1))), else: cs
+      cs = if :rand.uniform(2) == 1, do: Enum.shuffle(Enum.to_list(0..(k - 1))), else: cs
 
       shape = %{
         k: k,
         cs: cs,
-        start: Enum.random([0, 0, 0, 1]),
+        start: Enum.random([0, 0, 0, 0, 1]),
         stop: Enum.random([-1, -1, -1, -2, 0]),
         step: Enum.random([1, 1, 1, 1, 2]),
-        guard: :rand.uniform(6) == 1,
-        read: :rand.uniform(6) == 1
+        guard: :rand.uniform(8) == 1,
+        read: :rand.uniform(8) == 1,
+        between: Enum.random([nil, nil, nil, :unrelated, :unrelated, :rebind, :mention])
       }
 
       {:"shape_#{j}", shape}
@@ -52,7 +56,8 @@ defmodule Defk.AllocUnzeroedTest.Shapes do
 
   def covers?(s) do
     Enum.all?(0..12, fn n ->
-      idx = for i <- s.start..(n + s.stop)//s.step, c <- s.cs, do: s.k * i + c
+      m = if s.between == :rebind, do: n - 1, else: n
+      idx = for i <- s.start..(m + s.stop)//s.step, c <- s.cs, do: s.k * i + c
       len = s.k * n
       Enum.any?(idx, &(&1 < 0 or &1 >= len)) or MapSet.new(idx) == MapSet.new(0..(len - 1)//1)
     end)
@@ -68,6 +73,11 @@ defmodule Defk.AllocUnzeroedTest.Shapes do
   defp stop(-1), do: quote(do: n - 1)
   defp stop(-2), do: quote(do: n - 2)
   defp stop(0), do: quote(do: n)
+
+  defp between(nil), do: nil
+  defp between(:unrelated), do: quote(do: _ = n * 3)
+  defp between(:rebind), do: quote(do: n = n - 1)
+  defp between(:mention), do: quote(do: _ = len(out))
 
   defp write(s, c) do
     at = index(s.k, c)
@@ -93,15 +103,19 @@ defmodule Defk.AllocUnzeroedTest.Shapes do
       body = {:__block__, [], writes}
       body = if s.guard, do: quote(do: if(rem(i, 3) != 0, do: unquote(body))), else: body
 
-      quote do
-        defk unquote(name)(n :: i64) :: [u8] do
-          out = alloc(u8, unquote(len(s.k)))
-
+      loop =
+        quote do
           for i <- unquote(s.start)..unquote(stop(s.stop))//unquote(s.step) do
             unquote(body)
           end
+        end
 
-          out
+      stmts =
+        [quote(do: out = alloc(u8, unquote(len(s.k)))), between(s.between), loop, quote(do: out)]
+
+      quote do
+        defk unquote(name)(n :: i64) :: [u8] do
+          unquote({:__block__, [], Enum.reject(stmts, &is_nil/1)})
         end
       end
     end
@@ -189,7 +203,41 @@ defmodule Defk.AllocUnzeroedTest.K do
     out
   end
 
+  # two outputs written by one loop, other statements in between (the
+  # shape of geohash_decode)
+  defk two_outputs(a :: [f64]) :: {[f64], [f64]} do
+    n = len(a)
+    lo = alloc(f64, n)
+    hi = alloc(f64, n)
+
+    sum =
+      for x <- a, reduce: 0.0 do
+        z -> z + x
+      end
+
+    s = sum / float(max(n, 1))
+
+    for i <- 0..(n - 1)//1 do
+      lo[i] = a[i] - s
+      hi[i] = a[i] + s
+    end
+
+    {lo, hi}
+  end
+
   # ---- near misses: each keeps the zeroing
+
+  # the range's n is not the alloc's: rebound in between
+  defk rebinds_length(n :: i64) :: [i64] do
+    out = alloc(i64, n)
+    n = n - 1
+
+    for i <- 0..(n - 1)//1 do
+      out[i] = 1
+    end
+
+    out
+  end
 
   # reads the element before writing it
   defk read_first(n :: i64) :: [i64] do
@@ -367,8 +415,9 @@ defmodule Defk.AllocUnzeroedTest do
 
   defp raw?(name), do: kernel_c(name) =~ "defk_alloc_raw_" and not zeroed?(name)
 
-  @accepted [:dirty, :scale, :encode16, :by_len, :raise_mid, :slow_fill]
+  @accepted [:dirty, :scale, :encode16, :by_len, :raise_mid, :slow_fill, :two_outputs]
   @near_misses [
+    :rebinds_length,
     :read_first,
     :read_other,
     :short_range,
@@ -500,6 +549,8 @@ defmodule Defk.AllocUnzeroedTest do
     escapes: [args: fixed_list([integer(-2..300)])],
     other_length: [args: fixed_list([integer(-2..3000), integer(-2..3000)])],
     two_of_three: [args: n()],
-    mentions: [args: n()]
+    mentions: [args: n()],
+    two_outputs: [args: fixed_list([G.array(:f64)])],
+    rebinds_length: [args: n()]
   )
 end
