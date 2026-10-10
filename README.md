@@ -195,9 +195,9 @@ These are deliberate, to keep defk small for now.
 The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show <id>`); ticked items are closed.
 
 **0. Verdict** (plan in `bw show defk-sgw`)
-- [ ] Draft docs/verdict.md with the pre-registered go/no-go rule (defk-sgw.2)
-- [ ] Write docs/language.md, the kernel subset reference (defk-sgw.1)
-- [ ] Devex cold test: a new kernel from the docs alone (defk-sgw.3)
+- [x] Draft docs/verdict.md with the pre-registered go/no-go rule (defk-sgw.2)
+- [x] Write docs/language.md, the kernel subset reference (defk-sgw.1)
+- [x] Devex cold test: a new kernel from the docs alone (defk-sgw.3)
 - [ ] Freeze the workload-results snapshot on a quiet machine (defk-sgw.4)
 - [ ] Write the verdict: guide, runtime contract, devex, limitations (defk-sgw.5)
 - [ ] Final verdict session (defk-sgw.6)
@@ -215,25 +215,25 @@ The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show
 - [x] Early exit: `Enum.reduce_while`, `Enum.all?/any?` (defk-9vl)
 - [x] `case` on `i64`/`bool` (defk-9vl)
 - [x] Calls between kernels that yield (defk-jaj)
-- [ ] Bitwise operators (`band`/`bor`/`bxor`/`bsl`/`bsr`) for hashing and checksums (defk-w38)
+- [x] Bitwise operators (`band`/`bor`/`bxor`/`bsl`/`bsr`) for hashing and checksums (defk-w38)
 - [ ] Arrays through `if`/`cond` branches, and returning input arrays (defk-gqk)
 - [ ] `Enum.reduce/3`, and a `find_index` that keeps Elixir semantics without `nil` (defk-nii)
-- [ ] More `case` patterns: `x in [1, 2, 3]` and ranges (defk-gid)
-- [ ] Module attributes as constants (defk-ivt)
+- [x] More `case` patterns: `x in [1, 2, 3]` and ranges (defk-gid)
+- [x] Module attributes as constants (defk-ivt)
 - [x] Multi-clause kernels with a typed function head (defk-u9c)
-- [ ] Signed integer segments in the bitstring accumulator (defk-dki)
-- [ ] Pass the bitstring accumulator through helper kernels (defk-ooq)
+- [x] Signed integer segments in the bitstring accumulator (defk-dki)
+- [x] Pass the bitstring accumulator through helper kernels (defk-ooq)
 
 **3. Semantics: behave like Elixir where it matters**
 - [x] Array value semantics: copy on aliased write (defk-i2e, defk-auo)
 - [x] inf/NaN inside kernels: raise like Elixir (defk-q1c, defk-i00)
-- [ ] An error inside a guard fails the clause instead of raising (defk-7a6)
+- [x] An error inside a guard fails the clause instead of raising (defk-7a6)
 
 **4. Performance: plain-C speed from Elixir-shaped code**
 - [x] Bounds-check elimination for provably in-range `a[i]` (defk-88q)
 - [x] count_primes at C speed: `if`/`cond` arms compiled as selects (defk-jp3, defk-7q5)
 - [ ] Guard against code-size blowup from inlined calls (defk-6ag)
-- [ ] No C compiler warnings in generated code (defk-5dd)
+- [x] No C compiler warnings in generated code (defk-5dd)
 
 **5. Runtime: be a good BEAM citizen**
 - [x] Safepoints cost ~0% in hot loops (defk-5s3, defk-nua)
@@ -243,12 +243,12 @@ The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show
 - [x] Resume tests fail instead of hanging on a resume bug (defk-juw)
 - [x] Show an early-exit kernel in the preemption demo and `tick_gap` (defk-tfh)
 - [ ] `__defk_stats__` semantics across reloads (defk-9qv)
-- [ ] Layout version tag on frames, as defence in depth (defk-ls8)
+- [x] Layout version tag on frames, as defence in depth (defk-ls8)
 
 **6. Catalog: map the boundary of defk's niche**
 - [ ] Checksum/hash over binaries, compared with `:erlang.crc32` (defk-9p6.2, needs defk-w38)
-- [ ] Matrix multiply against Nx (expected verdict: use Nx) (defk-9p6.3)
-- [ ] n-body step with state kept packed between calls (defk-9p6.4)
+- [x] Matrix multiply against Nx (expected verdict: use Nx) (defk-9p6.3)
+- [x] n-body step with state kept packed between calls (defk-9p6.4)
 - [x] Fair early-exit cutoff for fuzzy_search's Levenshtein, in both backends (defk-8i4)
 
 **7. Later**
