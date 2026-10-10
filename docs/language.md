@@ -292,6 +292,10 @@ iex> M.mul(4611686018427387904, 2)
 
 Unary minus and `abs/1` of -2^63 overflow the same way.
 
+The check is left out where the compiler proves the result fits, as for
+`2 * i + 1` with `i <- 0..(len(a) - 1)//1` (array lengths are below 2^61).
+That changes speed, never results.
+
 `div/2` and `rem/2` take two `i64` values
 ([`builtin-arguments`](#builtin-arguments) otherwise) and round as Elixir does:
 `div` truncates toward zero, and `rem` has the sign of the dividend
@@ -962,8 +966,10 @@ iex> M.get(<<1.0::float-native>>, 1)
 
 The check is left out where the compiler proves the index in range, for
 example `i <- 0..(n - 1)//1` with `n = min(len(a), len(b))`, a
-`for x <- a` generator, or a `[u8]` value indexing a 256-element `alloc`. That
-changes speed, never results.
+`for x <- a` generator, a `[u8]` value indexing a 256-element `alloc`, or
+`out[2 * i + 1]` with `out = alloc(u8, 2 * len(a))` and
+`i <- 0..(len(a) - 1)//1` (a literal multiple or `div` by a literal of a
+length). That changes speed, never results.
 
 ### Word loads
 
