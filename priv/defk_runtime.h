@@ -43,6 +43,11 @@ typedef struct { double *data; int64_t len; } defk_arr_f64;
 typedef struct { int64_t *data; int64_t len; } defk_arr_i64;
 typedef struct { uint8_t *data; int64_t len; } defk_arr_u8;
 typedef struct { uint64_t *data; int64_t len; } defk_arr_u64;
+/* narrow element types (defk-4ai): only inside arrays; a read widens to
+   int64_t / double, a write is range-checked (defk_to_i16 ... defk_to_f32) */
+typedef struct { int16_t *data; int64_t len; } defk_arr_i16;
+typedef struct { int32_t *data; int64_t len; } defk_arr_i32;
+typedef struct { float *data; int64_t len; } defk_arr_f32;
 
 /* ---- per-call context (first member of every frame) --------------------- */
 
@@ -197,6 +202,9 @@ DEFK_ALLOC_FN(f64, double)
 DEFK_ALLOC_FN(i64, int64_t)
 DEFK_ALLOC_FN(u8, uint8_t)
 DEFK_ALLOC_FN(u64, uint64_t)
+DEFK_ALLOC_FN(i16, int16_t)
+DEFK_ALLOC_FN(i32, int32_t)
+DEFK_ALLOC_FN(f32, float)
 
 /*
  * Array value semantics (defk-auo): a copy of `src` in a new owned binary,
@@ -216,6 +224,9 @@ DEFK_COPY_FN(f64, double)
 DEFK_COPY_FN(i64, int64_t)
 DEFK_COPY_FN(u8, uint8_t)
 DEFK_COPY_FN(u64, uint64_t)
+DEFK_COPY_FN(i16, int16_t)
+DEFK_COPY_FN(i32, int32_t)
+DEFK_COPY_FN(f32, float)
 
 /* Hand an owned array back to the BEAM as a binary (ownership transfers). */
 static ERL_NIF_TERM defk_make_arr(ErlNifEnv *env, defk_ctx *ctx, void *data) {
@@ -631,7 +642,7 @@ static inline int64_t defk_rotr64(int64_t x, int64_t n) {
  * a width outside 1..64 or an x outside 0..2^w - 1 raises ArgumentError, as
  * the Elixir functions do. An i64 x arrives as its bit pattern with `neg`
  * set when it was negative. rotl/rotr rotate by n mod w. */
-__attribute__((noreturn, cold, unused)) static void defk_bits_fail(defk_ctx *ctx, const char *f,
+__attribute__((noreturn, cold, unused)) static void defk_field_fail(defk_ctx *ctx, const char *f,
                                                            uint64_t x, int neg, int64_t w) {
   if (w < 1 || w > 64)
     defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.%s: width %lld is not in 1..64", f, (long long)w);
@@ -641,23 +652,23 @@ __attribute__((noreturn, cold, unused)) static void defk_bits_fail(defk_ctx *ctx
   defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.%s: %llu does not fit in a %lld-bit field", f,
             (unsigned long long)x, (long long)w);
 }
-static inline uint64_t defk_bits_arg(defk_ctx *ctx, const char *f, uint64_t x, int neg, int64_t w) {
+static inline uint64_t defk_field_arg(defk_ctx *ctx, const char *f, uint64_t x, int neg, int64_t w) {
   if (DEFK_UNLIKELY(w < 1 || w > 64 || neg || (w < 64 && (x >> w) != 0)))
-    defk_bits_fail(ctx, f, x, neg, w);
+    defk_field_fail(ctx, f, x, neg, w);
   return x;
 }
 static inline int64_t defk_clz_w(defk_ctx *ctx, uint64_t x, int neg, int64_t w) {
-  x = defk_bits_arg(ctx, "clz/2", x, neg, w);
+  x = defk_field_arg(ctx, "clz/2", x, neg, w);
   return x == 0 ? w : __builtin_clzll(x) - (64 - w);
 }
 static inline int64_t defk_ctz_w(defk_ctx *ctx, uint64_t x, int neg, int64_t w) {
-  x = defk_bits_arg(ctx, "ctz/2", x, neg, w);
+  x = defk_field_arg(ctx, "ctz/2", x, neg, w);
   return x == 0 ? w : __builtin_ctzll(x);
 }
 /* rotate left by n mod w (right: by -n mod w) */
 static inline uint64_t defk_rot_w(defk_ctx *ctx, const char *f, uint64_t x, int neg, int64_t n,
                                   int64_t w, int right) {
-  x = defk_bits_arg(ctx, f, x, neg, w);
+  x = defk_field_arg(ctx, f, x, neg, w);
   int64_t m = ((n % w) + w) % w;
   uint64_t k = (uint64_t)(right && m ? w - m : m);
   if (k == 0) return x;
@@ -743,6 +754,9 @@ DEFK_ACCESS_FN(f64, double)
 DEFK_ACCESS_FN(i64, int64_t)
 DEFK_ACCESS_FN(u8, uint8_t)
 DEFK_ACCESS_FN(u64, uint64_t)
+DEFK_ACCESS_FN(i16, int16_t)
+DEFK_ACCESS_FN(i32, int32_t)
+DEFK_ACCESS_FN(f32, float)
 
 /*
  * Word loads from a [u8] (u64_le(bytes, i) and friends): the unsigned
@@ -841,10 +855,151 @@ static inline uint8_t defk_to_u8(defk_ctx *ctx, int64_t v) {
   if (DEFK_UNLIKELY(v < 0 || v > 255)) defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in u8", (long long)v);
   return (uint8_t)v;
 }
-static inline uint8_t defk_u64_to_u8(defk_ctx *ctx, uint64_t v) {
-  if (DEFK_UNLIKELY(v > 255))
-    defk_fail(ctx, DEFK_E_ARG, "value %llu does not fit in u8", (unsigned long long)v);
-  return (uint8_t)v;
+/* a u64 as an i64 for a narrow write's range check: one above 2^63 - 1
+   saturates, which no narrow type holds */
+static inline int64_t defk_u64_sat(uint64_t v) {
+  return v > (uint64_t)INT64_MAX ? INT64_MAX : (int64_t)v;
+}
+static inline int16_t defk_to_i16(defk_ctx *ctx, int64_t v) {
+  if (DEFK_UNLIKELY(v < INT16_MIN || v > INT16_MAX))
+    defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in i16", (long long)v);
+  return (int16_t)v;
+}
+static inline int32_t defk_to_i32(defk_ctx *ctx, int64_t v) {
+  if (DEFK_UNLIKELY(v < INT32_MIN || v > INT32_MAX))
+    defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in i32", (long long)v);
+  return (int32_t)v;
+}
+
+/*
+ * An [f32] write: v rounded to nearest, as Elixir's <<v::float-32-native>>
+ * (the C conversion under the default rounding mode). Underflow to 0.0 and
+ * subnormals are Elixir's result too. A value that rounds to +-inf, which
+ * Elixir would store, raises (a limit, defk-dtw.13). v is finite (every float
+ * operation checked it), so the converted value is inf exactly when it
+ * overflowed. In a flagged strip the DEFK_NF_ form flags it instead, and the
+ * replay raises here (defk-q1c: f32 writes feed the strip's flag).
+ */
+__attribute__((noreturn, cold)) static void defk_f32_range(defk_ctx *ctx, double v) {
+  defk_fail(ctx, DEFK_E_ARG, "value %.17g does not fit in f32", v);
+}
+static inline float defk_to_f32(defk_ctx *ctx, double v) {
+  float f = (float)v;
+  if (DEFK_UNLIKELY(!(__builtin_fabsf(f) <= 0x1.fffffep+127f))) defk_f32_range(ctx, v);
+  return f;
+}
+#define DEFK_NF_to_f32(C, V) ((float)defk_nf_r(&defk_nf, (double)(float)(V)))
+
+/*
+ * The bitstring accumulator (defk-cmr): acc = <<acc::bitstring, v::size(n)>>.
+ * A value is {nbits, slot + 1} (0: the empty bitstring, no buffer, which is
+ * what a zeroed local holds). Its buffer is an owned binary, so it stays put
+ * across yields, and is freed on an exception or process death like an array.
+ * The buffer's first 8 bytes hold its end, the number of bits written to it;
+ * the bits follow MSB-first (Elixir's big-endian default), and everything past
+ * the end is zero, so an append ORs its bits in.
+ *
+ * A value is a prefix of its buffer, so a value is never changed by a later
+ * append, as in Elixir. An append to a value that ends at its buffer's end
+ * writes in place (the common acc = <<acc::bitstring, ...>>); an append to an
+ * older, shorter value (`b = <<a::bitstring, 1::1>>` then `c = <<a::bitstring,
+ * 0::1>>`) copies its bits into a new buffer first, as the BEAM's own binary
+ * append does.
+ */
+typedef struct { int64_t nbits; int slot1; } defk_bits;
+
+#define DEFK_BITS_HDR 8
+
+/* the end of b's buffer (b has one) */
+static inline uint64_t defk_bits_end(defk_ctx *ctx, defk_bits b) {
+  uint64_t end;
+  __builtin_memcpy(&end, ctx->owned[b.slot1 - 1].data, sizeof end);
+  return end;
+}
+
+/* b with a buffer of its own that ends at b and has room for `more` bits,
+   plus the 8 bytes of slack an append's word store needs */
+__attribute__((noinline, unused)) static defk_bits defk_bits_reserve(defk_ctx *ctx, defk_bits b,
+                                                             int64_t more) {
+  uint64_t need = ((uint64_t)b.nbits + (uint64_t)more + 7) / 8 + 8 + DEFK_BITS_HDR;
+  if (need > DEFK_ALLOC_MAX_BYTES) defk_fail(ctx, DEFK_E_ARG, "bitstring too large");
+  if (b.slot1 && defk_bits_end(ctx, b) == (uint64_t)b.nbits) {
+    /* ours, at its end: grow in place, doubling */
+    ErlNifBinary *bin = &ctx->owned[b.slot1 - 1];
+    size_t old = bin->size, cap = old * 2;
+    if (cap < need) cap = (size_t)need;
+    if (!enif_realloc_binary(bin, cap))
+      defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", cap);
+    memset(bin->data + old, 0, cap - old);
+    return b;
+  }
+  /* empty, or an older value of a buffer appended past it: a new buffer
+     holding b's bits, the bits after them in its last byte cleared */
+  size_t cap = need < 64 ? 64 : (size_t)need;
+  int slot = defk_own(ctx, cap);
+  size_t bytes = (size_t)(b.nbits + 7) / 8;
+  uint8_t *data = ctx->owned[slot].data;
+  if (bytes) {
+    memcpy(data + DEFK_BITS_HDR, ctx->owned[b.slot1 - 1].data + DEFK_BITS_HDR, bytes);
+    if (b.nbits & 7) data[DEFK_BITS_HDR + bytes - 1] &= (uint8_t)(0xFF00u >> (b.nbits & 7));
+  }
+  uint64_t end = (uint64_t)b.nbits;
+  __builtin_memcpy(data, &end, sizeof end);
+  defk_bits r = {b.nbits, slot + 1};
+  return r;
+}
+
+/* the low n bits of v (1 <= n <= 57) at bit `pos` of p, MSB-first; the bits
+   from pos on are zero, and p has 8 readable bytes from pos / 8 */
+static inline void defk_bits_or(uint8_t *p, uint64_t pos, uint64_t v, int64_t n) {
+  uint8_t *q = p + (pos >> 3);
+  uint64_t w;
+  __builtin_memcpy(&w, q, 8);
+  w = DEFK_BE(64, w) | ((v << (64 - n)) >> (pos & 7));
+  w = DEFK_BE(64, w);
+  __builtin_memcpy(q, &w, 8);
+}
+
+__attribute__((noreturn, cold, unused)) static void defk_bits_fail(defk_ctx *ctx, int64_t v, int64_t n) {
+  if (n < 0 || n > 64)
+    defk_fail(ctx, DEFK_E_ARG, "bitstring segment size %lld is outside 0..64", (long long)n);
+  defk_fail(ctx, DEFK_E_ARG, "bitstring segment value %lld does not fit in %lld bits",
+            (long long)v, (long long)n);
+}
+
+/* <<b::bitstring, v::size(n)>>, unsigned: v must be in 0..2^n - 1 (Elixir
+   would keep the low n bits; a limit, like an array write) and n in 0..64 */
+static inline defk_bits defk_bits_put(defk_ctx *ctx, defk_bits b, int64_t v, int64_t n) {
+  if (DEFK_UNLIKELY((uint64_t)n > 64 || (n < 64 ? ((uint64_t)v >> n) != 0 : v < 0)))
+    defk_bits_fail(ctx, v, n);
+  if (n == 0) return b;
+  if (DEFK_UNLIKELY(!b.slot1 || defk_bits_end(ctx, b) != (uint64_t)b.nbits ||
+                    ((uint64_t)b.nbits + (uint64_t)n + 7) / 8 + 8 + DEFK_BITS_HDR >
+                        ctx->owned[b.slot1 - 1].size))
+    b = defk_bits_reserve(ctx, b, n);
+  uint8_t *p = ctx->owned[b.slot1 - 1].data;
+  uint64_t pos = (uint64_t)b.nbits;
+  if (n > 56) {
+    defk_bits_or(p + DEFK_BITS_HDR, pos, (uint64_t)v >> 32, n - 32);
+    defk_bits_or(p + DEFK_BITS_HDR, pos + (uint64_t)(n - 32), (uint64_t)v & 0xFFFFFFFFu, 32);
+  } else {
+    defk_bits_or(p + DEFK_BITS_HDR, pos, (uint64_t)v, n);
+  }
+  b.nbits += n;
+  uint64_t end = (uint64_t)b.nbits;
+  __builtin_memcpy(p, &end, sizeof end);
+  return b;
+}
+
+/* A bitstring result: {Bytes, BitLength}. The generated Elixir wrapper takes
+   the first BitLength bits of Bytes (<<b::bitstring-size(len), _::bitstring>>).
+   The bytes are copied out, so the buffer's slack is not returned. */
+__attribute__((unused)) static ERL_NIF_TERM defk_make_bits(ErlNifEnv *env, defk_ctx *ctx, defk_bits b) {
+  size_t bytes = (size_t)(b.nbits + 7) / 8;
+  ERL_NIF_TERM bin;
+  uint8_t *d = enif_make_new_binary(env, bytes, &bin);
+  if (bytes) memcpy(d, ctx->owned[b.slot1 - 1].data + DEFK_BITS_HDR, bytes);
+  return enif_make_tuple2(env, bin, enif_make_int64(env, b.nbits));
 }
 
 /* ---- scheduling ---------------------------------------------------------- */

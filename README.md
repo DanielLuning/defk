@@ -86,7 +86,6 @@ At `mix compile`, `defk` type-checks the body, emits C
 | Measurement and the DEFK_RESULT line for examples | `lib/defk/bench.ex` |
 | The builtin list shared by the compiler, Elixir mode and the error registry | `lib/defk/builtins.ex` |
 | Agreement helpers for tests | `lib/defk/test.ex`, `lib/defk/ex_unit/case.ex` |
-| Placeholder registry, see ticket defk-813 | `lib/defk/divergences.ex` |
 | StreamData generators by kernel type | `test/support/generators.ex` |
 | Runtime: arrays, checks, safepoints, frames, exceptions | `priv/defk_runtime.h` |
 | BEAM/NIF reference (execution model, lifecycles, errors, upgrade) | `docs/beam-nifs.md` |
@@ -94,7 +93,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 | Plain C baseline | `bench/native.c` |
 
 **Language:**
-- Types: `i64`, `f64`, `bool`, `[f64]`, `[i64]`, `[u8]`, and tuples for return values.
+- Types: `i64`, `f64`, `bool`, `[f64]`, `[f32]`, `[i64]`, `[i32]`, `[i16]`, `[u8]`, and tuples for return values. The narrow element types exist only in arrays: a read widens to `i64`/`f64`, a write that does not fit raises.
 - Constructs: `=`, `if`/`else`, `cond`, `case`, `for` with ranges, array generators, filters and `reduce:` (including tuple accumulators).
 - Early exit: `Enum.reduce_while(enumerable, acc, fn x, acc -> {:cont, acc} | {:halt, acc} end)`, and `Enum.all?/2` / `Enum.any?/2` with a `fn`. The enumerable is a range or an array, as in a `for` generator.
 - `case` on an `i64` or `bool`: integer literals, `true`/`false`, `^pinned`, `_` or a variable, each with an optional guard. Used as a value or a statement.

@@ -8,11 +8,16 @@ defmodule Defk.Compiler do
   # restored on resume. A call to another kernel is inlined (see "calls"), so
   # the callee's loops are the caller's loops and yield like them.
   #
-  # Types:  :i64 | :u64 | :f64 | :bool | {:arr, :f64 | :i64 | :u8 | :u64}
-  #       | {:tuple, [type]}
+  # Types:  :i64 | :u64 | :f64 | :bool | {:arr, elem} | {:tuple, [type]}
+  #         | :bitstring (the bitstring accumulator, see "bitstrings")
+  # elem:   :f64 | :i64 | :u64 | :u8 | :i16 | :i32 | :f32; the narrow ones
+  #         (u8, i16, i32, f32) exist only in arrays: a read widens to i64 or
+  #         f64, a write must fit (see "element types"); u64 is a scalar too
+  #         (defk-wlu)
 
   @scalars [:i64, :u64, :f64, :bool]
-  @elems [:f64, :i64, :u8, :u64]
+  @elems [:f64, :i64, :u64, :u8, :i16, :i32, :f32]
+  @elems_text "f64, f32, i64, i32, i16, u8 and u64"
   @ints [:i64, :u64]
   @max_u64 0xFFFFFFFFFFFFFFFF
   @max_i64 0x7FFFFFFFFFFFFFFF
@@ -29,7 +34,7 @@ defmodule Defk.Compiler do
   @facts [:lo, :hi, :lb, :ub, :len_lo, :len_lb]
 
   # forms that never yield: safepoints vanish and resume dispatch is dead code
-  @no_yield_macros "#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) 1\n#define DEFK_TICKS(W)\n#define DEFK_RESUMING 0\nint defk_rs = 0;\n"
+  @no_yield_macros "#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) ((void)(R), 1)\n#define DEFK_TICKS(W)\n#define DEFK_RESUMING 0\nint defk_rs = 0;\n"
   @undef_macros "#undef DEFK_SP\n#undef DEFK_SHORT\n#undef DEFK_TICKS\n#undef DEFK_RESUMING\n"
 
   # ---------------------------------------------------------------- entry ---
@@ -73,6 +78,12 @@ defmodule Defk.Compiler do
       end)
 
     sigs = Map.new(kernels, &{{&1.name, &1.arity}, &1})
+
+    # per kernel, the names it appends to: `<<>>` bound to one is a bitstring
+    Process.put(
+      :defk_bits_names,
+      Map.new(kernels, &{{&1.name, &1.arity}, Defk.Bitstring.accumulator_names(&1.body)})
+    )
 
     lowered =
       Enum.flat_map(kernels, fn k ->
@@ -321,6 +332,15 @@ defmodule Defk.Compiler do
   defp parse_param({:"::", _, [{p, _, ctx}, t]} = param) when is_atom(p) and is_atom(ctx) do
     ty = parse_type(t, param)
 
+    ty == :bitstring &&
+      err!(
+        param,
+        "bitstring-use",
+        "the bitstring parameter #{p} :: bitstring is not supported yet: a kernel builds bitstrings but does not take them",
+        hint: "pass bytes as a [u8] parameter",
+        rewrite: "#{p} :: [u8]"
+      )
+
     if match?({:tuple, _}, ty) do
       {:tuple, ts} = ty
 
@@ -354,6 +374,7 @@ defmodule Defk.Compiler do
 
   # `at` is the node an unknown type is reported at when the type has no position
   defp parse_type({t, _, ctx}, _) when t in @scalars and is_atom(ctx), do: t
+  defp parse_type({:bitstring, _, ctx}, _) when is_atom(ctx), do: :bitstring
   defp parse_type([{t, _, ctx}], _) when t in @elems and is_atom(ctx), do: {:arr, t}
   defp parse_type({a, b}, at), do: {:tuple, [parse_type(a, at), parse_type(b, at)]}
   defp parse_type({:{}, _, ts}, at), do: {:tuple, Enum.map(ts, &parse_type(&1, at))}
@@ -367,7 +388,7 @@ defmodule Defk.Compiler do
       boolean: "bool",
       number: "f64",
       binary: "[u8]",
-      bitstring: "[u8]",
+      bits: "bitstring",
       pos_integer: "i64",
       non_neg_integer: "i64"
     }
@@ -378,7 +399,7 @@ defmodule Defk.Compiler do
           [hint: "the kernel type for #{n} is #{instead[n]}"]
 
         [{n, _, ctx}] when is_atom(n) and is_atom(ctx) ->
-          [hint: "array element types are f64, i64, u8 and u64"]
+          [hint: "array element types are #{@elems_text}"]
 
         _ ->
           []
@@ -467,6 +488,7 @@ defmodule Defk.Compiler do
   # a u64 where an i64 is expected and back: checked (u64_to_i64/1)
   defp coerce!(%{t: :u64} = v, :i64, _at, _what, _ret), do: u64_to_i64(v)
   defp coerce!(%{t: :i64} = v, :u64, _at, _what, _ret), do: i64_to_u64(v)
+  defp coerce!(%{bits0: true}, :bitstring, _at, _what, _ret), do: empty_bits()
 
   defp coerce!(v, t, at, what, nil) do
     subject = Enum.join([what | describe(at)], " ")
@@ -623,15 +645,9 @@ defmodule Defk.Compiler do
     stored = "value stored in [#{e}]"
 
     vc =
-      case e do
-        :f64 -> coerce!(v, :f64, rhs, stored).c
-        :i64 when v.t == :u64 -> "defk_to_i64_elem(ctx, #{v.c})"
-        :i64 -> coerce!(v, :i64, rhs, stored).c
-        :u8 when v.t == :u64 -> "defk_u64_to_u8(ctx, #{v.c})"
-        :u8 -> "defk_to_u8(ctx, #{coerce!(v, :i64, rhs, stored).c})"
-        :u64 when v.t == :i64 -> if nonneg?(v), do: v.c, else: "defk_to_u64(ctx, #{v.c})"
-        :u64 -> coerce!(v, :u64, rhs, stored).c
-      end
+      if v.t in @ints and wide(e) != :f64,
+        do: int_stored(v, e),
+        else: narrowed(coerce!(v, wide(e), rhs, stored), e)
 
     # value semantics: the array is copied first if another binding may still
     # see its buffer (see "array values")
@@ -720,6 +736,16 @@ defmodule Defk.Compiler do
           "binding the tuple #{fmt(v.t)} to the variable #{name} is not in the kernel subset",
           rewrite: "{#{names}} = #{rhs}"
         )
+
+      # `acc = <<>>` where the kernel appends to acc (see "bitstrings");
+      # otherwise the empty [u8], which may still be returned as a bitstring
+      v[:bits0] && name in bits_names() ->
+        bind(var, empty_bits(), env, match)
+
+      v[:bits0] ->
+        name in env.guard && array_rebind_in_loop!(var, match)
+        {s, env} = bind_array(name, v, env)
+        {s, put_in(env.vars[name][:bits0], true)}
 
       match?({:arr, _}, v.t) ->
         name in env.guard && array_rebind_in_loop!(var, match)
@@ -1249,14 +1275,13 @@ defmodule Defk.Compiler do
   end
 
   # a binary literal, `"abc"` or `<<1, 2, 3>>`: the same static read-only [u8]
-  # as a binary attribute (defk-n4r.5)
-  defp lower_expr({:<<>>, _, _} = node, _env) do
-    case Defk.BinaryLiteral.bytes(node) do
-      {:ok, b} ->
-        {[], static_u8(b)}
-
-      {:error, why, opts} ->
-        err!(node, "binary-literal", Defk.BinaryLiteral.message(node, why), opts)
+  # as a binary attribute (defk-n4r.5); or an append to a bitstring
+  # accumulator, `<<acc::bitstring, ...>>` (see "bitstrings")
+  defp lower_expr({:<<>>, _, segs} = node, env) do
+    case Defk.Bitstring.parse(node) do
+      {:append, head, parts} -> lower_append(node, head, parts, env)
+      {:error, at, what, opts} -> err!(at, "bitstring-segment", what, opts)
+      :error -> binary_literal(node, segs)
     end
   end
 
@@ -1275,30 +1300,33 @@ defmodule Defk.Compiler do
     {si, i} = lower_expr(idx, env)
     i = coerce!(i, :i64, idx, "array index")
     {:arr, e} = a.t
+    raw = widen("(#{a.c}).data[#{i.c}]", e)
 
     get =
       cond do
-        # an f64 from an input array may hold inf or NaN bits: the read raises
-        # (defk-i00); an alloc/2 array holds only what the kernel wrote (fin),
-        # a copy of an input array still holds the input's bits
-        e == :f64 and not a[:fin] and in_bounds?(a, i) ->
-          "defk_in_f64(ctx, (#{a.c}).data[#{i.c}], #{i.c})"
+        # an f64 or f32 from an input array may hold inf or NaN bits: the read
+        # raises (defk-i00); an alloc/2 array holds only what the kernel wrote
+        # (fin), a copy of an input array still holds the input's bits
+        e in [:f64, :f32] and not a[:fin] and in_bounds?(a, i) ->
+          "defk_in_f64(ctx, #{raw}, #{i.c})"
 
         e == :f64 and not a[:fin] ->
           "defk_get_in_f64(ctx, #{a.c}, #{i.c})"
 
+        e == :f32 and not a[:fin] ->
+          "defk_in_f64(ctx, (double)defk_get_f32(ctx, #{a.c}, #{i.c}), #{i.c})"
+
         in_bounds?(a, i) ->
-          "(#{a.c}).data[#{i.c}]"
+          raw
 
         true ->
-          "defk_get_#{e}(ctx, #{a.c}, #{i.c})"
+          widen("defk_get_#{e}(ctx, #{a.c}, #{i.c})", e)
       end
 
-    v = if e == :u8, do: u8_val("((int64_t)#{get})"), else: val(get, e)
+    v = elem_val(get, e)
 
     # an in-range read cannot fail but by its inf/NaN check, which a float
     # expression may defer to its own check (float_tree)
-    raw = if e == :u8, do: "((int64_t)(#{a.c}).data[#{i.c}])", else: "(#{a.c}).data[#{i.c}]"
     v = if in_bounds?(a, i), do: Map.put(v, :pure_read, raw), else: v
     {[sa, si], v}
   end
@@ -1328,7 +1356,7 @@ defmodule Defk.Compiler do
   defp lower_expr({{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m, args} = node, env) do
     case args do
       [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}] ->
-        lower_reduce_while(src, init, x, acc, body, env, m)
+        lower_reduce_while(src, init, x, acc, body, env, m, node)
 
       _ ->
         fn_argument!(node, "Enum.reduce_while/3", [:x, :acc])
@@ -1347,7 +1375,7 @@ defmodule Defk.Compiler do
     # all?: halt with false at the first false; any?: halt with true at the first true
     {init, kw} = Defk.Builtins.bool_reduce(f)
 
-    lower_reduce_while(src, init, x, {:_, m, nil}, {:if, m, [pred, kw]}, env, m)
+    lower_reduce_while(src, init, x, {:_, m, nil}, {:if, m, [pred, kw]}, env, m, node)
   end
 
   defp lower_expr({:for, _, args} = node, env) do
@@ -1412,8 +1440,18 @@ defmodule Defk.Compiler do
           "a negated u64 is not a u64; to wrap, negate inside a mask: band(-x, 0xFFFFFFFFFFFFFFFF)"
       )
 
-    c = if v.t == :i64, do: "defk_neg_i64#{checked(env)}, #{v.c})", else: "(-#{v.c})"
-    {s, val(c, v.t)}
+    cond do
+      # a negative literal (-32_768) is a constant, with its facts
+      v.t == :i64 and v.c == "INT64_C(#{v[:lo]})" and v[:lo] > -0x8000000000000000 ->
+        {s, Map.merge(val("INT64_C(#{-v[:lo]})", :i64), %{lo: -v[:lo], hi: -v[:lo]})}
+
+      v.t == :i64 ->
+        c = "defk_neg_i64#{checked(env)}, #{v.c})"
+        {s, Map.merge(val(c, :i64), %{lo: neg(v[:hi]), hi: neg(v[:lo])})}
+
+      true ->
+        {s, val("(-#{v.c})", v.t)}
+    end
   end
 
   defp lower_expr({:+, _, [a]}, env) do
@@ -1814,6 +1852,7 @@ defmodule Defk.Compiler do
           {sb, v} = lower_block(body, env)
           {c, body, cond, sb, v}
       end)
+      |> bits_arms()
 
     t = branch_type!(for({_, _, _, _, v} <- arms, v, do: v), name, node)
     tmp = fresh(name, t)
@@ -2137,7 +2176,7 @@ defmodule Defk.Compiler do
     rewrite = with [n] <- args, do: "alloc(f64, #{Macro.to_string(n)})"
 
     err!(node, "alloc-form", what,
-      hint: "write alloc(f64 | i64 | u8 | u64, length)",
+      hint: "write alloc(type, length) with an element type: #{@elems_text}",
       rewrite: if(is_binary(rewrite), do: rewrite)
     )
   end
@@ -2180,6 +2219,11 @@ defmodule Defk.Compiler do
   end
 
   # `node` is the call, for the argument expressions
+  defp builtin(:len, [%{t: :bitstring}], node, _), do: bits_read!(node, arg(node, 0))
+
+  defp builtin(:bit_size, [%{t: :bitstring} = a], _node, _),
+    do: Map.merge(val("(#{a.c}).nbits", :i64), %{lo: 0})
+
   defp builtin(:len, [%{t: {:arr, _}} = a], _node, _) do
     # a view that is not a variable (e.g. a kernel call) is a new array each time it is evaluated
     own = if a.var, do: %{a.c => 0}, else: %{}
@@ -2299,6 +2343,7 @@ defmodule Defk.Compiler do
 
   @builtin_takes %{
     len: "an array",
+    bit_size: "a bitstring",
     div: "two i64 values",
     rem: "two i64 values",
     float: "a number",
@@ -2422,6 +2467,7 @@ defmodule Defk.Compiler do
     # bind each argument to a parameter once, as `p = arg` binds it
     {binds, vars} =
       Enum.zip_with([vals, k.params, args], fn [v, {p, t}, a] ->
+        v.t == :bitstring && bits_argument!(a, k)
         v = coerce!(v, t, a, "argument #{p} of #{k.name}/#{k.arity}")
 
         if match?({:arr, _}, t) do
@@ -2465,7 +2511,8 @@ defmodule Defk.Compiler do
       end)
 
     # temporaries, so the result is computed here and not where it is used; a
-    # returned array keeps its buffer, which may be an argument's
+    # returned array keeps its buffer, which may be an argument's, and its
+    # constant length bound (len_lo; len_lb names the callee's C variables)
     {ss, results} =
       Enum.map(rets, fn {{c, t}, v} ->
         tmp = fresh("#{k.name}_ret", t)
@@ -2473,7 +2520,12 @@ defmodule Defk.Compiler do
 
         r =
           if match?({:arr, _}, t),
-            do: Map.merge(r, %{buf: v[:buf] || make_ref(), fin: v[:fin] || false}),
+            do:
+              Map.merge(r, %{
+                buf: v[:buf] || make_ref(),
+                fin: v[:fin] || false,
+                len_lo: v[:len_lo]
+              }),
             else: r
 
         {"#{tmp} = #{c};\n", r}
@@ -2516,6 +2568,135 @@ defmodule Defk.Compiler do
       hint:
         "write the recursion as a loop: for ..., reduce: for a fold, Enum.reduce_while/3 to stop early",
       key: {:recursion, MapSet.new([key | cycle])}
+    )
+  end
+
+  # ----------------------------------------------------------- bitstrings --
+  # The bitstring accumulator (defk-cmr, Defk.Bitstring): a value of type
+  # :bitstring is a defk_bits {nbits, slot + 1} over a growable owned buffer
+  # (priv/defk_runtime.h), kept in the frame across yields like any local.
+  # `<<acc::bitstring, v::size(n), ...>>` evaluates acc and then every value
+  # and size left to right, as Elixir does, and appends the segments in order;
+  # each append checks 0 <= n <= 64 and 0 <= v < 2^n (a limit: Elixir keeps
+  # the low n bits). A value is never changed by a later append: the runtime
+  # appends in place only to a value that ends where its buffer ends, and
+  # copies an older value first. The empty binary literal `<<>>` is a [u8]
+  # marked bits0, and becomes the empty bitstring where it is bound to a name
+  # the kernel appends to, returned or assigned as a bitstring, or given by a
+  # branch whose other arms give one.
+
+  defp lower_append(node, head, parts, env) do
+    {sh, h} = lower_expr(head, env)
+    h = if h[:bits0], do: empty_bits(), else: h
+    h.t == :bitstring || bits_head!(node, head, h)
+    r = fresh("bits", :bitstring)
+
+    {ss, args} =
+      Enum.map_reduce(parts, [], fn {v_ast, n_ast}, acc ->
+        {sv, v} = lower_expr(v_ast, env)
+        v = coerce!(v, :i64, v_ast, "a bitstring segment value")
+        {sn, n} = lower_expr(n_ast, env)
+        n = coerce!(n, :i64, n_ast, "a bitstring segment size")
+        tv = fresh("seg", :i64)
+        {sn, nc} = segment_size(sn, n, n_ast)
+        {[sv, "#{tv} = #{v.c};\n", sn], [{tv, nc} | acc]}
+      end)
+
+    puts =
+      for {tv, nc} <- Enum.reverse(args), do: "#{r} = defk_bits_put(ctx, #{r}, #{tv}, #{nc});\n"
+
+    {[sh, "#{r} = #{h.c};\n", ss, puts], val(r, :bitstring, r)}
+  end
+
+  # a literal size is used as it is; any other is evaluated in its place
+  defp segment_size(_sn, n, n_ast) when is_integer(n_ast), do: {[], n.c}
+
+  defp segment_size(sn, n, _n_ast) do
+    tn = fresh("size", :i64)
+    {[sn, "#{tn} = #{n.c};\n"], tn}
+  end
+
+  defp binary_literal(node, segs) do
+    case Defk.BinaryLiteral.bytes(node) do
+      # `<<>>` may be the empty bitstring
+      {:ok, ""} when segs == [] ->
+        {[], Map.put(static_u8(""), :bits0, true)}
+
+      {:ok, b} ->
+        {[], static_u8(b)}
+
+      {:error, why, opts} ->
+        err!(node, "binary-literal", Defk.BinaryLiteral.message(node, why), opts)
+    end
+  end
+
+  defp empty_bits, do: val("((defk_bits){0, 0})", :bitstring)
+
+  # the names the current kernel appends to (Defk.Bitstring.accumulator_names/1)
+  defp bits_names,
+    do: Map.get(Process.get(:defk_bits_names, %{}), Process.get(:defk_fun), MapSet.new())
+
+  # the initial value `v` of accumulator pattern `p`
+  defp bits_init({n, _, ctx}, %{bits0: true} = v) when is_atom(n) and is_atom(ctx),
+    do: if(n in bits_names(), do: empty_bits(), else: v)
+
+  defp bits_init(_p, v), do: v
+
+  # the arms of a branch: `<<>>` beside a bitstring arm is the empty bitstring
+  defp bits_arms(arms) do
+    if Enum.any?(arms, &match?({_, _, _, _, %{t: :bitstring}}, &1)) do
+      Enum.map(arms, fn
+        {c, body, cond, sb, %{bits0: true}} -> {c, body, cond, sb, empty_bits()}
+        arm -> arm
+      end)
+    else
+      arms
+    end
+  end
+
+  @spec bits_head!(term(), term(), term()) :: no_return()
+  defp bits_head!(node, head, %{t: {:arr, :u8}}) do
+    err!(
+      head,
+      "bitstring-use",
+      "#{Macro.to_string(node)} appends to #{Macro.to_string(head)}, a [u8]: starting from an input bitstring is not supported yet",
+      why: "a bitstring accumulator starts from <<>> and is only appended to",
+      hint:
+        "start from <<>> and append the bytes: for b <- #{Macro.to_string(head)}, reduce: <<>> do acc -> <<acc::bitstring, b>> end"
+    )
+  end
+
+  defp bits_head!(_node, head, h) do
+    err!(
+      head,
+      "type-mismatch",
+      "#{Macro.to_string(head)} is appended to as a bitstring, and has type #{type_name(h)}"
+    )
+  end
+
+  # `node` reads bitstring `bits`
+  @spec bits_read!(term(), term()) :: no_return()
+  defp bits_read!(node, bits) do
+    hint =
+      if match?({:len, _, [_]}, node),
+        do: [rewrite: "bit_size(#{Macro.to_string(bits)})"],
+        else: [hint: "keep what the kernel needs to read in variables or an array as it appends"]
+
+    err!(
+      node,
+      "bitstring-use",
+      "#{Macro.to_string(node)} reads the bitstring #{Macro.to_string(bits)}: reading a bitstring accumulator is not supported yet (bit_size/1 measures it)",
+      hint
+    )
+  end
+
+  @spec bits_argument!(term(), term()) :: no_return()
+  defp bits_argument!(a, k) do
+    err!(
+      a,
+      "bitstring-use",
+      "passing the bitstring #{Macro.to_string(a)} to #{k.name}/#{k.arity} is not supported yet",
+      hint: "append in the caller: a called kernel can return the values and sizes to append"
     )
   end
 
@@ -2700,6 +2881,7 @@ defmodule Defk.Compiler do
 
   defp array_loop(name, src, rest, env, inner) do
     {s, a} = lower_expr(src, env)
+    a.t == :bitstring && bits_read!({:<-, [], [{name, [], nil}, src]}, src)
 
     match?({:arr, _}, a.t) ||
       err!(
@@ -2729,15 +2911,17 @@ defmodule Defk.Compiler do
       end
 
     k = fresh("k", :i64)
-    xt = if e == :u8, do: :i64, else: e
-    x = fresh(name, xt)
-    env = put_var(env, name, if(e == :u8, do: u8_val(x), else: val(x, xt)))
+    x = fresh(name, wide(e))
+    env = put_var(env, name, elem_val(x, e))
 
     # index is in range by construction: no bounds check
     in_loop(fn id ->
       {body, flat?} = lower_quals_tracked(rest, env, inner)
-      read = "#{arr}.data[#{k}]"
-      read = if e == :f64 and not a[:fin], do: "defk_in_f64(ctx, #{read}, #{k})", else: read
+      read = widen("#{arr}.data[#{k}]", e)
+
+      read =
+        if e in [:f64, :f32] and not a[:fin], do: "defk_in_f64(ctx, #{read}, #{k})", else: read
+
       body = ["#{x} = #{read};\n", body, "#{k} += 1;\n"]
 
       strip = %{
@@ -2771,7 +2955,7 @@ defmodule Defk.Compiler do
   end
 
   # The checked helpers a flagged strip turns into flags (DEFK_NF_ forms).
-  @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log exp pow)
+  @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log exp pow to_f32)
   @nf_on Enum.map(@nf_helpers, &"#define defk_#{&1} DEFK_NF_#{&1}\n") ++
            ["#undef DEFK_FCHECK\n#define DEFK_FCHECK DEFK_NF_FCHECK\n"]
   @nf_off Enum.map(@nf_helpers, &"#undef defk_#{&1}\n") ++
@@ -2899,7 +3083,8 @@ defmodule Defk.Compiler do
   #     that becomes a flag: any other error (a bounds check, i64 overflow, a
   #     CaseClauseError) could be raised before an earlier flagged one;
   #   * every local it mentions is a scalar, so a snapshot of those restores
-  #     the strip's start state (unchanged ones fold away), or an array;
+  #     the strip's start state (unchanged ones fold away), or an array (in
+  #     the snapshot when it is assigned whole, as array accumulators are);
   #   * an array it writes is not otherwise mentioned (no read of it, so the
   #     replay recomputes the values it wrote) and no input array is written.
   defp flag_strip(id, body) do
@@ -2921,7 +3106,9 @@ defmodule Defk.Compiler do
          true <- Enum.all?(locals, &(types[&1] in @nf_scalars)),
          false <- Enum.any?(params, &(written?(text, &1) or array_write?(text, &1))),
          true <- arrays_replayable?(text, arrays) do
-      named = Enum.with_index(locals, fn v, n -> {v, "defk_s#{id}_#{n}", types[v]} end)
+      # an array local assigned whole (an accumulator swap) is restored too
+      saved = locals ++ Enum.filter(arrays, &written?(text, &1))
+      named = Enum.with_index(saved, fn v, n -> {v, "defk_s#{id}_#{n}", types[v]} end)
       sticky = sticky_trees(text)
 
       flagged =
@@ -3087,15 +3274,25 @@ defmodule Defk.Compiler do
           err!(node, "reduce-clauses", "this for ..., reduce: has no `acc -> body` clause")
       end
 
+    # the outer names the loop reads: its generators and filters, and its
+    # body where the accumulator does not shadow them
+    loop_reads = MapSet.union(reads(quals), MapSet.difference(reads(body), reads(pat)))
+    lenv = loop_env(env, node)
+
     u64_accs(fn u64s ->
-      {si, accs} = reduce_accs(pat, init_ast, "the reduce: value", env, u64s)
+      {si, accs} = reduce_accs(pat, init_ast, "the reduce: value", env, node, loop_reads, u64s)
 
-      inner = fn genv ->
-        {sb, res} = lower_block(body, acc_env(accs, genv))
-        [sb, assign_accs(accs, res, last_expr(body), "the reduce body")]
-      end
+      loops =
+        with_acc_facts(accs, fn accs, fix ->
+          inner = fn genv ->
+            {sb, res} = lower_block(body, acc_env(accs, genv))
+            [sb, assign_accs(accs, res, last_expr(body), "the reduce body", genv.live, fix)]
+          end
 
-      {[si, lower_quals(quals, loop_env(env, node), inner)], acc_result(accs)}
+          lower_quals(quals, lenv, inner)
+        end)
+
+      {[si, loops], acc_result(accs)}
     end)
   end
 
@@ -3104,23 +3301,22 @@ defmodule Defk.Compiler do
   # in band(..., 0xFFFFFFFFFFFFFFFF). The fold is lowered with i64
   # accumulators; assign_accs throws for such an accumulator meeting a u64,
   # and the fold is lowered again from the saved compiler state with it as a
-  # u64. Elixir mode settles the same types (Defk.ElixirMode).
+  # u64. Elixir mode settles the same types (Defk.ElixirMode). The saved
+  # state is with_acc_facts/2's (lowering_key?/1), so a retry of either kind
+  # inside the other's attempt is undone with that attempt: each restores
+  # what it saved, including the other's pending fact notes.
   defp u64_accs(fun, u64s \\ []) do
-    state = for {k, _} = kv <- Process.get(), compiler_key?(k), do: kv
+    snap = for {k, v} <- Process.get(), lowering_key?(k), do: {k, v}
     ref = make_ref()
 
     try do
       fun.({ref, u64s})
     catch
       {:defk_u64_acc, ^ref, name} ->
-        for {k, _} <- Process.get(), compiler_key?(k), do: Process.delete(k)
-        for {k, v} <- state, do: Process.put(k, v)
+        restore_lowering(snap)
         u64_accs(fun, [name | u64s])
     end
   end
-
-  defp compiler_key?({:defk_halted, _}), do: true
-  defp compiler_key?(k), do: is_atom(k) and String.starts_with?(Atom.to_string(k), "defk_")
 
   # Enum.reduce_while(src, init, fn x, acc -> ... end) is the loop of
   # `for x <- src`, with the accumulator of `for ..., reduce: init`. Every tail
@@ -3132,37 +3328,60 @@ defmodule Defk.Compiler do
   # keeps every loop's single entry, which resume relies on (defk-nua).
   # `for ..., reduce:` with {:cont, acc}/{:halt, acc} is not early exit in
   # Elixir (the tuple becomes the next accumulator), so it is not one here.
-  defp lower_reduce_while(src, init_ast, x, acc_pat, body, env, m),
-    do: u64_accs(&lower_reduce_while(src, init_ast, x, acc_pat, body, env, m, &1))
+  # `node` is the whole call.
+  defp lower_reduce_while(src, init_ast, x, acc_pat, body, env, m, node),
+    do: u64_accs(&reduce_while_loop({src, init_ast, x, acc_pat, body}, env, m, node, &1))
 
-  defp lower_reduce_while(src, init_ast, x, acc_pat, body, env, m, u64s) do
-    {si, accs} = reduce_accs(acc_pat, init_ast, "the initial accumulator", env, u64s)
+  defp reduce_while_loop({src, init_ast, x, acc_pat, body}, env, m, node, u64s) do
+    loop_reads =
+      MapSet.union(reads(src), MapSet.difference(reads(body), reads([x, acc_pat])))
+
+    {si, accs} =
+      reduce_accs(acc_pat, init_ast, "the initial accumulator", env, node, loop_reads, u64s)
+
     id = Process.get(:defk_nhalts) + 1
     Process.put(:defk_nhalts, id)
     label = "defk_halt#{id}"
-
-    leaf = fn tag, v_ast, env ->
-      {s, v} = lower_expr(v_ast, env)
-      assign = assign_accs(accs, v, v_ast, "{:#{tag}, acc}")
-
-      if tag == :halt do
-        Process.put({:defk_halted, id}, true)
-        Process.put(:defk_halts_emitted, Process.get(:defk_halts_emitted, 0) + 1)
-      end
-
-      [s, assign, if(tag == :halt, do: "goto #{label};\n", else: [])]
-    end
-
-    inner = fn genv -> lower_tail(body, acc_env(accs, genv), leaf) end
     loop = {:for, m, [{:<-, m, [x, src]}, [do: body]]}
-    loops = lower_quals([{:<-, m, [x, src]}], loop_env(env, loop), inner)
+    lenv = loop_env(env, loop)
+
+    loops =
+      with_acc_facts(accs, fn accs, fix ->
+        leaf = fn tag, v_ast, env ->
+          {s, v} = lower_expr(v_ast, env)
+          assign = assign_accs(accs, v, v_ast, "{:#{tag}, acc}", lenv.live, fix)
+
+          if tag == :halt do
+            Process.put({:defk_halted, id}, true)
+            Process.put(:defk_halts_emitted, Process.get(:defk_halts_emitted, 0) + 1)
+          end
+
+          [s, assign, if(tag == :halt, do: "goto #{label};\n", else: [])]
+        end
+
+        inner = fn genv -> lower_tail(body, acc_env(accs, genv), leaf) end
+        lower_quals([{:<-, m, [x, src]}], lenv, inner)
+      end)
+
     halt = if Process.delete({:defk_halted, id}), do: "#{label}:;\n", else: []
     {[si, loops, halt], acc_result(accs)}
   end
 
-  # accumulators [{name, cvar, init_value}] from `acc` or `{a, b, ...}` and
-  # init; {ref, u64s} names the accumulators that are u64 (u64_accs/2)
-  defp reduce_accs(pat, init_ast, what, env, {ref, u64s}) do
+  # Accumulators [{name, cvar, acc}] from `acc` or `{a, b, ...}` and the
+  # initial value, where acc is what the body sees: %{t: type}, and for an
+  # array also its facts (owned, fin, len_lo).
+  #
+  # An array accumulator is threaded through the loop in place (defk-n4r.10):
+  # its buffer is the loop's own, so the body writes it, and a helper returns
+  # it, without a copy. The initial array is copied before the loop when it is
+  # not owned (an input, a binary attribute), or when another binding of its
+  # buffer is live: read after the loop statement, read in the loop
+  # (`loop_reads`, the outer names its generators, filters and body read),
+  # or an earlier accumulator. The new value at the end of each iteration is
+  # copied on the same test (assign_accs/6), so no buffer but the
+  # accumulator's own is seen across an iteration. `node` is the loop.
+  # {ref, u64s} names the accumulators that are u64 (u64_accs/2).
+  defp reduce_accs(pat, init_ast, what, env, node, loop_reads, {ref, u64s}) do
     {si, init} = lower_expr(init_ast, env)
     pats = if is_tuple(pat) and tuple_items(pat), do: tuple_items(pat), else: [pat]
     items = (match?(%{elems: _}, init) && tuple_items(init_ast)) || [init_ast]
@@ -3175,14 +3394,13 @@ defmodule Defk.Compiler do
         "the accumulator #{Macro.to_string(pat)} has #{length(pats)} element#{if match?([_], pats), do: "", else: "s"}, #{what} #{Macro.to_string(init_ast)} has #{length(inits)}"
       )
 
-    accs =
-      Enum.zip_with(pats, inits, fn p, v ->
-        match?({:arr, _}, v.t) &&
-          err!(
-            init_ast,
-            "array-accumulator",
-            "the array accumulator #{Macro.to_string(init_ast)} is not in the kernel subset"
-          )
+    live =
+      MapSet.union(env.live, pairs(env, MapSet.union(loop_reads, reads_outside(env.stmt, node))))
+
+    {accs, _} =
+      Enum.zip(pats, inits)
+      |> Enum.map_reduce(MapSet.new(live, &elem(&1, 1)), fn {p, v}, seen ->
+        v = bits_init(p, v)
 
         name =
           case p do
@@ -3198,10 +3416,21 @@ defmodule Defk.Compiler do
           end
 
         v = if name in u64s, do: as_u64(v), else: v
-        {name, fresh(name, v.t), v}
+        c = fresh(name, v.t)
+
+        case v.t do
+          {:arr, _} ->
+            {ic, seen} = loop_owned(v, seen)
+            acc = %{t: v.t, owned: true, fin: v[:fin] || false, len_lo: v[:len_lo]}
+            {{{name, c, acc}, ic}, seen}
+
+          t ->
+            {{{name, c, Map.put(Map.take(v, [:u64_ref]), :t, t)}, v.c}, seen}
+        end
       end)
 
-    {[si, Enum.map(accs, fn {_, c, v} -> "#{c} = #{v.c};\n" end)], accs}
+    {[si, Enum.map(accs, fn {{_, c, _}, ic} -> "#{c} = #{ic};\n" end)],
+     Enum.map(accs, &elem(&1, 0))}
   end
 
   # an i64 literal >= 0 may become a u64 accumulator (u64_accs/2): marked
@@ -3214,19 +3443,91 @@ defmodule Defk.Compiler do
 
   defp u64_candidates(inits, _items, _ref), do: inits
 
-  defp acc_env(accs, env) do
-    Enum.reduce(accs, env, fn {name, c, v}, e ->
-      # an accumulator that may become a u64 is marked (u64_mix!/2)
-      mark = if v[:u64_ref], do: %{u64_ref: v.u64_ref, acc: name}, else: %{}
+  # Lower a loop with accumulators `accs` by `lower.(accs, fix)`. The body is
+  # lowered assuming each array accumulator keeps the facts of its initial
+  # value (fin, len_lo); a new value without them is noted in `fix` by
+  # assign_accs/6, and the loop is lowered again (from the same compiler
+  # state) with those facts dropped.
+  defp with_acc_facts(accs, lower) do
+    if Enum.any?(accs, fn {_, _, a} -> facts?(a) end) do
+      fix = {:defk_acc_facts, make_ref()}
+      snap = for {k, v} <- Process.get(), lowering_key?(k), do: {k, v}
+      Process.put(fix, MapSet.new())
+      res = lower.(accs, fix)
+      weak = Process.delete(fix)
 
-      if String.starts_with?(Atom.to_string(name), "_"),
-        do: e,
-        else: put_var(e, name, Map.merge(val(c, v.t), mark))
+      if Enum.empty?(weak) do
+        res
+      else
+        restore_lowering(snap)
+        accs |> Enum.map(&drop_facts(&1, weak)) |> with_acc_facts(lower)
+      end
+    else
+      lower.(accs, nil)
+    end
+  end
+
+  defp restore_lowering(snap) do
+    for {k, _} <- Process.get(), lowering_key?(k), do: Process.delete(k)
+    for {k, v} <- snap, do: Process.put(k, v)
+  end
+
+  defp drop_facts({name, c, a} = acc, weak),
+    do: if(c in weak, do: {name, c, %{a | fin: false, len_lo: nil}}, else: acc)
+
+  # {C expression, seen}: array value `v` as an accumulator's, copied unless
+  # it is owned and no binding whose buffer is in `seen` (the live ones and
+  # earlier accumulators') may share its buffer
+  defp loop_owned(v, seen) do
+    {:arr, e} = v.t
+    copy? = not v.owned or (v[:buf] != nil and v.buf in seen)
+    c = if copy?, do: "defk_copy_#{e}(ctx, #{v.c})", else: v.c
+    {c, if(v[:buf], do: MapSet.put(seen, v.buf), else: seen)}
+  end
+
+  # a new value `r` of array accumulator `a` without a fact the body assumed
+  defp lost_facts?(%{t: {:arr, e}} = a, r) do
+    (e in [:f64, :f32] and a.fin and not r[:fin]) or
+      (is_integer(a.len_lo) and not (is_integer(r[:len_lo]) and r.len_lo >= a.len_lo))
+  end
+
+  # an array accumulator with facts a new value may not have
+  defp facts?(%{t: {:arr, e}} = a), do: (e in [:f64, :f32] and a.fin) or is_integer(a.len_lo)
+  defp facts?(_a), do: false
+
+  # the compiler state a lowering changes (decls, safepoints, loop ids, ...)
+  defp lowering_key?({:defk_halted, _}), do: true
+  defp lowering_key?({:defk_acc_facts, _}), do: true
+  defp lowering_key?(k) when is_atom(k), do: String.starts_with?(Atom.to_string(k), "defk_")
+  defp lowering_key?(_k), do: false
+
+  defp acc_env(accs, env) do
+    Enum.reduce(accs, env, fn {name, c, a}, e ->
+      cond do
+        String.starts_with?(Atom.to_string(name), "_") ->
+          e
+
+        # the accumulator's buffer is the loop's own: a binding of its own,
+        # and a name the body may bind again (array-rebind-in-loop is about
+        # the outer variable it shadows)
+        match?({:arr, _}, a.t) ->
+          b = Map.merge(a, %{c: c, id: make_ref(), buf: make_ref(), depth: e.depth + 1})
+          %{put_var(e, name, b) | guard: MapSet.delete(e.guard, name)}
+
+        # an accumulator that may become a u64 is marked (u64_mix!/2)
+        a[:u64_ref] ->
+          put_var(e, name, Map.merge(val(c, a.t), %{u64_ref: a.u64_ref, acc: name}))
+
+        true ->
+          put_var(e, name, val(c, a.t))
+      end
     end)
   end
 
-  # `at` is the expression that gives the new value
-  defp assign_accs(accs, res, at, what) do
+  # `at` is the expression that gives the new value; `live` the {id, buf}
+  # live across iterations (and after the loop); `fix` collects array
+  # accumulators whose new value lacks the facts assumed (with_acc_facts/2)
+  defp assign_accs(accs, res, at, what, live, fix) do
     results = Map.get(res, :elems, [res])
 
     length(results) == length(accs) ||
@@ -3239,9 +3540,24 @@ defmodule Defk.Compiler do
     items = tuple_items(at) || List.duplicate(at, length(accs))
 
     outs =
-      Enum.zip_with([accs, results, items], fn [{name, _c, v}, r, item] ->
-        if v[:u64_ref] && v.t == :i64 && r.t == :u64, do: throw({:defk_u64_acc, v.u64_ref, name})
-        coerce!(r, v.t, item, "the new value of #{name}")
+      Enum.zip_with([accs, results, items], fn [{name, _c, a}, r, item] ->
+        if a[:u64_ref] && a.t == :i64 && r.t == :u64, do: throw({:defk_u64_acc, a.u64_ref, name})
+        coerce!(r, a.t, item, "the new value of #{name}")
+      end)
+
+    # a new array value another live binding (or an earlier accumulator) may
+    # see, or that is not owned, is copied: the accumulator's buffer is the
+    # loop's alone
+    {outs, _} =
+      Enum.zip(accs, outs)
+      |> Enum.map_reduce(MapSet.new(live, &elem(&1, 1)), fn
+        {{_, c, %{t: {:arr, _}} = a}, r}, seen ->
+          lost_facts?(a, r) && Process.put(fix, MapSet.put(Process.get(fix), c))
+          {rc, seen} = loop_owned(r, seen)
+          {%{r | c: rc}, seen}
+
+        {_, r}, seen ->
+          {r, seen}
       end)
 
     case accs do
@@ -3250,7 +3566,7 @@ defmodule Defk.Compiler do
 
       _ ->
         # compute all new values before assigning (they may read each other)
-        tmps = Enum.map(accs, fn {name, _, v} -> fresh("#{name}_next", v.t) end)
+        tmps = Enum.map(accs, fn {name, _, a} -> fresh("#{name}_next", a.t) end)
 
         [
           Enum.zip_with(tmps, outs, &"#{&1} = #{&2.c};\n"),
@@ -3259,13 +3575,14 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp acc_result([{_, c, v}]), do: val(c, v.t, c)
+  # the loop's value; an array accumulator's buffer is no other binding's
+  defp acc_result([acc]), do: acc_value(acc)
 
   defp acc_result(accs),
-    do: %{
-      t: {:tuple, Enum.map(accs, &elem(&1, 2).t)},
-      elems: Enum.map(accs, fn {_, c, v} -> val(c, v.t, c) end)
-    }
+    do: %{t: {:tuple, Enum.map(accs, &elem(&1, 2).t)}, elems: Enum.map(accs, &acc_value/1)}
+
+  defp acc_value({_, c, %{t: {:arr, _}} = a}), do: Map.merge(a, %{c: c, var: c, buf: make_ref()})
+  defp acc_value({_, c, a}), do: val(c, a.t, c)
 
   # The body of a reduce_while fn: statements, then a tail that is a literal
   # {:cont, acc} or {:halt, acc}, or an if/cond/case whose branches end in one.
@@ -3572,7 +3889,63 @@ defmodule Defk.Compiler do
   defp ub(v), do: v[:ub] || %{}
   defp len_lb(a), do: a[:len_lb] || %{}
 
-  defp u8_val(c), do: Map.merge(val(c, :i64), %{lo: 0, hi: 255})
+  # ------------------------------------------------------- element types --
+  # A narrow element (u8, i16, i32, f32) widens when read: an integer to an
+  # i64 that carries its type's range as facts, an f32 to the f64 of the same
+  # value. A write takes the wide type and must fit: the store checks the
+  # range (defk_to_*), unless the value's facts prove it fits, as for
+  # max(min(v, 32_767), -32_768) into [i16].
+
+  @int_range %{u8: {0, 255}, i16: {-32_768, 32_767}, i32: {-2_147_483_648, 2_147_483_647}}
+
+  defp wide(e) when e in [:f64, :f32], do: :f64
+  defp wide(:u64), do: :u64
+  defp wide(_e), do: :i64
+
+  defp widen(c, :f32), do: "((double)#{c})"
+  defp widen(c, e) when is_map_key(@int_range, e), do: "((int64_t)#{c})"
+  defp widen(c, _e), do: c
+
+  defp elem_val(c, e) when is_map_key(@int_range, e) do
+    {lo, hi} = @int_range[e]
+    Map.merge(val(c, :i64), %{lo: lo, hi: hi})
+  end
+
+  defp elem_val(c, e), do: val(c, wide(e))
+
+  # the C value stored into [e], from v of type wide(e)
+  defp narrowed(v, :f32), do: "defk_to_f32(ctx, #{v.c})"
+
+  defp narrowed(v, e) when is_map_key(@int_range, e) do
+    {lo, hi} = @int_range[e]
+
+    if is_integer(v[:lo]) and is_integer(v[:hi]) and v[:lo] >= lo and v[:hi] <= hi,
+      do: "((#{ctype_elem(e)})#{v.c})",
+      else: "defk_to_#{e}(ctx, #{v.c})"
+  end
+
+  defp narrowed(v, _e), do: v.c
+
+  # The C value stored into an integer [e] from an integer v (defk-wlu): a
+  # value that doesn't fit raises ArgumentError, as a [u8] write of 300
+  # does. A u64 above 2^63 - 1 saturates before a narrow check, which then
+  # fails.
+  defp int_stored(%{t: :u64} = v, :u64), do: v.c
+
+  defp int_stored(%{t: :i64} = v, :u64),
+    do: if(nonneg?(v), do: v.c, else: "defk_to_u64(ctx, #{v.c})")
+
+  defp int_stored(%{t: :u64} = v, :i64) do
+    if is_integer(v[:hi]) and v[:hi] <= @max_i64,
+      do: "((int64_t)#{v.c})",
+      else: "defk_to_i64_elem(ctx, #{v.c})"
+  end
+
+  defp int_stored(%{t: :u64} = v, e), do: narrowed(%{v | c: "defk_u64_sat(#{v.c})", t: :i64}, e)
+  defp int_stored(v, e), do: narrowed(v, e)
+
+  defp ctype_elem(:u8), do: "uint8_t"
+  defp ctype_elem(e), do: "#{String.replace(to_string(e), "i", "int")}_t"
 
   # 0 <= i < len(a); with a width w (a word load), 0 <= i and i + w <= len(a)
   defp in_bounds?(a, i, w \\ 1) do
@@ -3888,6 +4261,7 @@ defmodule Defk.Compiler do
   defp to_term(c, :f64), do: "defk_make_f64(ctx, env, #{c})"
   defp to_term(c, :bool), do: "defk_make_bool(env, #{c})"
   defp to_term(c, {:arr, _}), do: "defk_make_arr(env, ctx, (#{c}).data)"
+  defp to_term(c, :bitstring), do: "defk_make_bits(env, ctx, #{c})"
 
   # -------------------------------------------------------------- helpers --
 
@@ -3906,6 +4280,7 @@ defmodule Defk.Compiler do
   defp ctype(:f64), do: "double"
   defp ctype(:bool), do: "int"
   defp ctype({:arr, e}), do: "defk_arr_#{e}"
+  defp ctype(:bitstring), do: "defk_bits"
   defp ctype({:c, ct}), do: ct
 
   defp to_f(%{t: t, c: c}) when t in @ints, do: "((double)#{c})"
@@ -4006,6 +4381,8 @@ defmodule Defk.Compiler do
   defp attribute_fix(_name, _v), do: []
 
   @spec not_an_array!(term(), term(), term()) :: no_return()
+  defp not_an_array!(node, arr, %{t: :bitstring}), do: bits_read!(node, arr)
+
   defp not_an_array!(node, arr, a) do
     err!(
       node,

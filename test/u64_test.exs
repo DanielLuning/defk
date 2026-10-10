@@ -94,6 +94,39 @@ defmodule Defk.U64Test.K do
     end)
   end
 
+  # -- with array accumulators (defk-n4r.10): a u64 accumulator from a
+  # literal and an array accumulator in one tuple. Both re-lower the loop
+  # from saved compiler state: the u64 one when h meets a u64, the array one
+  # when the new value (the input `a`) lacks alloc/2's facts
+  defk hash_table(b :: [u8]) :: {[u64], u64} do
+    for x <- b, reduce: {alloc(u64, 16), 0} do
+      {t, h} ->
+        h2 = band(bxor(h, x) * 0x100000001B3, @mask64)
+        t[band(h2, 15)] = h2
+        {t, h2}
+    end
+  end
+
+  defk both_retries(a :: [f64], b :: [u8]) :: {[f64], u64} do
+    for x <- b, reduce: {alloc(f64, 1), 0} do
+      {acc, h} -> {a, band((h + x) * 31 + trunc(acc[0]), @mask64)}
+    end
+  end
+
+  # the same, with an inner reduce_while that is retried too, inside each
+  # attempt of the outer loop
+  defk nested_retries(a :: [f64], b :: [u8]) :: {[f64], u64} do
+    for i <- 0..2//1, reduce: {alloc(f64, 1), 0} do
+      {acc, h} ->
+        g =
+          Enum.reduce_while(b, 0, fn x, g ->
+            if x == 0, do: {:halt, g}, else: {:cont, band(g * 31 + x + h, @mask64)}
+          end)
+
+        {a, band(h + g + trunc(acc[0]) + i, @mask64)}
+    end
+  end
+
   # -- [u64] arrays
   defk scale(a :: [u64], k :: u64) :: [u64] do
     out = alloc(u64, len(a))
@@ -436,6 +469,44 @@ defmodule Defk.U64Test do
     end
   end
 
+  test "a u64 accumulator next to an array accumulator, with both kinds of re-lowering" do
+    for bytes <- ["", "a", "hello world", :crypto.strong_rand_bytes(200)] do
+      {t, h} =
+        for <<x <- bytes>>, reduce: {List.duplicate(0, 16), 0} do
+          {t, h} ->
+            h2 = band(bxor(h, x) * 0x100000001B3, @umax)
+            {List.replace_at(t, band(h2, 15), h2), h2}
+        end
+
+      assert outcome(:hash_table, [bytes]) == {:ok, {Defk.Generators.pack(:u64, t), h}}
+
+      for xs <- [[0.0], [2.5, 1.0], [-7.0]] do
+        a = Defk.Generators.pack(:f64, xs)
+
+        {_, h} =
+          for <<x <- bytes>>, reduce: {0.0, 0} do
+            {acc0, h} -> {hd(xs), band((h + x) * 31 + trunc(acc0), @umax)}
+          end
+
+        want = if bytes == "", do: Defk.Generators.pack(:f64, [0.0]), else: a
+        assert outcome(:both_retries, [a, bytes]) == {:ok, {want, h}}
+
+        {_, h} =
+          for i <- 0..2, reduce: {0.0, 0} do
+            {acc0, h} ->
+              g =
+                Enum.reduce_while(:binary.bin_to_list(bytes), 0, fn x, g ->
+                  if x == 0, do: {:halt, g}, else: {:cont, band(g * 31 + x + h, @umax)}
+                end)
+
+              {hd(xs), band(h + g + trunc(acc0) + i, @umax)}
+          end
+
+        assert outcome(:nested_retries, [a, bytes]) == {:ok, {a, h}}
+      end
+    end
+  end
+
   test "[u64] arrays: reads, writes, alloc, and element range" do
     a = Defk.Generators.pack(:u64, @u64s)
     expect = Defk.Generators.pack(:u64, Enum.map(@u64s, &band(&1 * 0x100000001B3, @umax)))
@@ -682,6 +753,9 @@ defmodule Defk.U64Test do
     count_hash: [args: fixed_list([bytes()])],
     hash_until: [args: fixed_list([bytes(), G.i64(0..255)])],
     scale: [args: fixed_list([u64s(), G.u64()])],
+    hash_table: [args: fixed_list([bytes()])],
+    both_retries: [args: fixed_list([G.array(:f64, length: 1), bytes()])],
+    nested_retries: [args: fixed_list([G.array(:f64, length: 1), bytes()])],
     put_i64: [args: fixed_list([u64s(), G.i64(-2..50), G.i64()])],
     store: [args: fixed_list([G.array(:i64, length: 1), G.array(:u8, length: 1), G.u64()])],
     murmur3_32: [args: fixed_list([bytes(), seed32()])],

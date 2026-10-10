@@ -12,8 +12,9 @@ defmodule Defk do
         end
       end
 
-  Types: `i64`, `f64`, `bool`, packed arrays `[f64]`, `[i64]`, `[u8]`
-  (passed as binaries in native byte order), tuples as return values.
+  Types: `i64`, `f64`, `bool`, packed arrays `[f64]`, `[f32]`, `[i64]`, `[i32]`, `[i16]`, `[u8]`
+  (passed as binaries in native byte order), tuples as return values, and
+  `bitstring` as a return value (the bitstring accumulator).
   """
 
   # compile-time attribute: the defk app is not loaded when this module is
@@ -70,14 +71,28 @@ defmodule Defk do
         env
       )
 
-    nif_name = if elixir?, do: &Defk.ElixirMode.native_name/1, else: & &1
+    # a kernel returning a bitstring gets an Elixir wrapper (Defk.Bitstring),
+    # so its NIF has another name, as with Elixir mode
+    bits =
+      for k <- kernels,
+          Defk.Bitstring.returns_bits?(k.head),
+          into: MapSet.new(),
+          do: Defk.Bitstring.name(k.head)
+
+    nif_name = fn name ->
+      if elixir? or name in bits, do: Defk.ElixirMode.native_name(name), else: name
+    end
+
     {c_src, sigs} = Defk.Compiler.compile(env.module, kernels, env.file, nif_name: nif_name)
     lib = Defk.Build.build!(env.module, c_src, env.file)
+
+    {wrapped, plain} = Enum.split_with(sigs, &(&1.name in bits))
 
     stubs =
       if elixir?,
         do: native_stubs(sigs, nif_name) ++ dispatch_defs(sigs, mode, nif_name),
-        else: render_stubs(sigs)
+        else:
+          render_stubs(plain) ++ native_stubs(wrapped, nif_name) ++ wrappers(wrapped, nif_name)
 
     elixir_mode = if elixir?, do: Defk.ElixirMode.definitions(kernels, sigs, env.file), else: []
 
@@ -127,6 +142,21 @@ defmodule Defk do
     end
   end
 
+  # A kernel that returns a bitstring: its NIF gives {bytes, bit_length},
+  # which this def makes the bitstring (Defk.Bitstring.decode/2).
+  defp wrappers(sigs, nif_name) do
+    for %{name: name, params: params, ret: ret} <- sigs do
+      specs = for {_, t} <- params, do: spec(t, :in)
+      vs = for {p, _} <- params, do: Macro.var(p, nil)
+      call = quote do: unquote(nif_name.(name))(unquote_splicing(vs))
+
+      quote do
+        @spec unquote(name)(unquote_splicing(specs)) :: unquote(spec(ret, :out))
+        def unquote(name)(unquote_splicing(vs)), do: unquote(Defk.Bitstring.decode(ret, call))
+      end
+    end
+  end
+
   defp dispatch_defs(sigs, mode, nif_name) do
     for %{name: name, params: params, ret: ret} <- sigs do
       specs = for {_, t} <- params, do: spec(t, :in)
@@ -136,8 +166,16 @@ defmodule Defk do
         @spec unquote(name)(unquote_splicing(specs)) :: unquote(spec(ret, :out))
         def unquote(name)(unquote_splicing(vs)) do
           case Process.get(unquote(Defk.ElixirMode.process_mode_key()), unquote(mode)) do
-            :elixir -> __defk_elixir__(unquote(name), [unquote_splicing(vs)])
-            _ -> unquote(nif_name.(name))(unquote_splicing(vs))
+            :elixir ->
+              __defk_elixir__(unquote(name), [unquote_splicing(vs)])
+
+            _ ->
+              unquote(
+                Defk.Bitstring.decode(
+                  ret,
+                  quote(do: unquote(nif_name.(name))(unquote_splicing(vs)))
+                )
+              )
           end
         end
       end
@@ -150,5 +188,6 @@ defmodule Defk do
   defp spec(:f64, :out), do: quote(do: float())
   defp spec(:bool, _), do: quote(do: boolean())
   defp spec({:arr, _}, _), do: quote(do: binary())
+  defp spec(:bitstring, _), do: quote(do: bitstring())
   defp spec({:tuple, ts}, dir), do: {:{}, [], Enum.map(ts, &spec(&1, dir))}
 end

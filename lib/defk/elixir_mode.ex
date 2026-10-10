@@ -263,7 +263,8 @@ defmodule Defk.ElixirMode do
   defp write(arr, idx, rhs, env, m) do
     {qa, {:arr, e}} = expr(arr, env)
     {pre, [qi, qv], [ti, tv]} = operands([idx, rhs], env)
-    qv = if e == :f64, do: coerce(qv, tv, :f64), else: qv
+    # a float element widens an integer; put_* checks an integer fits its type
+    qv = if elem_type(e) == :f64, do: coerce(qv, tv, :f64), else: qv
     put = call(:"put_#{e}", [qa, coerce(qi, ti, :i64), qv], m)
 
     case arr do
@@ -298,9 +299,15 @@ defmodule Defk.ElixirMode do
   # a binary literal: the binary itself
   defp expr(b, _env) when is_binary(b), do: {b, {:arr, :u8}}
 
-  defp expr({:<<>>, _, _} = node, _env) do
-    {:ok, b} = Defk.BinaryLiteral.bytes(node)
-    {b, {:arr, :u8}}
+  defp expr({:<<>>, m, _} = node, env) do
+    case Defk.Bitstring.parse(node) do
+      {:append, head, parts} ->
+        append(head, parts, env, m)
+
+      :error ->
+        {:ok, b} = Defk.BinaryLiteral.bytes(node)
+        {b, {:arr, :u8}}
+    end
   end
 
   defp expr({:__block__, _, _} = b, env), do: value_block(b, env)
@@ -532,6 +539,14 @@ defmodule Defk.ElixirMode do
 
   # + - * on two integers of which one is a u64: checked in u64
   defp u64_op(op, qs, m), do: call(%{+: :add_u64, -: :sub_u64, *: :mul_u64}[op], qs, m)
+  # <<acc::bitstring, v::size(n), ...>>: the head, values and sizes left to
+  # right, then Ops.bits/2 checks each segment (the kernel's limits) and
+  # appends it
+  defp append(head, parts, env, m) do
+    {pre, [hq | qs], _} = operands([head | Enum.flat_map(parts, &Tuple.to_list/1)], env)
+    segs = qs |> Enum.chunk_every(2) |> Enum.map(fn [v, n] -> {v, n} end)
+    {with_pre(pre, call(:bits, [hq, segs], m)), :bitstring}
+  end
 
   defp tuple_expr(items, env) do
     {pre, qs, ts} = operands(items, env)
@@ -553,6 +568,7 @@ defmodule Defk.ElixirMode do
   end
 
   defp builtin(:len, [a], [{:arr, e}], m), do: {call(:"len_#{e}", [a], m), :i64}
+  defp builtin(:bit_size, [a], [_], m), do: {remote(Kernel, :bit_size, [a], m), :i64}
   defp builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: {call(f, [a, i], m), :i64}
 
   defp builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl64, :rotr64],
@@ -1291,9 +1307,10 @@ defmodule Defk.ElixirMode do
   defp tuple_items({a, b}), do: [a, b]
   defp tuple_items({:{}, _, items}), do: items
 
-  defp elem_type(:u8), do: :i64
-  defp elem_type(e), do: e
+  # a narrow element reads as the wide type (Defk.ElixirMode.Ops.esize/1)
+  defp elem_type(e) when e in [:f64, :f32], do: :f64
+  defp elem_type(:u64), do: :u64
+  defp elem_type(_e), do: :i64
 
-  defp esize(:u8), do: 1
-  defp esize(_), do: 8
+  defp esize(e), do: Defk.ElixirMode.Ops.esize(e)
 end

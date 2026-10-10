@@ -13,7 +13,7 @@ defmodule Defk.Builtins do
   # bit builtins with a plain Elixir meaning in Defk.Bits (clz and ctz also
   # take a width: clz/2, ctz/2)
   @bits [:mulhi, :clz, :ctz, :popcount, :rotl64, :rotr64, :rotl, :rotr, :f64_to_u64]
-  @all [:len, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
+  @all [:len, :bit_size, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
          @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ [:alloc] ++ @bits
 
   @doc "Every builtin name."
