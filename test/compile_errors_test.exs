@@ -372,17 +372,17 @@ defmodule Defk.CompileErrorsTest do
       assert rewrite(msg) == "b0 = a[0]\nb1 = a[1]"
     end
 
-    test "reading a float's bits names the planned builtin" do
+    test "reading a float's bits points at f64_to_u64" do
       msg = rejection("<<b::64>> = <<y::float-64>>\nb", "y :: f64", "i64")
       assert codes(msg) == ["bitstring-match"]
-      assert msg =~ "Defk.Bits.f64_to_u64/1, is planned"
+      assert msg =~ "b = f64_to_u64(y)"
     end
 
-    test "a literal mask (1 <<< 64) - 1 that overflows i64 gets the mask hint" do
-      msg = rejection("band(x, (1 <<< 64) - 1)", "x :: i64", "i64")
+    test "a literal shift past u64 masks gets the mask hint" do
+      msg = rejection("band(x, (1 <<< 65) - 1)", "x :: i64", "i64")
       assert codes(msg) == ["shift-overflow"]
-      assert whats(msg) == ["1 <<< 64 does not fit in i64"]
-      assert msg =~ "0x7FFFFFFFFFFFFFFF"
+      assert whats(msg) == ["1 <<< 65 does not fit in i64"]
+      assert msg =~ "computed at compile time"
     end
   end
 end

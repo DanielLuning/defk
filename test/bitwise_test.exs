@@ -327,8 +327,8 @@ defmodule Defk.BitwiseTest do
     assert msg =~ "if b, do: 1, else: 0"
   end
 
-  test "a mask beyond i64 is rejected as an integer literal" do
-    msg = rejection("band(x, 0xFFFFFFFFFFFFFFFF)", "x :: i64")
+  test "a mask beyond u64 is rejected as an integer literal" do
+    msg = rejection("band(x, 0x1FFFFFFFFFFFFFFFF)", "x :: i64")
     assert codes(msg) == ["integer-literal"]
 
     # 2 ** 64 - 1 is not a literal: ** is outside the subset

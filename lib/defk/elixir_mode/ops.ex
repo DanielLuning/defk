@@ -16,7 +16,10 @@ defmodule Defk.ElixirMode.Ops do
   @max_alloc_bytes 2 ** 48
   @no_alloc_bytes 2 ** 47
 
+  @max_u64 0xFFFFFFFFFFFFFFFF
+
   defguardp is_i64(x) when is_integer(x) and x >= @min and x <= @max
+  defguardp is_u64(x) when is_integer(x) and x >= 0 and x <= @max_u64
 
   # ------------------------------------------------------------ integers --
 
@@ -61,6 +64,50 @@ defmodule Defk.ElixirMode.Ops do
   def wbsl(_a, n) when n >= 64, do: 0
   def wbsl(a, n), do: Bitwise.bsl(a, n)
 
+  # the same by a count that is not a literal: a negative count raises, as
+  # the kernel's does (defk_wbsl)
+  def wbsl_var(_a, n) when n < 0,
+    do: raise(ArithmeticError, "bsl/2 by the negative count #{n} inside a mask")
+
+  def wbsl_var(a, n), do: wbsl(a, n)
+
+  # u64 (defk-wlu): + - * checked to 0..2^64 - 1, as the kernel's defk_add_u64
+  def add_u64(a, b), do: fit_u64(a + b, a, "+", b)
+  def sub_u64(a, b), do: fit_u64(a - b, a, "-", b)
+  def mul_u64(a, b), do: fit_u64(a * b, a, "*", b)
+
+  def div_u64(_a, 0), do: raise(ArithmeticError, "div/2 by zero")
+  def div_u64(a, b), do: Kernel.div(a, b)
+  def rem_u64(_a, 0), do: raise(ArithmeticError, "rem/2 by zero")
+  def rem_u64(a, b), do: Kernel.rem(a, b)
+
+  # bsl/bsr of a u64: exact (bsr of a u64 is logical); bsl raises past 2^64 - 1
+  def bsl_u64(a, n), do: shifted_u64(shift_u64(a, n), "bsl", a, n)
+  def bsr_u64(a, n), do: shifted_u64(shift_u64(a, -n), "bsr", a, n)
+
+  defp shift_u64(a, n) when n >= 64, do: if(a == 0, do: 0, else: :overflow)
+  defp shift_u64(_a, n) when n <= -64, do: 0
+
+  defp shift_u64(a, n) do
+    r = Bitwise.bsl(a, n)
+    if is_u64(r), do: r, else: :overflow
+  end
+
+  defp shifted_u64(:overflow, f, a, n),
+    do: raise(ArithmeticError, "u64 overflow in #{f}(#{a}, #{n})")
+
+  defp shifted_u64(r, _f, _a, _n), do: r
+
+  # a u64 where an i64 is expected and back: the same integer, or
+  # ArithmeticError when the other type cannot hold it
+  def u64_to_i64(a) when is_i64(a), do: a
+  def u64_to_i64(a), do: raise(ArithmeticError, "#{a} does not fit in i64")
+  def i64_to_u64(a) when a >= 0, do: a
+  def i64_to_u64(a), do: raise(ArithmeticError, "#{a} does not fit in u64")
+
+  defp fit_u64(r, _a, _op, _b) when is_u64(r), do: r
+  defp fit_u64(_r, a, op, b), do: raise(ArithmeticError, "u64 overflow in #{a} #{op} #{b}")
+
   defp shifted(:overflow, f, a, n), do: raise(ArithmeticError, "i64 overflow in #{f}(#{a}, #{n})")
   defp shifted(r, _f, _a, _n), do: r
 
@@ -87,6 +134,7 @@ defmodule Defk.ElixirMode.Ops do
   def len_f64(a), do: Kernel.div(byte_size(a), 8)
   def len_i64(a), do: Kernel.div(byte_size(a), 8)
   def len_u8(a), do: byte_size(a)
+  def len_u64(a), do: Kernel.div(byte_size(a), 8)
   def len_i16(a), do: Kernel.div(byte_size(a), 2)
   def len_i32(a), do: Kernel.div(byte_size(a), 4)
   def len_f32(a), do: Kernel.div(byte_size(a), 4)
@@ -96,7 +144,7 @@ defmodule Defk.ElixirMode.Ops do
   def esize(:u8), do: 1
   def esize(:i16), do: 2
   def esize(e) when e in [:i32, :f32], do: 4
-  def esize(e) when e in [:i64, :f64], do: 8
+  def esize(e) when e in [:i64, :f64, :u64], do: 8
 
   def get_f64(a, i) do
     case a do
@@ -108,6 +156,12 @@ defmodule Defk.ElixirMode.Ops do
   def get_i64(a, i) do
     in_bounds!(a, i, 8)
     <<_::binary-size(^i * 8), x::signed-64-native, _::binary>> = a
+    x
+  end
+
+  def get_u64(a, i) do
+    in_bounds!(a, i, 8)
+    <<_::binary-size(^i * 8), x::unsigned-64-native, _::binary>> = a
     x
   end
 
@@ -146,9 +200,13 @@ defmodule Defk.ElixirMode.Ops do
   # a value that doesn't fit its element type raises before the bounds check,
   # as in the kernel
   def put_f64(a, i, x) when is_float(x), do: put(a, i, 8, <<x::float-64-native>>)
-  def put_i64(a, i, x), do: put(a, i, 8, <<x::signed-64-native>>)
+  def put_i64(a, i, x) when is_i64(x), do: put(a, i, 8, <<x::signed-64-native>>)
+  def put_i64(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in i64")
   def put_u8(a, i, x) when x in 0..255, do: put(a, i, 1, <<x>>)
   def put_u8(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in u8")
+  def put_u64(a, i, x) when is_u64(x), do: put(a, i, 8, <<x::unsigned-64-native>>)
+  def put_u64(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in u64")
+
   def put_i16(a, i, x) when x in -0x8000..0x7FFF, do: put(a, i, 2, <<x::signed-16-native>>)
   def put_i16(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in i16")
 
@@ -213,6 +271,7 @@ defmodule Defk.ElixirMode.Ops do
   def elems_f64(a), do: Stream.map(0..(len_f64(a) - 1)//1, &get_f64(a, &1))
   def elems_i64(a), do: for(<<x::signed-64-native <- a>>, do: x)
   def elems_u8(a), do: :binary.bin_to_list(a)
+  def elems_u64(a), do: for(<<x::unsigned-64-native <- a>>, do: x)
   def elems_i16(a), do: for(<<x::signed-16-native <- a>>, do: x)
   def elems_i32(a), do: for(<<x::signed-32-native <- a>>, do: x)
   def elems_f32(a), do: Stream.map(0..(len_f32(a) - 1)//1, &get_f32(a, &1))
@@ -280,6 +339,11 @@ defmodule Defk.ElixirMode.Ops do
   defp scalar!(x, :f64, _n, _p) when is_float(x), do: x
   defp scalar!(x, :f64, _n, _p) when is_i64(x), do: :erlang.float(x)
   defp scalar!(_x, :f64, n, p), do: raise(ArgumentError, "argument #{n} (#{p}) must be a number")
+  defp scalar!(x, :u64, _n, _p) when is_u64(x), do: x
+
+  defp scalar!(_x, :u64, n, p),
+    do: raise(ArgumentError, "argument #{n} (#{p}) must be an integer fitting in u64")
+
   defp scalar!(x, :bool, _n, _p) when is_boolean(x), do: x
 
   defp scalar!(_x, :bool, n, p),

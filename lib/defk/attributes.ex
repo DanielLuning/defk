@@ -8,14 +8,15 @@ defmodule Defk.Attributes do
   # them (inline/1) before the compiler and Elixir mode see the body, so both
   # modes get the same value even if the attribute is redefined later.
   #
-  # An i64 integer, a float or a boolean becomes its literal, so it works
+  # An i64 or u64 integer, a float or a boolean becomes its literal, so it works
   # wherever a literal does (case patterns, guards, range steps, band masks
   # with their range facts). Any other value stays an `@name` node carrying
   # `defk_attr: {:ok, value} | :undefined` in the name's meta: the compiler
   # lowers a binary to a read-only [u8] and rejects the rest; Elixir mode
   # reads the binary from the same place.
 
-  @i64 -0x8000000000000000..0x7FFFFFFFFFFFFFFF
+  # i64 and u64: -2^63..2^64 - 1
+  @ints -0x8000000000000000..0xFFFFFFFFFFFFFFFF
 
   @doc false
   # Quoted `%{name => {:ok, value} | :undefined}` for the attributes `body`
@@ -56,7 +57,7 @@ defmodule Defk.Attributes do
         {:@, m, [{name, nm, ctx}]} when is_atom(name) and is_atom(ctx) ->
           case Map.get(attrs, name, :undefined) do
             {:ok, v} when is_boolean(v) or is_float(v) -> v
-            {:ok, v} when is_integer(v) and v in @i64 -> v
+            {:ok, v} when is_integer(v) and v in @ints -> v
             other -> {:@, m, [{name, [{:defk_attr, other} | nm], ctx}]}
           end
 

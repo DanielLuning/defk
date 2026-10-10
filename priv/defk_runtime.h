@@ -42,6 +42,7 @@
 typedef struct { double *data; int64_t len; } defk_arr_f64;
 typedef struct { int64_t *data; int64_t len; } defk_arr_i64;
 typedef struct { uint8_t *data; int64_t len; } defk_arr_u8;
+typedef struct { uint64_t *data; int64_t len; } defk_arr_u64;
 /* narrow element types (defk-4ai): only inside arrays; a read widens to
    int64_t / double, a write is range-checked (defk_to_i16 ... defk_to_f32) */
 typedef struct { int16_t *data; int64_t len; } defk_arr_i16;
@@ -200,6 +201,7 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
 DEFK_ALLOC_FN(f64, double)
 DEFK_ALLOC_FN(i64, int64_t)
 DEFK_ALLOC_FN(u8, uint8_t)
+DEFK_ALLOC_FN(u64, uint64_t)
 DEFK_ALLOC_FN(i16, int16_t)
 DEFK_ALLOC_FN(i32, int32_t)
 DEFK_ALLOC_FN(f32, float)
@@ -221,6 +223,7 @@ DEFK_ALLOC_FN(f32, float)
 DEFK_COPY_FN(f64, double)
 DEFK_COPY_FN(i64, int64_t)
 DEFK_COPY_FN(u8, uint8_t)
+DEFK_COPY_FN(u64, uint64_t)
 DEFK_COPY_FN(i16, int16_t)
 DEFK_COPY_FN(i32, int32_t)
 DEFK_COPY_FN(f32, float)
@@ -292,6 +295,15 @@ static double defk_get_f64_arg(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t, in
   if (enif_get_double(env, t, &d)) return d;
   if (enif_get_int64(env, t, &v)) return (double)v;
   defk_fail(ctx, DEFK_E_ARG, "argument %d (%s) must be a number", argn, pname);
+}
+
+__attribute__((unused)) static uint64_t defk_get_u64_arg(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t,
+                                                        int argn, const char *pname) {
+  ErlNifUInt64 v;
+  if (!enif_get_uint64(env, t, &v))
+    defk_fail(ctx, DEFK_E_ARG, "argument %d (%s) must be an integer fitting in u64", argn,
+              pname);
+  return (uint64_t)v;
 }
 
 __attribute__((unused)) static int defk_get_bool_arg(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t, int argn,
@@ -420,6 +432,108 @@ static inline int64_t defk_abs_i64(defk_ctx *ctx, int64_t a) {
   return a < 0 ? defk_neg_i64(ctx, a) : a;
 }
 
+/* ---- u64 (defk-wlu) ------------------------------------------------------
+ * Checked arithmetic in the u64 domain, 0..2^64 - 1: the exact result, or
+ * ArithmeticError where it leaves u64 (a - b below 0 included). Masked
+ * arithmetic (band(expr, 2^k - 1)) never comes here: it wraps in uint64_t. */
+#define DEFK_U64_OP(NAME, OP, BUILTIN)                                              \
+  static inline uint64_t defk_##NAME##_u64(defk_ctx *ctx, uint64_t a, uint64_t b) { \
+    uint64_t r;                                                                     \
+    if (DEFK_UNLIKELY(BUILTIN(a, b, &r)))                                           \
+      defk_fail(ctx, DEFK_E_ARITH, "u64 overflow in %llu " OP " %llu",              \
+                (unsigned long long)a, (unsigned long long)b);                      \
+    return r;                                                                       \
+  }                                                                                 \
+  static inline uint64_t defk_##NAME##_u64_s(int *ovf, uint64_t a, uint64_t b) {    \
+    uint64_t r;                                                                     \
+    *ovf |= BUILTIN(a, b, &r);                                                      \
+    return r;                                                                       \
+  }
+DEFK_U64_OP(add, "+", __builtin_add_overflow)
+DEFK_U64_OP(sub, "-", __builtin_sub_overflow)
+DEFK_U64_OP(mul, "*", __builtin_mul_overflow)
+/* bsl/bsr on a u64, exact: a negative count shifts the other way, bsr is
+ * logical (a u64 is never negative), and bsl sets *ovf when a bit is shifted
+ * out of the 64 */
+static inline uint64_t defk_bsl_u64_core(int *ovf, uint64_t a, int64_t n) {
+  if (n >= 64) {
+    *ovf |= a != 0;
+    return 0;
+  }
+  if (n >= 0) {
+    *ovf |= n > 0 && (a >> (64 - n)) != 0;
+    return a << n;
+  }
+  return n > -64 ? a >> -n : 0;
+}
+static inline uint64_t defk_bsr_u64_core(int *ovf, uint64_t a, int64_t n) {
+  if (n >= 64) return 0;
+  if (n >= 0) return a >> n;
+  if (n > -64) return defk_bsl_u64_core(ovf, a, -n);
+  *ovf |= a != 0;
+  return 0;
+}
+static inline uint64_t defk_bsl_u64(defk_ctx *ctx, uint64_t a, int64_t n) {
+  int ovf = 0;
+  uint64_t r = defk_bsl_u64_core(&ovf, a, n);
+  if (DEFK_UNLIKELY(ovf))
+    defk_fail(ctx, DEFK_E_ARITH, "u64 overflow in bsl(%llu, %lld)", (unsigned long long)a,
+              (long long)n);
+  return r;
+}
+static inline uint64_t defk_bsr_u64(defk_ctx *ctx, uint64_t a, int64_t n) {
+  int ovf = 0;
+  uint64_t r = defk_bsr_u64_core(&ovf, a, n);
+  if (DEFK_UNLIKELY(ovf))
+    defk_fail(ctx, DEFK_E_ARITH, "u64 overflow in bsr(%llu, %lld)", (unsigned long long)a,
+              (long long)n);
+  return r;
+}
+static inline uint64_t defk_bsl_u64_s(int *ovf, uint64_t a, int64_t n) { return defk_bsl_u64_core(ovf, a, n); }
+static inline uint64_t defk_bsr_u64_s(int *ovf, uint64_t a, int64_t n) { return defk_bsr_u64_core(ovf, a, n); }
+static inline uint64_t defk_div_u64(defk_ctx *ctx, uint64_t a, uint64_t b) {
+  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "div/2 by zero");
+  return a / b;
+}
+static inline uint64_t defk_rem_u64(defk_ctx *ctx, uint64_t a, uint64_t b) {
+  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "rem/2 by zero");
+  return a % b;
+}
+/* a u64 where an i64 is expected, and an i64 where a u64 is expected: the
+ * same integer, or ArithmeticError when the other type cannot hold it */
+static inline int64_t defk_u64_to_i64(defk_ctx *ctx, uint64_t a) {
+  if (DEFK_UNLIKELY(a > (uint64_t)INT64_MAX))
+    defk_fail(ctx, DEFK_E_ARITH, "%llu does not fit in i64", (unsigned long long)a);
+  return (int64_t)a;
+}
+static inline uint64_t defk_i64_to_u64(defk_ctx *ctx, int64_t a) {
+  if (DEFK_UNLIKELY(a < 0)) defk_fail(ctx, DEFK_E_ARITH, "%lld does not fit in u64", (long long)a);
+  return (uint64_t)a;
+}
+/* bsl inside a mask by a count that is not a literal: the low 64 bits of
+ * a * 2^n. A negative count would shift high bits of the exact value down,
+ * which the wrapped 64 bits no longer hold: it raises (a limit). */
+static inline uint64_t defk_wbsl(defk_ctx *ctx, uint64_t a, int64_t n) {
+  if (DEFK_UNLIKELY(n < 0))
+    defk_fail(ctx, DEFK_E_ARITH, "bsl/2 by the negative count %lld inside a mask", (long long)n);
+  return n >= 64 ? 0 : a << n;
+}
+static inline uint64_t defk_wbsl_s(int *ovf, uint64_t a, int64_t n) {
+  *ovf |= n < 0;
+  return n >= 64 || n < 0 ? 0 : a << n;
+}
+/* a value written to a [u64] or [i64] that its element type cannot hold:
+ * ArgumentError, as for a [u8] */
+static inline uint64_t defk_to_u64(defk_ctx *ctx, int64_t v) {
+  if (DEFK_UNLIKELY(v < 0)) defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in u64", (long long)v);
+  return (uint64_t)v;
+}
+static inline int64_t defk_to_i64_elem(defk_ctx *ctx, uint64_t v) {
+  if (DEFK_UNLIKELY(v > (uint64_t)INT64_MAX))
+    defk_fail(ctx, DEFK_E_ARG, "value %llu does not fit in i64", (unsigned long long)v);
+  return (int64_t)v;
+}
+
 /* ---- float arithmetic Elixir's way (defk-i00, decided in defk-q1c) -------
  *
  * Elixir raises ArithmeticError at any float operation whose result would be
@@ -524,6 +638,59 @@ static inline int64_t defk_rotr64(int64_t x, int64_t n) {
   unsigned k = (unsigned)n & 63u;
   return (int64_t)((u >> k) | (u << ((64u - k) & 63u)));
 }
+/* Defk.Bits.clz/2, ctz/2, rotl/3, rotr/3: x is a w-bit value, 1 <= w <= 64;
+ * a width outside 1..64 or an x outside 0..2^w - 1 raises ArgumentError, as
+ * the Elixir functions do. An i64 x arrives as its bit pattern with `neg`
+ * set when it was negative. rotl/rotr rotate by n mod w. */
+__attribute__((noreturn, cold, unused)) static void defk_field_fail(defk_ctx *ctx, const char *f,
+                                                           uint64_t x, int neg, int64_t w) {
+  if (w < 1 || w > 64)
+    defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.%s: width %lld is not in 1..64", f, (long long)w);
+  if (neg)
+    defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.%s: %lld does not fit in a %lld-bit field", f,
+              (long long)x, (long long)w);
+  defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.%s: %llu does not fit in a %lld-bit field", f,
+            (unsigned long long)x, (long long)w);
+}
+static inline uint64_t defk_field_arg(defk_ctx *ctx, const char *f, uint64_t x, int neg, int64_t w) {
+  if (DEFK_UNLIKELY(w < 1 || w > 64 || neg || (w < 64 && (x >> w) != 0)))
+    defk_field_fail(ctx, f, x, neg, w);
+  return x;
+}
+static inline int64_t defk_clz_w(defk_ctx *ctx, uint64_t x, int neg, int64_t w) {
+  x = defk_field_arg(ctx, "clz/2", x, neg, w);
+  return x == 0 ? w : __builtin_clzll(x) - (64 - w);
+}
+static inline int64_t defk_ctz_w(defk_ctx *ctx, uint64_t x, int neg, int64_t w) {
+  x = defk_field_arg(ctx, "ctz/2", x, neg, w);
+  return x == 0 ? w : __builtin_ctzll(x);
+}
+/* rotate left by n mod w (right: by -n mod w) */
+static inline uint64_t defk_rot_w(defk_ctx *ctx, const char *f, uint64_t x, int neg, int64_t n,
+                                  int64_t w, int right) {
+  x = defk_field_arg(ctx, f, x, neg, w);
+  int64_t m = ((n % w) + w) % w;
+  uint64_t k = (uint64_t)(right && m ? w - m : m);
+  if (k == 0) return x;
+  uint64_t mask = w == 64 ? ~UINT64_C(0) : (UINT64_C(1) << w) - 1;
+  return ((x << k) | (x >> (w - k))) & mask;
+}
+/* the forms the compiler calls, for an i64 x (its sign checked) and a u64 x */
+static inline int64_t defk_clz_i(defk_ctx *ctx, int64_t x, int64_t w) { return defk_clz_w(ctx, (uint64_t)x, x < 0, w); }
+static inline int64_t defk_clz_u(defk_ctx *ctx, uint64_t x, int64_t w) { return defk_clz_w(ctx, x, 0, w); }
+static inline int64_t defk_ctz_i(defk_ctx *ctx, int64_t x, int64_t w) { return defk_ctz_w(ctx, (uint64_t)x, x < 0, w); }
+static inline int64_t defk_ctz_u(defk_ctx *ctx, uint64_t x, int64_t w) { return defk_ctz_w(ctx, x, 0, w); }
+static inline uint64_t defk_rotl_i(defk_ctx *ctx, int64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotl/3", (uint64_t)x, x < 0, n, w, 0); }
+static inline uint64_t defk_rotl_u(defk_ctx *ctx, uint64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotl/3", x, 0, n, w, 0); }
+static inline uint64_t defk_rotr_i(defk_ctx *ctx, int64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotr/3", (uint64_t)x, x < 0, n, w, 1); }
+static inline uint64_t defk_rotr_u(defk_ctx *ctx, uint64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotr/3", x, 0, n, w, 1); }
+static inline uint64_t defk_min_u64(uint64_t a, uint64_t b) { return a < b ? a : b; }
+static inline uint64_t defk_max_u64(uint64_t a, uint64_t b) { return a > b ? a : b; }
+static inline uint64_t defk_f64_to_u64(double x) {
+  uint64_t u;
+  __builtin_memcpy(&u, &x, 8);
+  return u;
+}
 static inline int64_t defk_min_i64(int64_t a, int64_t b) { return a < b ? a : b; }
 static inline int64_t defk_max_i64(int64_t a, int64_t b) { return a > b ? a : b; }
 /* Erlang's min/max return the first argument when the two compare equal
@@ -551,6 +718,19 @@ static inline int defk_cmp_i64_f64(int64_t i, double f) {
   return frac > 0.0 ? -1 : frac < 0.0 ? 1 : 0;
 }
 
+/* the same for a u64, and a u64 against an i64 (exact, both integers) */
+static inline int defk_cmp_u64_f64(uint64_t u, double f) {
+  if (u <= (uint64_t)INT64_MAX) return defk_cmp_i64_f64((int64_t)u, f);
+  if (f >= 0x1p64) return -1;           /* above every u64 */
+  if (!(f >= 0x1p63)) return 1;         /* below 2^63 <= u (or NaN) */
+  uint64_t t = (uint64_t)f;             /* f is an integer here (>= 2^53) */
+  return u < t ? -1 : u > t ? 1 : 0;
+}
+static inline int defk_cmp_u64_i64(uint64_t u, int64_t i) {
+  if (i < 0) return 1;
+  return u < (uint64_t)i ? -1 : u > (uint64_t)i ? 1 : 0;
+}
+
 /* === on two floats: Erlang's exact equality tells -0.0 from 0.0 */
 static inline int defk_feq_exact(double a, double b) {
   uint64_t x, y;
@@ -573,6 +753,7 @@ static inline int defk_feq_exact(double a, double b) {
 DEFK_ACCESS_FN(f64, double)
 DEFK_ACCESS_FN(i64, int64_t)
 DEFK_ACCESS_FN(u8, uint8_t)
+DEFK_ACCESS_FN(u64, uint64_t)
 DEFK_ACCESS_FN(i16, int16_t)
 DEFK_ACCESS_FN(i32, int32_t)
 DEFK_ACCESS_FN(f32, float)
@@ -673,6 +854,11 @@ static inline double defk_nf_r(int *nf, double r) {
 static inline uint8_t defk_to_u8(defk_ctx *ctx, int64_t v) {
   if (DEFK_UNLIKELY(v < 0 || v > 255)) defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in u8", (long long)v);
   return (uint8_t)v;
+}
+/* a u64 as an i64 for a narrow write's range check: one above 2^63 - 1
+   saturates, which no narrow type holds */
+static inline int64_t defk_u64_sat(uint64_t v) {
+  return v > (uint64_t)INT64_MAX ? INT64_MAX : (int64_t)v;
 }
 static inline int16_t defk_to_i16(defk_ctx *ctx, int64_t v) {
   if (DEFK_UNLIKELY(v < INT16_MIN || v > INT16_MAX))

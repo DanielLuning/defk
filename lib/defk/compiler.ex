@@ -8,15 +8,19 @@ defmodule Defk.Compiler do
   # restored on resume. A call to another kernel is inlined (see "calls"), so
   # the callee's loops are the caller's loops and yield like them.
   #
-  # Types:  :i64 | :f64 | :bool | {:arr, elem} | {:tuple, [type]}
+  # Types:  :i64 | :u64 | :f64 | :bool | {:arr, elem} | {:tuple, [type]}
   #         | :bitstring (the bitstring accumulator, see "bitstrings")
-  # elem:   :f64 | :i64 | :u8 | :i16 | :i32 | :f32; the narrow ones (u8, i16,
-  #         i32, f32) exist only in arrays: a read widens to i64 or f64, a
-  #         write must fit (see "element types")
+  # elem:   :f64 | :i64 | :u64 | :u8 | :i16 | :i32 | :f32; the narrow ones
+  #         (u8, i16, i32, f32) exist only in arrays: a read widens to i64 or
+  #         f64, a write must fit (see "element types"); u64 is a scalar too
+  #         (defk-wlu)
 
-  @scalars [:i64, :f64, :bool]
-  @elems [:f64, :i64, :u8, :i16, :i32, :f32]
-  @elems_text "f64, f32, i64, i32, i16 and u8"
+  @scalars [:i64, :u64, :f64, :bool]
+  @elems [:f64, :i64, :u64, :u8, :i16, :i32, :f32]
+  @elems_text "f64, f32, i64, i32, i16, u8 and u64"
+  @ints [:i64, :u64]
+  @max_u64 0xFFFFFFFFFFFFFFFF
+  @max_i64 0x7FFFFFFFFFFFFFFF
   @float_ops %{+: "fadd", -: "fsub", *: "fmul"}
   @math1 Defk.Builtins.math1()
   # band/2 ... and the operators that are the same functions (&&& ...)
@@ -24,6 +28,8 @@ defmodule Defk.Compiler do
   @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
   # u64_le/2 ... word loads from a [u8]
   @loads Defk.Builtins.loads()
+  # clz, rotl, ... with a plain Elixir meaning in Defk.Bits
+  @bits Defk.Builtins.bits()
   # range facts carried by values (see "range facts" below)
   @facts [:lo, :hi, :lb, :ub, :len_lo, :len_lb]
 
@@ -475,7 +481,13 @@ defmodule Defk.Compiler do
   # "array index"; for a kernel's result, `ret` is its declared return type.
   defp coerce!(v, t, at, what, ret \\ nil)
   defp coerce!(%{t: t} = v, t, _at, _what, _ret), do: v
-  defp coerce!(%{t: :i64} = v, :f64, _at, _what, _ret), do: %{v | c: to_f(v), t: :f64}
+
+  defp coerce!(%{t: t} = v, :f64, _at, _what, _ret) when t in @ints,
+    do: %{v | c: to_f(v), t: :f64}
+
+  # a u64 where an i64 is expected and back: checked (u64_to_i64/1)
+  defp coerce!(%{t: :u64} = v, :i64, _at, _what, _ret), do: u64_to_i64(v)
+  defp coerce!(%{t: :i64} = v, :u64, _at, _what, _ret), do: i64_to_u64(v)
   defp coerce!(%{bits0: true}, :bitstring, _at, _what, _ret), do: empty_bits()
 
   defp coerce!(v, t, at, what, nil) do
@@ -632,7 +644,10 @@ defmodule Defk.Compiler do
     {:arr, e} = a.t
     stored = "value stored in [#{e}]"
 
-    vc = narrowed(coerce!(v, wide(e), rhs, stored), e)
+    vc =
+      if v.t in @ints and wide(e) != :f64,
+        do: int_stored(v, e),
+        else: narrowed(coerce!(v, wide(e), rhs, stored), e)
 
     # value semantics: the array is copied first if another binding may still
     # see its buffer (see "array values")
@@ -792,13 +807,22 @@ defmodule Defk.Compiler do
         match?({:<<>>, _, [{:"::", _, [_, {:float, _, _}]}]}, rhs)
 
     if float_bits? do
+      rewrite =
+        with [{:"::", _, [{b, _, ctx}, _]}] when is_atom(b) and is_atom(ctx) <- segs,
+             {:<<>>, _, [{:"::", _, [x, _]}]} <- rhs do
+          [rewrite: "#{b} = f64_to_u64(#{Macro.to_string(x)})"]
+        else
+          _ -> []
+        end
+
       err!(
         pat,
         "bitstring-match",
         "reading a float's bits with #{Macro.to_string(pat)} = #{Macro.to_string(rhs)} is not in the kernel subset",
-        why: "a kernel has no bitstrings",
-        hint:
-          "do it in Elixir before the call; a builtin for it, Defk.Bits.f64_to_u64/1, is planned"
+        [
+          why: "a kernel has no bitstrings",
+          hint: "f64_to_u64(x) (Defk.Bits.f64_to_u64/1) gives the bits of a float as a u64"
+        ] ++ rewrite
       )
     else
       arr = Macro.to_string(rhs)
@@ -1215,13 +1239,15 @@ defmodule Defk.Compiler do
   # value :: %{c: c_expr, t: type, owned: bool, var: cname | nil}
   #        | %{t: {:tuple, ts}, elems: [value]}
 
+  # a literal is an i64; one in 2^63..2^64 - 1 is a u64
   defp lower_expr(n, _env) when is_integer(n) do
-    n in -0x8000000000000000..0x7FFFFFFFFFFFFFFF ||
-      err!(n, "integer-literal", "the integer literal #{n} does not fit in i64",
+    n in -0x8000000000000000..@max_u64 ||
+      err!(n, "integer-literal", "the integer literal #{n} does not fit in i64 or u64",
         rewrite: "#{n * 1.0}"
       )
 
-    {[], Map.merge(val("INT64_C(#{n})", :i64), %{lo: n, hi: n})}
+    v = if n > @max_i64, do: val("UINT64_C(#{n})", :u64), else: val("INT64_C(#{n})", :i64)
+    {[], Map.merge(v, %{lo: n, hi: n})}
   end
 
   defp lower_expr(f, _env) when is_float(f),
@@ -1370,7 +1396,7 @@ defmodule Defk.Compiler do
   end
 
   defp lower_expr({op, _, [a, b]} = node, env) when op in [:+, :-, :*, :/],
-    do: float_tree(node, env) || lower_arith(op, a, b, env)
+    do: float_tree(node, env) || lower_arith(op, a, b, node, env)
 
   defp lower_expr({op, _, [a, b]} = node, env)
        when op in [:==, :!=, :===, :!==, :<, :>, :<=, :>=] do
@@ -1404,9 +1430,15 @@ defmodule Defk.Compiler do
     {s, val("(!#{v.c})", :bool)}
   end
 
-  defp lower_expr({:-, _, [a]}, env) do
+  defp lower_expr({:-, _, [a]} = node, env) do
     {s, v} = lower_expr(a, env)
     numeric!(v, a, :-)
+
+    v.t == :u64 &&
+      err!(node, "operand-type", "- takes i64 or f64, and #{Macro.to_string(a)} is u64",
+        hint:
+          "a negated u64 is not a u64; to wrap, negate inside a mask: band(-x, 0xFFFFFFFFFFFFFFFF)"
+      )
 
     cond do
       # a negative literal (-32_768) is a constant, with its facts
@@ -1462,9 +1494,14 @@ defmodule Defk.Compiler do
     else
       {s, v} = lower_expr(x, env)
       int!(v, x, "wrap64/1")
-      {s, v}
+      {s, if(v.t == :u64, do: val("((int64_t)#{v.c})", :i64), else: v)}
     end
   end
+
+  # Defk.Bits.clz(x, w) etc. are the builtins (Defk.Bits is their Elixir meaning)
+  defp lower_expr({{:., _, [{:__aliases__, _, [:Defk, :Bits]}, f]}, m, args}, env)
+       when f in [:wrap64 | @bits] and is_list(args),
+       do: lower_expr({f, m, args}, env)
 
   # :math.sqrt(x) etc. map onto the builtins
   defp lower_expr({{:., _, [:math, fun]}, m, args}, env) when fun in [:pow | @math1],
@@ -1479,31 +1516,24 @@ defmodule Defk.Compiler do
 
   # + - * / one operation at a time: i64 checked for overflow, f64 for a
   # result that is inf or NaN (defk-i00); see float_tree for the common case
-  defp lower_arith(op, a, b, env) do
+  defp lower_arith(op, a, b, node, env) do
     {sa, va} = lower_expr(a, env)
     {sb, vb} = lower_expr(b, env)
     numeric!(va, a, op)
     numeric!(vb, b, op)
+    pair = if op != :/ and va.t in @ints and vb.t in @ints, do: int_pair!(va, vb, node)
 
     v =
-      case {op, va.t, vb.t} do
+      case pair || {op, va.t, vb.t} do
+        {:u64, ua, ub} ->
+          fun = %{+: "add", -: "sub", *: "mul"}[op]
+          val("defk_#{fun}_u64#{checked(env)}, #{ua.c}, #{ub.c})", :u64)
+
+        {:i64, va, vb} ->
+          i64_arith(op, va, vb, env)
+
         {:/, _, _} ->
           val("defk_fdiv#{checked(env)}, #{to_f(va)}, #{to_f(vb)})", :f64)
-
-        {:+, :i64, :i64} ->
-          Map.merge(
-            val("defk_add_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
-            add_facts(va, vb)
-          )
-
-        {:-, :i64, :i64} ->
-          Map.merge(
-            val("defk_sub_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
-            sub_facts(va, vb)
-          )
-
-        {:*, :i64, :i64} ->
-          val("defk_mul_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64)
 
         # a float result that is inf or NaN raises, as in Elixir (defk-i00)
         _ ->
@@ -1511,6 +1541,74 @@ defmodule Defk.Compiler do
       end
 
     {[sa, sb], v}
+  end
+
+  # i64 + - * checked for overflow, with range facts
+  defp i64_arith(op, va, vb, env) do
+    case {op, va.t, vb.t} do
+      {:+, :i64, :i64} ->
+        Map.merge(
+          val("defk_add_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
+          add_facts(va, vb)
+        )
+
+      {:-, :i64, :i64} ->
+        Map.merge(
+          val("defk_sub_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
+          sub_facts(va, vb)
+        )
+
+      {:*, :i64, :i64} ->
+        val("defk_mul_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64)
+    end
+  end
+
+  # The integer type of an operation on `va` and `vb` (defk-wlu):
+  # {:i64 | :u64, va, vb}. Two i64 stay i64; a u64 with a u64, or with an
+  # i64 its range facts prove non-negative (a literal, len(a), a mask ...),
+  # is u64. A u64 with any other i64 has no type holding every result: it is
+  # rejected, pointing at masked arithmetic, where the two mix.
+  defp int_pair!(va, vb, node) do
+    case {va.t, vb.t} do
+      {t, t} -> {t, va, vb}
+      {:u64, :i64} -> if nonneg?(vb), do: {:u64, va, as_u64(vb)}, else: u64_mix!(node, vb)
+      {:i64, :u64} -> if nonneg?(va), do: {:u64, as_u64(va), vb}, else: u64_mix!(node, va)
+    end
+  end
+
+  # an accumulator that may become a u64 (u64_accs/2) is one, rather than a mix
+  @spec u64_mix!(term(), term()) :: no_return()
+  defp u64_mix!(_node, %{u64_ref: ref, acc: name}), do: throw({:defk_u64_acc, ref, name})
+
+  defp u64_mix!({op, _, _} = node, _i) do
+    wrap? = op in [:+, :-, :*, :band, :bor, :bxor, :&&&, :|||, :"^^^"]
+
+    err!(
+      node,
+      "u64-mix",
+      "#{Macro.to_string(node)} mixes a u64 with an i64 that may be negative, which is not in the kernel subset outside a mask",
+      if(wrap?,
+        do: [rewrite: "band(#{Macro.to_string(node)}, 0xFFFFFFFFFFFFFFFF)"],
+        else: []
+      )
+    )
+  end
+
+  defp as_u64(v), do: %{v | c: "((uint64_t)#{v.c})", t: :u64}
+
+  # a u64 where an i64 is expected: the same integer, or ArithmeticError
+  # when it is above 2^63 - 1 (no check when its range facts rule that out)
+  defp u64_to_i64(v) do
+    if is_integer(v[:hi]) and v[:hi] <= @max_i64,
+      do: %{v | c: "((int64_t)#{v.c})", t: :i64},
+      else: %{v | c: "defk_u64_to_i64(ctx, #{v.c})", t: :i64}
+  end
+
+  # an i64 where a u64 is expected: ArithmeticError when it is negative
+  defp i64_to_u64(v) do
+    if nonneg?(v),
+      do: as_u64(v),
+      else: %{v | c: "defk_i64_to_u64(ctx, #{v.c})", t: :u64}
   end
 
   # A float expression of + - * / whose operands are pure (variables,
@@ -1681,6 +1779,15 @@ defmodule Defk.Compiler do
 
   # the one type of the values of `node` (an if, cond or case named `name`)
   defp branch_type!(vals, name, node) do
+    # a u64 branch and i64 branches known to be >= 0 (a literal ...) give a u64
+    u64? =
+      Enum.any?(vals, &(&1.t == :u64)) and
+        Enum.all?(vals, &(&1.t == :u64 or (&1.t == :i64 and nonneg?(&1))))
+
+    if u64?, do: :u64, else: branch_type1!(vals, name, node)
+  end
+
+  defp branch_type1!(vals, name, node) do
     case Enum.uniq_by(vals, & &1.t) do
       [%{t: {:tuple, _} = t} | _] ->
         err!(
@@ -1896,78 +2003,131 @@ defmodule Defk.Compiler do
     end
   end
 
-  # Masked arithmetic (Defk.Masked): the tree of + - * neg bsl under a mask
-  # 2^k - 1 is computed in uint64_t, which wraps modulo 2^64 without an
-  # overflow check, and masked once; its leaves are lowered as usual. The low
-  # k bits are those of Elixir's exact result, so nothing can raise but the
-  # leaves. A mask m gives a value in 0..m; -1 stands for wrap64/1, the
-  # i64 bit pattern of the low 64 bits.
+  # Masked arithmetic (Defk.Masked): the tree of + - * neg band bor bxor
+  # bnot bsl under a mask 2^k - 1 is computed in uint64_t, which wraps
+  # modulo 2^64 without an overflow check, and masked once; its leaves are
+  # lowered as usual. The low k bits are those of Elixir's exact result, so
+  # nothing can raise but the leaves (and a bsl by a negative count that is
+  # not a literal). The 64-bit mask gives a u64 (defk-wlu); a narrower mask m
+  # an i64 in 0..m; -1 stands for wrap64/1, the i64 bit pattern of the low
+  # 64 bits.
   defp lower_masked(expr, mask, label, env) do
     {s, c} = wrapped(expr, {expr, label}, nil, env)
 
     v =
-      if mask == -1,
-        do: val("((int64_t)#{c})", :i64),
-        else: Map.merge(val("((int64_t)(#{c} & UINT64_C(#{mask})))", :i64), %{lo: 0, hi: mask})
+      cond do
+        mask == -1 -> val("((int64_t)#{c})", :i64)
+        mask == @max_u64 -> Map.merge(val(c, :u64), %{lo: 0})
+        true -> Map.merge(val("((int64_t)(#{c} & UINT64_C(#{mask})))", :i64), %{lo: 0, hi: mask})
+      end
 
     {s, v}
   end
 
   # {s, uint64_t C expression}; `top` is the masked expression and the
-  # band's label, `parent` the operator taking `ast` (for errors)
+  # band's label, `parent` the operator taking `ast` (for errors): nil,
+  # {:arith, op} or {:bit, label}
   defp wrapped(ast, top, parent, env) do
     case Defk.Masked.tree_node(ast) do
       nil ->
         {s, v} = lower_expr(ast, env)
-        v.t == :i64 || masked_operand!(v, ast, top, parent)
+        v.t in @ints || masked_operand!(v, ast, top, parent)
         {s, "((uint64_t)#{v.c})"}
 
       {:pos, a} ->
         wrapped(a, top, parent, env)
 
       {:neg, a} ->
-        {s, c} = wrapped(a, top, "-", env)
+        {s, c} = wrapped(a, top, {:arith, "-"}, env)
         {s, "(UINT64_C(0) - #{c})"}
 
+      {:bnot, a} ->
+        {s, c} = wrapped(a, top, {:bit, "bnot/1"}, env)
+        {s, "(~#{c})"}
+
       {:bsl, a, n} ->
-        {s, c} = wrapped(a, top, :bsl, env)
+        {s, c} = wrapped(a, top, {:bit, "bsl/2"}, env)
         {s, if(n >= 64, do: "(UINT64_C(0) & #{c})", else: "(#{c} << #{n})")}
 
+      # a count that is not a literal: 64 or more gives 0, a negative one
+      # raises (defk_wbsl)
+      {:bsl_var, a, n} ->
+        {s, c} = wrapped(a, top, {:bit, "bsl/2"}, env)
+        {sn, vn} = lower_expr(n, env)
+        int!(vn, n, "bsl/2")
+
+        shift =
+          if vn.t == :u64,
+            do: "(#{vn.c} >= 64 ? UINT64_C(0) : #{c} << #{vn.c})",
+            else: "defk_wbsl#{checked(env)}, #{c}, #{vn.c})"
+
+        {[s, sn], shift}
+
       {op, a, b} ->
-        cop = %{add: "+", sub: "-", mul: "*"}[op]
-        {sa, ca} = wrapped(a, top, cop, env)
-        {sb, cb} = wrapped(b, top, cop, env)
+        cop = %{add: "+", sub: "-", mul: "*", band: "&", bor: "|", bxor: "^"}[op]
+        parent = if op in [:band, :bor, :bxor], do: {:bit, "#{op}/2"}, else: {:arith, cop}
+        {sa, ca} = wrapped(a, top, parent, env)
+        {sb, cb} = wrapped(b, top, parent, env)
         {[sa, sb], "(#{ca} #{cop} #{cb})"}
     end
   end
 
-  # the error the same expression gets without the mask: an f64 makes the
-  # masked expression f64, which band rejects; a bool is rejected by + - *
+  # the error the same expression gets without the mask: an f64 under
+  # + - * makes the masked expression f64, which band rejects; a bool is
+  # rejected by + - *; a bitwise operator rejects both
   @spec masked_operand!(term(), term(), term(), term()) :: no_return()
   defp masked_operand!(v, ast, {top, label}, parent) do
-    cond do
-      parent == :bsl -> int!(v, ast, "bsl/2")
-      v.t == :f64 -> int!(v, top, label)
-      true -> numeric!(v, ast, parent || label)
+    case parent do
+      nil -> int!(v, ast, label)
+      {:bit, l} -> int!(v, ast, l)
+      {:arith, _} when v.t == :f64 -> int!(v, top, label)
+      {:arith, op} -> numeric!(v, ast, op)
     end
+  end
+
+  # bnot of a u64 is negative: no u64, and no i64 for every u64
+  defp bitwise_val(:bnot, [%{t: :u64}], [x], node, _env) do
+    err!(node, "operand-type", "bnot/1 takes an i64, and #{Macro.to_string(x)} is u64",
+      hint: "bnot of a u64 is negative; to flip its 64 bits, write it inside a mask",
+      rewrite: "band(#{Macro.to_string(node)}, 0xFFFFFFFFFFFFFFFF)"
+    )
   end
 
   defp bitwise_val(:bnot, [a], _args, _node, _env),
     do: Map.merge(val("(~#{a.c})", :i64), %{lo: bnot(a[:hi]), hi: bnot(a[:lo])})
 
-  defp bitwise_val(f, [a, b], _args, _node, _env) when f in [:band, :bor, :bxor] do
+  defp bitwise_val(f, [a, b], _args, node, _env) when f in [:band, :bor, :bxor] do
     cop = %{band: "&", bor: "|", bxor: "^"}[f]
-    Map.merge(val("(#{a.c} #{cop} #{b.c})", :i64), bit_facts(f, a, b))
+
+    case int_pair!(a, b, node) do
+      {:i64, a, b} -> Map.merge(val("(#{a.c} #{cop} #{b.c})", :i64), bit_facts(f, a, b))
+      {:u64, a, b} -> val("(#{a.c} #{cop} #{b.c})", :u64)
+    end
+  end
+
+  # a u64 shifted (defk-wlu): exact, bsr is logical, bsl raises when a bit
+  # leaves the 64; by a literal 0..63, bsr is one shift with a range
+  defp bitwise_val(f, [%{t: :u64} = a, b], [_x, n], _node, env) when f in [:bsl, :bsr] do
+    b = coerce!(b, :i64, n, "shift count")
+
+    case int_literal(n) do
+      k when f == :bsr and is_integer(k) and k in 0..63 ->
+        Map.merge(val("(#{a.c} >> #{k})", :u64), %{lo: 0, hi: Bitwise.bsr(a[:hi] || @max_u64, k)})
+
+      _ ->
+        val("defk_#{f}_u64#{checked(env)}, #{a.c}, #{b.c})", :u64)
+    end
   end
 
   # a shift of two literals that leaves i64 would always raise: rejected
-  defp bitwise_val(f, [a, b], [x, n], node, env) when f in [:bsl, :bsr] do
+  defp bitwise_val(f, [a, b], [x, n] = args, node, env) when f in [:bsl, :bsr] do
+    b = coerce!(b, :i64, Enum.at(args, 1), "shift count")
     {x, n} = {int_literal(x), int_literal(n)}
 
     (is_integer(x) and is_integer(n) and Defk.ElixirMode.Ops.shift(f, x, n) == :overflow) &&
       err!(node, "shift-overflow", "#{Macro.to_string(node)} does not fit in i64",
         hint:
-          "the kernel would raise ArithmeticError here every time. A mask (1 <<< n) - 1 can be computed in i64 for n <= 62; write the 63-bit one as 0x7FFFFFFFFFFFFFFF, and drop a mask that the value already fits"
+          "the kernel would raise ArithmeticError here every time. Write a value past 2^63 - 1 as a u64 literal (0x8000000000000000); a mask (1 <<< k) - 1 directly in band(x, mask) is computed at compile time, for k up to 64"
       )
 
     c =
@@ -1985,7 +2145,7 @@ defmodule Defk.Compiler do
 
   # `at` is the operand's expression; `label` names what takes it
   defp int!(v, at, label) do
-    v.t == :i64 ||
+    v.t in @ints ||
       err!(
         at,
         "operand-type",
@@ -2089,14 +2249,39 @@ defmodule Defk.Compiler do
   # mulhi, clz, ctz, popcount, rotl64, rotr64 (Defk.Builtins.bits/0): the
   # Defk.Bits functions on the u64 bit patterns; the helpers are in
   # defk_runtime.h. The counts are in 0..64.
-  defp builtin(f, [%{t: :i64} = a], _, _) when f in [:clz, :ctz, :popcount],
+  defp builtin(f, [%{t: t} = a], _, _) when f in [:clz, :ctz, :popcount] and t in @ints,
     do: Map.merge(val("defk_#{f}(#{a.c})", :i64), %{lo: 0, hi: 64})
 
   defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:mulhi, :rotl64, :rotr64],
     do: val("defk_#{f}(#{a.c}, #{b.c})", :i64)
 
-  defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:div, :rem],
-    do: val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
+  # clz/2, ctz/2, rotl/3, rotr/3 (defk-wlu): x is a w-bit value, checked as
+  # Defk.Bits checks it; an i64 x passes its sign. rotl/rotr give x's type.
+  defp builtin(f, [%{t: t} = x, w], node, _) when f in [:clz, :ctz] and t in @ints do
+    w = coerce!(w, :i64, arg(node, 1), "#{f}/2 width")
+    c = "defk_#{f}_#{if t == :i64, do: "i", else: "u"}(ctx, #{x.c}, #{w.c})"
+    Map.merge(val(c, :i64), %{lo: 0, hi: 64})
+  end
+
+  defp builtin(f, [%{t: t} = x, n, w], node, _) when f in [:rotl, :rotr] and t in @ints do
+    n = coerce!(n, :i64, arg(node, 1), "#{f}/3 count")
+    w = coerce!(w, :i64, arg(node, 2), "#{f}/3 width")
+    c = val("defk_#{f}_#{if t == :i64, do: "i", else: "u"}(ctx, #{x.c}, #{n.c}, #{w.c})", :u64)
+    if t == :i64, do: u64_to_i64(c), else: c
+  end
+
+  defp builtin(:f64_to_u64, [x], node, _) do
+    numeric!(x, arg(node, 0), "f64_to_u64/1")
+    val("defk_f64_to_u64(#{to_f(x)})", :u64)
+  end
+
+  defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, _)
+       when f in [:div, :rem] and ta in @ints and tb in @ints do
+    case int_pair!(a, b, node) do
+      {:i64, a, b} -> val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
+      {:u64, a, b} -> val("defk_#{f}_u64(ctx, #{a.c}, #{b.c})", :u64)
+    end
+  end
 
   defp builtin(:float, [a], node, _),
     do:
@@ -2105,15 +2290,23 @@ defmodule Defk.Compiler do
         val(to_f(a), :f64)
       )
 
-  defp builtin(:trunc, [%{t: :i64} = a], _, _), do: a
+  defp builtin(f, [%{t: t} = a], _, _) when f in [:trunc, :round] and t in @ints, do: a
   defp builtin(:trunc, [%{t: :f64} = a], _, _), do: val("defk_trunc(ctx, #{a.c})", :i64)
-  defp builtin(:round, [%{t: :i64} = a], _, _), do: a
   defp builtin(:round, [%{t: :f64} = a], _, _), do: val("defk_round(ctx, #{a.c})", :i64)
+  defp builtin(:abs, [%{t: :u64} = a], _, _), do: a
   defp builtin(:abs, [%{t: :i64} = a], _, _), do: val("defk_abs_i64(ctx, #{a.c})", :i64)
   defp builtin(:abs, [%{t: :f64} = a], _, _), do: val("fabs(#{a.c})", :f64)
 
-  defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:min, :max],
-    do: Map.merge(val("defk_#{f}_i64(#{a.c}, #{b.c})", :i64), minmax_facts(f, a, b))
+  defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, _)
+       when f in [:min, :max] and ta in @ints and tb in @ints do
+    case int_pair!(a, b, node) do
+      {:i64, a, b} ->
+        Map.merge(val("defk_#{f}_i64(#{a.c}, #{b.c})", :i64), minmax_facts(f, a, b))
+
+      {:u64, a, b} ->
+        val("defk_#{f}_u64(#{a.c}, #{b.c})", :u64)
+    end
+  end
 
   defp builtin(f, [%{t: :f64} = a, %{t: :f64} = b], _, _) when f in [:min, :max],
     do: val("defk_#{f}_f64(#{a.c}, #{b.c})", :f64)
@@ -2179,11 +2372,14 @@ defmodule Defk.Compiler do
     u16_le: "a [u8] array and an i64 byte offset",
     u16_be: "a [u8] array and an i64 byte offset",
     mulhi: "two i64 values",
-    clz: "an i64 value",
-    ctz: "an i64 value",
-    popcount: "an i64 value",
+    clz: "an integer",
+    ctz: "an integer",
+    popcount: "an integer",
     rotl64: "two i64 values",
-    rotr64: "two i64 values"
+    rotr64: "two i64 values",
+    rotl: "an integer, an i64 count and an i64 width",
+    rotr: "an integer, an i64 count and an i64 width",
+    f64_to_u64: "a number"
   }
 
   @spec builtin_arguments!(term(), term(), term()) :: no_return()
@@ -2192,20 +2388,16 @@ defmodule Defk.Compiler do
     ts = Enum.map(vals, & &1.t)
 
     arity =
-      if name in [
-           :div,
-           :rem,
-           :min,
-           :max,
-           :pow,
-           :mulhi,
-           :rotl64,
-           :rotr64 | @loads ++ (@bitwise -- [:bnot])
-         ],
-         do: 2,
-         else: 1
+      cond do
+        name in [:clz, :ctz] -> if match?([_, _], vals), do: 2, else: 1
+        name in [:rotl, :rotr] -> 3
+        name in [:div, :rem, :min, :max, :pow, :mulhi, :rotl64, :rotr64] -> 2
+        name in @loads or name in @bitwise -> if name == :bnot, do: 1, else: 2
+        true -> 1
+      end
 
-    takes = "#{name}/#{arity} takes #{@builtin_takes[name]}"
+    what = if name in [:clz, :ctz] and arity == 2, do: "an integer and an i64 width"
+    takes = "#{name}/#{arity} takes #{what || @builtin_takes[name]}"
 
     err!(
       node,
@@ -3085,20 +3277,45 @@ defmodule Defk.Compiler do
     # the outer names the loop reads: its generators and filters, and its
     # body where the accumulator does not shadow them
     loop_reads = MapSet.union(reads(quals), MapSet.difference(reads(body), reads(pat)))
-    {si, accs} = reduce_accs(pat, init_ast, "the reduce: value", env, node, loop_reads)
     lenv = loop_env(env, node)
 
-    loops =
-      with_acc_facts(accs, fn accs, fix ->
-        inner = fn genv ->
-          {sb, res} = lower_block(body, acc_env(accs, genv))
-          [sb, assign_accs(accs, res, last_expr(body), "the reduce body", genv.live, fix)]
-        end
+    u64_accs(fn u64s ->
+      {si, accs} = reduce_accs(pat, init_ast, "the reduce: value", env, node, loop_reads, u64s)
 
-        lower_quals(quals, lenv, inner)
-      end)
+      loops =
+        with_acc_facts(accs, fn accs, fix ->
+          inner = fn genv ->
+            {sb, res} = lower_block(body, acc_env(accs, genv))
+            [sb, assign_accs(accs, res, last_expr(body), "the reduce body", genv.live, fix)]
+          end
 
-    {[si, loops], acc_result(accs)}
+          lower_quals(quals, lenv, inner)
+        end)
+
+      {[si, loops], acc_result(accs)}
+    end)
+  end
+
+  # An accumulator whose initial value is a non-negative integer literal is
+  # a u64 when a new value is (defk-wlu): `reduce: 0` with a body that ends
+  # in band(..., 0xFFFFFFFFFFFFFFFF). The fold is lowered with i64
+  # accumulators; assign_accs throws for such an accumulator meeting a u64,
+  # and the fold is lowered again from the saved compiler state with it as a
+  # u64. Elixir mode settles the same types (Defk.ElixirMode). The saved
+  # state is with_acc_facts/2's (lowering_key?/1), so a retry of either kind
+  # inside the other's attempt is undone with that attempt: each restores
+  # what it saved, including the other's pending fact notes.
+  defp u64_accs(fun, u64s \\ []) do
+    snap = for {k, v} <- Process.get(), lowering_key?(k), do: {k, v}
+    ref = make_ref()
+
+    try do
+      fun.({ref, u64s})
+    catch
+      {:defk_u64_acc, ^ref, name} ->
+        restore_lowering(snap)
+        u64_accs(fun, [name | u64s])
+    end
   end
 
   # Enum.reduce_while(src, init, fn x, acc -> ... end) is the loop of
@@ -3112,12 +3329,15 @@ defmodule Defk.Compiler do
   # `for ..., reduce:` with {:cont, acc}/{:halt, acc} is not early exit in
   # Elixir (the tuple becomes the next accumulator), so it is not one here.
   # `node` is the whole call.
-  defp lower_reduce_while(src, init_ast, x, acc_pat, body, env, m, node) do
+  defp lower_reduce_while(src, init_ast, x, acc_pat, body, env, m, node),
+    do: u64_accs(&reduce_while_loop({src, init_ast, x, acc_pat, body}, env, m, node, &1))
+
+  defp reduce_while_loop({src, init_ast, x, acc_pat, body}, env, m, node, u64s) do
     loop_reads =
       MapSet.union(reads(src), MapSet.difference(reads(body), reads([x, acc_pat])))
 
     {si, accs} =
-      reduce_accs(acc_pat, init_ast, "the initial accumulator", env, node, loop_reads)
+      reduce_accs(acc_pat, init_ast, "the initial accumulator", env, node, loop_reads, u64s)
 
     id = Process.get(:defk_nhalts) + 1
     Process.put(:defk_nhalts, id)
@@ -3160,10 +3380,12 @@ defmodule Defk.Compiler do
   # or an earlier accumulator. The new value at the end of each iteration is
   # copied on the same test (assign_accs/6), so no buffer but the
   # accumulator's own is seen across an iteration. `node` is the loop.
-  defp reduce_accs(pat, init_ast, what, env, node, loop_reads) do
+  # {ref, u64s} names the accumulators that are u64 (u64_accs/2).
+  defp reduce_accs(pat, init_ast, what, env, node, loop_reads, {ref, u64s}) do
     {si, init} = lower_expr(init_ast, env)
-    inits = Map.get(init, :elems, [init])
     pats = if is_tuple(pat) and tuple_items(pat), do: tuple_items(pat), else: [pat]
+    items = (match?(%{elems: _}, init) && tuple_items(init_ast)) || [init_ast]
+    inits = u64_candidates(Map.get(init, :elems, [init]), items, ref)
 
     length(pats) == length(inits) ||
       err!(
@@ -3193,6 +3415,7 @@ defmodule Defk.Compiler do
               )
           end
 
+        v = if name in u64s, do: as_u64(v), else: v
         c = fresh(name, v.t)
 
         case v.t do
@@ -3202,13 +3425,23 @@ defmodule Defk.Compiler do
             {{{name, c, acc}, ic}, seen}
 
           t ->
-            {{{name, c, %{t: t}}, v.c}, seen}
+            {{{name, c, Map.put(Map.take(v, [:u64_ref]), :t, t)}, v.c}, seen}
         end
       end)
 
     {[si, Enum.map(accs, fn {{_, c, _}, ic} -> "#{c} = #{ic};\n" end)],
      Enum.map(accs, &elem(&1, 0))}
   end
+
+  # an i64 literal >= 0 may become a u64 accumulator (u64_accs/2): marked
+  # with the fold's ref
+  defp u64_candidates(inits, items, ref) when length(items) == length(inits) do
+    Enum.zip_with(inits, items, fn v, item ->
+      if is_integer(item) and item >= 0 and v.t == :i64, do: Map.put(v, :u64_ref, ref), else: v
+    end)
+  end
+
+  defp u64_candidates(inits, _items, _ref), do: inits
 
   # Lower a loop with accumulators `accs` by `lower.(accs, fix)`. The body is
   # lowered assuming each array accumulator keeps the facts of its initial
@@ -3264,6 +3497,7 @@ defmodule Defk.Compiler do
 
   # the compiler state a lowering changes (decls, safepoints, loop ids, ...)
   defp lowering_key?({:defk_halted, _}), do: true
+  defp lowering_key?({:defk_acc_facts, _}), do: true
   defp lowering_key?(k) when is_atom(k), do: String.starts_with?(Atom.to_string(k), "defk_")
   defp lowering_key?(_k), do: false
 
@@ -3279,6 +3513,10 @@ defmodule Defk.Compiler do
         match?({:arr, _}, a.t) ->
           b = Map.merge(a, %{c: c, id: make_ref(), buf: make_ref(), depth: e.depth + 1})
           %{put_var(e, name, b) | guard: MapSet.delete(e.guard, name)}
+
+        # an accumulator that may become a u64 is marked (u64_mix!/2)
+        a[:u64_ref] ->
+          put_var(e, name, Map.merge(val(c, a.t), %{u64_ref: a.u64_ref, acc: name}))
 
         true ->
           put_var(e, name, val(c, a.t))
@@ -3303,6 +3541,7 @@ defmodule Defk.Compiler do
 
     outs =
       Enum.zip_with([accs, results, items], fn [{name, _c, a}, r, item] ->
+        if a[:u64_ref] && a.t == :i64 && r.t == :u64, do: throw({:defk_u64_acc, a.u64_ref, name})
         coerce!(r, a.t, item, "the new value of #{name}")
       end)
 
@@ -3660,6 +3899,7 @@ defmodule Defk.Compiler do
   @int_range %{u8: {0, 255}, i16: {-32_768, 32_767}, i32: {-2_147_483_648, 2_147_483_647}}
 
   defp wide(e) when e in [:f64, :f32], do: :f64
+  defp wide(:u64), do: :u64
   defp wide(_e), do: :i64
 
   defp widen(c, :f32), do: "((double)#{c})"
@@ -3685,6 +3925,24 @@ defmodule Defk.Compiler do
   end
 
   defp narrowed(v, _e), do: v.c
+
+  # The C value stored into an integer [e] from an integer v (defk-wlu): a
+  # value that doesn't fit raises ArgumentError, as a [u8] write of 300
+  # does. A u64 above 2^63 - 1 saturates before a narrow check, which then
+  # fails.
+  defp int_stored(%{t: :u64} = v, :u64), do: v.c
+
+  defp int_stored(%{t: :i64} = v, :u64),
+    do: if(nonneg?(v), do: v.c, else: "defk_to_u64(ctx, #{v.c})")
+
+  defp int_stored(%{t: :u64} = v, :i64) do
+    if is_integer(v[:hi]) and v[:hi] <= @max_i64,
+      do: "((int64_t)#{v.c})",
+      else: "defk_to_i64_elem(ctx, #{v.c})"
+  end
+
+  defp int_stored(%{t: :u64} = v, e), do: narrowed(%{v | c: "defk_u64_sat(#{v.c})", t: :i64}, e)
+  defp int_stored(v, e), do: narrowed(v, e)
 
   defp ctype_elem(:u8), do: "uint8_t"
   defp ctype_elem(e), do: "#{String.replace(to_string(e), "i", "int")}_t"
@@ -3999,6 +4257,7 @@ defmodule Defk.Compiler do
   defp decl_locals(k), do: Enum.map(k.decls, fn {c, ct} -> "#{ct} #{c} = {0};\n" end)
 
   defp to_term(c, :i64), do: "enif_make_int64(env, #{c})"
+  defp to_term(c, :u64), do: "enif_make_uint64(env, #{c})"
   defp to_term(c, :f64), do: "defk_make_f64(ctx, env, #{c})"
   defp to_term(c, :bool), do: "defk_make_bool(env, #{c})"
   defp to_term(c, {:arr, _}), do: "defk_make_arr(env, ctx, (#{c}).data)"
@@ -4017,16 +4276,17 @@ defmodule Defk.Compiler do
   end
 
   defp ctype(:i64), do: "int64_t"
+  defp ctype(:u64), do: "uint64_t"
   defp ctype(:f64), do: "double"
   defp ctype(:bool), do: "int"
   defp ctype({:arr, e}), do: "defk_arr_#{e}"
   defp ctype(:bitstring), do: "defk_bits"
   defp ctype({:c, ct}), do: ct
 
-  defp to_f(%{t: :i64, c: c}), do: "((double)#{c})"
+  defp to_f(%{t: t, c: c}) when t in @ints, do: "((double)#{c})"
   defp to_f(%{c: c}), do: c
 
-  defp numeric?(v), do: v.t in [:i64, :f64]
+  defp numeric?(v), do: v.t in [:i64, :u64, :f64]
   # `at` is the operand's expression; `op` names what takes it
   defp numeric!(v, at, op) do
     numeric?(v) ||
@@ -4076,7 +4336,7 @@ defmodule Defk.Compiler do
   end
 
   # A module attribute whose value is not in the kernel subset: undefined
-  # where the kernel is defined, an integer outside i64, or a value that is
+  # where the kernel is defined, an integer outside i64 and u64, or a value that is
   # not a number, a boolean or a binary.
   @spec attribute!(term()) :: no_return()
   defp attribute!({:@, _, [{name, _, _}]} = node) do
@@ -4089,7 +4349,7 @@ defmodule Defk.Compiler do
         )
 
       {:ok, n} when is_integer(n) ->
-        err!(node, "integer-literal", "@#{name} is #{n}, which does not fit in i64",
+        err!(node, "integer-literal", "@#{name} is #{n}, which does not fit in i64 or u64",
           hint: "use a value that fits, or a float attribute and compute in f64"
         )
 
@@ -4241,7 +4501,8 @@ defmodule Defk.Compiler do
   # from 0.0 the way Erlang's =:= does.
   defp compare_numeric_c(op, va, vb, node) do
     cond do
-      op in [:===, :!==] and va.t != vb.t ->
+      # an integer is never === a float; an i64 and a u64 are both integers
+      op in [:===, :!==] and (va.t == :f64 or vb.t == :f64) and va.t != vb.t ->
         if op == :===, do: "0", else: "1"
 
       op in [:===, :!==] and va.t == :f64 and vb.t == :f64 ->
@@ -4252,11 +4513,13 @@ defmodule Defk.Compiler do
       va.t == vb.t ->
         "(#{va.c} #{cop(op)} #{vb.c})"
 
-      va.t == :i64 and vb.t == :f64 ->
-        "(defk_cmp_i64_f64(#{va.c}, #{vb.c}) #{cop(op)} 0)"
+      # i64 or u64 against f64, u64 against i64: exact values, as Erlang
+      # compares them (cmp(a, b) OP 0, and cmp(b, a) = -cmp(a, b))
+      cmp = mixed_cmp(va.t, vb.t) ->
+        "(defk_cmp_#{cmp}(#{va.c}, #{vb.c}) #{cop(op)} 0)"
 
-      va.t == :f64 and vb.t == :i64 ->
-        "(0 #{cop(op)} defk_cmp_i64_f64(#{vb.c}, #{va.c}))"
+      cmp = mixed_cmp(vb.t, va.t) ->
+        "(0 #{cop(op)} defk_cmp_#{cmp}(#{vb.c}, #{va.c}))"
 
       true ->
         err!(
@@ -4267,6 +4530,10 @@ defmodule Defk.Compiler do
         )
     end
   end
+
+  defp mixed_cmp(:i64, :f64), do: "i64_f64"
+  defp mixed_cmp(:u64, t) when t in [:i64, :f64], do: "u64_#{t}"
+  defp mixed_cmp(_, _), do: nil
 
   defp fmt({:arr, e}), do: "[#{e}]"
   defp fmt({:tuple, ts}), do: "{#{Enum.map_join(ts, ", ", &fmt/1)}}"

@@ -1,7 +1,8 @@
 # Masked arithmetic (defk-n4r.2, CONTEXT.md): the + - * neg bsl tree directly
 # under band(expr, 2^k - 1) is computed with wrapping machine arithmetic and
 # masked once, which gives Elixir's exact result (band of the bignum) and
-# never raises; wrap64(expr) wraps the same tree to the 64-bit pattern
+# never raises (band bor bxor bnot join the tree, k = 64 and u64 are in
+# test/u64_test.exs, defk-wlu); wrap64(expr) wraps the same tree to the 64-bit pattern
 # (Defk.Bits.wrap64/1), while band(expr, -1) is Elixir's identity, checked
 # like any band whose operand is not a 2^k - 1 mask. Anything else in
 # the tree is a leaf and is checked as usual; a mask that is not 2^k - 1 gets
@@ -54,8 +55,9 @@ defmodule Defk.MaskedArithTest.K do
   defk(leaf_rem(x :: i64, y :: i64) :: i64, do: band(x * y + rem(x * y, 7), 255))
   # bsr is a leaf, exact
   defk(leaf_bsr(x :: i64, y :: i64) :: i64, do: band(bsr(x, 3) * y, 0xFFFF))
-  # a bsl by a non-literal count is a leaf, checked
-  defk(leaf_bsl(x :: i64, n :: i64) :: i64, do: band(bsl(x, n) + 1, 255))
+  # a bsl by a non-literal count is in the tree (defk-wlu): it wraps, and a
+  # negative count raises
+  defk(var_bsl(x :: i64, n :: i64) :: i64, do: band(bsl(x, n) + 1, 255))
 
   # not masks: checked
   defk(not_mask(x :: i64, y :: i64) :: i64, do: band(x * y, 254))
@@ -187,15 +189,18 @@ defmodule Defk.MaskedArithTest do
     end
   end
 
-  test "leaves are checked: div, rem, a bsl by a variable count" do
+  test "leaves are checked: div, rem; a bsl by a variable count wraps" do
     assert {:raise, %ArithmeticError{message: "div/2 by zero"}} = agrees(:leaf_div, [1, 0])
     assert agrees(:leaf_div, [@min, 1]) == {:ok, band(@min * 3, 255)}
     assert {:raise, %ArithmeticError{} = e} = agrees(:leaf_rem, [@max, 2])
     assert Defk.Test.reason(e) == :overflow
     assert agrees(:leaf_rem, [3, 5]) == {:ok, band(15 + rem(15, 7), 255)}
     assert agrees(:leaf_bsr, [@min, @max]) == {:ok, band((@min >>> 3) * @max, 0xFFFF)}
-    assert {:raise, %ArithmeticError{}} = agrees(:leaf_bsl, [1, 63])
-    assert agrees(:leaf_bsl, [1, 62]) == {:ok, band((1 <<< 62) + 1, 255)}
+    assert agrees(:var_bsl, [1, 63]) == {:ok, 1}
+    assert agrees(:var_bsl, [3, 7]) == {:ok, band((3 <<< 7) + 1, 255)}
+    assert agrees(:var_bsl, [@max, 200]) == {:ok, 1}
+    assert {:raise, %ArithmeticError{} = e} = agrees(:var_bsl, [1, -1])
+    assert Defk.Test.reason(e) == :negative_shift
   end
 
   test "a mask that is not 2^k - 1, or not a literal, gets the checked form" do
@@ -262,8 +267,8 @@ defmodule Defk.MaskedArithTest do
     msg = rejection("wrap64(x * 1.5)", "x :: i64")
     assert whats(msg) == ["wrap64/1 takes integers, and x * 1.5 is f64"]
 
-    # 2^64 - 1 is no i64 literal: wrap64/1 is the 64-bit wrap
-    msg = rejection("band(x * x, 0xFFFFFFFFFFFFFFFF)", "x :: i64")
+    # past 2^64 - 1 no literal and no mask
+    msg = rejection("band(x * x, 0x1FFFFFFFFFFFFFFFF)", "x :: i64")
     assert codes(msg) == ["integer-literal"]
   end
 
@@ -291,7 +296,7 @@ defmodule Defk.MaskedArithTest do
     leaf_div: [],
     leaf_rem: [],
     leaf_bsr: [],
-    leaf_bsl: [args: fixed_list([G.i64(), G.i64(-70..70, [@min, @max])])],
+    var_bsl: [args: fixed_list([G.i64(), G.i64(-70..70, [@min, @max])])],
     not_mask: [],
     var_mask: [],
     pick: [],

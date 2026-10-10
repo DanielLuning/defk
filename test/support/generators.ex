@@ -71,6 +71,28 @@ defmodule Defk.Generators do
     ])
   end
 
+  @u64_edges [
+    0,
+    1,
+    2,
+    @i64_max,
+    @i64_max + 1,
+    @i64_max + 2,
+    2 ** 64 - 1,
+    2 ** 64 - 2,
+    2 ** 32,
+    2 ** 53 + 1
+  ]
+
+  @doc "Any u64: uniform, small, or an edge value (2^63 - 1, 2^63, 2^64 - 1, ...)."
+  def u64 do
+    frequency([
+      {4, integer(0..(2 ** 64 - 1))},
+      {2, integer(0..1000)},
+      {3, member_of(@u64_edges)}
+    ])
+  end
+
   @doc """
   An i64 in `range` (uniform, the range's ends, or an edge value inside it),
   or one of `extra`. For arguments that set a loop's trip count, where an
@@ -211,6 +233,7 @@ defmodule Defk.Generators do
   def pack(:f64, list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
   def pack(:i64, list), do: for(x <- list, into: <<>>, do: <<x::signed-64-native>>)
   def pack(:u8, list), do: :erlang.list_to_binary(list)
+  def pack(:u64, list), do: for(x <- list, into: <<>>, do: <<x::unsigned-64-native>>)
   def pack(:i16, list), do: for(x <- list, into: <<>>, do: <<x::signed-16-native>>)
   def pack(:i32, list), do: for(x <- list, into: <<>>, do: <<x::signed-32-native>>)
   def pack(:f32, list), do: for(x <- list, into: <<>>, do: <<x::float-32-native>>)
@@ -218,6 +241,7 @@ defmodule Defk.Generators do
   defp elem(:f64), do: f64()
   defp elem(:i64), do: i64()
   defp elem(:u8), do: integer(0..255)
+  defp elem(:u64), do: u64()
   defp elem(:i16), do: narrow_int(16)
   defp elem(:i32), do: narrow_int(32)
   # an f64 that rounds to a finite f32 (|x| < 2^127), of any magnitude, or an
@@ -249,6 +273,7 @@ defmodule Defk.Generators do
 
   @doc "A generator for a kernel parameter of `type`."
   def for_type(:i64), do: i64()
+  def for_type(:u64), do: u64()
   def for_type(:f64), do: f64()
   def for_type(:bool), do: bool()
   def for_type({:arr, e}), do: array(e)
@@ -266,6 +291,7 @@ defmodule Defk.Generators do
 
     case type do
       :i64 -> member_of(common ++ bignums ++ [0.0, 1.0, -0.0, true, "1"])
+      :u64 -> member_of(common ++ [-1, @i64_min, 2 ** 64, 2 ** 100, 0.0, 1.0, true, "1"])
       :f64 -> member_of(common ++ bignums ++ [true, "1.0"])
       :bool -> member_of(common ++ [0, 1, 1.0, :yes, "true"])
       {:arr, :u8} -> member_of(common ++ [1, 1.0, true, <<1, 2, 3::4>>])

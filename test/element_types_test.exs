@@ -395,7 +395,7 @@ defmodule Defk.ElementTypesTest do
     """
 
     e = assert_raise CompileError, fn -> Code.compile_string(src) end
-    assert Exception.message(e) =~ "f64, f32, i64, i32, i16 and u8"
+    assert Exception.message(e) =~ "f64, f32, i64, i32, i16, u8 and u64"
 
     src = """
     defmodule Defk.ElementTypesTest.BadAlloc do
@@ -405,7 +405,7 @@ defmodule Defk.ElementTypesTest do
     """
 
     e = assert_raise CompileError, fn -> Code.compile_string(src) end
-    assert Exception.message(e) =~ "f64, f32, i64, i32, i16 and u8"
+    assert Exception.message(e) =~ "f64, f32, i64, i32, i16, u8 and u64"
   end
 
   # ---------------------------------------------------- agreement properties --
