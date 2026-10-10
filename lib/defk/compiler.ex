@@ -1904,7 +1904,7 @@ defmodule Defk.Compiler do
         err!(
           node,
           "array-in-branch",
-          "this #{name} gives an array (#{fmt(t)})#{of}; arrays from an #{name} are not supported yet",
+          "this #{name} gives an array (#{fmt(t)})#{of}; arrays from #{name} branches are not supported yet",
           rewrite
         )
 
