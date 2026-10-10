@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-09T21:55:15Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 4,
-  "status": "open",
+  "status": "in_progress",
   "title": "Keccak-f[1600] permutation: statement order and temporaries change speed by 1.5x (register spills)",
   "type": "task",
-  "updated_at": "2026-10-09T21:55:15Z"
+  "updated_at": "2026-10-10T10:50:45Z"
 }
