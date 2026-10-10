@@ -42,6 +42,11 @@
 typedef struct { double *data; int64_t len; } defk_arr_f64;
 typedef struct { int64_t *data; int64_t len; } defk_arr_i64;
 typedef struct { uint8_t *data; int64_t len; } defk_arr_u8;
+/* narrow element types (defk-4ai): only inside arrays; a read widens to
+   int64_t / double, a write is range-checked (defk_to_i16 ... defk_to_f32) */
+typedef struct { int16_t *data; int64_t len; } defk_arr_i16;
+typedef struct { int32_t *data; int64_t len; } defk_arr_i32;
+typedef struct { float *data; int64_t len; } defk_arr_f32;
 
 /* ---- per-call context (first member of every frame) --------------------- */
 
@@ -195,6 +200,9 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
 DEFK_ALLOC_FN(f64, double)
 DEFK_ALLOC_FN(i64, int64_t)
 DEFK_ALLOC_FN(u8, uint8_t)
+DEFK_ALLOC_FN(i16, int16_t)
+DEFK_ALLOC_FN(i32, int32_t)
+DEFK_ALLOC_FN(f32, float)
 
 /*
  * Array value semantics (defk-auo): a copy of `src` in a new owned binary,
@@ -213,6 +221,9 @@ DEFK_ALLOC_FN(u8, uint8_t)
 DEFK_COPY_FN(f64, double)
 DEFK_COPY_FN(i64, int64_t)
 DEFK_COPY_FN(u8, uint8_t)
+DEFK_COPY_FN(i16, int16_t)
+DEFK_COPY_FN(i32, int32_t)
+DEFK_COPY_FN(f32, float)
 
 /* Hand an owned array back to the BEAM as a binary (ownership transfers). */
 static ERL_NIF_TERM defk_make_arr(ErlNifEnv *env, defk_ctx *ctx, void *data) {
@@ -562,6 +573,9 @@ static inline int defk_feq_exact(double a, double b) {
 DEFK_ACCESS_FN(f64, double)
 DEFK_ACCESS_FN(i64, int64_t)
 DEFK_ACCESS_FN(u8, uint8_t)
+DEFK_ACCESS_FN(i16, int16_t)
+DEFK_ACCESS_FN(i32, int32_t)
+DEFK_ACCESS_FN(f32, float)
 
 /*
  * Word loads from a [u8] (u64_le(bytes, i) and friends): the unsigned
@@ -660,6 +674,35 @@ static inline uint8_t defk_to_u8(defk_ctx *ctx, int64_t v) {
   if (DEFK_UNLIKELY(v < 0 || v > 255)) defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in u8", (long long)v);
   return (uint8_t)v;
 }
+static inline int16_t defk_to_i16(defk_ctx *ctx, int64_t v) {
+  if (DEFK_UNLIKELY(v < INT16_MIN || v > INT16_MAX))
+    defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in i16", (long long)v);
+  return (int16_t)v;
+}
+static inline int32_t defk_to_i32(defk_ctx *ctx, int64_t v) {
+  if (DEFK_UNLIKELY(v < INT32_MIN || v > INT32_MAX))
+    defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in i32", (long long)v);
+  return (int32_t)v;
+}
+
+/*
+ * An [f32] write: v rounded to nearest, as Elixir's <<v::float-32-native>>
+ * (the C conversion under the default rounding mode). Underflow to 0.0 and
+ * subnormals are Elixir's result too. A value that rounds to +-inf, which
+ * Elixir would store, raises (a limit, defk-dtw.13). v is finite (every float
+ * operation checked it), so the converted value is inf exactly when it
+ * overflowed. In a flagged strip the DEFK_NF_ form flags it instead, and the
+ * replay raises here (defk-q1c: f32 writes feed the strip's flag).
+ */
+__attribute__((noreturn, cold)) static void defk_f32_range(defk_ctx *ctx, double v) {
+  defk_fail(ctx, DEFK_E_ARG, "value %.17g does not fit in f32", v);
+}
+static inline float defk_to_f32(defk_ctx *ctx, double v) {
+  float f = (float)v;
+  if (DEFK_UNLIKELY(!(__builtin_fabsf(f) <= 0x1.fffffep+127f))) defk_f32_range(ctx, v);
+  return f;
+}
+#define DEFK_NF_to_f32(C, V) ((float)defk_nf_r(&defk_nf, (double)(float)(V)))
 
 /*
  * The bitstring accumulator (defk-cmr): acc = <<acc::bitstring, v::size(n)>>.

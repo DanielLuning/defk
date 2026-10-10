@@ -165,11 +165,12 @@ That is a defk bug or a broken toolchain, not a kernel error.
 | `i64` | a signed 64-bit integer | an integer in -2^63..2^63-1; anything else (a float, a bignum) raises `ArgumentError` "argument N (name) must be an integer fitting in i64" | an integer |
 | `f64` | a double | a float, or an integer that fits in `i64` (converted to a float); anything else raises `ArgumentError` "argument N (name) must be a number" | a float, always finite: any operation that would make inf or NaN raised first |
 | `bool` | `true` or `false` | `true` or `false`; anything else (including `nil`) raises `ArgumentError` "argument N (name) must be a boolean" | `true` or `false` |
-| `[f64]`, `[i64]`, `[u8]` | an array of that element type | a binary of packed native-endian elements; not a binary, or a byte size that is not a multiple of the element size, raises `ArgumentError` | a binary of packed native-endian elements |
+| `[f64]`, `[i64]`, `[u8]`, `[f32]`, `[i32]`, `[i16]` | an array of that element type | a binary of packed native-endian elements; not a binary, or a byte size that is not a multiple of the element size, raises `ArgumentError` | a binary of packed native-endian elements |
 | `{t1, t2, ...}` | see below | not allowed ([`tuple-parameter`](#tuple-parameter)) | a tuple |
 | `bitstring` | a [bitstring accumulator](#the-bitstring-accumulator) | not allowed ([`bitstring-use`](#bitstring-use)) | a bitstring (any number of bits) |
 
-**Supported:** `i64`, `f64`, `bool`, `[f64]`, `[i64]`, `[u8]`. Any other type
+**Supported:** `i64`, `f64`, `bool`, `[f64]`, `[f32]`, `[i64]`, `[i32]`,
+`[i16]`, `[u8]`. Any other type
 name is [`unknown-type`](#unknown-type), whose hint names the kernel type for
 the Elixir one (`integer` is `i64`, `float` and `number` are `f64`, `binary` is
 `[u8]`).
@@ -188,8 +189,31 @@ nest ([`nested-tuple`](#nested-tuple)), a branch cannot give one
 ([`tuple-argument`](#tuple-argument)), and a call to a kernel that returns
 one is destructured at once (`{out, n} = fill(out, v)`).
 
-An array's **element type** is `f64`, `i64` or `u8`. Reading a `[u8]` element
-gives an `i64` in 0..255.
+An array's **element type** is `f64`, `f32`, `i64`, `i32`, `i16` or `u8`
+(the unknown-type error for any other, such as `[u16]`, lists these). The
+narrow ones (`f32`, `i32`, `i16`, `u8`) exist only inside arrays; there are no
+narrow scalars. Reading an element widens it exactly, as Elixir's bitstring
+match does: a `[u8]`, `[i16]` or `[i32]` element is an `i64` in that type's
+range, an `[f32]` element is the `f64` of the same value. All arithmetic is
+`i64` or `f64`, never `f32`. A write must fit the element type (see
+[Writing](#writing)).
+
+An Elixir caller builds and reads these arrays as binaries of native-endian
+elements:
+
+| Element type | Build | Read |
+|---|---|---|
+| `f64` | `for x <- xs, into: <<>>, do: <<x::float-64-native>>` | `for <<x::float-64-native <- bin>>, do: x` |
+| `f32` | `for x <- xs, into: <<>>, do: <<x::float-32-native>>` | `for <<x::float-32-native <- bin>>, do: x` |
+| `i64` | `for x <- xs, into: <<>>, do: <<x::signed-64-native>>` | `for <<x::signed-64-native <- bin>>, do: x` |
+| `i32` | `for x <- xs, into: <<>>, do: <<x::signed-32-native>>` | `for <<x::signed-32-native <- bin>>, do: x` |
+| `i16` | `for x <- xs, into: <<>>, do: <<x::signed-16-native>>` | `for <<x::signed-16-native <- bin>>, do: x` |
+| `u8` | `:erlang.list_to_binary(xs)` | `:binary.bin_to_list(bin)` |
+
+`Nx.to_binary/1` of an `{:f, 32}`, `{:s, 16}`, ... tensor is the same layout.
+Building an `f32` element rounds to nearest; a value that rounds to inf
+(over about 3.4028235e38) makes inf bits, which the kernel rejects when it
+reads them (see [Inputs](#inputs)).
 
 **Unsupported:** maps, structs, lists, strings, atoms other than `true` and
 `false`, `nil`, functions, and arrays of `bool` or tuples. A kernel that needs
@@ -271,7 +295,7 @@ bit Elixir's. A float operation whose result would be inf or NaN raises `Arithme
 at that operation, as Elixir does: `1.0e308 * 10.0`, `x / 0.0`, `0.0 / 0.0`,
 `sqrt(-1.0)`, `log(0.0)`, `exp(1000.0)`, `:math.pow(10.0, 400.0)`. This holds
 even when the value would never be returned. Underflow to `0.0` or a subnormal
-does not raise. An `[f64]` input element whose bits are inf or NaN raises
+does not raise. An `[f64]` or `[f32]` input element whose bits are inf or NaN raises
 `ArgumentError` when it is read; elements never read don't. An `if`/`cond` arm
 that isn't taken never raises. Messages differ from Elixir's (they name the
 operation, not the line); run the kernel in Elixir mode to find the line.
@@ -707,9 +731,12 @@ value, as in Elixir.
   gone after the loop. Reading it after the loop would give the array from
   before the loop, which is never what the code means, so it is a compile
   error ([`array-rebind-in-loop`](#array-rebind-in-loop)): write the array's
-  elements instead (`a[i] = v`, which does carry over), or use a new name
-  inside the loop. Binding it again in an `if` or `case` branch follows
-  Elixir's scoping like any variable.
+  elements instead (`a[i] = v`, which does carry over), carry the array as
+  a `reduce:` accumulator, which is how a rebound array such as
+  `{slots, n} = insert(slots, ...)` reaches the next iteration (see
+  [Array accumulators](#array-accumulators)), or use a new name inside the
+  loop. Binding it again in an `if` or `case` branch follows Elixir's
+  scoping like any variable.
 
 ## 6. Arrays
 
@@ -782,8 +809,9 @@ end
 
 ### Allocating
 
-**Supported:** `alloc(f64 | i64 | u8, n)` returns a new array of `n` elements,
-all zero. A malformed call is [`alloc-form`](#alloc-form).
+**Supported:** `alloc(type, n)`, with `type` one of `f64`, `f32`, `i64`,
+`i32`, `i16`, `u8`, returns a new array of `n` elements, all zero. A
+malformed call is [`alloc-form`](#alloc-form).
 
 - A negative `n` raises `ArgumentError` "alloc/2: negative length n".
 - More than 2^48 bytes (the user address space of 64-bit platforms) raises
@@ -809,13 +837,25 @@ accumulator.
   array parameter of a called kernel (which must then return it, see
   [Calls to other kernels](#calls-to-other-kernels)). The caller's binary is
   never changed.
-- The stored value must have the element type: `[f64]` takes an `f64` or an
-  `i64` (widened), `[i64]` takes an `i64`, `[u8]` takes an `i64`
-  ([`type-mismatch`](#type-mismatch) otherwise).
+- The stored value must have the element type's wide type: `[f64]` and
+  `[f32]` take an `f64` or an `i64` (widened), `[i64]`, `[i32]`, `[i16]` and
+  `[u8]` take an `i64` ([`type-mismatch`](#type-mismatch) otherwise).
 - A `[u8]` write of a value outside 0..255 raises `ArgumentError` "value 300
   does not fit in u8". Elixir's `<<300::8>>` would wrap; a kernel never
   wraps silently (a limit). Write `rem(v, 256)` for a non-negative `v` if
-  wrapping is what you want.
+  wrapping is what you want. Likewise an `[i16]` write outside
+  -32768..32767 raises "value 32768 does not fit in i16", and an `[i32]`
+  write outside -2^31..2^31-1 "... does not fit in i32".
+- An `[f32]` write rounds the `f64` to the nearest `f32`, as
+  `<<v::float-32-native>>` does (`0.1` is stored as `0.10000000149011612`).
+  A value that rounds to inf (`1.0e40`, or anything from
+  `3.4028235677973366e38` up) raises `ArgumentError` "value ... does not fit
+  in f32", where Elixir would store inf (a limit). Underflow is Elixir's:
+  `1.0e-50` stores `0.0`, `1.0e-40` an `f32` subnormal.
+- The range check is left out where the compiler proves the value fits, as
+  for a clamp: `out[i] = max(min(a[i] + b[i], 32_767), -32_768)` into an
+  `[i16]` stores without a check (and clang vectorises the loop to
+  saturating adds, like the hand-written C).
 - A write has no value, so it cannot end a block that needs one
   ([`write-as-value`](#write-as-value)).
 
@@ -876,6 +916,14 @@ where it cannot prove that:
   the array it passed (after the call, or in a later iteration): the callee
   copies. When the caller rebinds the result instead
   (`{out, n} = fill(out, v)`), the callee writes the caller's array in place.
+- **An array accumulator** (see [Array accumulators](#array-accumulators))
+  starts as a copy of its initial array when that is an input array, or
+  when another variable with the same buffer is read in the loop or after
+  it; and the array the body gives for the next iteration is copied on the
+  same test (an input array, an array from outside the loop that the loop
+  reads, or one array given to two accumulators). Otherwise the
+  accumulator's buffer is the loop's alone and every write to it, in the
+  body or in a called kernel that returns it, is in place.
 
 Renaming copies nothing: `b = a`, a swap `{prev, cur} = {cur, prev}`, passing
 an array to a kernel and returning one are each a pointer move. So does a
@@ -912,9 +960,10 @@ without a copy. Returning an input array it never writes is
 already has it.
 
 Arrays cannot be the value of an `if`, `cond` or `case`
-([`array-in-branch`](#array-in-branch), not supported yet), nor a `reduce:`
-or `Enum.reduce_while` accumulator
-([`array-accumulator`](#array-accumulator)).
+([`array-in-branch`](#array-in-branch), not supported yet). They can be a
+`reduce:` or `Enum.reduce_while` accumulator, alone or in a tuple, which is
+how an array rebound in a loop body is carried out of the loop (see
+[Array accumulators](#array-accumulators)).
 
 ### Inputs
 
@@ -923,6 +972,12 @@ aligned to the element size (for example a sub-binary at an odd byte offset)
 is copied once, into an aligned buffer, when the kernel starts. Either way the
 caller's binary is never changed: a write copies it first (see
 [Copies](#copies)).
+
+A binary whose byte size is not a multiple of the element size raises
+`ArgumentError` at the call, before the kernel runs: "argument 1 (a): byte
+size 5 is not a multiple of 4 (f32)". An `[f64]` or `[f32]` element whose
+bits are inf or NaN raises `ArgumentError` when it is read, as Elixir's
+`<<x::float-32-native>>` match fails on it; elements never read don't.
 
 ## 7. Control flow
 
@@ -987,7 +1042,8 @@ end
 **Supported with restrictions.** Generators:
 
 - `x <- first..last` and `x <- first..last//step` over `i64` bounds.
-- `x <- array`: each element in order (a `[u8]` element is an `i64`).
+- `x <- array`: each element in order, widened (a `[u8]`, `[i16]` or
+  `[i32]` element is an `i64`, an `[f32]` element an `f64`).
 
 Several generators nest, and filters (any `bool` expression) skip the rest of
 the body. Without `reduce:`, a `for` is a statement and its body's value is
@@ -1005,7 +1061,9 @@ end
   ([`reduce-clauses`](#reduce-clauses)). The accumulator may be a tuple,
   `{a, b} -> ...`, with an initial tuple of the same size
   ([`accumulator-shape`](#accumulator-shape)); other accumulator patterns are
-  [`accumulator-pattern`](#accumulator-pattern).
+  [`accumulator-pattern`](#accumulator-pattern). An accumulator, or a tuple
+  element of one, may be an array (see
+  [Array accumulators](#array-accumulators)).
 - A `for` without `reduce:` used as a value, and `into:`, are
   [`for-collect`](#for-collect); other options are
   [`for-option`](#for-option); a generator over anything but a range or an
@@ -1052,6 +1110,52 @@ end
 - There is no `while`, `break` or `return`, and no `Enum.reduce/3`
   ([`enum-reduce`](#enum-reduce)) or `Enum.find`/`find_index`
   ([`enum-find`](#enum-find)) yet.
+
+### Array accumulators
+
+**Supported:** an array, alone or as an element of a tuple accumulator, in
+`for ..., reduce:` and `Enum.reduce_while/3`. This is how a loop body binds
+an array again, typically through a kernel that writes it and returns it,
+and carries the result to the next iteration and out of the loop:
+
+```elixir
+defk insert(slots :: [i64], counts :: [i64], key :: i64) :: {[i64], [i64], i64} do
+  j = band(key, len(slots) - 1)
+  new = if counts[j] == 0, do: 1, else: 0
+  slots[j] = key
+  counts[j] = counts[j] + 1
+  {slots, counts, new}
+end
+
+defk tally(keys :: [i64]) :: {[i64], [i64], i64} do
+  for k <- keys, reduce: {alloc(i64, 64), alloc(i64, 64), 0} do
+    {slots, counts, n} ->
+      {slots, counts, new} = insert(slots, counts, k)
+      {slots, counts, n + new}
+  end
+end
+```
+
+- The value the body gives (or the `acc` of `{:cont, acc}` and
+  `{:halt, acc}`) is the accumulator of the next iteration, and after the
+  last one the loop's value, as in Elixir. `tally` returns both tables.
+- **The accumulator array is threaded in place.** Its buffer is the loop's
+  own, so the body's writes, and those of a called kernel that returns it,
+  go to that buffer, and `tally` copies nothing. The initial array, or a
+  new value, is copied first only where another variable could see the
+  change (see [Copies](#copies)): `tally(keys)` with
+  `reduce: {slots0, ...}` copies `slots0` once, before the loop, if
+  `slots0` is read after it.
+- An array cannot be the value of an `if`, `cond` or `case`
+  ([`array-in-branch`](#array-in-branch)), so a body that changes the array
+  only sometimes writes its elements in a branch, or calls the kernel that
+  writes it on every iteration. In `Enum.reduce_while/3` each tail is its
+  own value, so `if done, do: {:halt, {slots, n}}, else: {:cont, {slots, n + 1}}`
+  works.
+- Elixir mode runs the same `for ..., reduce:` or `Enum.reduce_while/3`,
+  with the arrays as binaries.
+
+(defk-n4r.10)
 
 ### `raise`
 
@@ -1310,11 +1414,11 @@ end
 
 ### unknown-type
 
-Kernel types are i64, f64, bool, [f64], [i64], [u8] and tuples of them for results.
+Kernel types are i64, f64, bool, arrays of f64, f32, i64, i32, i16 and u8 ([f64], [f32], [i64], [i32], [i16], [u8]) and tuples of them for results; bitstring is a result type too (the bitstring accumulator).
 
 - kind: a mistake to fix (in the kernel or the build)
 - why: a kernel works on native numbers and packed arrays, and these are the types it has
-- hint: use i64, f64, bool, [f64], [i64] or [u8] (a tuple of them for a result)
+- hint: use i64, f64, bool, [f64], [f32], [i64], [i32], [i16] or [u8] (a tuple of them for a result)
 
 Rejected:
 
@@ -1874,7 +1978,7 @@ end
 Only arrays can be indexed with a[i].
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a[i] reads an element of an array ([f64], [i64] or [u8]), and this value is not one
+- why: a[i] reads an element of an array ([f64], [f32], [i64], [i32], [i16] or [u8]), and this value is not one
 - hint: index an array
 
 Rejected:
@@ -1971,7 +2075,7 @@ end
 
 ### alloc-form
 
-alloc/2 takes an element type (f64, i64 or u8) and a length.
+alloc/2 takes an element type (f64, f32, i64, i32, i16 or u8) and a length.
 
 - kind: a mistake to fix (in the kernel or the build)
 - why: an array's element type is fixed when it is created
@@ -2463,38 +2567,6 @@ defk f(n :: i64) :: i64 do
   for i <- 1..n//1, reduce: 0 do
     acc -> if acc < 100, do: acc + i, else: acc
   end
-end
-```
-
-### array-accumulator
-
-Arrays are not accumulators; allocate the array before the loop and write it in the body.
-
-- kind: outside the kernel subset (permanent)
-- why: an accumulator is a number or a boolean (or a tuple of them); an array is written in place
-- hint: allocate the array before the loop and write it in the body
-
-Rejected:
-
-```elixir
-defk f(n :: i64) :: [f64] do
-  for i <- 0..(n - 1)//1, reduce: alloc(f64, n) do
-    out -> out
-  end
-end
-```
-
-Write instead:
-
-```elixir
-defk f(n :: i64) :: [f64] do
-  out = alloc(f64, n)
-
-  for i <- 0..(n - 1)//1 do
-    out[i] = float(i)
-  end
-
-  out
 end
 ```
 
@@ -3080,11 +3152,11 @@ end
 
 ### array-rebind-in-loop
 
-An array variable read after a loop is not bound again inside the loop body; write its elements instead.
+An array variable read after a loop is not bound again inside the loop body; write its elements, or carry it as a reduce accumulator.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` is what changes the array for the rest of the kernel
-- hint: write the array's elements in the loop (a[i] = v), or give the array bound inside the loop a new name
+- why: as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` changes the array for the rest of the kernel, and a reduce accumulator carries a rebound array to the next iteration and out of the loop
+- hint: write the array's elements in the loop (a[i] = v); to bind it again, as {a, k} = helper(a, ...) does, make it a reduce accumulator: {a, n} = for ..., reduce: {a, 0} do {a, n} -> ... end; or give the array bound inside the loop a new name
 
 Rejected:
 
@@ -3170,6 +3242,8 @@ bug.
 | an `i64` argument outside `i64` | any integer | `ArgumentError` "argument N (name) must be an integer fitting in i64" |
 | an `f64` argument that is an integer outside `i64` | converts | `ArgumentError` "argument N (name) must be a number" |
 | a `[u8]` write of a value outside 0..255 | `<<300::8>>` wraps | `ArgumentError` "value 300 does not fit in u8" |
+| an `[i16]` or `[i32]` write of a value outside its range | `<<32768::signed-16>>` wraps | `ArgumentError` "value 32768 does not fit in i16" |
+| an `[f32]` write of a value that rounds to inf | `<<1.0e40::float-32>>` stores inf | `ArgumentError` "value 1.0e40 does not fit in f32" |
 | a [bitstring accumulator](#the-bitstring-accumulator) segment `v::size(n)` with `v` outside `0..2^n - 1` (a negative `v` included) | keeps the low `n` bits | `ArgumentError` "bitstring segment value v does not fit in n bits" |
 | a bitstring segment size outside `0..64` | any non-negative size | `ArgumentError` "bitstring segment size n is outside 0..64" |
 | `alloc/2` of more than 2^48 bytes | (the VM would abort) | `ArgumentError` "alloc/2: length too large" |
@@ -3189,8 +3263,8 @@ bug.
 ## 13. Known divergences
 
 A divergence is a different value or behaviour without raising; the one rule
-does not allow any. The `Defk.Divergences` registry is still a placeholder
-(defk-813), so this list is kept by hand. Each entry is a bug with a ticket.
+does not allow any. There is no registry: this list is kept by hand, and each
+entry is a bug with a ticket until it is fixed or turned into a limit.
 
 None at the moment. (The last, an array write visible through another
 variable naming the same array, was removed by giving arrays value semantics,

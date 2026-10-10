@@ -49,7 +49,8 @@ defmodule Defk.Errors do
   # defk-w38), "module-attribute" (attributes are constants since defk-ivt),
   # "read-only-array" (an input array is copied before a write since
   # defk-auo), "tuple-return-call" (a kernel returning a tuple is called from
-  # kernels since defk-auo).
+  # kernels since defk-auo), "array-accumulator" (an owned array is threaded
+  # through a reduce accumulator since defk-n4r.10).
 
   @codes [
     # -- kernel definitions
@@ -76,9 +77,10 @@ defmodule Defk.Errors do
       code: "unknown-type",
       kind: :error,
       summary:
-        "Kernel types are i64, f64, bool, [f64], [i64], [u8] and tuples of them for results.",
+        "Kernel types are i64, f64, bool, arrays of f64, f32, i64, i32, i16 and u8 ([f64], [f32], [i64], [i32], [i16], [u8]) and tuples of them for results; bitstring is a result type too (the bitstring accumulator).",
       why: "a kernel works on native numbers and packed arrays, and these are the types it has",
-      hint: "use i64, f64, bool, [f64], [i64] or [u8] (a tuple of them for a result)",
+      hint:
+        "use i64, f64, bool, [f64], [f32], [i64], [i32], [i16] or [u8] (a tuple of them for a result)",
       example: "defk f(x :: integer) :: integer do\n  x\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  x\nend"
     },
@@ -307,7 +309,8 @@ defmodule Defk.Errors do
       code: "not-an-array",
       kind: :error,
       summary: "Only arrays can be indexed with a[i].",
-      why: "a[i] reads an element of an array ([f64], [i64] or [u8]), and this value is not one",
+      why:
+        "a[i] reads an element of an array ([f64], [f32], [i64], [i32], [i16] or [u8]), and this value is not one",
       hint: "index an array",
       example: "defk f(x :: i64) :: i64 do\n  x[0]\nend",
       rewrite: "defk f(x :: [i64]) :: i64 do\n  x[0]\nend"
@@ -347,7 +350,7 @@ defmodule Defk.Errors do
     %{
       code: "alloc-form",
       kind: :error,
-      summary: "alloc/2 takes an element type (f64, i64 or u8) and a length.",
+      summary: "alloc/2 takes an element type (f64, f32, i64, i32, i16 or u8) and a length.",
       why: "an array's element type is fixed when it is created",
       hint: "name the element type first",
       example: "defk f(n :: i64) :: [f64] do\n  alloc(n)\nend",
@@ -550,19 +553,6 @@ defmodule Defk.Errors do
         "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    acc when acc < 100 -> acc + i\n  end\nend",
       rewrite:
         "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    acc -> if acc < 100, do: acc + i, else: acc\n  end\nend"
-    },
-    %{
-      code: "array-accumulator",
-      kind: :subset,
-      summary:
-        "Arrays are not accumulators; allocate the array before the loop and write it in the body.",
-      why:
-        "an accumulator is a number or a boolean (or a tuple of them); an array is written in place",
-      hint: "allocate the array before the loop and write it in the body",
-      example:
-        "defk f(n :: i64) :: [f64] do\n  for i <- 0..(n - 1)//1, reduce: alloc(f64, n) do\n    out -> out\n  end\nend",
-      rewrite:
-        "defk f(n :: i64) :: [f64] do\n  out = alloc(f64, n)\n\n  for i <- 0..(n - 1)//1 do\n    out[i] = float(i)\n  end\n\n  out\nend"
     },
 
     # -- case
@@ -825,11 +815,11 @@ defmodule Defk.Errors do
       code: "array-rebind-in-loop",
       kind: :error,
       summary:
-        "An array variable read after a loop is not bound again inside the loop body; write its elements instead.",
+        "An array variable read after a loop is not bound again inside the loop body; write its elements, or carry it as a reduce accumulator.",
       why:
-        "as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` is what changes the array for the rest of the kernel",
+        "as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` changes the array for the rest of the kernel, and a reduce accumulator carries a rebound array to the next iteration and out of the loop",
       hint:
-        "write the array's elements in the loop (a[i] = v), or give the array bound inside the loop a new name",
+        "write the array's elements in the loop (a[i] = v); to bind it again, as {a, k} = helper(a, ...) does, make it a reduce accumulator: {a, n} = for ..., reduce: {a, 0} do {a, n} -> ... end; or give the array bound inside the loop a new name",
       example:
         "defk f(n :: i64) :: [i64] do\n  a = alloc(i64, n)\n\n  for i <- 0..(n - 1)//1 do\n    a = alloc(i64, n)\n    a[i] = i\n  end\n\n  a\nend",
       rewrite:

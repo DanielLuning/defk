@@ -84,6 +84,29 @@ defmodule Defk.BitstringTest.K do
     end)
   end
 
+  # an array accumulator beside a bitstring accumulator in one tuple
+  defk evens_and_bits(xs :: [i64]) :: {[i64], bitstring} do
+    {out, bits, _} =
+      for x <- xs, reduce: {alloc(i64, len(xs)), <<>>, 0} do
+        {out, bits, i} ->
+          out[i] = band(x, 0xFFFF) * 2
+          {out, <<bits::bitstring, band(x, 1)::1>>, i + 1}
+      end
+
+    {out, bits}
+  end
+
+  # the same, where the new array loses the initial one's length fact, so
+  # the loop body is lowered twice (with_acc_facts in the compiler)
+  defk regrown(xs :: [i64]) :: {[i64], bitstring} do
+    for x <- xs, reduce: {alloc(i64, 4), <<>>} do
+      {a, bits} ->
+        b = alloc(i64, len(a) + 1)
+        b[0] = band(x, 0xFFFF)
+        {b, <<bits::bitstring, band(x, 3)::2>>}
+    end
+  end
+
   # a called kernel returns a bitstring; the caller appends to it
   defk unary(n :: i64) :: bitstring do
     for _ <- 1..n//1, reduce: <<>> do
@@ -228,6 +251,21 @@ defmodule Defk.BitstringTest do
         assert b == <<a::bitstring, 1::1, x::64>>
         assert c == <<a::bitstring, 0::2>>
       end
+    end
+
+    test "a bitstring accumulator beside an array accumulator" do
+      xs = [3, 4, 7, 10, 1]
+      evens = i64s(Enum.map(xs, &(&1 * 2)))
+      bits = for x <- xs, into: <<>>, do: <<Bitwise.band(x, 1)::1>>
+      assert K.evens_and_bits(i64s(xs)) == {evens, bits}
+      assert agrees(:evens_and_bits, [i64s(xs)]) == {:ok, {evens, bits}}
+
+      out = i64s([1 | List.duplicate(0, 8)])
+      bits2 = for x <- xs, into: <<>>, do: <<Bitwise.band(x, 3)::2>>
+      assert K.regrown(i64s(xs)) == {out, bits2}
+      assert agrees(:regrown, [i64s(xs)]) == {:ok, {out, bits2}}
+      assert agrees(:regrown, [<<>>]) == {:ok, {i64s([0, 0, 0, 0]), <<>>}}
+      assert K.__defk_source__() =~ "regrown"
     end
 
     test "Enum.reduce_while and a called kernel's bitstring" do
@@ -467,6 +505,8 @@ defmodule Defk.BitstringTest do
     pack: [args: StreamData.fixed_list([G.array(:i64, of: G.i64(0..300)), G.i64(-2..70)])],
     at_offset: [args: StreamData.fixed_list([G.i64(-1..9), G.i64(0..3), G.i64(0..65)])],
     flags: [],
+    evens_and_bits: [],
+    regrown: [],
     header: [],
     forks: [],
     empty: [],

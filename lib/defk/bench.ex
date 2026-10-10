@@ -89,15 +89,7 @@ defmodule Defk.Bench do
         {:ok, defk} ->
           correct = Keyword.get(opts, :check, fn -> true end).()
           defk_us = best(defk, runs)
-          speedup = elixir_us / max(defk_us, 1)
-
-          %{
-            correct: correct,
-            elixir_ms: ms(elixir_us),
-            defk_ms: ms(defk_us),
-            speedup: Float.round(speedup, 2),
-            verdict: verdict(speedup)
-          }
+          Map.put(compare(elixir_us, defk_us), :correct, correct)
 
         :error ->
           %{
@@ -128,6 +120,35 @@ defmodule Defk.Bench do
     result
   end
 
+  @doc """
+  The pure arithmetic behind a report, over measured times in microseconds:
+  `%{elixir_ms, defk_ms, speedup, verdict}`. The verdict uses the unrounded
+  speedup.
+  """
+  def compare(elixir_us, defk_us) do
+    speedup = elixir_us / max(defk_us, 1)
+
+    %{
+      elixir_ms: ms(elixir_us),
+      defk_ms: ms(defk_us),
+      speedup: Float.round(speedup, 2),
+      verdict: verdict(speedup)
+    }
+  end
+
+  @doc "Defk's speedup over the native side, from times in ms (above 1: defk is faster)."
+  def native_speedup(native_ms, defk_ms), do: Float.round(native_ms / max(defk_ms, 0.001), 2)
+
+  @doc "One sweep row from times in ms."
+  def sweep_row(size, elixir_ms, defk_ms) do
+    %{
+      size: size,
+      elixir_ms: elixir_ms,
+      defk_ms: defk_ms,
+      speedup: native_speedup(elixir_ms, defk_ms)
+    }
+  end
+
   @doc "The verdict for a speedup of defk over the Elixir baseline."
   def verdict(s) when s >= @good, do: :good
   def verdict(s) when s >= 1.0, do: :marginal
@@ -148,8 +169,7 @@ defmodule Defk.Bench do
     native_us = best(fun, runs)
     native_ms = ms(native_us)
 
-    native_speedup =
-      if result.defk_ms, do: Float.round(native_ms / max(result.defk_ms, 0.001), 2)
+    native_speedup = if result.defk_ms, do: native_speedup(native_ms, result.defk_ms)
 
     Map.merge(result, %{
       native_ms: native_ms,
@@ -175,7 +195,7 @@ defmodule Defk.Bench do
       |> Enum.map(fn {size, elixir, defk} ->
         e = ms(best(elixir, runs))
         d = ms(best(defk, runs))
-        %{size: size, elixir_ms: e, defk_ms: d, speedup: Float.round(e / max(d, 0.001), 2)}
+        sweep_row(size, e, d)
       end)
 
     Map.merge(result, %{sweep: rows, crossover: crossover(rows)})

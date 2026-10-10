@@ -87,6 +87,16 @@ defmodule Defk.ElixirMode.Ops do
   def len_f64(a), do: Kernel.div(byte_size(a), 8)
   def len_i64(a), do: Kernel.div(byte_size(a), 8)
   def len_u8(a), do: byte_size(a)
+  def len_i16(a), do: Kernel.div(byte_size(a), 2)
+  def len_i32(a), do: Kernel.div(byte_size(a), 4)
+  def len_f32(a), do: Kernel.div(byte_size(a), 4)
+
+  @doc false
+  # bytes per element of [e]
+  def esize(:u8), do: 1
+  def esize(:i16), do: 2
+  def esize(e) when e in [:i32, :f32], do: 4
+  def esize(e) when e in [:i64, :f64], do: 8
 
   def get_f64(a, i) do
     case a do
@@ -106,7 +116,27 @@ defmodule Defk.ElixirMode.Ops do
     :binary.at(a, i)
   end
 
-  # an f64 element whose bits are inf or NaN (only an input array can hold
+  def get_i16(a, i) do
+    in_bounds!(a, i, 2)
+    <<_::binary-size(^i * 2), x::signed-16-native, _::binary>> = a
+    x
+  end
+
+  def get_i32(a, i) do
+    in_bounds!(a, i, 4)
+    <<_::binary-size(^i * 4), x::signed-32-native, _::binary>> = a
+    x
+  end
+
+  # f32 widens to the f64 of the same value, as the match does
+  def get_f32(a, i) do
+    case a do
+      <<_::binary-size(^i * 4), x::float-32-native, _::binary>> when i >= 0 -> x
+      _ -> get_failed(a, i, 4)
+    end
+  end
+
+  # an f64 or f32 element whose bits are inf or NaN (only an input array can hold
   # one): ArgumentError, reason :non_finite_input (defk-q1c)
   defp get_failed(a, i, esz) do
     in_bounds!(a, i, esz)
@@ -119,6 +149,22 @@ defmodule Defk.ElixirMode.Ops do
   def put_i64(a, i, x), do: put(a, i, 8, <<x::signed-64-native>>)
   def put_u8(a, i, x) when x in 0..255, do: put(a, i, 1, <<x>>)
   def put_u8(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in u8")
+  def put_i16(a, i, x) when x in -0x8000..0x7FFF, do: put(a, i, 2, <<x::signed-16-native>>)
+  def put_i16(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in i16")
+
+  def put_i32(a, i, x) when x in -0x80000000..0x7FFFFFFF,
+    do: put(a, i, 4, <<x::signed-32-native>>)
+
+  def put_i32(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in i32")
+
+  # rounded to nearest as the bitstring does; where that gives +-inf (which
+  # Elixir stores, and no match reads back) the write raises, as the kernel's
+  def put_f32(a, i, x) when is_float(x) do
+    case <<x::float-32-native>> do
+      <<_::float-32-native>> = bytes -> put(a, i, 4, bytes)
+      _ -> raise ArgumentError, "value #{inspect(x)} does not fit in f32"
+    end
+  end
 
   defp put(a, i, esz, bytes) do
     in_bounds!(a, i, esz)
@@ -167,6 +213,9 @@ defmodule Defk.ElixirMode.Ops do
   def elems_f64(a), do: Stream.map(0..(len_f64(a) - 1)//1, &get_f64(a, &1))
   def elems_i64(a), do: for(<<x::signed-64-native <- a>>, do: x)
   def elems_u8(a), do: :binary.bin_to_list(a)
+  def elems_i16(a), do: for(<<x::signed-16-native <- a>>, do: x)
+  def elems_i32(a), do: for(<<x::signed-32-native <- a>>, do: x)
+  def elems_f32(a), do: Stream.map(0..(len_f32(a) - 1)//1, &get_f32(a, &1))
 
   defp in_bounds!(a, i, esz) do
     len = Kernel.div(byte_size(a), esz)
@@ -216,7 +265,7 @@ defmodule Defk.ElixirMode.Ops do
 
   defp array!(a, n, p, e) do
     is_binary(a) || raise ArgumentError, "argument #{n} (#{p}) must be a binary of packed #{e}"
-    esz = if e == :u8, do: 1, else: 8
+    esz = esize(e)
 
     Kernel.rem(byte_size(a), esz) == 0 ||
       raise ArgumentError,
