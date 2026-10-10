@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-10T09:12:57Z",
   "created": "2026-10-05T15:08:11Z",
   "description": "Kernels declared yield: false compile with a clang warning \"variable 'v_rem_N' set but not used\": the strip-remaining counter is computed but DEFK_SHORT(R) expands to 1 without using it. Present on main before defk-jaj. Done when generated C for yield: false kernels compiles warning-free (e.g. mark the var unused or don't emit it under no-yield).",
   "id": "defk-5dd",
@@ -9,8 +10,8 @@
     "ready-for-agent"
   ],
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Fix 'set but not used' C warning in yield: false kernels",
   "type": "task",
-  "updated_at": "2026-10-10T09:05:52Z"
+  "updated_at": "2026-10-10T09:12:57Z"
 }
