@@ -9,6 +9,7 @@ defmodule Defk.Compiler do
   # the callee's loops are the caller's loops and yield like them.
   #
   # Types:  :i64 | :f64 | :bool | {:arr, :f64 | :i64 | :u8} | {:tuple, [type]}
+  #         | :bitstring (the bitstring accumulator, see "bitstrings")
 
   @scalars [:i64, :f64, :bool]
   @elems [:f64, :i64, :u8]
@@ -67,6 +68,12 @@ defmodule Defk.Compiler do
       end)
 
     sigs = Map.new(kernels, &{{&1.name, &1.arity}, &1})
+
+    # per kernel, the names it appends to: `<<>>` bound to one is a bitstring
+    Process.put(
+      :defk_bits_names,
+      Map.new(kernels, &{{&1.name, &1.arity}, Defk.Bitstring.accumulator_names(&1.body)})
+    )
 
     lowered =
       Enum.flat_map(kernels, fn k ->
@@ -315,6 +322,15 @@ defmodule Defk.Compiler do
   defp parse_param({:"::", _, [{p, _, ctx}, t]} = param) when is_atom(p) and is_atom(ctx) do
     ty = parse_type(t, param)
 
+    ty == :bitstring &&
+      err!(
+        param,
+        "bitstring-use",
+        "the bitstring parameter #{p} :: bitstring is not supported yet: a kernel builds bitstrings but does not take them",
+        hint: "pass bytes as a [u8] parameter",
+        rewrite: "#{p} :: [u8]"
+      )
+
     if match?({:tuple, _}, ty) do
       {:tuple, ts} = ty
 
@@ -348,6 +364,7 @@ defmodule Defk.Compiler do
 
   # `at` is the node an unknown type is reported at when the type has no position
   defp parse_type({t, _, ctx}, _) when t in @scalars and is_atom(ctx), do: t
+  defp parse_type({:bitstring, _, ctx}, _) when is_atom(ctx), do: :bitstring
   defp parse_type([{t, _, ctx}], _) when t in @elems and is_atom(ctx), do: {:arr, t}
   defp parse_type({a, b}, at), do: {:tuple, [parse_type(a, at), parse_type(b, at)]}
   defp parse_type({:{}, _, ts}, at), do: {:tuple, Enum.map(ts, &parse_type(&1, at))}
@@ -361,7 +378,7 @@ defmodule Defk.Compiler do
       boolean: "bool",
       number: "f64",
       binary: "[u8]",
-      bitstring: "[u8]",
+      bits: "bitstring",
       pos_integer: "i64",
       non_neg_integer: "i64"
     }
@@ -455,6 +472,7 @@ defmodule Defk.Compiler do
   defp coerce!(v, t, at, what, ret \\ nil)
   defp coerce!(%{t: t} = v, t, _at, _what, _ret), do: v
   defp coerce!(%{t: :i64} = v, :f64, _at, _what, _ret), do: %{v | c: to_f(v), t: :f64}
+  defp coerce!(%{bits0: true}, :bitstring, _at, _what, _ret), do: empty_bits()
 
   defp coerce!(v, t, at, what, nil) do
     subject = Enum.join([what | describe(at)], " ")
@@ -704,6 +722,16 @@ defmodule Defk.Compiler do
           "binding the tuple #{fmt(v.t)} to the variable #{name} is not in the kernel subset",
           rewrite: "{#{names}} = #{rhs}"
         )
+
+      # `acc = <<>>` where the kernel appends to acc (see "bitstrings");
+      # otherwise the empty [u8], which may still be returned as a bitstring
+      v[:bits0] && name in bits_names() ->
+        bind(var, empty_bits(), env, match)
+
+      v[:bits0] ->
+        name in env.guard && array_rebind_in_loop!(var, match)
+        {s, env} = bind_array(name, v, env)
+        {s, put_in(env.vars[name][:bits0], true)}
 
       match?({:arr, _}, v.t) ->
         name in env.guard && array_rebind_in_loop!(var, match)
@@ -1222,14 +1250,13 @@ defmodule Defk.Compiler do
   end
 
   # a binary literal, `"abc"` or `<<1, 2, 3>>`: the same static read-only [u8]
-  # as a binary attribute (defk-n4r.5)
-  defp lower_expr({:<<>>, _, _} = node, _env) do
-    case Defk.BinaryLiteral.bytes(node) do
-      {:ok, b} ->
-        {[], static_u8(b)}
-
-      {:error, why, opts} ->
-        err!(node, "binary-literal", Defk.BinaryLiteral.message(node, why), opts)
+  # as a binary attribute (defk-n4r.5); or an append to a bitstring
+  # accumulator, `<<acc::bitstring, ...>>` (see "bitstrings")
+  defp lower_expr({:<<>>, _, segs} = node, env) do
+    case Defk.Bitstring.parse(node) do
+      {:append, head, parts} -> lower_append(node, head, parts, env)
+      {:error, at, what, opts} -> err!(at, "bitstring-segment", what, opts)
+      :error -> binary_literal(node, segs)
     end
   end
 
@@ -1705,6 +1732,7 @@ defmodule Defk.Compiler do
           {sb, v} = lower_block(body, env)
           {c, body, cond, sb, v}
       end)
+      |> bits_arms()
 
     t = branch_type!(for({_, _, _, _, v} <- arms, v, do: v), name, node)
     tmp = fresh(name, t)
@@ -2018,6 +2046,11 @@ defmodule Defk.Compiler do
   end
 
   # `node` is the call, for the argument expressions
+  defp builtin(:len, [%{t: :bitstring}], node, _), do: bits_read!(node, arg(node, 0))
+
+  defp builtin(:bit_size, [%{t: :bitstring} = a], _node, _),
+    do: Map.merge(val("(#{a.c}).nbits", :i64), %{lo: 0})
+
   defp builtin(:len, [%{t: {:arr, _}} = a], _node, _) do
     # a view that is not a variable (e.g. a kernel call) is a new array each time it is evaluated
     own = if a.var, do: %{a.c => 0}, else: %{}
@@ -2104,6 +2137,7 @@ defmodule Defk.Compiler do
 
   @builtin_takes %{
     len: "an array",
+    bit_size: "a bitstring",
     div: "two i64 values",
     rem: "two i64 values",
     float: "a number",
@@ -2228,6 +2262,7 @@ defmodule Defk.Compiler do
     # bind each argument to a parameter once, as `p = arg` binds it
     {binds, vars} =
       Enum.zip_with([vals, k.params, args], fn [v, {p, t}, a] ->
+        v.t == :bitstring && bits_argument!(a, k)
         v = coerce!(v, t, a, "argument #{p} of #{k.name}/#{k.arity}")
 
         if match?({:arr, _}, t) do
@@ -2322,6 +2357,135 @@ defmodule Defk.Compiler do
       hint:
         "write the recursion as a loop: for ..., reduce: for a fold, Enum.reduce_while/3 to stop early",
       key: {:recursion, MapSet.new([key | cycle])}
+    )
+  end
+
+  # ----------------------------------------------------------- bitstrings --
+  # The bitstring accumulator (defk-cmr, Defk.Bitstring): a value of type
+  # :bitstring is a defk_bits {nbits, slot + 1} over a growable owned buffer
+  # (priv/defk_runtime.h), kept in the frame across yields like any local.
+  # `<<acc::bitstring, v::size(n), ...>>` evaluates acc and then every value
+  # and size left to right, as Elixir does, and appends the segments in order;
+  # each append checks 0 <= n <= 64 and 0 <= v < 2^n (a limit: Elixir keeps
+  # the low n bits). A value is never changed by a later append: the runtime
+  # appends in place only to a value that ends where its buffer ends, and
+  # copies an older value first. The empty binary literal `<<>>` is a [u8]
+  # marked bits0, and becomes the empty bitstring where it is bound to a name
+  # the kernel appends to, returned or assigned as a bitstring, or given by a
+  # branch whose other arms give one.
+
+  defp lower_append(node, head, parts, env) do
+    {sh, h} = lower_expr(head, env)
+    h = if h[:bits0], do: empty_bits(), else: h
+    h.t == :bitstring || bits_head!(node, head, h)
+    r = fresh("bits", :bitstring)
+
+    {ss, args} =
+      Enum.map_reduce(parts, [], fn {v_ast, n_ast}, acc ->
+        {sv, v} = lower_expr(v_ast, env)
+        v = coerce!(v, :i64, v_ast, "a bitstring segment value")
+        {sn, n} = lower_expr(n_ast, env)
+        n = coerce!(n, :i64, n_ast, "a bitstring segment size")
+        tv = fresh("seg", :i64)
+        {sn, nc} = segment_size(sn, n, n_ast)
+        {[sv, "#{tv} = #{v.c};\n", sn], [{tv, nc} | acc]}
+      end)
+
+    puts =
+      for {tv, nc} <- Enum.reverse(args), do: "#{r} = defk_bits_put(ctx, #{r}, #{tv}, #{nc});\n"
+
+    {[sh, "#{r} = #{h.c};\n", ss, puts], val(r, :bitstring, r)}
+  end
+
+  # a literal size is used as it is; any other is evaluated in its place
+  defp segment_size(_sn, n, n_ast) when is_integer(n_ast), do: {[], n.c}
+
+  defp segment_size(sn, n, _n_ast) do
+    tn = fresh("size", :i64)
+    {[sn, "#{tn} = #{n.c};\n"], tn}
+  end
+
+  defp binary_literal(node, segs) do
+    case Defk.BinaryLiteral.bytes(node) do
+      # `<<>>` may be the empty bitstring
+      {:ok, ""} when segs == [] ->
+        {[], Map.put(static_u8(""), :bits0, true)}
+
+      {:ok, b} ->
+        {[], static_u8(b)}
+
+      {:error, why, opts} ->
+        err!(node, "binary-literal", Defk.BinaryLiteral.message(node, why), opts)
+    end
+  end
+
+  defp empty_bits, do: val("((defk_bits){0, 0})", :bitstring)
+
+  # the names the current kernel appends to (Defk.Bitstring.accumulator_names/1)
+  defp bits_names,
+    do: Map.get(Process.get(:defk_bits_names, %{}), Process.get(:defk_fun), MapSet.new())
+
+  # the initial value `v` of accumulator pattern `p`
+  defp bits_init({n, _, ctx}, %{bits0: true} = v) when is_atom(n) and is_atom(ctx),
+    do: if(n in bits_names(), do: empty_bits(), else: v)
+
+  defp bits_init(_p, v), do: v
+
+  # the arms of a branch: `<<>>` beside a bitstring arm is the empty bitstring
+  defp bits_arms(arms) do
+    if Enum.any?(arms, &match?({_, _, _, _, %{t: :bitstring}}, &1)) do
+      Enum.map(arms, fn
+        {c, body, cond, sb, %{bits0: true}} -> {c, body, cond, sb, empty_bits()}
+        arm -> arm
+      end)
+    else
+      arms
+    end
+  end
+
+  @spec bits_head!(term(), term(), term()) :: no_return()
+  defp bits_head!(node, head, %{t: {:arr, :u8}}) do
+    err!(
+      head,
+      "bitstring-use",
+      "#{Macro.to_string(node)} appends to #{Macro.to_string(head)}, a [u8]: starting from an input bitstring is not supported yet",
+      why: "a bitstring accumulator starts from <<>> and is only appended to",
+      hint:
+        "start from <<>> and append the bytes: for b <- #{Macro.to_string(head)}, reduce: <<>> do acc -> <<acc::bitstring, b>> end"
+    )
+  end
+
+  defp bits_head!(_node, head, h) do
+    err!(
+      head,
+      "type-mismatch",
+      "#{Macro.to_string(head)} is appended to as a bitstring, and has type #{type_name(h)}"
+    )
+  end
+
+  # `node` reads bitstring `bits`
+  @spec bits_read!(term(), term()) :: no_return()
+  defp bits_read!(node, bits) do
+    hint =
+      if match?({:len, _, [_]}, node),
+        do: [rewrite: "bit_size(#{Macro.to_string(bits)})"],
+        else: [hint: "keep what the kernel needs to read in variables or an array as it appends"]
+
+    err!(
+      node,
+      "bitstring-use",
+      "#{Macro.to_string(node)} reads the bitstring #{Macro.to_string(bits)}: reading a bitstring accumulator is not supported yet (bit_size/1 measures it)",
+      hint
+    )
+  end
+
+  @spec bits_argument!(term(), term()) :: no_return()
+  defp bits_argument!(a, k) do
+    err!(
+      a,
+      "bitstring-use",
+      "passing the bitstring #{Macro.to_string(a)} to #{k.name}/#{k.arity} is not supported yet",
+      hint: "append in the caller: a called kernel can return the values and sizes to append"
     )
   end
 
@@ -2506,6 +2670,7 @@ defmodule Defk.Compiler do
 
   defp array_loop(name, src, rest, env, inner) do
     {s, a} = lower_expr(src, env)
+    a.t == :bitstring && bits_read!({:<-, [], [{name, [], nil}, src]}, src)
 
     match?({:arr, _}, a.t) ||
       err!(
@@ -2953,6 +3118,8 @@ defmodule Defk.Compiler do
 
     accs =
       Enum.zip_with(pats, inits, fn p, v ->
+        v = bits_init(p, v)
+
         match?({:arr, _}, v.t) &&
           err!(
             init_ast,
@@ -3648,6 +3815,7 @@ defmodule Defk.Compiler do
   defp to_term(c, :f64), do: "defk_make_f64(ctx, env, #{c})"
   defp to_term(c, :bool), do: "defk_make_bool(env, #{c})"
   defp to_term(c, {:arr, _}), do: "defk_make_arr(env, ctx, (#{c}).data)"
+  defp to_term(c, :bitstring), do: "defk_make_bits(env, ctx, #{c})"
 
   # -------------------------------------------------------------- helpers --
 
@@ -3665,6 +3833,7 @@ defmodule Defk.Compiler do
   defp ctype(:f64), do: "double"
   defp ctype(:bool), do: "int"
   defp ctype({:arr, e}), do: "defk_arr_#{e}"
+  defp ctype(:bitstring), do: "defk_bits"
   defp ctype({:c, ct}), do: ct
 
   defp to_f(%{t: :i64, c: c}), do: "((double)#{c})"
@@ -3765,6 +3934,8 @@ defmodule Defk.Compiler do
   defp attribute_fix(_name, _v), do: []
 
   @spec not_an_array!(term(), term(), term()) :: no_return()
+  defp not_an_array!(node, arr, %{t: :bitstring}), do: bits_read!(node, arr)
+
   defp not_an_array!(node, arr, a) do
     err!(
       node,

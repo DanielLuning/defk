@@ -73,6 +73,8 @@ defmodule Defk.Test do
     {"out of memory", :out_of_memory},
     {"negative length", :negative_length},
     {"does not fit in u8", :element_range},
+    {"bitstring segment size", :segment_size},
+    {"bitstring segment value", :segment_fit},
     {"step", :zero_step}
   ]
 

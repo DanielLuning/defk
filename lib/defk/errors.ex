@@ -752,6 +752,34 @@ defmodule Defk.Errors do
       example: "defk f(i :: i64) :: i64 do\n  t = <<1, 2, 300>>\n  t[i]\nend",
       rewrite: "defk f(i :: i64) :: i64 do\n  t = <<1, 2, 44>>\n  t[i]\nend"
     },
+    # -- the bitstring accumulator
+    %{
+      code: "bitstring-segment",
+      kind: :planned,
+      summary:
+        "An append to a bitstring accumulator takes unsigned big-endian integer segments: `v::size(n)`, `v::k` or `v`.",
+      why:
+        "a kernel appends integer bits; signed, little-endian, float and binary segments are not supported until a workload needs them",
+      hint: "write unsigned big-endian integer segments: v::size(n), v::k or v (8 bits)",
+      example:
+        "defk f(x :: i64) :: bitstring do\n  acc = <<>>\n  <<acc::bitstring, x::signed-8>>\nend",
+      rewrite:
+        "defk f(x :: i64) :: bitstring do\n  acc = <<>>\n  <<acc::bitstring, band(x, 255)::8>>\nend"
+    },
+    %{
+      code: "bitstring-use",
+      kind: :planned,
+      summary:
+        "A bitstring accumulator starts from `<<>>`, is appended to, measured with `bit_size/1` and returned; nothing else.",
+      why:
+        "a bitstring is a kernel's output: reading it, starting from an input binary, taking it as a parameter or passing it to another kernel is not supported yet",
+      hint:
+        "measure it with bit_size/1, and keep what the kernel needs to read in variables or an array",
+      example:
+        "defk f(n :: i64) :: i64 do\n  acc = <<>>\n  acc = <<acc::bitstring, n::8>>\n  len(acc)\nend",
+      rewrite:
+        "defk f(n :: i64) :: i64 do\n  acc = <<>>\n  acc = <<acc::bitstring, n::8>>\n  bit_size(acc)\nend"
+    },
     # -- raise
     %{
       code: "raise-value",
