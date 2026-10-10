@@ -3,7 +3,8 @@
   "blocked_by": [
     "defk-djy.3",
     "defk-djy.4",
-    "defk-djy.5"
+    "defk-djy.5",
+    "defk-djy.6"
   ],
   "blocks": [],
   "created": "2026-10-10T14:58:34Z",
@@ -15,5 +16,5 @@
   "status": "open",
   "title": "Docs cold test against the built HexDocs",
   "type": "task",
-  "updated_at": "2026-10-10T14:58:41Z"
+  "updated_at": "2026-10-10T14:58:42Z"
 }
