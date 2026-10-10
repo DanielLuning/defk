@@ -33,6 +33,16 @@ Each construct below is marked **supported**, **supported with restrictions**
 or **unsupported** (with the error code it gets). Examples are kernels inside a
 module that has `use Defk`; `iex>` lines show what a call returns or raises.
 
+The tests run every example (`test/language_doc_examples_test.exs`). A
+block with a kernel in it is followed by a block of `iex>` lines calling the
+module as `M` (or by its own `defmodule` name), which run in native code and
+in Elixir mode and must give the result shown; or it has one of these
+comments on the line above its opening fence: `<!-- defk-example compiles -->`
+(compiled only), `<!-- defk-example error: <code> -->` (must fail with that
+code), `<!-- defk-example skip: <reason> -->` (a fragment, not checked), or
+`<!-- defk-example known-failure: <ticket> -->` (checked, and must still fail
+until the ticket is fixed). A kernel block with none of these fails the tests.
+
 ## 1. What a kernel is, and the one rule
 
 A **kernel** is a function written in the kernel subset with `defk`, compiled
@@ -223,6 +233,7 @@ reads them (see [Inputs](#inputs)).
 `false`, `nil`, functions, and arrays of `bool` or tuples. A kernel that needs
 them is the wrong tool: pack the data into binaries in Elixir first.
 
+<!-- defk-example compiles -->
 ```elixir
 defk mean_var(a :: [f64]) :: {f64, f64} do
   {_n, mean, m2} =
@@ -322,6 +333,7 @@ non-negative integer Elixir has.
   `u64` when its new value is one, or when it meets a `u64` in one of the
   operations above, so `reduce: 0` folds hashes:
 
+  <!-- defk-example compiles -->
   ```elixir
   defk total(hashes :: [u64]) :: u64 do
     for h <- hashes, reduce: 0 do
@@ -494,6 +506,7 @@ constant expression of literals such as `(1 <<< 64) - 1`; and inside
 `wrap64(expr)`, the 64-bit wrap to an `i64` pattern. This is how hashes and
 checksums wrap:
 
+<!-- defk-example compiles -->
 ```elixir
 @mask64 0xFFFFFFFFFFFFFFFF
 
@@ -553,6 +566,7 @@ The rule, the same in native code and Elixir mode:
 
 MurmurHash3's 32-bit mixing stays in `i64` with 32-bit masks:
 
+<!-- defk-example compiles -->
 ```elixir
 defk mix32(h :: i64, k :: i64) :: i64 do
   k = band(rotl(band(k * 0xCC9E2D51, 0xFFFFFFFF), 15, 32) * 0x1B873593, 0xFFFFFFFF)
@@ -576,6 +590,7 @@ the binary itself. `""` and `<<>>` are a zero-length array (`len` is 0, any
 index raises); `<<>>` is also where a [bitstring
 accumulator](#the-bitstring-accumulator) starts.
 
+<!-- defk-example compiles -->
 ```elixir
 defk hex_digit(x :: i64) :: i64 do
   "0123456789abcdef"[band(x, 15)]
@@ -622,7 +637,7 @@ end
 ```
 
 ```
-iex> Mod.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
+iex> M.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
 <<41, 1::size(1)>>
 ```
 
@@ -699,6 +714,7 @@ arithmetic, as a range bound or step, as a `case` pattern
 compiler the same range as a literal mask, so with `@mask 255`,
 `table[band(h, @mask)]` skips its bounds check against a 256-element array.
 
+<!-- defk-example compiles -->
 ```elixir
 @s16_min -32_768
 @s16_max 32_767
@@ -887,6 +903,7 @@ and the big-endian `u64_be`, `u32_be`, `u16_be` read the unsigned 8-, 4- or
 - The load is unaligned and compiles to one machine load (plus a byte swap
   for the other byte order).
 
+<!-- defk-example compiles -->
 ```elixir
 defk sum_words(b :: [u8]) :: i64 do
   for i <- 0..(len(b) - 8)//8, reduce: 0 do
@@ -954,6 +971,7 @@ accumulator.
 - A write has no value, so it cannot end a block that needs one
   ([`write-as-value`](#write-as-value)).
 
+<!-- defk-example compiles -->
 ```elixir
 defk histogram(bytes :: [u8]) :: [i64] do
   h = alloc(i64, 256)
@@ -1106,6 +1124,7 @@ arrays, use `if`/`else` or `case`.
 **Supported with restrictions:** `case` on an `i64` or `bool` subject, as a
 value or a statement.
 
+<!-- defk-example compiles -->
 ```elixir
 defk classify(x :: i64, y :: i64) :: i64 do
   case x do
@@ -1145,6 +1164,7 @@ Several generators nest, and filters (any `bool` expression) skip the rest of
 the body. Without `reduce:`, a `for` is a statement and its body's value is
 discarded. With `reduce:`, it is a fold whose value is the final accumulator:
 
+<!-- defk-example compiles -->
 ```elixir
 defk even_sum(n :: i64) :: i64 do
   for i <- 0..n//1, rem(i, 2) == 0, reduce: 0 do
@@ -1188,6 +1208,7 @@ end
 `for` generator, and the function is a literal one-clause `fn`
 ([`fn-argument`](#fn-argument) for a capture).
 
+<!-- defk-example compiles -->
 ```elixir
 defk prime_early?(x :: i64) :: bool do
   Enum.all?(2..trunc(:math.sqrt(x))//1, fn d -> rem(x, d) != 0 end)
@@ -1214,6 +1235,7 @@ end
 an array again, typically through a kernel that writes it and returns it,
 and carries the result to the next iteration and out of the loop:
 
+<!-- defk-example compiles -->
 ```elixir
 defk insert(slots :: [i64], counts :: [i64], key :: i64) :: {[i64], [i64], i64} do
   j = band(key, len(slots) - 1)
@@ -1262,6 +1284,7 @@ exception with that message, or the module's default message for
 `raise Module` ("argument error", "bad argument in arithmetic expression",
 "runtime error"), and `raise "message"` is a `RuntimeError`.
 
+<!-- defk-example compiles -->
 ```elixir
 defk fft_size(n :: i64) :: i64 do
   if n < 1 or band(n, n - 1) != 0, do: raise(ArgumentError, "n must be a power of two")
@@ -1300,6 +1323,7 @@ does not have).
 **Supported with restrictions:** a kernel may call any kernel of the same
 module, defined before or after it.
 
+<!-- defk-example compiles -->
 ```elixir
 defk count_primes(n :: i64) :: i64 do
   for i <- 2..n//1, reduce: 0 do
@@ -1460,7 +1484,6 @@ and replace everything from the first `###` heading of this section to the
 end of the section with its output (`test/language_doc_test.exs` fails until
 they match).
 
-Compiling 2 files (.ex)
 ### kernel-head
 
 A kernel head is `name(arg :: type, ...) :: return_type`.
