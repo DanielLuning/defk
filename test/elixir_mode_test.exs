@@ -504,12 +504,25 @@ defmodule Defk.ElixirModeTest do
       x = f64s(for i <- 1..5_000, do: 20.0 + 5 * :math.sin(i / 500) + rem(i * 7919, 13) / 10)
 
       for w <- [1, 2, 60, 5_000] do
-        {means, stds} = Rolling.Elixir.mean_std(x, w)
-        expect = means ++ stds
-        assert Rolling.Kernels.__defk_elixir__(:mean_std, [x, w]) === f64s(expect)
+        # one chunk runs the kernel's exact arithmetic; several chunks re-seed
+        # their window sums, so those agree only within a tolerance (loose: the
+        # sqrt of a cancelled variance, e.g. w = 1, amplifies 1e-13 to 1e-6)
+        expect = Rolling.Elixir.mean_std(x, w, 1)
+        assert Rolling.Kernels.__defk_elixir__(:mean_std, [x, w]) === expect
 
         # bit-exact natively too: kernels build with -ffp-contract=off (defk-jlk)
-        assert Rolling.Kernels.mean_std(x, w) === f64s(expect)
+        assert Rolling.Kernels.mean_std(x, w) === expect
+
+        chunked = Rolling.Elixir.mean_std(x, w, 7)
+        assert byte_size(chunked) == byte_size(expect)
+
+        for {<<a::float-64-native>>, <<b::float-64-native>>} <-
+              Enum.zip(
+                for(<<v::binary-8 <- chunked>>, do: v),
+                for(<<v::binary-8 <- expect>>, do: v)
+              ) do
+          assert abs(a - b) < 1.0e-5
+        end
       end
 
       for w <- [0, 5_001, 20_000], do: agree(Rolling.Kernels, :mean_std, [x, w], message: false)
