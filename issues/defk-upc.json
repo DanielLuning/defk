@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-09T21:33:26Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Range facts for constant multiples and alloc(2 * len): out[2 * i] keeps its bounds check",
   "type": "task",
-  "updated_at": "2026-10-09T21:33:26Z"
+  "updated_at": "2026-10-10T10:22:50Z"
 }
