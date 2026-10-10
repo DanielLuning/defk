@@ -15,9 +15,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Implemented on branch defk-9p6.13/cosine-topk-f32 (3bf0d2a, 8326f4a): examples/cosine_topk.exs + README row (Where defk helps). PROVISIONAL numbers, loaded machine (load ~7/12 cores, two other benchmark agents); quiet run is defk-sgw.4.\n\nRealistic size: 100k x 384 f32, k = 10 (other size 1k). Pre-normalised (unit, then f32) vectors on every side, so cosine = dot; query arrives as an un-normalised f32 list and every side normalises it inside the timed call. Indexes resident: packed f32 binary in :persistent_term (Elixir, defk), vettore flat resource in :persistent_term (flat_new_inner_product reported as native; flat_new_cosine beside), Nx {n,384} f32 tensor in :persistent_term on EXLA.Backend (and BinaryBackend).\n\nVerdict at 100k: Elixir 48-57 ms (packed f32, 8 floats per match, 12 chunks on Task.async_stream) vs defk 7.2-9.6 ms (12 chunks; one call 21 ms) = 5.3-7.3x, good, baseline :optimized. 1k: Elixir 2.4-2.8 ms (float lists in 12 shard processes 1.3 ms, the best Elixir there) vs defk 0.23 ms. Sweep 1k..100k (6 points) 3.9-12x, crossover 1k.\nElixir variants (header table): f32 1/match 756-913 ms; 8/match one process 366-372; f64 widened 582-646; sort-all instead of bounded top-k 790-818; tuples/lists at \u003c=10k; float lists 1.3x faster per element at 10k but 1.2 GB at 100k (over persistent_term's 1 GB literal area; in shard processes 73 ms, slower than the binary); chunks 1/2/4/12/24.\nvettore 0.3.5 (precompiled, installed in seconds; DirtyCpu, one thread): inner product 12.5-12.7 ms, flat_new_cosine 33.6-34.2 ms (3 f64 dots per row + a String id clone per row). defk chunked 1.7x faster than vettore ip; defk one call 1.7x slower.\nNx row: Nx 0.13.1 + EXLA 0.13.1 compiled here in ~25 s (precompiled XLA 0.10.0): 1.0-1.22 ms at 100k, 0.11-0.13 at 1k: 6-8x faster than defk -\u003e recommendation for a plain dot top-k is Nx+EXLA. BinaryBackend 14.3-15 s at 100k, 85 ms at 1k.\nResponsiveness (1 ms ticker, one scheduler, 100k, max/p99): Elixir 2.2/2.2, defk 2.2/2.2, vettore 2.0/2.0, EXLA 1.3-1.5/same: ~2 ms floor under load, nobody blocks.\nAgreement: 5 queries x both sizes, identical top-10 indices on every side; Elixir and defk scores bit-identical (same 8 partial sums, f64); others within 2e-6 absolute (f32 accumulation, random-walk sqrt(384)*2^-24 ~ 1.2e-6; worst case 2.3e-5 not reached; observed max 1.6e-7); smallest reference score gap 1.5e-5 must exceed 2x tol; also Elixir mode, bad inputs, plain reference. Failure halts the script.\nKernel: literal @dim 384 drops all bounds checks; 8 partial sums SLP-vectorise to 2xf64 NEON (fcvtl/fmul.2d/fadd.2d). defk 12 chunks only 2.8x one call (defk-8qs).\nTickets filed (needs-triage): defk-7tk (re-measure matmul with EXLA 0.13.1), defk-n7k (runtime-stride row-major bounds checks), defk-agp (in-place accumulate keeps per-op float checks, axpy not vectorised), defk-cwl (flaky multi_clause frames_live test under load). mix ci green after git merge main (one flaky run: defk-cwl).",
+      "timestamp": "2026-10-10T12:11:13Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Target workload: cosine top-k over f32 vs vettore and Nx",
   "type": "task",
-  "updated_at": "2026-10-10T11:47:24Z"
+  "updated_at": "2026-10-10T12:11:13Z"
 }
