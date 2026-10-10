@@ -29,7 +29,7 @@ defmodule Defk.LanguageDocExamplesTest do
   end
 
   defp compiled?(%{check: check}),
-    do: check == :run or check == :compiles or match?({:error, _}, check)
+    do: check == :run or match?({kind, _} when kind in [:compiles, :error], check)
 
   for %{check: check} = ex <- @examples, not match?({:skip, _}, check) do
     @ex ex
@@ -62,22 +62,22 @@ defmodule Defk.LanguageDocExamplesTest do
       doc =
         Enum.join(
           [
-            "<!-- defk-example compiles -->",
+            "<!-- defk-example compiles: the point is the C -->",
             fence(@kernel),
             "<!-- defk-example error: unsupported-map -->",
             fence("defk g(x :: i64) :: i64, do: %{a: x}"),
             "  <!-- defk-example skip: a fragment -->",
             "  " <> fence("defk h(x :: i64) :: i64"),
-            "<!-- defk-example nonsense -->",
-            fence(@kernel),
             "<!-- defk-example compiles -->",
+            fence(@kernel),
+            "<!-- defk-example skip: no kernel here -->",
             fence("x = 1")
           ],
           "\n"
         )
 
       assert [
-               {2, :compiles},
+               {2, {:compiles, "the point is the C"}},
                {8, {:error, "unsupported-map"}},
                {12, {:skip, "a fragment"}},
                {16, {:invalid, "unknown annotation" <> _}},

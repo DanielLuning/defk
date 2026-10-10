@@ -37,9 +37,10 @@ The tests run every example (`test/language_doc_examples_test.exs`). A
 block with a kernel in it is followed by a block of `iex>` lines calling the
 module as `M` (or by its own `defmodule` name), which run in native code and
 in Elixir mode and must give the result shown; or it has one of these
-comments on the line above its opening fence: `<!-- defk-example compiles -->`
-(compiled only), `<!-- defk-example error: <code> -->` (must fail with that
-code), `<!-- defk-example skip: <reason> -->` (a fragment, not checked), or
+comments on the line above its opening fence:
+`<!-- defk-example compiles: <reason> -->` (compiled only, where a run makes
+no sense), `<!-- defk-example error: <code> -->` (must fail with that code),
+`<!-- defk-example skip: <reason> -->` (a fragment, not checked), or
 `<!-- defk-example known-failure: <ticket> -->` (checked, and must still fail
 until the ticket is fixed). A kernel block with none of these fails the tests.
 
@@ -233,7 +234,6 @@ reads them (see [Inputs](#inputs)).
 `false`, `nil`, functions, and arrays of `bool` or tuples. A kernel that needs
 them is the wrong tool: pack the data into binaries in Elixir first.
 
-<!-- defk-example compiles -->
 ```elixir
 defk mean_var(a :: [f64]) :: {f64, f64} do
   {_n, mean, m2} =
@@ -247,6 +247,11 @@ defk mean_var(a :: [f64]) :: {f64, f64} do
 
   {mean, m2 / len(a)}
 end
+```
+
+```elixir
+iex> M.mean_var(<<1.0::float-native, 2.0::float-native, 3.0::float-native, 4.0::float-native>>)
+{2.5, 1.25}
 ```
 
 ### Literals
@@ -333,13 +338,19 @@ non-negative integer Elixir has.
   `u64` when its new value is one, or when it meets a `u64` in one of the
   operations above, so `reduce: 0` folds hashes:
 
-  <!-- defk-example compiles -->
   ```elixir
   defk total(hashes :: [u64]) :: u64 do
     for h <- hashes, reduce: 0 do
       acc -> acc + h
     end
   end
+  ```
+
+  ```elixir
+  iex> M.total(<<9223372036854775808::unsigned-64-native, 1::unsigned-64-native>>)
+  9223372036854775809
+  iex> M.total(<<18446744073709551615::unsigned-64-native, 1::unsigned-64-native>>)
+  ** (ArithmeticError) u64 overflow in 18446744073709551615 + 1
   ```
 
 - A `case` on a `u64` is [`case-subject`](#case-subject).
@@ -506,7 +517,6 @@ constant expression of literals such as `(1 <<< 64) - 1`; and inside
 `wrap64(expr)`, the 64-bit wrap to an `i64` pattern. This is how hashes and
 checksums wrap:
 
-<!-- defk-example compiles -->
 ```elixir
 @mask64 0xFFFFFFFFFFFFFFFF
 
@@ -515,6 +525,13 @@ defk fnv1a64(bytes :: [u8]) :: u64 do
     h -> band(bxor(h, b) * 0x100000001B3, @mask64)
   end
 end
+```
+
+```elixir
+iex> M.fnv1a64("")
+14695981039346656037
+iex> M.fnv1a64("a")
+12638187200555641996
 ```
 
 The rule, the same in native code and Elixir mode:
@@ -566,12 +583,16 @@ The rule, the same in native code and Elixir mode:
 
 MurmurHash3's 32-bit mixing stays in `i64` with 32-bit masks:
 
-<!-- defk-example compiles -->
 ```elixir
 defk mix32(h :: i64, k :: i64) :: i64 do
   k = band(rotl(band(k * 0xCC9E2D51, 0xFFFFFFFF), 15, 32) * 0x1B873593, 0xFFFFFFFF)
   band(rotl(bxor(h, k), 13, 32) * 5 + 0xE6546B64, 0xFFFFFFFF)
 end
+```
+
+```elixir
+iex> M.mix32(0, 1)
+651101558
 ```
 
 (defk-n4r.2, defk-wlu)
@@ -590,7 +611,6 @@ the binary itself. `""` and `<<>>` are a zero-length array (`len` is 0, any
 index raises); `<<>>` is also where a [bitstring
 accumulator](#the-bitstring-accumulator) starts.
 
-<!-- defk-example compiles -->
 ```elixir
 defk hex_digit(x :: i64) :: i64 do
   "0123456789abcdef"[band(x, 15)]
@@ -607,6 +627,15 @@ defk starts_with?(s :: [u8], p :: [u8]) :: bool do
 end
 
 defk is_ham?(s :: [u8]) :: bool, do: starts_with?(s, "Ham")
+```
+
+```elixir
+iex> M.hex_digit(255)
+102
+iex> M.is_ham?("Hamburg")
+true
+iex> M.starts_with?("Ha", "Ham")
+false
 ```
 
 A write to a literal bound to a variable copies it first, like an input
@@ -724,7 +753,6 @@ arithmetic, as a range bound or step, as a `case` pattern
 compiler the same range as a literal mask, so with `@mask 255`,
 `table[band(h, @mask)]` skips its bounds check against a 256-element array.
 
-<!-- defk-example compiles -->
 ```elixir
 @s16_min -32_768
 @s16_max 32_767
@@ -737,6 +765,15 @@ end
 defk ones(i :: i64) :: i64 do
   @table[band(i, 7)]
 end
+```
+
+```elixir
+iex> M.clip(40_000)
+32767
+iex> M.clip(-40_000)
+-32768
+iex> M.ones(10)
+3
 ```
 
 A binary attribute is an array like an input array: it can be indexed (a
@@ -919,13 +956,19 @@ and the big-endian `u64_be`, `u32_be`, `u16_be` read the unsigned 8-, 4- or
 - The load is unaligned and compiles to one machine load (plus a byte swap
   for the other byte order).
 
-<!-- defk-example compiles -->
 ```elixir
 defk sum_words(b :: [u8]) :: i64 do
   for i <- 0..(len(b) - 8)//8, reduce: 0 do
     acc -> wrap64(acc + u64_le(b, i))
   end
 end
+```
+
+```elixir
+iex> M.sum_words(<<1::64-little, 2::64-little, 7>>)
+3
+iex> M.sum_words(<<-1::64-little, 1::64-little>>)
+0
 ```
 
 (defk-n4r.2)
@@ -987,7 +1030,6 @@ accumulator.
 - A write has no value, so it cannot end a block that needs one
   ([`write-as-value`](#write-as-value)).
 
-<!-- defk-example compiles -->
 ```elixir
 defk histogram(bytes :: [u8]) :: [i64] do
   h = alloc(i64, 256)
@@ -998,6 +1040,12 @@ defk histogram(bytes :: [u8]) :: [i64] do
 
   h
 end
+```
+
+```elixir
+iex> h = M.histogram(<<1, 1, 255>>)
+iex> {byte_size(h), :binary.part(h, 8, 8)}
+{2048, <<2::64-native>>}
 ```
 
 An input array is written the same way; here a HyperLogLog register update:
@@ -1140,7 +1188,6 @@ arrays, use `if`/`else` or `case`.
 **Supported with restrictions:** `case` on an `i64` or `bool` subject, as a
 value or a statement.
 
-<!-- defk-example compiles -->
 ```elixir
 defk classify(x :: i64, y :: i64) :: i64 do
   case x do
@@ -1150,6 +1197,15 @@ defk classify(x :: i64, y :: i64) :: i64 do
     _ -> 2
   end
 end
+```
+
+```elixir
+iex> M.classify(3, 3)
+0
+iex> M.classify(12, 0)
+12
+iex> M.classify(11, 0)
+2
 ```
 
 - Patterns: integer literals (also negative), `true`/`false` for a `bool`
@@ -1211,13 +1267,19 @@ Several generators nest, and filters (any `bool` expression) skip the rest of
 the body. Without `reduce:`, a `for` is a statement and its body's value is
 discarded. With `reduce:`, it is a fold whose value is the final accumulator:
 
-<!-- defk-example compiles -->
 ```elixir
 defk even_sum(n :: i64) :: i64 do
   for i <- 0..n//1, rem(i, 2) == 0, reduce: 0 do
     acc -> acc + i
   end
 end
+```
+
+```elixir
+iex> M.even_sum(10)
+30
+iex> M.even_sum(-1)
+0
 ```
 
 - `reduce:` takes one `acc -> body` clause
@@ -1255,11 +1317,17 @@ end
 `for` generator, and the function is a literal one-clause `fn`
 ([`fn-argument`](#fn-argument) for a capture).
 
-<!-- defk-example compiles -->
 ```elixir
 defk prime_early?(x :: i64) :: bool do
   Enum.all?(2..trunc(:math.sqrt(x))//1, fn d -> rem(x, d) != 0 end)
 end
+```
+
+```elixir
+iex> M.prime_early?(97)
+true
+iex> M.prime_early?(91)
+false
 ```
 
 - `Enum.reduce_while(src, init, fn x, acc -> ... end)`: the accumulator may be
@@ -1282,7 +1350,6 @@ end
 an array again, typically through a kernel that writes it and returns it,
 and carries the result to the next iteration and out of the loop:
 
-<!-- defk-example compiles -->
 ```elixir
 defk insert(slots :: [i64], counts :: [i64], key :: i64) :: {[i64], [i64], i64} do
   j = band(key, len(slots) - 1)
@@ -1299,6 +1366,12 @@ defk tally(keys :: [i64]) :: {[i64], [i64], i64} do
       {slots, counts, n + new}
   end
 end
+```
+
+```elixir
+iex> {_slots, counts, n} = M.tally(<<1::64-native, 2::64-native, 1::64-native>>)
+iex> {:binary.part(counts, 8, 16), n}
+{<<2::64-native, 1::64-native>>, 2}
 ```
 
 - The value the body gives (or the `acc` of `{:cont, acc}` and
@@ -1331,12 +1404,18 @@ exception with that message, or the module's default message for
 `raise Module` ("argument error", "bad argument in arithmetic expression",
 "runtime error"), and `raise "message"` is a `RuntimeError`.
 
-<!-- defk-example compiles -->
 ```elixir
 defk fft_size(n :: i64) :: i64 do
   if n < 1 or band(n, n - 1) != 0, do: raise(ArgumentError, "n must be a power of two")
   ctz(n)
 end
+```
+
+```elixir
+iex> M.fft_size(1024)
+10
+iex> M.fft_size(12)
+** (ArgumentError) n must be a power of two
 ```
 
 - **A statement**, anywhere a statement goes: in a block before its value, in
@@ -1370,7 +1449,6 @@ does not have).
 **Supported with restrictions:** a kernel may call any kernel of the same
 module, defined before or after it.
 
-<!-- defk-example compiles -->
 ```elixir
 defk count_primes(n :: i64) :: i64 do
   for i <- 2..n//1, reduce: 0 do
@@ -1385,6 +1463,11 @@ defk prime?(x :: i64) :: bool do
     p -> p and rem(x, d) != 0
   end
 end
+```
+
+```elixir
+iex> M.count_primes(100)
+25
 ```
 
 - The call is inlined: the callee's body is compiled into the caller, so its

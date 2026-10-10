@@ -11,7 +11,9 @@ defmodule Defk.LanguageDoc do
   #     the kernels are compiled, and each `iex>` expression runs in native code
   #     and in Elixir mode; the two must agree, and the native result must be
   #     the documented one (a value, `===`, or `** (Module) message`)
-  #   - `<!-- defk-example compiles -->`: compiled only (native and Elixir mode)
+  #   - `<!-- defk-example compiles: <reason> -->`: compiled only (native and
+  #     Elixir mode), where a run makes no sense, such as an example whose point
+  #     is the generated C
   #   - `<!-- defk-example error: <code> -->`: must fail to compile with exactly
   #     that error code
   #   - `<!-- defk-example skip: <reason> -->`: not checked (a fragment)
@@ -36,7 +38,7 @@ defmodule Defk.LanguageDoc do
 
   defmodule Example do
     @moduledoc false
-    # check: :run | :compiles | {:error, code} | {:skip, reason} | {:invalid, why}
+    # check: :run | {:compiles, reason} | {:error, code} | {:skip, reason} | {:invalid, why}
     defstruct [:line, :check, :known_failure, :source, :name, :module, steps: []]
   end
 
@@ -134,8 +136,8 @@ defmodule Defk.LanguageDoc do
 
   defp parse_annotation(spec) do
     case Regex.run(~r/^([a-z-]+)(?::\s*(.*))?$/, spec) do
-      [_, "compiles"] ->
-        :compiles
+      [_, "compiles", reason] when reason != "" ->
+        {:compiles, reason}
 
       [_, "error", code] ->
         if code =~ ~r/^[a-z0-9-]+$/, do: {:error, code}, else: {:bad, spec}
@@ -186,7 +188,7 @@ defmodule Defk.LanguageDoc do
           {:run, nil}
 
         {{:known_failure, t}, nil} ->
-          {:compiles, t}
+          {{:compiles, "a known failure"}, t}
 
         {{:known_failure, t}, _} ->
           {:run, t}
