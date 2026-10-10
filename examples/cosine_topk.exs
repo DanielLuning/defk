@@ -108,7 +108,7 @@
 #   matrix-vector top-k, use Nx with EXLA. Nx on the BinaryBackend is Elixir
 #   and ~300x slower than the Elixir baseline. EXLA 0.13.1 compiled here in
 #   ~25 s with a precompiled XLA 0.10.0 (the EXLA 0.10.0 that matmul.exs
-#   tried did not compile). defk earns its place only where the loop is more
+#   tried did not compile; defk-7tk re-measures matmul with it). defk earns its place only where the loop is more
 #   than a dot product (a custom score, a filter, a different top-k rule) or
 #   where EXLA is not wanted as a dependency.
 #
@@ -136,13 +136,14 @@
 #
 # Kernel notes: @dim 384 is a literal, so m[r * 384 + 8 * j + c] needs no
 # bounds check (with dim = len(q) every access kept its check: 25 vs 20 ms
-# in one call); q is copied into a 384-element alloc for the same
+# in one call; defk-n7k); q is copied into a 384-element alloc for the same
 # reason. A strict f64 sum cannot be vectorised by clang, so the dot product
 # keeps eight partial sums; clang's SLP vectoriser then runs them as four
 # 2 x f64 NEON lanes (fcvtl f32->f64, fmul.2d, fadd.2d) with the non-finite
 # checks flagged once per strip. A dimension-major layout (an axpy into the
 # score array) was tried: it does not vectorise, because the in-place
-# out[r] = out[r] + x * q keeps per-operation float checks (~26 ms).
+# out[r] = out[r] + x * q keeps per-operation float checks (~26 ms;
+# defk-agp).
 
 Mix.install([
   {:defk, path: Path.expand("..", __DIR__)},
