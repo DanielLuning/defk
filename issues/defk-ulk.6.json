@@ -10,11 +10,13 @@
   "created": "2026-10-10T14:54:36Z",
   "description": "Decide from the prototypes how users choose between a portable build and an architecture build.\n\nTo settle: the default; where the choice is written (config, use Defk option, env var, per kernel) and its exact spelling; named levels vs native; what happens on a CPU mismatch (error vs fallback); whether one release may carry several variants; cache key/.so naming; what DEFK_RESULT reports; interaction with defk-n8f and the C-compiler stance. Write it as a short decision record with the evidence and rejected options.\n\nDone when the decision is recorded (docs/research/simd.md or a decision doc) and implementation tickets are filed.",
   "id": "defk-ulk.6",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "parent": "defk-ulk",
   "priority": 3,
   "status": "open",
   "title": "Decide: the target build API (portable vs architecture) and its deploy story",
   "type": "task",
-  "updated_at": "2026-10-10T14:54:44Z"
+  "updated_at": "2026-10-10T14:54:45Z"
 }
