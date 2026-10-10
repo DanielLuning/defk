@@ -1,78 +1,42 @@
 defmodule Defk.YieldFalseStripTest do
   use ExUnit.Case, async: true
 
-  # Test that yield: false kernels with strip loops don't generate
-  # "set but not used" warnings. The strip loop emits v_rem_N that is
-  # assigned but used in DEFK_SHORT(v_rem_N). When DEFK_SHORT is defined
-  # as ((void)(R), 1) for no-yield, the variable is marked as intentionally
-  # unused and clang doesn't warn.
+  # defk-5dd: a strip loop in a yield: false kernel computes v_rem_N, which
+  # DEFK_SHORT(R) ignores under no-yield; it must still count as used, or
+  # clang warns "variable set but not used".
+
+  defmodule K do
+    use Defk
+
+    defk sum_nb(a :: [i64]) :: i64, yield: false do
+      for x <- a, reduce: 0 do
+        acc -> acc + x
+      end
+    end
+  end
 
   defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
 
-  test "yield: false kernel with loop generates no 'set but not used' warning" do
-    defmodule K do
-      use Defk
-
-      # A simple reduce over an array - this generates a strip loop
-      defk sum_array_nb(a :: [i64]) :: i64, yield: false do
-        for x <- a, reduce: 0 do
-          acc -> acc + x
-        end
-      end
-    end
-
-    # Get the generated C source
+  test "a yield: false strip loop compiles without set-but-not-used" do
     src = K.__defk_source__()
+    assert src =~ "DEFK_SHORT(v_rem_"
 
-    # The generated code should contain the pattern for the no-yield DEFK_SHORT macro,
-    # which marks the variable as intentionally unused: ((void)(v_rem_N), 1)
-    assert src =~ "((void)",
-           "Generated C should use ((void) to mark variable as intentionally unused"
+    dir = Path.join(System.tmp_dir!(), "defk_yield_false_strip_test")
+    File.mkdir_p!(dir)
+    c = Path.join(dir, "k.c")
+    File.write!(c, src)
+    priv = Path.expand("../priv", __DIR__)
 
-    # Verify the kernel works (basic functionality test)
-    assert K.sum_array_nb(i64s([1, 2, 3, 4, 5])) == 15
-  end
+    {out, status} =
+      System.cmd(
+        System.get_env("CC", "cc"),
+        ~w(-fsyntax-only -std=gnu11 -Werror=unused-but-set-variable) ++
+          ["-I", Defk.Build.erts_include(), "-I", priv, c],
+        stderr_to_stdout: true
+      )
 
-  test "yield: false kernel with product reduction" do
-    defmodule K2 do
-      use Defk
-
-      defk product_nb(a :: [i64]) :: i64, yield: false do
-        for x <- a, reduce: 1 do
-          acc -> acc * x
-        end
-      end
-    end
-
-    src = K2.__defk_source__()
-    # Verify the macro expansion is in place
-    assert src =~ "((void)", "Generated C should use ((void) macro"
-
-    # Verify functionality
-    assert K2.product_nb(i64s([1, 2, 3, 4, 5])) == 120
-  end
-
-  test "yield: false kernel with double-nested loops" do
-    defmodule K3 do
-      use Defk
-
-      defk matrix_sum_nb(rows :: i64, cols :: i64) :: i64, yield: false do
-        for i <- 1..rows//1, reduce: 0 do
-          sum ->
-            for j <- 1..cols//1, reduce: sum do
-              inner_sum ->
-                inner_sum + i + j
-            end
-        end
-      end
-    end
-
-    src = K3.__defk_source__()
-    # Both nested loops should have the macro expansion
-    assert src =~ "((void)", "Generated C should use ((void) macro"
-
-    # Verify functionality
-    # Sum for 2x2: (1+1 + 1+2) + (2+1 + 2+2) = 2 + 3 + 3 + 4 = 12
-    assert K3.matrix_sum_nb(2, 2) == 12
+    assert status == 0, out
+    refute out =~ "set but not used"
+    assert K.sum_nb(i64s([1, 2, 3, 4, 5])) == 15
   end
 end
