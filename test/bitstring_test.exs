@@ -15,6 +15,13 @@ defmodule Defk.BitstringTest.K do
     end
   end
 
+  # each element of a [u64] in n bits: 2^63 and up included (defk-dig)
+  defk pack_u64(xs :: [u64], n :: i64) :: bitstring do
+    for x <- xs, reduce: <<>> do
+      acc -> <<acc::bitstring, x::size(n)>>
+    end
+  end
+
   # each element of xs as a signed n-bit integer
   defk pack_signed(xs :: [i64], n :: i64) :: bitstring do
     for x <- xs, reduce: <<>> do
@@ -307,6 +314,21 @@ defmodule Defk.BitstringTest do
 
       # Elixir itself would keep the low bits
       assert <<4::2>> == <<0::2>>
+    end
+
+    test "a u64 segment value takes the whole unsigned range" do
+      top = 2 ** 64 - 1
+      xs = for x <- [2 ** 63, top, 5], into: <<>>, do: <<x::64-native>>
+      assert agrees(:pack_u64, [xs, 64]) == {:ok, <<2 ** 63::64, top::64, 5::64>>}
+
+      for {x, n} <- [{2 ** 63, 32}, {top, 63}, {6, 2}] do
+        assert {:raise, %ArgumentError{} = e} = agrees(:pack_u64, [<<x::64-native>>, n])
+        assert Defk.Test.reason(e) == :segment_fit
+        assert Exception.message(e) =~ "bitstring segment value #{x} does not fit in #{n} bits"
+      end
+
+      assert {:raise, %ArgumentError{} = e} = agrees(:pack_u64, [<<top::64-native>>, 65])
+      assert Defk.Test.reason(e) == :segment_size
     end
 
     test "a size outside 0..64 raises in both modes" do
@@ -632,6 +654,7 @@ defmodule Defk.BitstringTest do
 
   agreement(K,
     pack: [args: StreamData.fixed_list([G.array(:i64, of: G.i64(0..300)), G.i64(-2..70)])],
+    pack_u64: [args: StreamData.fixed_list([G.array(:u64), G.i64(-2..70)])],
     pack_signed: [
       args: StreamData.fixed_list([G.array(:i64, of: G.i64(-300..300)), G.i64(-2..70)])
     ],

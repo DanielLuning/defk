@@ -1173,6 +1173,17 @@ static inline defk_bits defk_bits_put(defk_ctx *ctx, defk_bits b, int64_t v, int
   return defk_bits_append(ctx, b, (uint64_t)v, n);
 }
 
+/* the same for a u64 value: v must be below 2^n (any u64 for n = 64) */
+static inline defk_bits defk_bits_put_u64(defk_ctx *ctx, defk_bits b, uint64_t v, int64_t n) {
+  if (DEFK_UNLIKELY((uint64_t)n > 64 || (n < 64 && (v >> n) != 0))) {
+    if ((uint64_t)n <= 64 && v > (uint64_t)INT64_MAX)
+      defk_fail(ctx, DEFK_E_ARG, "bitstring segment value %llu does not fit in %lld bits",
+                (unsigned long long)v, (long long)n);
+    defk_bits_fail(ctx, (int64_t)v, n, 0);
+  }
+  return defk_bits_append(ctx, b, v, n);
+}
+
 /* <<b::bitstring, v::size(n)-signed>>: v must be in -2^(n-1)..2^(n-1) - 1
    (n = 0 holds only 0; n = 64 takes every i64). The low n bits of v, as an
    unsigned segment, are appended. The bounds are built by shifting 1 left by
