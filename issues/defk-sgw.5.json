@@ -11,6 +11,7 @@
     "defk-sgw.4"
   ],
   "blocks": [
+    "defk-djy.8",
     "defk-sgw.6"
   ],
   "created": "2026-10-06T09:13:19Z",
@@ -30,5 +31,5 @@
   "status": "open",
   "title": "Write the verdict: guide, runtime contract, devex, limitations",
   "type": "task",
-  "updated_at": "2026-10-08T08:17:57Z"
+  "updated_at": "2026-10-10T14:58:41Z"
 }
