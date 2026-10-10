@@ -1124,6 +1124,15 @@ malformed call is [`alloc-form`](#alloc-form).
   inside a loop allocates on every iteration. Arrays that are not returned
   are freed when the kernel returns or raises, or when its process dies while
   it is suspended.
+- The zeroing yields like a loop: a large buffer is zeroed in strips with a
+  safepoint after each, so an 85 MB `alloc` does not hold the scheduler.
+  When the first statement after `x = alloc(type, k * n)` that mentions `x`
+  is a `for i <- 0..(n - 1)//1` whose body writes `x[k * i + c]` for every
+  `c` in `0..k-1` (not in a branch) and mentions `x` nowhere else, and
+  nothing in between rebinds a variable of `n`, every element is written
+  before anything can read it, and the buffer is not zeroed at all (the
+  fast-path report notes which allocs are). This is an optimisation:
+  the array is all zeros wherever it is not written, either way.
 
 ### Writing
 

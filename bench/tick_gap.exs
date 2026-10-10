@@ -2,6 +2,15 @@
 # `mix run bench/tick_gap.exs [runs]`
 alias Examples.Kernels, as: K
 
+defmodule TickGap.Alloc do
+  use Defk
+
+  # zeroing an 85 MB alloc (defk-ktw): in strips with a safepoint after each
+  defk zeros(n :: i64) :: i64 do
+    len(alloc(u8, n))
+  end
+end
+
 defmodule TickGap do
   def ex_prime?(x), do: Enum.reduce(2..trunc(:math.sqrt(x))//1, true, &(&2 and rem(x, &1) != 0))
   def ex_count_primes(n), do: Enum.count(2..n//1, &ex_prime?/1)
@@ -14,7 +23,11 @@ cases = [
   {"plain Elixir", fn -> TickGap.ex_count_primes(400_000) end},
   {"yielding kernel", fn -> K.count_primes(2_000_000) end},
   # early exit (Enum.all? halts at the first divisor), n scaled to a similar runtime
-  {"early-exit kernel", fn -> K.count_primes_early(6_000_000) end}
+  {"early-exit kernel", fn -> K.count_primes_early(6_000_000) end},
+  # one kernel call per alloc; the first run's pages are cold
+  {"85 MB alloc", fn -> TickGap.Alloc.zeros(85_000_000) end, TickGap.Alloc},
+  {"85 MB alloc x20", fn -> for _ <- 1..20, do: TickGap.Alloc.zeros(85_000_000) end,
+   TickGap.Alloc}
 ]
 
 f = fn us -> :erlang.float_to_binary(us / 1000, decimals: 2) end
@@ -25,12 +38,14 @@ IO.puts(
 )
 
 Defk.Bench.TickGap.with_one_scheduler(fn ->
-  for {name, fun} <- cases do
+  for c <- cases do
+    {name, fun, mod} = with {name, fun} <- c, do: {name, fun, K}
+
     res =
       for _ <- 1..runs do
-        y0 = K.__defk_stats__().yields
+        y0 = mod.__defk_stats__().yields
         {us, gaps} = Defk.Bench.TickGap.measure(fun)
-        {us, gaps, K.__defk_stats__().yields - y0}
+        {us, gaps, mod.__defk_stats__().yields - y0}
       end
 
     worst = Enum.map(res, fn {_, g, _} -> Enum.max(g) end)

@@ -11,9 +11,10 @@
 defmodule Defk.RaiseCleanupTest.K do
   use Defk
 
-  # one owned buffer, no loop, so this kernel never yields: the raise runs on
-  # the stack frame of the first call (the nif_ wrapper's defk_finish)
-  defk raise_one(n :: i64, at :: i64) :: i64 do
+  # one owned buffer and yield: false (zeroing a large alloc has safepoints,
+  # defk-ktw), so this kernel never yields: the raise runs on the stack frame
+  # of the first call (the nif_ wrapper's defk_finish)
+  defk raise_one(n :: i64, at :: i64) :: i64, yield: false do
     buf = alloc(i64, n)
     buf[at]
   end
@@ -63,7 +64,7 @@ defmodule Defk.RaiseCleanupTest do
     end
 
     assert K.__defk_stats__().promotions == promotions0,
-           "raise_one yielded; it has no loop, so its raise must leave the stack frame"
+           "raise_one yielded; it has yield: false, so its raise must leave the stack frame"
 
     assert %{frames_live: 0} = K.__defk_stats__()
 
