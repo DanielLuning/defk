@@ -76,6 +76,8 @@ defmodule Defk.Test do
     {"does not fit in i16", :element_range},
     {"does not fit in i32", :element_range},
     {"does not fit in f32", :element_range},
+    {"bitstring segment size", :segment_size},
+    {"bitstring segment value", :segment_fit},
     {"step", :zero_step}
   ]
 

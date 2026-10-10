@@ -12,7 +12,7 @@ defmodule Defk.Builtins do
   @loads [:u64_le, :u64_be, :u32_le, :u32_be, :u16_le, :u16_be]
   # i64 -> i64 bit builtins with a plain Elixir meaning in Defk.Bits
   @bits [:mulhi, :clz, :ctz, :popcount, :rotl64, :rotr64]
-  @all [:len, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
+  @all [:len, :bit_size, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
          @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ [:alloc] ++ @bits
 
   @doc "Every builtin name."

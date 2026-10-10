@@ -293,9 +293,15 @@ defmodule Defk.ElixirMode do
   # a binary literal: the binary itself
   defp expr(b, _env) when is_binary(b), do: {b, {:arr, :u8}}
 
-  defp expr({:<<>>, _, _} = node, _env) do
-    {:ok, b} = Defk.BinaryLiteral.bytes(node)
-    {b, {:arr, :u8}}
+  defp expr({:<<>>, m, _} = node, env) do
+    case Defk.Bitstring.parse(node) do
+      {:append, head, parts} ->
+        append(head, parts, env, m)
+
+      :error ->
+        {:ok, b} = Defk.BinaryLiteral.bytes(node)
+        {b, {:arr, :u8}}
+    end
   end
 
   defp expr({:__block__, _, _} = b, env), do: value_block(b, env)
@@ -479,6 +485,15 @@ defmodule Defk.ElixirMode do
     end
   end
 
+  # <<acc::bitstring, v::size(n), ...>>: the head, values and sizes left to
+  # right, then Ops.bits/2 checks each segment (the kernel's limits) and
+  # appends it
+  defp append(head, parts, env, m) do
+    {pre, [hq | qs], _} = operands([head | Enum.flat_map(parts, &Tuple.to_list/1)], env)
+    segs = qs |> Enum.chunk_every(2) |> Enum.map(fn [v, n] -> {v, n} end)
+    {with_pre(pre, call(:bits, [hq, segs], m)), :bitstring}
+  end
+
   defp tuple_expr(items, env) do
     {pre, qs, ts} = operands(items, env)
     {with_pre(pre, tuple(qs)), {:tuple, ts}}
@@ -498,6 +513,7 @@ defmodule Defk.ElixirMode do
   end
 
   defp builtin(:len, [a], [{:arr, e}], m), do: {call(:"len_#{e}", [a], m), :i64}
+  defp builtin(:bit_size, [a], [_], m), do: {remote(Kernel, :bit_size, [a], m), :i64}
   defp builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: {call(f, [a, i], m), :i64}
 
   defp builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl64, :rotr64],

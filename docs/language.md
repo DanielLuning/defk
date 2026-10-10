@@ -167,12 +167,17 @@ That is a defk bug or a broken toolchain, not a kernel error.
 | `bool` | `true` or `false` | `true` or `false`; anything else (including `nil`) raises `ArgumentError` "argument N (name) must be a boolean" | `true` or `false` |
 | `[f64]`, `[i64]`, `[u8]`, `[f32]`, `[i32]`, `[i16]` | an array of that element type | a binary of packed native-endian elements; not a binary, or a byte size that is not a multiple of the element size, raises `ArgumentError` | a binary of packed native-endian elements |
 | `{t1, t2, ...}` | see below | not allowed ([`tuple-parameter`](#tuple-parameter)) | a tuple |
+| `bitstring` | a [bitstring accumulator](#the-bitstring-accumulator) | not allowed ([`bitstring-use`](#bitstring-use)) | a bitstring (any number of bits) |
 
 **Supported:** `i64`, `f64`, `bool`, `[f64]`, `[f32]`, `[i64]`, `[i32]`,
 `[i16]`, `[u8]`. Any other type
 name is [`unknown-type`](#unknown-type), whose hint names the kernel type for
 the Elixir one (`integer` is `i64`, `float` and `number` are `f64`, `binary` is
 `[u8]`).
+
+**Supported with restrictions:** `bitstring`, the type of a [bitstring
+accumulator](#the-bitstring-accumulator): a result type, alone or in a tuple
+(`:: {bitstring, i64}`), never a parameter type.
 
 **Supported with restrictions:** tuples. A tuple of scalars and arrays is a
 return type (`:: {f64, f64}`, `:: {[f64], i64}`). Inside a kernel, tuples exist
@@ -239,7 +244,9 @@ end
   (a result, an argument, a `[f64]` write) widens, as in Elixir arithmetic.
 - `true` and `false` are `bool`. Other atoms and `nil` are
   [`unsupported-atom`](#unsupported-atom). A string or `<<1, 2, 3>>` is a
-  `[u8]` ([binary literals](#binary-literals)).
+  `[u8]` ([binary literals](#binary-literals)). `<<>>` is the empty `[u8]`,
+  or the empty bitstring where a [bitstring
+  accumulator](#the-bitstring-accumulator) starts.
 
 ## 4. Expressions and operators
 
@@ -343,6 +350,7 @@ wrong types is [`builtin-arguments`](#builtin-arguments).
 | Builtin | Takes | Gives | Raises |
 |---|---|---|---|
 | `len(a)` | an array | its number of elements, `i64` | |
+| `bit_size(b)` | a [bitstring](#the-bitstring-accumulator) | its number of bits, `i64` | |
 | `min(a, b)`, `max(a, b)` | two `i64` or two `f64` (not mixed) | the same type; when the two compare equal, the first argument, as Erlang does (`min(-0.0, 0.0)` is `-0.0`) | |
 | `abs(x)` | `i64` or `f64` | the same type | `i64`: `ArithmeticError` for -2^63 |
 | `float(x)` | a number | `f64` (an `i64` above 2^53 rounds, as in Elixir) | |
@@ -477,7 +485,8 @@ kernel, compared byte by byte in a loop. Natively it is a static const view in
 the NIF: no allocation and no copy, and its length is known, so
 `"0123456789abcdef"[band(x, 15)]` has no bounds check. In Elixir mode it is
 the binary itself. `""` and `<<>>` are a zero-length array (`len` is 0, any
-index raises).
+index raises); `<<>>` is also where a [bitstring
+accumulator](#the-bitstring-accumulator) starts.
 
 ```elixir
 defk hex_digit(x :: i64) :: i64 do
@@ -508,6 +517,78 @@ pattern.
 ([`binary-literal`](#binary-literal)); build it in Elixir and pass it as a
 `[u8]` parameter, or use a module attribute. `<>` and `~s` are
 [`unsupported-string`](#unsupported-string). (defk-n4r.5)
+
+### The bitstring accumulator
+
+**Supported with restrictions.** A kernel builds output whose length depends
+on the data, such as a compressed bit stream, the way Elixir code does: a
+local that starts as `<<>>` and is only appended to, then returned as a
+bitstring (the signature type is `bitstring`).
+
+```elixir
+defk pack(xs :: [i64], n :: i64) :: bitstring do
+  for x <- xs, reduce: <<>> do
+    acc -> <<acc::bitstring, x::size(n)>>
+  end
+end
+```
+
+```
+iex> Mod.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
+<<41, 1::size(1)>>
+```
+
+- **Appending.** `<<acc::bitstring, seg, ...>>` gives a new bitstring with
+  the segments after `acc`'s bits. A segment is an `i64` expression `v` in 8
+  bits, `v::k` with a literal `k`, or `v::size(n)` with any `i64` expression
+  `n`; it is unsigned and big-endian (most significant bit first), Elixir's
+  default, so `unsigned`, `big` and `integer` may be written and change
+  nothing. The head, then every value and size, are evaluated left to right,
+  then the segments are appended in order. Several segments in one append,
+  sizes from 0 to 64, and any total length (not only whole bytes) are fine.
+- **Starting.** `<<>>` bound to a variable the kernel appends to
+  (`acc = <<>>`), or given as the initial value of an accumulator it appends
+  to (`reduce: {<<>>, 0}`, `Enum.reduce_while(xs, <<>>, ...)`), is the empty
+  bitstring. So is `<<>>` returned where the kernel returns a `bitstring`,
+  or given by a branch whose other branches give a bitstring.
+- **Where it can go.** A variable, a `for ..., reduce:` or
+  `Enum.reduce_while/3` accumulator (alone or in a tuple), a branch of an
+  `if`, `cond` or `case`, a called kernel's result (a kernel that returns a
+  `bitstring` is inlined like any other, and the caller may append to what
+  it returns), and the kernel's result, alone or in a tuple.
+- **Measuring.** `bit_size(acc)` is its number of bits, an `i64`. Pad to a
+  whole number of bytes, if you need to, with an explicit append:
+  `<<acc::bitstring, 0::size(rem(8 - rem(bit_size(acc), 8), 8))>>`.
+- **Values.** As in Elixir, appending never changes an existing value: after
+  `b = <<a::bitstring, 1::1>>`, `a` is still what it was, and appending to
+  `a` again gives a bitstring unrelated to `b`. Natively the common
+  `acc = <<acc::bitstring, ...>>` appends in place to a growable buffer
+  (doubling as it fills); appending to an older value copies its bits first.
+- **Limits.** A segment value outside `0..2^n - 1` raises `ArgumentError`
+  "bitstring segment value v does not fit in n bits", where Elixir keeps the
+  low `n` bits: mask it first (`band(v, 255)::8`), which also writes a
+  negative value's two's complement bits. A size outside `0..64` raises
+  `ArgumentError` "bitstring segment size n is outside 0..64". Elixir mode
+  raises both too. A value with the top bit of a 64-bit segment set is a
+  negative `i64`, so it does not fit `::64`; append it as two 32-bit halves
+  (`band(bsr(v, 32), 0xFFFFFFFF)::32, band(v, 0xFFFFFFFF)::32`).
+- **Runtime.** The buffer belongs to the call: it is kept across yields, and
+  freed when the kernel raises or its process dies, like an array the kernel
+  allocated. The NIF copies the bits into a binary and returns it with the
+  bit length; the kernel's generated Elixir function takes the bitstring
+  from it as a sub-binary
+  (`<<b::bitstring-size(len), _::bitstring>> = bin`). So a kernel returning
+  a bitstring has its NIF registered as `__defk_native_<name>__`, as in
+  Elixir mode.
+
+**Unsupported, until a workload needs them** ([`bitstring-segment`](#bitstring-segment),
+[`bitstring-use`](#bitstring-use)): signed, little- or native-endian, float,
+binary, bitstring and UTF segments; reading or indexing a bitstring
+(`acc[i]`, `len(acc)`, `for b <- acc`; a `<<...>> = acc` match is
+[`bitstring-match`](#bitstring-match)); starting from
+an input binary (`<<input::bitstring, ...>>` with `input :: [u8]`); a
+`bitstring` parameter; and passing a bitstring to another kernel.
+(defk-cmr)
 
 ### Module attributes
 
@@ -1187,8 +1268,8 @@ including ordinary `def`s of the kernel's own module, are not callable
   `RuntimeError` from a kernel's own [`raise`](#raise)), after the
   kernel's own buffers are freed. Catch it like any other.
 - **Process death.** A process killed while its kernel is suspended between
-  steps frees the kernel's frame and arrays (`__defk_stats__().frames_live`
-  goes back down; `demo.exs` shows it).
+  steps frees the kernel's frame, arrays and bitstring buffers
+  (`__defk_stats__().frames_live` goes back down; `demo.exs` shows it).
 - **Hot code upgrade.** A kernel suspended across a reload of its module
   finishes in the library it started in. A second reload (or `:code.purge/1`)
   before it finishes kills it, like any process running old Erlang code
@@ -1333,7 +1414,7 @@ end
 
 ### unknown-type
 
-Kernel types are i64, f64, bool, arrays of f64, f32, i64, i32, i16 and u8 ([f64], [f32], [i64], [i32], [i16], [u8]) and tuples of them for results.
+Kernel types are i64, f64, bool, arrays of f64, f32, i64, i32, i16 and u8 ([f64], [f32], [i64], [i32], [i16], [u8]) and tuples of them for results; bitstring is a result type too (the bitstring accumulator).
 
 - kind: a mistake to fix (in the kernel or the build)
 - why: a kernel works on native numbers and packed arrays, and these are the types it has
@@ -1945,7 +2026,7 @@ end
 A kernel calls builtins and the other kernels in its module.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a kernel runs as native code: it can call its builtins (len, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, mulhi, clz, ctz, popcount, rotl64, rotr64) and the kernels in this module, which are inlined
+- why: a kernel runs as native code: it can call its builtins (len, bit_size, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, mulhi, clz, ctz, popcount, rotl64, rotr64) and the kernels in this module, which are inlined
 - hint: define it as a kernel in this module, or compute it in Elixir and pass the result in
 
 Rejected:
@@ -2938,6 +3019,60 @@ defk f(i :: i64) :: i64 do
 end
 ```
 
+### bitstring-segment
+
+An append to a bitstring accumulator takes unsigned big-endian integer segments: `v::size(n)`, `v::k` or `v`.
+
+- kind: not supported yet (planned)
+- why: a kernel appends integer bits; signed, little-endian, float and binary segments are not supported until a workload needs them
+- hint: write unsigned big-endian integer segments: v::size(n), v::k or v (8 bits)
+
+Rejected:
+
+```elixir
+defk f(x :: i64) :: bitstring do
+  acc = <<>>
+  <<acc::bitstring, x::signed-8>>
+end
+```
+
+Write instead:
+
+```elixir
+defk f(x :: i64) :: bitstring do
+  acc = <<>>
+  <<acc::bitstring, band(x, 255)::8>>
+end
+```
+
+### bitstring-use
+
+A bitstring accumulator starts from `<<>>`, is appended to, measured with `bit_size/1` and returned; nothing else.
+
+- kind: not supported yet (planned)
+- why: a bitstring is a kernel's output: reading it, starting from an input binary, taking it as a parameter or passing it to another kernel is not supported yet
+- hint: measure it with bit_size/1, and keep what the kernel needs to read in variables or an array
+
+Rejected:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  acc = <<>>
+  acc = <<acc::bitstring, n::8>>
+  len(acc)
+end
+```
+
+Write instead:
+
+```elixir
+defk f(n :: i64) :: i64 do
+  acc = <<>>
+  acc = <<acc::bitstring, n::8>>
+  bit_size(acc)
+end
+```
+
 ### raise-value
 
 `raise` in a kernel is a statement: it cannot be a value, the last expression of a kernel or of a branch that gives one.
@@ -3109,6 +3244,8 @@ bug.
 | a `[u8]` write of a value outside 0..255 | `<<300::8>>` wraps | `ArgumentError` "value 300 does not fit in u8" |
 | an `[i16]` or `[i32]` write of a value outside its range | `<<32768::signed-16>>` wraps | `ArgumentError` "value 32768 does not fit in i16" |
 | an `[f32]` write of a value that rounds to inf | `<<1.0e40::float-32>>` stores inf | `ArgumentError` "value 1.0e40 does not fit in f32" |
+| a [bitstring accumulator](#the-bitstring-accumulator) segment `v::size(n)` with `v` outside `0..2^n - 1` (a negative `v` included) | keeps the low `n` bits | `ArgumentError` "bitstring segment value v does not fit in n bits" |
+| a bitstring segment size outside `0..64` | any non-negative size | `ArgumentError` "bitstring segment size n is outside 0..64" |
 | `alloc/2` of more than 2^48 bytes | (the VM would abort) | `ArgumentError` "alloc/2: length too large" |
 | `alloc/2` of a size the allocator cannot provide | (the VM would abort) | `ArgumentError` "out of memory"; Elixir mode raises it from 2^47 bytes without trying |
 | a range whose last element is within one step of the `i64` limit, e.g. `0..9223372036854775807` | runs | `ArithmeticError` "range element ... is within one step of the i64 limit" before the loop starts, also when the loop would stop earlier |

@@ -704,6 +704,118 @@ static inline float defk_to_f32(defk_ctx *ctx, double v) {
 }
 #define DEFK_NF_to_f32(C, V) ((float)defk_nf_r(&defk_nf, (double)(float)(V)))
 
+/*
+ * The bitstring accumulator (defk-cmr): acc = <<acc::bitstring, v::size(n)>>.
+ * A value is {nbits, slot + 1} (0: the empty bitstring, no buffer, which is
+ * what a zeroed local holds). Its buffer is an owned binary, so it stays put
+ * across yields, and is freed on an exception or process death like an array.
+ * The buffer's first 8 bytes hold its end, the number of bits written to it;
+ * the bits follow MSB-first (Elixir's big-endian default), and everything past
+ * the end is zero, so an append ORs its bits in.
+ *
+ * A value is a prefix of its buffer, so a value is never changed by a later
+ * append, as in Elixir. An append to a value that ends at its buffer's end
+ * writes in place (the common acc = <<acc::bitstring, ...>>); an append to an
+ * older, shorter value (`b = <<a::bitstring, 1::1>>` then `c = <<a::bitstring,
+ * 0::1>>`) copies its bits into a new buffer first, as the BEAM's own binary
+ * append does.
+ */
+typedef struct { int64_t nbits; int slot1; } defk_bits;
+
+#define DEFK_BITS_HDR 8
+
+/* the end of b's buffer (b has one) */
+static inline uint64_t defk_bits_end(defk_ctx *ctx, defk_bits b) {
+  uint64_t end;
+  __builtin_memcpy(&end, ctx->owned[b.slot1 - 1].data, sizeof end);
+  return end;
+}
+
+/* b with a buffer of its own that ends at b and has room for `more` bits,
+   plus the 8 bytes of slack an append's word store needs */
+__attribute__((noinline, unused)) static defk_bits defk_bits_reserve(defk_ctx *ctx, defk_bits b,
+                                                             int64_t more) {
+  uint64_t need = ((uint64_t)b.nbits + (uint64_t)more + 7) / 8 + 8 + DEFK_BITS_HDR;
+  if (need > DEFK_ALLOC_MAX_BYTES) defk_fail(ctx, DEFK_E_ARG, "bitstring too large");
+  if (b.slot1 && defk_bits_end(ctx, b) == (uint64_t)b.nbits) {
+    /* ours, at its end: grow in place, doubling */
+    ErlNifBinary *bin = &ctx->owned[b.slot1 - 1];
+    size_t old = bin->size, cap = old * 2;
+    if (cap < need) cap = (size_t)need;
+    if (!enif_realloc_binary(bin, cap))
+      defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", cap);
+    memset(bin->data + old, 0, cap - old);
+    return b;
+  }
+  /* empty, or an older value of a buffer appended past it: a new buffer
+     holding b's bits, the bits after them in its last byte cleared */
+  size_t cap = need < 64 ? 64 : (size_t)need;
+  int slot = defk_own(ctx, cap);
+  size_t bytes = (size_t)(b.nbits + 7) / 8;
+  uint8_t *data = ctx->owned[slot].data;
+  if (bytes) {
+    memcpy(data + DEFK_BITS_HDR, ctx->owned[b.slot1 - 1].data + DEFK_BITS_HDR, bytes);
+    if (b.nbits & 7) data[DEFK_BITS_HDR + bytes - 1] &= (uint8_t)(0xFF00u >> (b.nbits & 7));
+  }
+  uint64_t end = (uint64_t)b.nbits;
+  __builtin_memcpy(data, &end, sizeof end);
+  defk_bits r = {b.nbits, slot + 1};
+  return r;
+}
+
+/* the low n bits of v (1 <= n <= 57) at bit `pos` of p, MSB-first; the bits
+   from pos on are zero, and p has 8 readable bytes from pos / 8 */
+static inline void defk_bits_or(uint8_t *p, uint64_t pos, uint64_t v, int64_t n) {
+  uint8_t *q = p + (pos >> 3);
+  uint64_t w;
+  __builtin_memcpy(&w, q, 8);
+  w = DEFK_BE(64, w) | ((v << (64 - n)) >> (pos & 7));
+  w = DEFK_BE(64, w);
+  __builtin_memcpy(q, &w, 8);
+}
+
+__attribute__((noreturn, cold, unused)) static void defk_bits_fail(defk_ctx *ctx, int64_t v, int64_t n) {
+  if (n < 0 || n > 64)
+    defk_fail(ctx, DEFK_E_ARG, "bitstring segment size %lld is outside 0..64", (long long)n);
+  defk_fail(ctx, DEFK_E_ARG, "bitstring segment value %lld does not fit in %lld bits",
+            (long long)v, (long long)n);
+}
+
+/* <<b::bitstring, v::size(n)>>, unsigned: v must be in 0..2^n - 1 (Elixir
+   would keep the low n bits; a limit, like an array write) and n in 0..64 */
+static inline defk_bits defk_bits_put(defk_ctx *ctx, defk_bits b, int64_t v, int64_t n) {
+  if (DEFK_UNLIKELY((uint64_t)n > 64 || (n < 64 ? ((uint64_t)v >> n) != 0 : v < 0)))
+    defk_bits_fail(ctx, v, n);
+  if (n == 0) return b;
+  if (DEFK_UNLIKELY(!b.slot1 || defk_bits_end(ctx, b) != (uint64_t)b.nbits ||
+                    ((uint64_t)b.nbits + (uint64_t)n + 7) / 8 + 8 + DEFK_BITS_HDR >
+                        ctx->owned[b.slot1 - 1].size))
+    b = defk_bits_reserve(ctx, b, n);
+  uint8_t *p = ctx->owned[b.slot1 - 1].data;
+  uint64_t pos = (uint64_t)b.nbits;
+  if (n > 56) {
+    defk_bits_or(p + DEFK_BITS_HDR, pos, (uint64_t)v >> 32, n - 32);
+    defk_bits_or(p + DEFK_BITS_HDR, pos + (uint64_t)(n - 32), (uint64_t)v & 0xFFFFFFFFu, 32);
+  } else {
+    defk_bits_or(p + DEFK_BITS_HDR, pos, (uint64_t)v, n);
+  }
+  b.nbits += n;
+  uint64_t end = (uint64_t)b.nbits;
+  __builtin_memcpy(p, &end, sizeof end);
+  return b;
+}
+
+/* A bitstring result: {Bytes, BitLength}. The generated Elixir wrapper takes
+   the first BitLength bits of Bytes (<<b::bitstring-size(len), _::bitstring>>).
+   The bytes are copied out, so the buffer's slack is not returned. */
+__attribute__((unused)) static ERL_NIF_TERM defk_make_bits(ErlNifEnv *env, defk_ctx *ctx, defk_bits b) {
+  size_t bytes = (size_t)(b.nbits + 7) / 8;
+  ERL_NIF_TERM bin;
+  uint8_t *d = enif_make_new_binary(env, bytes, &bin);
+  if (bytes) memcpy(d, ctx->owned[b.slot1 - 1].data + DEFK_BITS_HDR, bytes);
+  return enif_make_tuple2(env, bin, enif_make_int64(env, b.nbits));
+}
+
 /* ---- scheduling ---------------------------------------------------------- */
 
 /*
