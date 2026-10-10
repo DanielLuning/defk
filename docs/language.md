@@ -1313,6 +1313,15 @@ defk split(x :: i64, f :: f64) :: f64 do
 end
 ```
 
+```elixir
+iex> M.split(150, 1.0)
+51.0
+iex> M.split(-3, 2.0)
+1.0
+iex> M.split(7, 3.0)
+1.5
+```
+
 - Each element position has one type, checked on its own: `{x, f}` beside
   `{0, 0.5}` is an `{i64, f64}`, and `{x, f}` beside `{f, f}` is
   [`branch-types`](#branch-types) for element 1.
