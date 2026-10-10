@@ -14,9 +14,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Done on branch defk-9p6.11/batched-levenshtein (commit f7cd20e): examples/batched_levenshtein.exs, Mix.install ex_strsim 0.1.0 (precompiled, installed fine). PROVISIONAL, MEASURED UNDER LOAD (two other benchmark agents running). Realistic size declared: 234,454 words (fuzzy_search list), query 'accomodation'; 1k is the sweep's first point. Elixir variants at 234k (best of 5): anchor per_pair DP 179 ms; DP with fixed query row 157 (binary) / 158 (charlist); Myers binary 28.1; Myers charlist 18.9; Myers binary comprehension 56.9; + branch-free score 16.3; over persistent_term tuple 16.0; same in 12 chunks 3.6-4.2 ms (baseline from 10k words up; one process below). defk (same Myers, [u8] out, packed index in persistent_term): DP kernel 31.3; Myers one call 6.6-6.8 (5.7 without the list); 12 chunks 4.3-4.6. Verdict at 234k: 0.86-0.99x -\u003e poor (best vs best, geo_nearest's rule); one process 2.4-2.8x; sweep 1k 2.9-4x, 3k 2.7-3.4x, 10k 1.9-2.3x, 30k ~1x, 100k 0.83-1.17x, 234k 0.84-1.0x; crossover 1000. defk chunks run on 2 of 12 schedulers (defk-8qs; yield or 1 ms sleep before the call did not help). ex_strsim per pair via Enum.map 35-38 ms (defk 8x, Elixir one-process Myers 2.2x faster). Tick gap (one scheduler, 234k, one process each): max ~2.0 / 2.2 / 2.1 ms Elixir/defk/ex_strsim, the loaded machine's floor (short per-pair NIF calls do not block). Agreement: Elixir (Myers, DP, chunked), defk (Myers, DP, chunked), anchor and ex_strsim identical on 11 queries x 234k, query lengths 0..70 x 1k, odd candidates (empty, 64-300 bytes); kernels agree with Elixir mode; mismatch exits 1. Expected :poor; a 1.0x run could read marginal (defk-9p6.24). README row in the poor-fit section. mix test and mix ci pass. No compiler bug found; Myers needed no workaround (i64, m \u003c= 62).",
+      "timestamp": "2026-10-10T12:01:31Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Target workload: batched Levenshtein vs ex_strsim",
   "type": "task",
-  "updated_at": "2026-10-10T11:47:24Z"
+  "updated_at": "2026-10-10T12:01:31Z"
 }
