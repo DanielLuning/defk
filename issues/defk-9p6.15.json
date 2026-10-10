@@ -9,6 +9,7 @@
   "blocks": [
     "defk-sgw.4"
   ],
+  "closed_at": "2026-10-10T12:17:06Z",
   "created": "2026-10-05T21:21:32Z",
   "description": "100 / 100k pre-hashed u64s, p=14. ex_data_sketch 0.10.3 at the backend layer: baseline Backend.Pure.hll_update_many(state, [u64], p: 14), NIF column Backend.Rust.hll_update_many (packs the list to a binary in Elixir; copies registers twice per call, confirmed in hll.rs, so the per-call copy is like for like). defk packs the same list end to end. Public HLL.update_many (10k chunking, raw hashing path) out. Agreement: byte-identical state binary.\n\nEvidence bar (from defk-dtw.4/defk-dtw.15): script examples/\u003cname\u003e.exs with Mix.install of the pinned anchor package; the anchor's Elixir version is the first baseline and must be optimised further in Elixir before the verdict counts (what was tried listed in the header; baseline: :optimized); realistic size declared in the header before any numbers; workload verdict at the realistic size, other size beside; ~6-point geometric sweep with crossover (smallest size where defk \u003e= 2x, or none), skipped if a large run exceeds ~1 min; NIF timing and responsiveness (max and p99 1 ms tick gap, one scheduler, large size, for Elixir/defk/NIF) via Defk.Bench.report/1; Elixir, defk and NIF outputs must agree (failure fails the script); quiet-machine run_all.exs; row added to examples/README.md.",
   "id": "defk-9p6.15",
@@ -27,8 +28,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Target workload: HLL update_many vs ex_data_sketch",
   "type": "task",
-  "updated_at": "2026-10-10T12:15:52Z"
+  "updated_at": "2026-10-10T12:17:06Z"
 }
