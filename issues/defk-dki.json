@@ -7,6 +7,7 @@
     "defk-9p6.16",
     "defk-sgw.3"
   ],
+  "closed_at": "2026-10-10T10:07:28Z",
   "created": "2026-10-06T09:08:21Z",
   "description": "Allow `v::size(n)-signed` / `v::k-signed` segments when appending to the bitstring accumulator. A value outside the signed range of its width raises (a limit; Elixir truncates), matching the decided rule for unsigned segments. Gorilla's anchor writes `\u003c\u003c1::1, 0::1, dod::7-signed\u003e\u003e`; without it the author must write `band(dod, 0x7F)::7`.\n\nEach accepted convenience construct needs: an Elixir-mode meaning, agreement tests (Defk.Case, both modes), and a docs/language.md entry. Decided in 'Which convenience constructs do the six target workloads need?' (defk-dtw.18); sketches on branch prototype/defk-dtw.18-sketches (prototypes/convenience_sketches.exs).\n\nDone when signed segments of widths 1..64 agree with Elixir mode, including the boundary values and the raise just outside them.",
   "id": "defk-dki",
@@ -20,8 +21,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Signed integer segments in the bitstring accumulator",
   "type": "task",
-  "updated_at": "2026-10-10T09:59:01Z"
+  "updated_at": "2026-10-10T10:07:28Z"
 }
