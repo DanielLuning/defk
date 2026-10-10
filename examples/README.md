@@ -36,6 +36,7 @@ elixir examples/run_all.exs         # all of them + scoreboard (exit 1 if any cl
    - `Defk.Bench` forces a full GC before each timed run, so one run's garbage isn't billed to the next.
 5. **"As good" means Elixir wins.** Below the 2× bar (`marginal`), the recommendation is Elixir: the gain doesn't pay for native code.
 6. **Keep the poor fits.** Examples where Elixir wins are as valuable as the wins. They tell people what not to do.
+7. **Give each parallel kernel call a few milliseconds of work, or fewer, bigger chunks.** The BEAM wakes an idle scheduler when a crowded run queue has run enough reductions. A kernel charges one timeslice (4000 reductions) per 250 µs, while Elixir uses that many in about 5 µs. So kernel tasks under ~1 ms that one process spawns (`Task.async_stream` chunks) stay on 2–4 of 12 schedulers, while Elixir tasks of the same length spread over all 12 (`defk-8qs`). Chunks of ~5 ms spread (monte_carlo_rtp at 10M spins: 48 chunks on 11–12 schedulers). If the work can't be split that coarsely, `+swt very_low` (`elixir --erl "+swt very_low"`) spreads the short calls: batched_levenshtein's 12 chunks went from 5.1–5.6 to 2.3–2.5 ms and monte_carlo_rtp at 1M from 16.7 to 7.7 ms, while the Elixir chunks did not change (measured under load). Report the verdict on a default VM and give the flag's number beside it. Runtime options are in `defk-6lr`.
 
 ## Where defk helps
 
