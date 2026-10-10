@@ -79,6 +79,70 @@ defmodule Defk.Build do
         else: reraise(e, __STACKTRACE__)
   end
 
+  # The fast-path report's remark pass (`use Defk, report: :full`): the same
+  # compile with clang's loop-vectorize remarks, to an object file that is
+  # thrown away, so the cached .so is never touched. -gline-tables-only gives
+  # the remarks their C lines and does not change what the optimiser does.
+  # The remarks are cached beside the .so, named by these flags too.
+  @remark_flags ~w(-gline-tables-only -Rpass=loop-vectorize -Rpass-missed=loop-vectorize -Rpass-analysis=loop-vectorize)
+
+  @doc """
+  Whether `CC` (or "cc") is clang, by the first line of its `--version`.
+  """
+  @spec clang?() :: boolean()
+  def clang?, do: System.get_env("CC", "cc") |> cc_version() |> String.contains?("clang")
+
+  @doc """
+  clang's loop-vectorize remarks on the C source `src` of the library at
+  `base` (from `build!/3`), in the order clang gave them: `{:ok, [{file,
+  line, kind, message}]}`, kind `:passed`, `:missed` or `:analysis`, or
+  `{:error, output}` if the pass failed. Run only for `report: :full`, and
+  only when `clang?/0`.
+  """
+  @spec remarks!(binary(), String.t()) ::
+          {:ok, [{String.t(), pos_integer(), atom(), String.t()}]} | {:error, String.t()}
+  def remarks!(src, base) do
+    tag = @remark_flags |> :erlang.md5() |> Base.encode16(case: :lower) |> binary_part(0, 6)
+    cached = "#{base}-#{tag}.remarks"
+
+    with {:error, _} <- File.read(cached),
+         {:ok, out} <- remark_pass(src, base) do
+      File.write!(cached, out)
+      {:ok, parse_remarks(out)}
+    else
+      {:ok, out} -> {:ok, parse_remarks(out)}
+      {:error, out} -> {:error, out}
+    end
+  end
+
+  defp remark_pass(src, base) do
+    c = base <> ".c"
+    File.exists?(c) || File.write!(c, src)
+    obj = "#{base}-remarks-#{System.unique_integer([:positive])}.o"
+
+    args =
+      (@cflags -- ["-shared"]) ++
+        @remark_flags ++ ["-I", erts_include(), "-I", @priv, "-c", "-o", obj, c]
+
+    try do
+      case System.cmd(System.get_env("CC", "cc"), args, stderr_to_stdout: true) do
+        {out, 0} -> {:ok, out}
+        {out, _} -> {:error, out}
+      end
+    after
+      File.rm(obj)
+    end
+  end
+
+  @remark ~r/^(.+?):(\d+):\d+: remark: (.*) \[-Rpass(|-missed|-analysis)=loop-vectorize\]$/
+
+  defp parse_remarks(out) do
+    for line <- String.split(out, "\n"), [_, file, l, msg, kind] <- [Regex.run(@remark, line)] do
+      kind = %{"" => :passed, "-missed" => :missed, "-analysis" => :analysis}[kind]
+      {file, String.to_integer(l), kind, msg}
+    end
+  end
+
   @doc """
   Cache key for a generated kernel: the 10 hex chars used in the file name.
 

@@ -82,6 +82,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 | Type checker and C codegen | `lib/defk/compiler.ex` |
 | Compile error codes and format | `lib/defk/errors.ex` |
 | C build, cached by source hash | `lib/defk/build.ex` |
+| Fast-path report: margin notes, clang's vectorisation remarks | `lib/defk/report.ex` |
 | Elixir mode: kernel bodies as plain Elixir | `lib/defk/elixir_mode.ex`, `lib/defk/elixir_mode/ops.ex` |
 | Measurement and the DEFK_RESULT line for examples | `lib/defk/bench.ex` |
 | The builtin list shared by the compiler, Elixir mode and the error registry | `lib/defk/builtins.ex` |
@@ -115,6 +116,17 @@ way, and `Defk.ElixirMode.with_mode/2` switches one process. It is always
 compiled in `:test`. `dbg/1` and `IO.inspect/1,2` work inside a kernel body
 there (native code ignores them), and `Mod.__defk_elixir_source__/0` shows the
 generated code.
+
+**Fast-path report** (a tool for explaining measurements): `Defk.Report.print(Mod)`
+prints each kernel's source with margin notes on what the compiler did to the
+hot path. It shows each bounds check dropped or kept (a kept one names the fact
+that would drop it), each `if`/`cond`/`case` as a select or a branch and why,
+each loop's safepoints (per iteration, strips of `DEFK_STRIP`, or none) and
+why, inlined calls, copies and flagged float checks. `Mod.__defk_report__/0`
+returns the same facts as data, so a test can assert that a hot loop stays
+tight. `use Defk, report: :full` adds clang's vectorisation verdict for each
+loop, at the cost of one extra compiler pass. See
+[`docs/fast-path-report.md`](docs/fast-path-report.md).
 
 ## Design decisions the benchmarks validated
 

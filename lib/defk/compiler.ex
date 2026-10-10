@@ -49,6 +49,7 @@ defmodule Defk.Compiler do
     Process.put(:defk_diags, [])
     Process.put(:defk_broken, MapSet.new())
     Process.put(:defk_statics, %{})
+    Process.put(:defk_report, [])
 
     kernels =
       raw_kernels
@@ -495,6 +496,8 @@ defmodule Defk.Compiler do
     Process.put(:defk_nhalts, 0)
     Process.put(:defk_halts_emitted, 0)
     Process.put(:defk_writes, [])
+    Process.put(:defk_report_kernel, {{k.name, k.arity}, k.yield})
+    note(:kernel, k.head, if(k.yield, do: :yield, else: :no_yield), "#{k.name}/#{k.arity}")
 
     vars =
       Map.new(k.params, fn {p, t} ->
@@ -764,6 +767,7 @@ defmodule Defk.Compiler do
         do: "(#{a.c}).data[#{i.c}] = #{vc};\n",
         else: "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
 
+    note_bounds(target, a, i)
     {[sa, si, sv, sc, store], env}
   end
 
@@ -774,7 +778,8 @@ defmodule Defk.Compiler do
     {[s, s2], env}
   end
 
-  defp lower_stmt({:if, _, [cond, kw]}, env) when is_list(kw) do
+  defp lower_stmt({:if, _, [cond, kw]} = node, env) when is_list(kw) do
+    note_branch_stmt(node, "a statement, and a select is for a value")
     {sc, c} = lower_cond(cond, env)
     {sa, _} = lower_stmts(Keyword.fetch!(kw, :do), env)
 
@@ -789,6 +794,7 @@ defmodule Defk.Compiler do
   end
 
   defp lower_stmt({:case, _, [subject, [do: clauses]]} = node, env) do
+    note_branch_stmt(node, "a statement, and a select is for a value")
     {ss, arms, cenv} = case_arms(subject, clauses, node, env)
     {[ss, branch_chain(arms, cenv, &elem(lower_stmts(&1, &2), 0))], env}
   end
@@ -1142,6 +1148,13 @@ defmodule Defk.Compiler do
       case env.vars do
         %{^n => %{buf: _} = b} ->
           if not b.owned or shared?(b, MapSet.union(pairs(env, seen), env.out)) do
+            note(
+              :copy,
+              e,
+              :copied,
+              "#{n} is copied before this statement, which writes it in a branch or loop: #{copy_why(b)}"
+            )
+
             {s, env} = copy_var(n, b, env)
             {[acc, s], env}
           else
@@ -1229,10 +1242,12 @@ defmodule Defk.Compiler do
             raise "defk bug: input array #{n} written in a nested block was not copied first"
 
           {s, b} = copied(a, n)
+          note(:copy, arr, :copied, "#{n} is copied before this write: #{copy_why(a)}")
           {s, b, %{env | vars: Map.put(env.vars, n, b)}}
 
         _ ->
           {s, b} = copied(a, "arr")
+          note(:copy, arr, :copied, "the array is copied before this write: #{copy_why(a)}")
           {s, b, env}
       end
     end
@@ -1290,6 +1305,13 @@ defmodule Defk.Compiler do
     |> Enum.reduce({[], env}, fn n, {acc, env} ->
       case env.vars do
         %{^n => %{buf: ^buf} = b} ->
+          note(
+            :copy,
+            loop,
+            :copied,
+            "#{n} is copied before the loop, which walks its buffer while writing it"
+          )
+
           {s, env} = copy_var(n, b, env)
           {[acc, s], env}
 
@@ -1439,6 +1461,7 @@ defmodule Defk.Compiler do
     # an in-range read cannot fail but by its inf/NaN check, which a float
     # expression may defer to its own check (float_tree)
     v = if in_bounds?(a, i), do: Map.put(v, :pure_read, raw), else: v
+    note_bounds(node, a, i)
     {[sa, si], v}
   end
 
@@ -1656,23 +1679,48 @@ defmodule Defk.Compiler do
     {[sa, sb], v}
   end
 
-  # i64 + - * checked for overflow, with range facts
+  # i64 + - * checked for overflow, with range facts; no check when the
+  # operands' facts keep every result inside i64 (defk-upc)
   defp i64_arith(op, va, vb, env) do
-    case {op, va.t, vb.t} do
-      {:+, :i64, :i64} ->
-        Map.merge(
-          val("defk_add_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
-          add_facts(va, vb)
-        )
+    {fun, facts, {lo, hi}} =
+      case op do
+        :+ ->
+          {"add", add_facts(va, vb), {add(lo_of(va), lo_of(vb)), add(hi_of(va), hi_of(vb))}}
 
-      {:-, :i64, :i64} ->
-        Map.merge(
-          val("defk_sub_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
-          sub_facts(va, vb)
-        )
+        :- ->
+          {"sub", sub_facts(va, vb),
+           {add(lo_of(va), neg(hi_of(vb))), add(hi_of(va), neg(lo_of(vb)))}}
 
-      {:*, :i64, :i64} ->
-        val("defk_mul_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64)
+        :* ->
+          {"mul", mul_facts(va, vb), mul_range(va, vb)}
+      end
+
+    c =
+      if in_i64?(lo, hi),
+        do: "(#{va.c} #{op} #{vb.c})",
+        else: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"
+
+    Map.merge(val(c, :i64), facts)
+  end
+
+  # div or rem of two integers, checked for a zero divisor (and i64 div for
+  # overflow)
+  defp int_div(f, a, b, node, env) do
+    case {int_pair!(a, b, node), env} do
+      {{:i64, a, b}, %{bad: bad, ovf: ovf}} when f == :div ->
+        val("defk_div_i64_g(&#{bad}, &#{ovf}, #{a.c}, #{b.c})", :i64)
+
+      {{:i64, a, b}, %{bad: bad}} ->
+        val("defk_rem_i64_g(&#{bad}, #{a.c}, #{b.c})", :i64)
+
+      {{:u64, a, b}, %{bad: bad}} ->
+        val("defk_#{f}_u64_g(&#{bad}, #{a.c}, #{b.c})", :u64)
+
+      {{:i64, a, b}, _} ->
+        val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
+
+      {{:u64, a, b}, _} ->
+        val("defk_#{f}_u64(ctx, #{a.c}, #{b.c})", :u64)
     end
   end
 
@@ -1975,7 +2023,7 @@ defmodule Defk.Compiler do
       arms = bits_arms(arms)
       t = branch_type!(for({_, _, _, _, v} <- arms, v, do: v), name, node)
       tmp = fresh(name, t)
-      {lower_branch(arms, [t], [tmp], env), val(tmp, t, tmp)}
+      {lower_branch(arms, [t], [tmp], env, node), val(tmp, t, tmp)}
     end
   end
 
@@ -2014,13 +2062,16 @@ defmodule Defk.Compiler do
 
     tmps = Enum.map(ts, &fresh(name, &1))
     elems = Enum.zip_with(tmps, ts, &val(&1, &2, &1))
-    {lower_branch(arms, ts, tmps, env), %{t: {:tuple, ts}, elems: elems}}
+    {lower_branch(arms, ts, tmps, env, node), %{t: {:tuple, ts}, elems: elems}}
   end
 
   # the code that assigns each of `tmps` (of types `ts`) its element of the
-  # value of the arm taken
-  defp lower_branch(arms, ts, tmps, env),
-    do: if(select?(arms), do: select(arms, ts, tmps, env), else: chain(arms, tmps))
+  # value of the arm taken; `node` is the if, cond or case
+  defp lower_branch(arms, ts, tmps, env, node) do
+    code = if(select?(arms), do: select(arms, ts, tmps, env), else: chain(arms, tmps))
+    note_branch(node, arms, code, tmps)
+    code
+  end
 
   # the C of each element of an arm's value
   defp parts(%{elems: elems}), do: Enum.map(elems, & &1.c)
@@ -2429,8 +2480,9 @@ defmodule Defk.Compiler do
   # u64_le(bytes, i) and the other word loads (Defk.Builtins.loads/0): an
   # unaligned load of w bytes at byte offset i, bounds-checked unless
   # i + w <= len(bytes) is proven. u64 gives the i64 bit pattern.
-  defp builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], _node, _) when f in @loads do
+  defp builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], node, _) when f in @loads do
     w = Defk.Builtins.load_width(f)
+    note_bounds(node, a, i, w)
 
     c =
       if in_bounds?(a, i, w),
@@ -2472,21 +2524,14 @@ defmodule Defk.Compiler do
 
   defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, env)
        when f in [:div, :rem] and ta in @ints and tb in @ints do
-    case {int_pair!(a, b, node), env} do
-      {{:i64, a, b}, %{bad: bad, ovf: ovf}} when f == :div ->
-        val("defk_div_i64_g(&#{bad}, &#{ovf}, #{a.c}, #{b.c})", :i64)
+    v = int_div(f, a, b, node, env)
 
-      {{:i64, a, b}, %{bad: bad}} ->
-        val("defk_rem_i64_g(&#{bad}, #{a.c}, #{b.c})", :i64)
+    case {f, v, b} do
+      {:div, %{t: :i64}, %{lo: k, hi: k}} when is_integer(k) and k > 0 ->
+        Map.merge(v, div_facts_of(a, k))
 
-      {{:u64, a, b}, %{bad: bad}} ->
-        val("defk_#{f}_u64_g(&#{bad}, #{a.c}, #{b.c})", :u64)
-
-      {{:i64, a, b}, _} ->
-        val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
-
-      {{:u64, a, b}, _} ->
-        val("defk_#{f}_u64(ctx, #{a.c}, #{b.c})", :u64)
+      _ ->
+        v
     end
   end
 
@@ -2675,6 +2720,7 @@ defmodule Defk.Compiler do
   defp inline(k, vals, {_, _, args} = node, env) do
     key = {k.name, k.arity}
     key in env.inlining && recursion!(key, node, env)
+    note(:inline, node, :inlined, "#{k.name}/#{k.arity}")
 
     # bind each argument to a parameter once, as `p = arg` binds it
     {binds, vars} =
@@ -3055,6 +3101,7 @@ defmodule Defk.Compiler do
     in_loop(fn id ->
       {body, flat?} = lower_quals_tracked(rest, env, inner)
       strip = strip && Map.merge(strip, %{var: i, stop: e})
+      loop_at(range)
       [setup, loop(id, done, strip, flat?, [body, incr])]
     end)
   end
@@ -3073,18 +3120,12 @@ defmodule Defk.Compiler do
     near_limit =
       cond do
         is_integer(k) and k > 0 ->
-          safe? =
-            (is_integer(vb[:hi]) and vb[:hi] <= @i64_max - k) or
-              (k <= @i64_max - 2 ** 61 and Enum.any?(ub(vb), fn {_, d} -> d <= 0 end))
-
-          if !safe?, do: "#{e} > INT64_C(#{@i64_max - k})"
+          hi = hi_of(vb)
+          if !(is_integer(hi) and hi <= @i64_max - k), do: "#{e} > INT64_C(#{@i64_max - k})"
 
         is_integer(k) ->
-          safe? =
-            (is_integer(vb[:lo]) and vb[:lo] >= @i64_min - k) or
-              Enum.any?(lb(vb), fn {_, d} -> d >= @i64_min - k end)
-
-          if !safe?, do: "#{e} < INT64_C(#{@i64_min - k})"
+          lo = lo_of(vb)
+          if !(is_integer(lo) and lo >= @i64_min - k), do: "#{e} < INT64_C(#{@i64_min - k})"
 
         true ->
           "(#{k} > 0 ? #{e} > INT64_MAX - #{k} : #{e} < INT64_MIN - #{k})"
@@ -3148,6 +3189,7 @@ defmodule Defk.Compiler do
         stop: "#{arr}.len - 1"
       }
 
+      loop_at(src)
       [s, "#{k} = 0;\n", loop(id, "#{k} >= #{arr}.len", strip, flat?, body)]
     end)
   end
@@ -3180,6 +3222,9 @@ defmodule Defk.Compiler do
   # a float_tree check's replay: no braces inside (its operands are pure)
   @nf_replay ~r/DEFK_FCHECK\([^{}]*\) \{[^{}]*\}/
   @nf_scalars ~w(int64_t double int uint64_t)
+  # the end of a loop/5 form, for Defk.Report's remark mapping (note_loop/2)
+  @loop_end "/* defk:end */\n"
+  @strips "strips of DEFK_STRIP trips, one safepoint per strip"
 
   # A loop with a safepoint on every back-edge, except for a flat loop whose
   # trip count is known on entry:
@@ -3196,18 +3241,58 @@ defmodule Defk.Compiler do
   #   strip.done_at   - the loop's exit test against a given last index
   # A flat loop whose body can fail only by a float check runs flagged
   # (flagged_loop/5).
+  # Each form is noted for the fast-path report (note_loop/2) and marked in
+  # the C for clang's remarks (Defk.Report).
   defp loop(id, done, strip, :plain = flat, body) when is_map(strip) do
     case flag_strip(id, body) do
-      nil -> strip_loop(id, done, strip, flat, body)
-      flagged -> flagged_loop(id, done, strip, body, flagged)
+      nil ->
+        mark = note_loop(:strips, @strips)
+        note_unflagged(body)
+        [mark, strip_loop(id, done, strip, flat, body), @loop_end]
+
+      flagged ->
+        mark = note_loop(:strips, @strips <> "; flagged")
+
+        note(
+          :nonfinite,
+          Process.get(:defk_report_loop),
+          :flagged,
+          "float checks set a flag tested once per strip; a set flag replays the strip with raising checks"
+        )
+
+        [mark, flagged_loop(id, done, strip, body, flagged), @loop_end]
     end
   end
 
-  defp loop(id, done, strip, flat, body) when is_map(strip) and flat == :exits,
-    do: strip_loop(id, done, strip, flat, body)
+  defp loop(id, done, strip, flat, body) when is_map(strip) and flat == :exits do
+    mark =
+      note_loop(
+        :strips,
+        @strips <> "; a reduce_while halt can leave it, so its trips are charged on entry"
+      )
 
-  defp loop(id, done, _strip, _flat?, body),
-    do: ["defk_l#{id}:;\nwhile (!(#{done})) {\n", resume_dispatch(), body, safepoint(), "}\n"]
+    [mark, strip_loop(id, done, strip, flat, body), @loop_end]
+  end
+
+  defp loop(id, done, strip, flat?, body) do
+    why =
+      [
+        strip == nil && "the range step is not a literal, so the trip count is not known on entry",
+        flat? == false && "the body has a nested loop (its own or in an inlined call)"
+      ]
+      |> Enum.filter(& &1)
+      |> Enum.join("; ")
+
+    [
+      note_loop(:per_iteration, "a safepoint every iteration: " <> why),
+      "defk_l#{id}:;\nwhile (!(#{done})) {\n",
+      resume_dispatch(),
+      body,
+      safepoint(),
+      "}\n",
+      @loop_end
+    ]
+  end
 
   defp strip_loop(id, done, strip, flat, body) do
     r = fresh("rem", {:c, "uint64_t"})
@@ -3283,7 +3368,7 @@ defmodule Defk.Compiler do
       flagged.(done),
       "DEFK_TICKS(#{r} + 1)\n",
       strip_frame(id, done, se, strip, e, strip_stop, flagged.(strip.done_at.(se))),
-      "if (0) {\ndefk_rp#{id}:;\n",
+      "if (0) {\ndefk_rp#{id}:;\n/* defk:replay */\n",
       restore,
       "while (!(#{strip.done_at.(se)})) {\n",
       body,
@@ -3637,6 +3722,13 @@ defmodule Defk.Compiler do
         case v.t do
           {:arr, _} ->
             {ic, seen} = loop_owned(v, seen)
+
+            note_copy(
+              ic,
+              init_ast,
+              "the initial value of #{name} is copied: the accumulator's buffer is the loop's alone"
+            )
+
             acc = %{t: v.t, owned: true, fin: v[:fin] || false, len_lo: v[:len_lo]}
             {{{name, c, acc}, ic}, seen}
 
@@ -3767,9 +3859,16 @@ defmodule Defk.Compiler do
     {outs, _} =
       Enum.zip(accs, outs)
       |> Enum.map_reduce(MapSet.new(live, &elem(&1, 1)), fn
-        {{_, c, %{t: {:arr, _}} = a}, r}, seen ->
+        {{name, c, %{t: {:arr, _}} = a}, r}, seen ->
           lost_facts?(a, r) && Process.put(fix, MapSet.put(Process.get(fix), c))
           {rc, seen} = loop_owned(r, seen)
+
+          note_copy(
+            rc,
+            at,
+            "the new value of #{name} is copied every iteration: the accumulator's buffer is the loop's alone"
+          )
+
           {%{r | c: rc}, seen}
 
         {_, r}, seen ->
@@ -3831,16 +3930,19 @@ defmodule Defk.Compiler do
           hint: "add an else branch that returns {:cont, acc} or {:halt, acc}"
         )
 
+    note_branch_stmt(node, "it ends an Enum.reduce_while/3 fn, each arm continuing or halting")
     branch_chain([{c, Keyword.fetch!(kw, :do)}, {true, else_ast}], env, &lower_tail(&1, &2, leaf))
   end
 
   defp tail_expr({:cond, _, [[do: clauses]]} = node, env, leaf) when is_list(clauses) do
     arms = Enum.map(clauses, &clause_parts/1)
     match?({true, _}, List.last(arms)) || cond_without_true!(node)
+    note_branch_stmt(node, "it ends an Enum.reduce_while/3 fn, each arm continuing or halting")
     branch_chain(arms, env, &lower_tail(&1, &2, leaf))
   end
 
   defp tail_expr({:case, _, [subject, [do: clauses]]} = node, env, leaf) do
+    note_branch_stmt(node, "it ends an Enum.reduce_while/3 fn, each arm continuing or halting")
     {ss, arms, cenv} = case_arms(subject, clauses, node, env)
     [ss, branch_chain(arms, cenv, &lower_tail(&1, &2, leaf))]
   end
@@ -4226,15 +4328,56 @@ defmodule Defk.Compiler do
   # ---------------------------------------------------------- range facts --
   # An i64 value may carry facts that let a[i] skip its bounds check:
   #   lo, hi - constants with lo <= v <= hi (nil = unknown)
-  #   lb, ub - %{array_cvar => k}: v >= len(array) + k, v <= len(array) + k
+  #   lb, ub - %{array_cvar => k}: v >= len(array) + k, v <= len(array) + k;
+  #            a multiple or quotient of a length (defk-upc) has the key
+  #            {array_cvar, p, q}, p >= 0 and q >= 1 coprime and not both 1:
+  #            q * v >= p * len(array) + k, q * v <= p * len(array) + k
   # An array may carry len_lo / len_lb: the same lower bounds for its length.
   # Facts are exact for checked arithmetic (an overflow raises, never wraps).
   # They name array C variables, which are assigned in one place, never change
   # length, and stay in scope only where every fact about them was derived.
+  # Every length is below 2^61 (DEFK_ALLOC_MAX_BYTES, and the largest
+  # binary), so an ub fact also bounds v by a constant (hi_of/1).
 
   defp lb(v), do: v[:lb] || %{}
   defp ub(v), do: v[:ub] || %{}
   defp len_lb(a), do: a[:len_lb] || %{}
+
+  @len_max 2 ** 61 - 1
+
+  defp scale({_arr, _p, _q} = key), do: key
+  defp scale(arr), do: {arr, 1, 1}
+
+  # the fact q * v <= p * len(arr) + k (dir :ub) or >= (:lb), with p and q
+  # made coprime: dividing by their gcd rounds k down for ub, up for lb
+  defp norm_fact(arr, p, q, k, dir) do
+    g = Integer.gcd(p, q)
+    k = if dir == :ub, do: Integer.floor_div(k, g), else: -Integer.floor_div(-k, g)
+
+    case {div(p, g), div(q, g)} do
+      {1, 1} -> {arr, k}
+      {p, q} -> {{arr, p, q}, k}
+    end
+  end
+
+  # the constant bounds v's facts give, its lb/ub facts included
+  defp lo_of(v) do
+    Enum.reduce(lb(v), v[:lo], fn {key, k}, lo ->
+      {_, _, q} = scale(key)
+      either(lo, -Integer.floor_div(-k, q), &max/2)
+    end)
+  end
+
+  defp hi_of(v) do
+    Enum.reduce(ub(v), v[:hi], fn {key, k}, hi ->
+      {_, p, q} = scale(key)
+      either(hi, Integer.floor_div(p * @len_max + k, q), &min/2)
+    end)
+  end
+
+  # a value within lo..hi needs no i64 overflow check
+  defp in_i64?(lo, hi),
+    do: is_integer(lo) and is_integer(hi) and lo >= @i64_min and hi <= @i64_max
 
   # ------------------------------------------------------- element types --
   # A narrow element (u8, i16, i32, f32) widens when read: an integer to an
@@ -4296,14 +4439,28 @@ defmodule Defk.Compiler do
 
   # 0 <= i < len(a); with a width w (a word load), 0 <= i and i + w <= len(a)
   defp in_bounds?(a, i, w \\ 1) do
+    lo = lo_of(i)
     i = if w == 1, do: i, else: %{lo: i[:lo], hi: add(i[:hi], w - 1), ub: shift(ub(i), w - 1)}
+    hi = hi_of(i)
 
     below? =
-      Map.get(ub(i), a.c, 0) < 0 or
-        (is_integer(a[:len_lo]) and is_integer(i[:hi]) and i[:hi] < a[:len_lo]) or
-        Enum.any?(len_lb(a), fn {y, d} -> match?(%{^y => o} when o - d < 0, ub(i)) end)
+      (is_integer(a[:len_lo]) and is_integer(hi) and hi < a[:len_lo]) or
+        Enum.any?(ub(i), &below_len?(&1, a.c, len_lb(a)))
 
-    is_integer(i[:lo]) and i[:lo] >= 0 and below?
+    is_integer(lo) and lo >= 0 and below?
+  end
+
+  # q * i <= p * len(y) + o proves i < len(a): y is a with p <= q and o < 0,
+  # or len(a) has a lower bound q1 * len(a) >= p1 * len(y) + d with
+  # p / q <= p1 / q1 and o / q < d / q1
+  defp below_len?({key, o}, arr, len_lb) do
+    {y, p, q} = scale(key)
+
+    (y == arr and p <= q and o < 0) or
+      Enum.any?(len_lb, fn {key1, d} ->
+        {y1, p1, q1} = scale(key1)
+        y1 == y and p * q1 <= p1 * q and o * q1 < d * q
+      end)
   end
 
   defp add_facts(a, b) do
@@ -4321,6 +4478,56 @@ defmodule Defk.Compiler do
       hi: add(a[:hi], neg(b[:lo])),
       lb: shift(lb(a), neg(b[:hi])),
       ub: shift(ub(a), neg(b[:lo]))
+    }
+  end
+
+  # a product: lo..hi from the operands' (nil when one is unbounded), and
+  # for a constant k >= 1 times v, v's facts scaled by k
+  defp mul_facts(a, b) do
+    case {a, b} do
+      {%{lo: k, hi: k}, v} when is_integer(k) and k > 0 ->
+        scaled(v, k)
+
+      {v, %{lo: k, hi: k}} when is_integer(k) and k > 0 ->
+        scaled(v, k)
+
+      _ ->
+        Map.new(
+          Enum.zip([:lo, :hi], Tuple.to_list(mul_bounds({a[:lo], a[:hi]}, {b[:lo], b[:hi]})))
+        )
+    end
+  end
+
+  defp scaled(v, k) do
+    %{
+      lo: v[:lo] && v[:lo] * k,
+      hi: v[:hi] && v[:hi] * k,
+      lb: scale_facts(lb(v), k, :lb),
+      ub: scale_facts(ub(v), k, :ub)
+    }
+  end
+
+  # every value of a * b, with the bounds lb/ub facts give (lo_of, hi_of)
+  defp mul_range(a, b), do: mul_bounds({lo_of(a), hi_of(a)}, {lo_of(b), hi_of(b)})
+
+  defp mul_bounds({a1, a2}, {b1, b2})
+       when is_integer(a1) and is_integer(a2) and is_integer(b1) and is_integer(b2) do
+    ps = [a1 * b1, a1 * b2, a2 * b1, a2 * b2]
+    {Enum.min(ps), Enum.max(ps)}
+  end
+
+  defp mul_bounds(_a, _b), do: {nil, nil}
+
+  # div(v, k) for a literal k >= 1: div is monotonic, and v's facts divided
+  # (ub only for v >= 0, where div rounds down rather than towards zero)
+  defp div_facts_of(v, k) do
+    ub = if is_integer(lo_of(v)) and lo_of(v) >= 0, do: div_facts(ub(v), k, :ub), else: %{}
+
+    %{
+      lo: v[:lo] && div(v[:lo], k),
+      hi: v[:hi] && div(v[:hi], k),
+      lb: div_facts(lb(v), k, :lb),
+      ub: ub
     }
   end
 
@@ -4388,8 +4595,32 @@ defmodule Defk.Compiler do
   defp neg(x) when is_integer(x), do: -x
   defp neg(_), do: nil
 
+  # the facts of v + k from those of v
   defp shift(_facts, nil), do: %{}
-  defp shift(facts, k), do: Map.new(facts, fn {arr, o} -> {arr, o + k} end)
+
+  defp shift(facts, k) do
+    Map.new(facts, fn {key, o} ->
+      {_, _, q} = scale(key)
+      {key, o + q * k}
+    end)
+  end
+
+  # the facts of v * k, k >= 1, or div(v, k), k >= 1 (the ub facts only for
+  # v >= 0, where div rounds down): q * div(v, k) * k <= q * v, and
+  # q * div(v, k) * k >= q * (v - k + 1)
+  defp scale_facts(facts, k, dir) do
+    Map.new(facts, fn {key, o} ->
+      {arr, p, q} = scale(key)
+      norm_fact(arr, k * p, q, k * o, dir)
+    end)
+  end
+
+  defp div_facts(facts, k, dir) do
+    Map.new(facts, fn {key, o} ->
+      {arr, p, q} = scale(key)
+      norm_fact(arr, p, k * q, if(dir == :ub, do: o, else: o - q * (k - 1)), dir)
+    end)
+  end
 
   # combine optional bounds: `both` needs both known, `either` is valid with one
   defp both(x, y, f) when is_integer(x) and is_integer(y), do: f.(x, y)
@@ -4900,4 +5131,205 @@ defmodule Defk.Compiler do
   defp fmt(t), do: Atom.to_string(t)
 
   defp sanitize(name), do: name |> to_string() |> String.replace(~r/[^A-Za-z0-9_]/, "_")
+
+  # --------------------------------------------------------------- report --
+  # The fast-path report (defk-6cn, Defk.Report): a handful of lowering sites
+  # note what they decided for the hot path with note/4, as {kernel, line,
+  # {topic, verdict, text}}, and report/0 returns the notes of the last
+  # compile/4 in this process. A note is never read back by the lowering, so
+  # the report cannot change a kernel. `kernel` is the kernel called from
+  # Elixir; a note inside an inlined call keeps the callee's line. The notes
+  # live under lowering keys (lowering_key?/1), so a lowering that is undone
+  # and redone (with_acc_facts/2, u64_accs/2) drops its notes with the rest
+  # of its state; a note made twice (a select lowers its arms twice) is kept
+  # once.
+
+  @doc false
+  # The notes of the last compile/4, each kernel's in line order.
+  def report do
+    notes = :defk_report |> Process.get([]) |> Enum.reverse() |> Enum.uniq()
+    order = notes |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    groups = Enum.group_by(notes, &elem(&1, 0))
+    Enum.flat_map(order, fn k -> Enum.sort_by(groups[k], &(elem(&1, 1) || 0)) end)
+  end
+
+  defp note(topic, at, verdict, text) do
+    {kernel, _yield?} = Process.get(:defk_report_kernel)
+    n = {kernel, note_line(at), {topic, verdict, text}}
+    Process.put(:defk_report, [n | Process.get(:defk_report, [])])
+    :ok
+  end
+
+  defp note_line(line) when is_integer(line), do: line
+
+  defp note_line({_, m, _}) when is_list(m), do: Keyword.get(m, :line) || ctx_line()
+  defp note_line(_), do: ctx_line()
+
+  # the line of the statement being lowered (in_ctx/2)
+  defp ctx_line do
+    case Process.get(:defk_ctx) do
+      {_, m, _} when is_list(m) -> Keyword.get(m, :line)
+      _ -> nil
+    end
+  end
+
+  # a[i], or the word load u64_le(bytes, i): its bounds check dropped, or
+  # kept with the facts that would drop it. in_bounds?/3 is asked again with
+  # each missing half supplied, so what is named is what it would accept.
+  defp note_bounds(node, a, i, w \\ 1) do
+    {text, arr, idx} =
+      case node do
+        {{:., _, [Access, :get]}, _, [arr, idx]} -> {src_text(node), arr, idx}
+        {_, _, [arr, idx]} -> {Macro.to_string(node), arr, idx}
+      end
+
+    if in_bounds?(a, i, w) do
+      note(:bounds, node, :dropped, text)
+    else
+      {arr, idx} = {src_text(arr), src_text(idx)}
+      low = "0 <= #{idx}"
+      high = if w == 1, do: "#{idx} < len(#{arr})", else: "#{idx} + #{w} <= len(#{arr})"
+      with_low = Map.put(i, :lo, max(i[:lo] || 0, 0))
+      with_high = Map.put(i, :ub, Map.put(i[:ub] || %{}, a.c, -w))
+
+      missing =
+        cond do
+          in_bounds?(a, with_low, w) -> low
+          in_bounds?(a, with_high, w) -> high
+          true -> "#{low} and #{high}"
+        end
+
+      note(:bounds, node, :kept, "#{text}: bounds check kept; nothing proves #{missing}")
+    end
+  end
+
+  # Macro.to_string/1 (which runs the formatter), short-cut for the usual
+  # a[i +- k]
+  defp src_text({n, _, ctx}) when is_atom(n) and is_atom(ctx), do: Atom.to_string(n)
+  defp src_text(n) when is_integer(n) and n >= 0, do: Integer.to_string(n)
+
+  defp src_text({{:., _, [Access, :get]}, _, [arr, idx]}),
+    do: "#{src_text(arr)}[#{src_text(idx)}]"
+
+  defp src_text({op, _, [a, {n, _, ctx} = b]})
+       when op in [:+, :-] and is_atom(n) and is_atom(ctx),
+       do: "#{src_text(a)} #{op} #{src_text(b)}"
+
+  defp src_text({op, _, [a, b]}) when op in [:+, :-] and is_integer(b) and b >= 0,
+    do: "#{src_text(a)} #{op} #{b}"
+
+  defp src_text(ast), do: Macro.to_string(ast)
+
+  # an if/cond/case value: lower_branch/5's choice, and why not a select
+  defp note_branch(node, arms, code, tmps) do
+    name = elem(node, 0)
+
+    cond do
+      not select?(arms) ->
+        note(:branch, node, :branch, "#{name}: a branch; not a select: #{why_not_select(arms)}")
+
+      # select/4 found nothing that can raise and gave the plain chain
+      code == chain(arms, tmps) ->
+        note(
+          :branch,
+          node,
+          :branch,
+          "#{name}: a plain branch, no arm can raise; clang may if-convert it"
+        )
+
+      true ->
+        note(
+          :branch,
+          node,
+          :select,
+          "#{name}: a select; every arm is computed with overflow flags, an overflow replays the arm taken"
+        )
+    end
+  end
+
+  # select?/1's conditions in its order, as a reason; a rule it gains that
+  # these do not name is reported as the heuristic's
+  defp why_not_select([{_, _, :else, _, _}]), do: "it has one arm"
+
+  defp why_not_select(arms) do
+    {[_ | later], [last]} = Enum.split(arms, -1)
+    arm = fn i -> if i == length(arms) - 1, do: "the last arm", else: "arm #{i + 1}" end
+
+    stmts = Enum.find_index(arms, fn {_, _, _, sb, _} -> sb && IO.iodata_length(sb) > 0 end)
+    impure = Enum.find_index(arms, fn {_, body, _, _, _} -> not speculate?(body) end)
+
+    later_cond =
+      Enum.find_index(later, fn
+        {c, _, {sc, _}, _, _} -> IO.iodata_length(sc) > 0 or not speculate?(c)
+        _ -> false
+      end)
+
+    cond do
+      match?({_, _, :nomatch, _, _}, last) ->
+        "a case with no catch-all clause raises CaseClauseError when none matches"
+
+      stmts ->
+        "#{arm.(stmts)} has statements before its value (a binding, a loop, an inlined call)"
+
+      impure ->
+        "#{arm.(impure)} may raise or call a kernel, so it cannot be computed when not taken"
+
+      later_cond ->
+        "condition #{later_cond + 2} may raise or has statements"
+
+      true ->
+        "the select heuristic declined it"
+    end
+  end
+
+  # an if/cond/case that is a statement or a reduce_while tail
+  defp note_branch_stmt(node, what),
+    do: note(:branch, node, :branch, "#{elem(node, 0)}: a branch; #{what}")
+
+  # the loop that loop/5 lowers next (range_loop/8, array_loop/5)
+  defp loop_at(node), do: Process.put(:defk_report_loop, note_line(node))
+
+  # loop/5's choice of safepoints: the C marker that maps clang's remarks to
+  # this loop (Defk.Report), and the note
+  defp note_loop(verdict, why) do
+    {{name, arity}, yield?} = Process.get(:defk_report_kernel)
+    line = Process.get(:defk_report_loop)
+
+    if yield? do
+      note(:loop, line, verdict, why)
+    else
+      note(:loop, line, :none, "no safepoints: #{name}/#{arity} has yield: false")
+    end
+
+    "/* defk:loop #{name}/#{arity} #{line} */\n"
+  end
+
+  # a flat loop that is not flagged: why its float checks stay
+  defp note_unflagged(body) do
+    text = IO.iodata_to_binary(body)
+
+    if Regex.match?(@nf_call, text) do
+      rest = text |> String.replace(@nf_replay, "") |> String.replace(@nf_call, "")
+
+      why =
+        if Regex.match?(~r/\bctx\b/, rest),
+          do: "the body can also raise otherwise (a bounds check, an overflow, a no-match)",
+          else: "the body's state cannot be restored from a snapshot to replay a strip"
+
+      note(
+        :nonfinite,
+        Process.get(:defk_report_loop),
+        :checked,
+        "float checks raise where they fail: #{why}"
+      )
+    end
+  end
+
+  defp copy_why(%{owned: true}), do: "another binding still sees its buffer"
+  defp copy_why(_a), do: "its buffer is not the kernel's own (an input, or another variable's)"
+
+  # an array copied for value semantics; `c` is the C of the value used
+  defp note_copy(c, at, what) do
+    if String.starts_with?(c, "defk_copy_"), do: note(:copy, at, :copied, what)
+  end
 end
