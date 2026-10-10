@@ -3,7 +3,7 @@
 # Why people reach for a NIF here: thumbnailing, preview generation and
 # vision preprocessing touch every pixel several times; a 1080p frame is
 # 2M pixels x 9 neighbour reads.
-# Expected verdict: marginal (Elixir is the recommendation)
+# Expected verdict: good
 #
 #   elixir examples/image_blur.exs
 #
@@ -32,13 +32,20 @@
 # the clamped 9-neighbour sum is the same number either way.
 #
 # Fairness: the kernel switched to the same separable algorithm (horizontal
-# 3-sums into an i64 buffer, then vertical): 5.5-5.8 ms in one call, against
-# 15.3 ms for the old 9-reads-per-pixel kernel. The kernel is one call (one
-# scheduler, see defk-8qs for chunked kernel calls); the baseline is the best
-# Elixir, on all schedulers. Against one-process Elixir the kernel is ~25x
-# ahead (141 vs 5.6 ms), so defk still helps a caller who cannot or does not
-# want to spread the frame over schedulers. Verdict on the best Elixir:
-# 1.86-1.96x, marginal, use Elixir (defk-9p6.8).
+# 3-sums into an i64 buffer, then vertical), and is chunked the same way as
+# the Elixir baseline: 12 row bands with halo rows, one kernel call per band,
+# started together with Task.async + Task.await_many (Task.async_stream would
+# keep short kernel tasks on 2-4 schedulers, README "Measuring correctly" 7).
+# Parallel against parallel, default VM, 3 runs:
+#
+#   Elixir, 12 bands            9.1-9.9 ms
+#   defk, 12 bands              2.3-2.5 ms   -> 3.8-4.2x, good  <- verdict
+#   defk, 4 / 24 bands          3.5-3.9 / 1.7-2.1 ms
+#   defk, 12 bands, +swt very_low  1.7 ms    (5.6x against Elixir 9.4 ms)
+#
+# One process against one call: Elixir 141-160 ms, defk 5.4-5.8 ms (about
+# 26-29x); the old 9-reads-per-pixel kernel was 15.3 ms in one call.
+# Numbers are provisional (shared machine under load, defk-9p6.8).
 
 Mix.install([{:defk, path: Path.expand("..", __DIR__)}])
 
@@ -68,6 +75,37 @@ defmodule Blur.Kernels do
       up = hs[max(y - 1, 0) * w + x]
       dn = hs[min(y + 1, h - 1) * w + x]
       out[y * w + x] = div(up + hs[y * w + x] + dn, 9)
+    end
+
+    out
+  end
+  # One band of the frame: output rows y0..y1-1 of the same blur. Gray and
+  # horizontal sums are computed only for the band plus its halo rows.
+  defk gray_blur_band(rgb :: [u8], w :: i64, h :: i64, y0 :: i64, y1 :: i64) :: [u8] do
+    lo = max(y0 - 1, 0)
+    hi = min(y1, h - 1)
+    n = (hi - lo + 1) * w
+    gray = alloc(u8, n)
+
+    for p <- 0..(n - 1)//1 do
+      q = lo * w + p
+      gray[p] = div(77 * rgb[3 * q] + 150 * rgb[3 * q + 1] + 29 * rgb[3 * q + 2], 256)
+    end
+
+    hs = alloc(i64, n)
+
+    for y <- 0..(hi - lo)//1, x <- 0..(w - 1)//1 do
+      l = gray[y * w + max(x - 1, 0)]
+      r = gray[y * w + min(x + 1, w - 1)]
+      hs[y * w + x] = l + gray[y * w + x] + r
+    end
+
+    out = alloc(u8, (y1 - y0) * w)
+
+    for y <- y0..(y1 - 1)//1, x <- 0..(w - 1)//1 do
+      up = hs[(max(y - 1, 0) - lo) * w + x]
+      dn = hs[(min(y + 1, h - 1) - lo) * w + x]
+      out[(y - y0) * w + x] = div(up + hs[(y - lo) * w + x] + dn, 9)
     end
 
     out
@@ -154,6 +192,23 @@ defmodule Blur.Elixir do
   defp walk(<<>>, <<>>, <<>>, p, cu, acc), do: <<acc::binary, div(p + cu + cu, 9)>>
 end
 
+# Chunked defk: the same row bands, one kernel call per band, all started at
+# once (Task.async + await_many; Task.async_stream keeps short kernel tasks on
+# 2-4 schedulers, README "Measuring correctly" item 7).
+defmodule Blur.Chunked do
+  def run(rgb, w, h, n \\ System.schedulers_online()) do
+    band = div(h + n - 1, n)
+
+    for i <- 0..(n - 1), i * band < h do
+      y0 = i * band
+      y1 = min(h, y0 + band)
+      Task.async(fn -> Blur.Kernels.gray_blur_band(rgb, w, h, y0, y1) end)
+    end
+    |> Task.await_many(:infinity)
+    |> :erlang.iolist_to_binary()
+  end
+end
+
 {w, h} = {1920, 1080}
 # synthetic frame: gradients plus a checkerboard so the blur has edges to soften
 rgb =
@@ -175,7 +230,11 @@ if System.get_env("BLUR_VARIANTS") do
   for {name, f} <- [
         {"first pass (9 :binary.at/2 per pixel)", fn -> Blur.Elixir.first_pass(rgb, w, h) end},
         {"three-row walk, one process", fn -> Blur.Elixir.gray_blur(rgb, w, h) end},
-        {"three-row walk, bands on all schedulers", fn -> Blur.Elixir.gray_blur_par(rgb, w, h) end}
+        {"three-row walk, bands on all schedulers", fn -> Blur.Elixir.gray_blur_par(rgb, w, h) end},
+        {"defk one call", fn -> Blur.Kernels.gray_blur(rgb, w, h) end},
+        {"defk 12 bands", fn -> Blur.Chunked.run(rgb, w, h) end},
+        {"defk 4 bands", fn -> Blur.Chunked.run(rgb, w, h, 4) end},
+        {"defk 24 bands", fn -> Blur.Chunked.run(rgb, w, h, 24) end}
       ] do
     IO.puts("  #{String.pad_trailing(name, 44)} #{time.(f)} ms  exact=#{f.() == want}")
   end
@@ -183,14 +242,15 @@ end
 
 Defk.Bench.report(
   name: "image_blur",
-  expected: :marginal,
+  expected: :good,
   baseline: :optimized,
   runs: 3,
   elixir: fn -> Blur.Elixir.gray_blur_par(rgb, w, h) end,
-  defk: fn -> Blur.Kernels.gray_blur(rgb, w, h) end,
+  defk: fn -> Blur.Chunked.run(rgb, w, h) end,
   check: fn ->
     want = Blur.Kernels.gray_blur(rgb, w, h)
-    Blur.Elixir.gray_blur(rgb, w, h) == want and Blur.Elixir.gray_blur_par(rgb, w, h) == want
+    Blur.Elixir.gray_blur(rgb, w, h) == want and Blur.Elixir.gray_blur_par(rgb, w, h) == want and
+      Blur.Chunked.run(rgb, w, h) == want and Blur.Chunked.run(rgb, w, h, 5) == want
   end,
-  reason: "optimised Elixir (sliding three-row walk on all schedulers) is within 2x of a one-call kernel; one-process Elixir is 25x slower"
+  reason: "12 row bands on both sides (sliding three-row walk vs separable kernel, one Task.async per band); one process: 141-160 vs 5.5 ms"
 )

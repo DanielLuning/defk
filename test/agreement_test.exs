@@ -148,6 +148,24 @@ defmodule Defk.AgreementTest.Catalog do
     ])
   end
 
+  # gray_blur_band(rgb, w, h, y0, y1): the same frames plus a row range, in
+  # range most of the time, sometimes arbitrary (empty or out-of-frame bands)
+  defp blur_band(max_side) do
+    bind(blur(max_side), fn [rgb, w, h] ->
+      range =
+        if is_integer(w) and is_integer(h) and h in 0..max_side do
+          frequency([
+            {6, bind(integer(0..h), fn y0 -> tuple({constant(y0), integer(y0..h)}) end)},
+            {1, tuple({integer(-2..(h + 2)), integer(-2..(h + 2))})}
+          ])
+        else
+          tuple({integer(-2..4), integer(-2..4)})
+        end
+
+      bind(range, fn {y0, y1} -> constant([rgb, w, h, y0, y1]) end)
+    end)
+  end
+
   # search(q, blob, offs, k): words over a small alphabet (so distances tie)
   # in the fuzzy_search layout, one blob plus an offset table; sometimes an
   # offset table of arbitrary small offsets (index errors, negative lengths)
@@ -196,7 +214,8 @@ defmodule Defk.AgreementTest.Catalog do
   )
 
   agreement(Blur.Kernels,
-    gray_blur: [args: blur(10), deep: [args: blur(48), max_runs: 1_000]]
+    gray_blur: [args: blur(10), deep: [args: blur(48), max_runs: 1_000]],
+    gray_blur_band: [args: blur_band(10), deep: [args: blur_band(48), max_runs: 1_000]]
   )
 
   agreement(FuzzySearch.Kernels,
