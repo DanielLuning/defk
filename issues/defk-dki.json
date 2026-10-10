@@ -13,9 +13,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Decisions: parse/1 segments are now {value, size, signed?}; signed+unsigned in one segment is a bitstring-segment error; error code kept, narrowed to little-endian/float/binary/other. Signed 0-width holds no bits, only 0 fits (as unsigned). Signed range -2^(n-1)..2^(n-1)-1; message 'bitstring segment value v does not fit in n signed bits' (reason :segment_fit). Native: defk_bits_put_signed range-checks with bounds built from 1\u003c\u003c(n-1) (n\u003c=63) and no signed shifts, then masks low n bits (n\u003c64) into the shared unsigned defk_bits_append. Kernel bodies need an acc head (\u003c\u003cacc::bitstring, ...\u003e\u003e) as for unsigned.",
+      "timestamp": "2026-10-10T09:59:01Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Signed integer segments in the bitstring accumulator",
   "type": "task",
-  "updated_at": "2026-10-10T09:53:59Z"
+  "updated_at": "2026-10-10T09:59:01Z"
 }
