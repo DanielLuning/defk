@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-10T14:58:32Z",
+  "description": "## Why\n\ndefk has strong reference material (docs/language.md, the compile error catalogue, examples/README.md, ADRs, research), but it lives as repo markdown and is written for people inside the project. The code side is thin: no ex_doc dependency or docs config in mix.exs, a short Defk moduledoc, Defk.Test (assert_agrees, a public testing API) hidden with @moduledoc false, lib/examples.ex in lib/, few @spec, and the functions use Defk generates (__defk_elixir__/2, __defk_report__/0, __defk_source__/0, ...) documented only in language.md. Compile errors link to docs/language.md#\u003ccode\u003e, which only works inside the repo.\n\nGoal: mix docs produces HexDocs that a newcomer can learn defk from, with two halves:\n1. Clear API documentation: every public module and function documented, with examples that run (doctests), typespecs, and the generated functions explained.\n2. Supporting guides: what defk is, how to use it (first kernel, testing with Elixir mode, measuring, deploying), the language reference, the error catalogue, and an honest scope page: what defk is not yet (planned, with tickets) and what it won't be (by design, with the reason).\n\n## Principles\n\n- One source of truth: guides are built from the existing docs (language.md, errors.ex's catalogue, examples/README.md) rather than copies that drift; generated sections stay generated.\n- Every example in the docs is checked (doctests or the docs example test, in both modes), and mix docs runs in mix ci with warnings as errors.\n- Plain language, Elixir-first framing (see README Purpose): defk helps where Elixir pushes people to a NIF, and the docs say when to use Elixir instead.\n- Hex publishing itself is gated on the verdict (defk-sgw.5): a research result may still get HexDocs-quality docs without a Hex release.\n\nDone when mix docs builds clean in CI, every public module/function has docs with checked examples, the guides cover getting started through deployment plus the scope page, and a docs-only cold test against the built HexDocs passes.",
+  "id": "defk-djy",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Documentation: API docs, guides and HexDocs (what defk is, isn't yet, and won't be)",
+  "type": "epic",
+  "updated_at": "2026-10-10T14:58:32Z"
+}
