@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Design: notes are collected through note/4 into :defk_report (a lowering key, so with_acc_facts/u64_accs relowering drops them with the rest of the state; duplicates from a select lowering its arms twice are uniq'd). Sites: note_bounds at a[i] reads/writes and word loads (the missing fact is found by asking in_bounds? again with each half supplied, so it tracks defk-upc's facts), note_branch in lower_branch/5 (select?/1 is untouched; why_not_select mirrors its conditions and falls back to 'the select heuristic declined it' for any rule defk-id9 adds), note_loop in loop/5, inline/4, the copy sites. Facts are {kernel, line, {topic, verdict, text}}, kernel = {name, arity} of the entry kernel; inlined code keeps the callee's line. report: :full: no #line directives; loop/5 forms are wrapped in C comments /* defk:loop name/arity line */ ... /* defk:end */ (and /* defk:replay */ for a flagged loop's cold replay), and the remark pass compiles the same C with -gline-tables-only -Rpass*=loop-vectorize to a discarded .o, so the .so and its cache key are exactly the normal build's; remarks are cached as \u003cbase\u003e-\u003cflags hash\u003e.remarks. Analysis remarks precede their loop's missed remark, so reasons are attached by order, which also drops the inlined runtime-header loops. The comments changed the generated C once (one cache miss per module), not the .so code. Measured: the note functions cost ~1 ms over 15 compiles of examples + fuzzy_search + the report test module.",
+      "timestamp": "2026-10-10T10:40:41Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Add a fast-path report for kernels",
   "type": "task",
-  "updated_at": "2026-10-10T10:22:50Z"
+  "updated_at": "2026-10-10T10:40:41Z"
 }
