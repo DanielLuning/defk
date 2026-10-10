@@ -65,6 +65,17 @@ defmodule Defk.ReportTest.K do
     a[0] = a[0] + 1
     a
   end
+
+  # no float operation: nothing to flag (defk-60q)
+  defk spread(a :: [u8]) :: [u8] do
+    out = alloc(u8, 2 * len(a))
+
+    for j <- 0..(len(a) - 1)//1 do
+      out[2 * j] = a[j]
+    end
+
+    out
+  end
 end
 
 defmodule Defk.ReportTest.Full do
@@ -124,6 +135,17 @@ defmodule Defk.ReportTest do
                facts(Examples.Kernels, {:dot, 2}, "for i <- 0..(n - 1)//1"),
                &match?({:nonfinite, :flagged, _}, &1)
              )
+    end
+
+    test "a loop with no float operation is not flagged" do
+      facts = facts(K, {:spread, 1}, "for j <- 0..(len(a) - 1)//1")
+      assert [{:loop, :strips, why}] = for({:loop, _, _} = f <- facts, do: f)
+      refute why =~ "flagged"
+      refute Enum.any?(kernel_facts(K, {:spread, 1}), &match?({:nonfinite, _, _}, &1))
+      # and its C has no flag or replay path (no kernel in K has a float)
+      c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
+      refute c =~ "defk:replay"
+      refute c =~ "int defk_nf;"
     end
 
     test "a kept bounds check names its missing fact" do
