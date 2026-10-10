@@ -16,11 +16,15 @@
     {
       "text": "Per defk-q1c: [f32] reads use the on-read non-finite check (ArgumentError) and f32 writes feed the accumulated flag; see defk-i00.",
       "timestamp": "2026-10-06T07:32:42Z"
+    },
+    {
+      "text": "Implemented on branch defk-4ai/element-types (3e9db87). Decisions: (1) an f32 write that rounds to +-inf raises ArgumentError 'value ... does not fit in f32', the same exception as the integer element range checks (reason :element_range in Defk.Test), not ArithmeticError: it is a limit on the store, not a float op. 'Feeds the accumulated flag' is done through the strip mechanism: defk_to_f32 is an nf helper (DEFK_NF_to_f32), so flat loops with f32 writes still run flagged and vectorise; the replay raises the ArgumentError at the first failing write. (2) [f32] input reads reuse defk_in_f64 on the widened value (NaN/inf survive float-\u003edouble). (3) narrow integer writes (u8 too) drop defk_to_* when the value's lo/hi facts fit; unary minus of a literal now folds to a constant with facts (before, -32_768 was defk_neg_i64(32768) with no facts, so the clamp proved nothing). (4) Verified on arm64 clang: the PCM mix loop out[i] = max(min(a[i] + b[i], 32_767), -32_768) vectorises to the identical inner loop as hand C (4x sqadd.8h, width 8 x interleave 4). Bounds were proven with out = alloc(i16, len(a)) and i \u003c- 0..(min(len(a), len(b)) - 1); with out = alloc(i16, n), n = min(...), the out[i] write keeps its bounds check because array length facts have no upper bound relative to other arrays (follow-up candidate). (5) Section 14 'Changes in flight' in docs/language.md left untouched; types documented in sections 3, 6, 7 and 12 directly.",
+      "timestamp": "2026-10-10T09:19:44Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Add [i16], [i32] and [f32] element types",
   "type": "task",
-  "updated_at": "2026-10-10T09:05:51Z"
+  "updated_at": "2026-10-10T09:19:44Z"
 }
