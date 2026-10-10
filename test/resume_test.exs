@@ -113,6 +113,31 @@ defmodule Defk.ResumeTest.Shapes do
         end
       end
 
+      # body temporaries (defk-zep): `held` is bound before the nested loops
+      # and read in and after them, so their safepoints spill it; `hot` is the
+      # inner loop's own, left out of every spill list
+      defk unquote(n.(:temps))(a :: [i64], reps :: i64) :: i64, unquote(opts) do
+        for r <- 1..reps//1, reduce: 0 do
+          acc ->
+            base = rem(acc * 7 + r, 1_000_003)
+            held = base * 3 + 1
+
+            {s, t} =
+              for x <- a, reduce: {base, 1} do
+                {s, t} ->
+                  hot = bxor(s, x)
+                  {rem(hot * held + t, 1_000_000_007), rem(t + hot, 1_000_003)}
+              end
+
+            w =
+              for i <- 0..(rem(r, 4) + 1)//1, reduce: 0 do
+                z -> z + held * i
+              end
+
+            rem(acc + s + t + base + held + w, 1_000_000_007)
+        end
+      end
+
       # a callee raises after its caller has yielded and resumed many times
       defk unquote(n.(:calls_raise))(n :: i64, at :: i64) :: i64, unquote(opts) do
         for i <- 1..n//1, reduce: 0 do
@@ -238,6 +263,7 @@ defmodule Defk.ResumeTest do
       {"deep", K, fn -> K.deep(260) end, fn -> K.deep_nb(260) end},
       {"flat", K, fn -> K.flat(f, 60) end, fn -> K.flat_nb(f, 60) end},
       {"calls", K, fn -> K.calls(a, 20) end, fn -> K.calls_nb(a, 20) end},
+      {"temps", K, fn -> K.temps(a, 300) end, fn -> K.temps_nb(a, 300) end},
       {"fuzzy", F, fn -> F.search("elixir", blob, offs, 10) end,
        fn -> F.search_blocking("elixir", blob, offs, 10) end}
     ]
@@ -256,6 +282,7 @@ defmodule Defk.ResumeTest do
       {"deep", K, fn -> K.deep(60) end, fn -> K.deep_nb(60) end},
       {"flat", K, fn -> K.flat(f, 3) end, fn -> K.flat_nb(f, 3) end},
       {"calls", K, fn -> K.calls(c, 3) end, fn -> K.calls_nb(c, 3) end},
+      {"temps", K, fn -> K.temps(c, 4) end, fn -> K.temps_nb(c, 4) end},
       {"fuzzy", F, fn -> F.search("elixir", blob, offs, 10) end,
        fn -> F.search_blocking("elixir", blob, offs, 10) end}
     ]
@@ -293,6 +320,25 @@ defmodule Defk.ResumeTest do
         K.__defk_force_yields__(false)
       end
     end
+  end
+
+  # A safepoint spills the locals live where it resumes (defk-zep): the
+  # strip safepoint of temps/2's inner loop spills `held`, and no safepoint
+  # spills `hot`, so the C compiler need not keep it alive out of its loop.
+  test "safepoints spill only the locals live where they resume" do
+    saves =
+      Regex.scan(~r/^#define DEFK_SAVE(\d+) (.*)$/m, kernel_c("temps/2"), capture: :all_but_first)
+      |> Enum.map(fn [n, list] -> {n, list} end)
+
+    assert Enum.any?(saves, fn {_, l} -> l =~ ~r/F->v_held_\d+ = / end)
+    refute Enum.any?(saves, fn {_, l} -> l =~ ~r/F->v_hot_\d+ = / end)
+    # the outer loop's own safepoint: neither (both are bound in its body)
+    assert Enum.any?(saves, fn {_, l} -> not (l =~ ~r/v_held_|v_hot_/) end)
+  end
+
+  defp kernel_c(name) do
+    [_, rest] = String.split(K.__defk_source__(), "/* ---- #{name} (yielding) ---- */\n")
+    rest |> String.split("/* ---- ") |> hd()
   end
 
   # A missing or wrong resume dispatch case raises defk_lost_resume's
@@ -450,6 +496,8 @@ defmodule Defk.ResumeTest do
     calls_nb: [args: calls()],
     calls_raise: [args: calls_raise()],
     calls_raise_nb: [args: calls_raise()],
+    temps: [args: mix()],
+    temps_nb: [args: mix()],
     weights: [args: fixed_list([G.array(:i64, of: small()), G.i64()])],
     dot_mod: [],
     keep?: [],

@@ -4,8 +4,8 @@ defmodule Defk.Compiler do
   #
   # Every kernel body is lowered to C text over plain locals and emitted as a
   # resumable state machine called from Elixir. Locals live in registers; at a
-  # safepoint that decides to yield they are spilled into a frame struct and
-  # restored on resume. A call to another kernel is inlined (see "calls"), so
+  # safepoint that decides to yield the ones live there are spilled into a
+  # frame struct and restored on resume (safepoint_saves/2). A call to another kernel is inlined (see "calls"), so
   # the callee's loops are the caller's loops and yield like them.
   #
   # Types:  :i64 | :u64 | :f64 | :bool | {:arr, elem} | {:tuple, [type]}
@@ -488,6 +488,7 @@ defmodule Defk.Compiler do
   defp lower_kernel(k, sigs) do
     Process.put(:defk_n, 0)
     Process.put(:defk_decls, [])
+    Process.put(:defk_decl_loop, %{})
     Process.put(:defk_fsticky, %{})
     Process.put(:defk_sp, 0)
     Process.put(:defk_sps, [])
@@ -513,6 +514,7 @@ defmodule Defk.Compiler do
       stmts: [stmts, ret_stmts],
       ret_vals: ret_vals,
       decls: Enum.reverse(Process.get(:defk_decls)),
+      decl_loop: Process.get(:defk_decl_loop),
       sp_count: Process.get(:defk_sp),
       sps: Process.get(:defk_sps)
     })
@@ -3535,7 +3537,8 @@ defmodule Defk.Compiler do
     Process.put(:defk_loops, [id | stack])
     res = fun.(id)
     Process.put(:defk_loops, stack)
-    res
+    # the loop's extent in the C, for safepoint_saves/2 (removed there)
+    ["/* defk:in #{id} */\n", res, "/* defk:out #{id} */\n"]
   end
 
   # Dispatch for the loops entered from here (the current loop body, or the
@@ -4641,15 +4644,16 @@ defmodule Defk.Compiler do
     arrays = for {{p, {:arr, _}}, i} <- Enum.with_index(k.params), do: {p, i}
     scalars = for {{p, t}, i} <- Enum.with_index(k.params), t in @scalars, do: {p, t, i}
 
-    saved =
-      Enum.map(scalars, fn {p, _, _} -> "p_#{sanitize(p)}" end) ++ Enum.map(k.decls, &elem(&1, 0))
-
+    params = Enum.map(scalars, fn {p, _, _} -> "p_#{sanitize(p)}" end)
     yields? = k.yield and k.sp_count > 0
+    {stmts, saves} = safepoint_saves(k, params)
+    # the frame holds what some safepoint spills
+    framed = if yields?, do: Enum.uniq(Enum.flat_map(saves, &elem(&1, 1))), else: []
 
     [
       "/* ---- #{k.name}/#{k.arity}#{if yields?, do: " (yielding)", else: ""} ---- */\n",
       "typedef struct {\n  defk_ctx ctx;\n  int resume;\n  int64_t budget;\n  int copy[#{max(k.arity, 1)}];\n",
-      frame_fields(k),
+      frame_fields(k, framed),
       "} #{f};\n\n",
       # noinline: keep the kernel body out of the setjmp frame below
       "static __attribute__((noinline)) int run_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n",
@@ -4658,12 +4662,13 @@ defmodule Defk.Compiler do
       zero_params(k),
       decl_locals(k),
       bind_params(k, arrays),
-      resume_block(yields?, k, saved),
+      resume_block(yields?, k, saves),
       decode_params(scalars),
-      sp_macro(yields?, saved),
-      k.stmts,
+      sp_macro(yields?, saves),
+      stmts,
       "*result = #{emit_result(k)};\nreturn DEFK_DONE;\n",
       @undef_macros,
+      if(yields?, do: Enum.map(saves, fn {n, _} -> "#undef DEFK_SAVE#{n}\n" end), else: []),
       "}\n\n",
       guard_fn(k, f),
       step_fn(yields?, k, f),
@@ -4671,10 +4676,64 @@ defmodule Defk.Compiler do
     ]
   end
 
-  defp frame_fields(k) do
+  defp frame_fields(k, framed) do
+    framed = MapSet.new(framed)
+
     Enum.map(k.params, fn {p, t} -> "  #{ctype(t)} p_#{sanitize(p)};\n" end) ++
-      Enum.map(k.decls, fn {c, ct} -> "  #{ct} #{c};\n" end)
+      for {c, ct} <- k.decls, c in framed, do: "  #{ct} #{c};\n"
   end
+
+  # {the kernel's statements, [{n, locals}]}: what safepoint n spills, the
+  # locals live where it resumes, at the header of its own loop. A local
+  # bound in the body of loop L (fresh/2 notes the innermost open loop) is
+  # written before it is read in every iteration of L: it is dead wherever
+  # control is not inside an iteration of L, which is at L's own header and
+  # anywhere outside L. Only a safepoint in a loop nested in L spills it;
+  # the others leave it out, when every mention of it in the C is between
+  # L's in_loop/1 markers (a local mentioned outside is spilled everywhere,
+  # as before). A dead local in a spill list is not wrong, but it is read
+  # at the safepoint, so the C compiler keeps its value alive into it: a
+  # temporary of an inner loop becomes a value that loop carries out to
+  # the enclosing loop's safepoint. With Keccak's 25 lanes that spilled
+  # half the state on every round (defk-zep). The markers are removed.
+  defp safepoint_saves(k, params) do
+    text = IO.iodata_to_binary(k.stmts)
+    marks = Regex.scan(~r{/\* defk:(in|out) (\d+) \*/\n}, text, return: :index)
+
+    extent =
+      Enum.reduce(marks, %{}, fn [{at, len}, {ks, kl}, {is, il}], acc ->
+        id = String.to_integer(binary_part(text, is, il))
+
+        case binary_part(text, ks, kl) do
+          "in" -> Map.put(acc, id, {at + len, nil})
+          "out" -> Map.update!(acc, id, fn {from, nil} -> {from, at} end)
+        end
+      end)
+
+    mentions =
+      Regex.scan(~r/\bv_\w+/, text, return: :index)
+      |> Enum.group_by(fn [{at, len}] -> binary_part(text, at, len) end, fn [{at, _}] -> at end)
+
+    inside? = fn c ->
+      case extent[k.decl_loop[c]] do
+        {from, to} -> Enum.all?(Map.get(mentions, c, []), &(&1 >= from and &1 < to))
+        nil -> false
+      end
+    end
+
+    local = for {c, _} <- k.decls, inside?.(c), into: %{}, do: {c, k.decl_loop[c]}
+
+    saves =
+      for {n, path} <- Enum.sort(k.sps) do
+        open = MapSet.new(Enum.drop(path, -1))
+        {n, params ++ for({c, _} <- k.decls, not dead_at?(local, c, open), do: c)}
+      end
+
+    {Regex.replace(~r{/\* defk:(in|out) \d+ \*/\n}, text, ""), saves}
+  end
+
+  # a local of a loop whose iterations do not enclose the safepoint
+  defp dead_at?(local, c, open), do: Map.has_key?(local, c) and local[c] not in open
 
   defp run_preamble(yields?) do
     if yields?,
@@ -4697,12 +4756,15 @@ defmodule Defk.Compiler do
     end)
   end
 
-  defp resume_block(yields?, k, saved) do
+  # each safepoint restores what it spilled
+  defp resume_block(yields?, k, saves) do
     if yields? do
       [
-        "if (defk_rs) {\n",
-        Enum.map(saved, &"#{&1} = F->#{&1};\n"),
-        "switch (defk_rs) {\n",
+        "if (defk_rs) {\nswitch (defk_rs) {\n",
+        Enum.map(saves, fn {n, saved} ->
+          ["case #{n}:\n", Enum.map(saved, &"#{&1} = F->#{&1};\n"), "break;\n"]
+        end),
+        "}\nswitch (defk_rs) {\n",
         resume_cases(k.sps, []),
         "}\n}\n"
       ]
@@ -4717,9 +4779,12 @@ defmodule Defk.Compiler do
     end)
   end
 
-  defp sp_macro(yields?, saved) do
+  defp sp_macro(yields?, saves) do
     if yields? do
-      "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { if (DEFK_UNLIKELY(F->resume)) { defk_lost_resume(ctx, F->resume, N); return DEFK_ERR; } #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
+      Enum.map_join(saves, fn {n, saved} ->
+        "#define DEFK_SAVE#{n} #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}\n"
+      end) <>
+        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { if (DEFK_UNLIKELY(F->resume)) { defk_lost_resume(ctx, F->resume, N); return DEFK_ERR; } DEFK_SAVE##N F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
         "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n#define DEFK_RESUMING DEFK_UNLIKELY(defk_rs)\n"
     else
       @no_yield_macros
@@ -4851,6 +4916,9 @@ defmodule Defk.Compiler do
     Process.put(:defk_n, n)
     c = "v_#{sanitize(base)}_#{n}"
     Process.put(:defk_decls, [{c, ctype(t)} | Process.get(:defk_decls)])
+    # the innermost loop open where it is bound (safepoint_saves/2)
+    loop = List.first(Process.get(:defk_loops))
+    Process.put(:defk_decl_loop, Map.put(Process.get(:defk_decl_loop), c, loop))
     c
   end
 
