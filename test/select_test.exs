@@ -3,6 +3,36 @@
 # only an overflow in the taken arm (or a reached condition) raises
 # (defk-jp3, defk-7q5).
 
+# A division is not speculated (defk-id9): an arm with div, rem or a float
+# division compiles to a branch, so the untaken one is skipped.
+defmodule Defk.SelectTest.Cost do
+  use Defk
+
+  defk rem_arm(pow2 :: bool, v :: i64, n :: i64) :: i64 do
+    if pow2, do: band(v, n - 1), else: rem(v, n)
+  end
+
+  defk div_arm(c :: bool, v :: i64, n :: i64) :: i64 do
+    if c, do: v + n, else: div(v, n)
+  end
+
+  defk fdiv_arm(c :: bool, x :: f64, y :: f64) :: f64 do
+    if c, do: x + y, else: x / y
+  end
+
+  defk cond_rem(v :: i64, n :: i64) :: i64 do
+    cond do
+      v < 0 -> v + n
+      v == 0 -> 1
+      true -> rem(v, n)
+    end
+  end
+
+  defk add_arm(c :: bool, x :: i64, y :: i64) :: i64 do
+    if c, do: x + y, else: x - y
+  end
+end
+
 defmodule Defk.SelectTest.K do
   use Defk
 
@@ -142,6 +172,40 @@ defmodule Defk.SelectTest do
   test "pure arithmetic arms compile to a select" do
     c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
     assert c =~ "defk_add_i64_s(&"
+  end
+
+  describe "cost heuristic (defk-id9)" do
+    defp cost_c,
+      do: File.read!(String.replace_suffix(Defk.SelectTest.Cost.__defk_lib__(), ".so", ".c"))
+
+    # the C of one kernel: from its marker comment to the next kernel's
+    defp body_of(name) do
+      [_, rest] = String.split(cost_c(), "/* ---- #{name}/", parts: 2)
+      rest |> String.split("/* ---- ", parts: 2) |> hd()
+    end
+
+    test "a rem, div or float division arm compiles to a branch, not a select" do
+      for name <- ~w(rem_arm div_arm fdiv_arm cond_rem) do
+        c = body_of(name)
+        assert c =~ ~r/if \(/, name
+        refute c =~ "_s(&", name
+        refute c =~ ~r/= v_cond_\d+ \? /, name
+      end
+    end
+
+    test "an add arm still compiles to a select" do
+      assert cost_c() =~ ~r/defk_add_i64_s\(&/
+    end
+
+    test "the branches agree with Elixir, including a division by zero in the taken arm" do
+      alias Defk.SelectTest.Cost
+      assert Cost.rem_arm(true, 13, 8) == 5
+      assert Cost.rem_arm(false, 13, 5) == 3
+      assert Cost.div_arm(true, 1, 0) == 1
+      assert Cost.fdiv_arm(true, 1.0, 0.0) == 1.0
+      assert_raise ArithmeticError, fn -> Cost.rem_arm(false, 1, 0) end
+      assert_raise ArithmeticError, fn -> Cost.div_arm(false, 1, 0) end
+    end
   end
 
   # ---------------------------------------------------- agreement properties --
