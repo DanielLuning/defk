@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-djy.1"
+  ],
   "blocks": [],
   "created": "2026-10-10T14:58:34Z",
   "description": "Every example in guides and moduledocs runs: extend the docs example test (test/language_doc_examples_test.exs) to all extras, doctests for API docs, both native and Elixir mode where it applies. mix docs --warnings-as-errors in ci (broken auto-links fail). A link check for relative links between extras and to source files. A check that every error code has a catalogue entry with example and rewrite (exists?) and every public function has a @doc. Done when a broken example, link or missing doc fails mix ci.",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Keep the docs true: checks in CI",
   "type": "task",
-  "updated_at": "2026-10-10T14:58:34Z"
+  "updated_at": "2026-10-10T14:58:40Z"
 }
