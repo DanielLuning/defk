@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-cmr"
   ],
@@ -14,8 +14,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Signed integer segments in the bitstring accumulator",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:54Z"
+  "updated_at": "2026-10-10T09:53:59Z"
 }
