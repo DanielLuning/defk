@@ -5,7 +5,9 @@
   "created": "2026-10-10T11:22:24Z",
   "description": "Found during defk-ktw, which zeroes alloc/2 in 1 MiB strips with safepoints. Other runtime paths still touch a whole buffer in one call with no safepoint, so a large buffer holds the scheduler there too: defk_copy_T (value-semantics copies, one memcpy), defk_bind's copy of a misaligned input binary (one memcpy at entry), and defk_bits_reserve (memsets the doubled region of a growing bitstring accumulator at once, 32+ MB for a 64 MB output). These need measuring with bench/tick_gap.exs first, then strips where the gap matters.",
   "id": "defk-oed",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 3,
   "status": "open",
   "title": "Big memcpy/memset at once in the runtime: array copies, misaligned inputs, bitstring growth",
