@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-10T14:58:34Z",
+  "description": "Like defk-sgw.3 and defk-dig, but the fresh session may read only the built HexDocs (doc/ HTML or the epub), not the repo: install defk in a new project, write and test a kernel, find out from the scope page whether a given job fits, read a compile error and follow its link, and answer 'should I use defk or Elixir here?' for two example jobs. Record every confusing point; fix or ticket each. Append the log next to the other cold tests.",
+  "id": "defk-djy.9",
+  "labels": [],
+  "parent": "defk-djy",
+  "priority": 2,
+  "status": "open",
+  "title": "Docs cold test against the built HexDocs",
+  "type": "task",
+  "updated_at": "2026-10-10T14:58:34Z"
+}
