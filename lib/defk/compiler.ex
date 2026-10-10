@@ -134,9 +134,9 @@ defmodule Defk.Compiler do
   # bitstring to pass. One that no entry kernel reaches would be an entry
   # kernel taking a bitstring from Elixir, so it is rejected.
   defp unreached_helpers!(helpers, entries, sigs) do
-    reached = reach(Enum.map(entries, &{&1.name, &1.arity}), sigs, MapSet.new())
+    reached = reach(Enum.map(entries, &{&1.name, &1.arity}), sigs, %{})
 
-    for k <- helpers, {k.name, k.arity} not in reached do
+    for k <- helpers, not Map.has_key?(reached, {k.name, k.arity}) do
       {p, _} = Enum.find(k.params, &match?({_, :bitstring}, &1))
       param = Enum.find(params_ast(k.head), &match?({:"::", _, [{^p, _, _}, _]}, &1))
 
@@ -152,14 +152,16 @@ defmodule Defk.Compiler do
     end
   end
 
-  # the kernels `keys` call, directly or through other kernels
+  # `keys` and the kernels they call, directly or through other kernels, as
+  # the keys of `seen` (a map, not a MapSet: dialyzer treats a MapSet built
+  # up in a recursion as opaque)
   defp reach([], _sigs, seen), do: seen
 
   defp reach([key | rest], sigs, seen) do
-    if key in seen do
+    if Map.has_key?(seen, key) do
       reach(rest, sigs, seen)
     else
-      reach(callees(sigs[key].body, sigs) ++ rest, sigs, MapSet.put(seen, key))
+      reach(callees(sigs[key].body, sigs) ++ rest, sigs, Map.put(seen, key, true))
     end
   end
 
