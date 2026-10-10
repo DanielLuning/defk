@@ -73,6 +73,9 @@ defmodule Defk.Test do
     {"out of memory", :out_of_memory},
     {"negative length", :negative_length},
     {"does not fit in u8", :element_range},
+    {"does not fit in i16", :element_range},
+    {"does not fit in i32", :element_range},
+    {"does not fit in f32", :element_range},
     {"step", :zero_step}
   ]
 
