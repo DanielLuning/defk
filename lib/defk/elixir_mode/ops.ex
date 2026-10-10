@@ -114,6 +114,13 @@ defmodule Defk.ElixirMode.Ops do
   defp fit(r, _a, _op, _b) when is_i64(r), do: r
   defp fit(_r, a, op, b), do: raise(ArithmeticError, "i64 overflow in #{a} #{op} #{b}")
 
+  @doc false
+  # Whether an ArithmeticError is an i64 or u64 limit (the exact result leaves
+  # the type) and not an error Elixir would raise: a case guard raises the
+  # first and fails its clause on the second (defk-7a6)
+  def limit?(%ArithmeticError{message: m}),
+    do: String.contains?(m, ["overflow in", "does not fit in"])
+
   defp check(r, _msg) when is_i64(r), do: r
   defp check(_r, msg), do: raise(ArithmeticError, msg)
 
