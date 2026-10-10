@@ -13,6 +13,7 @@
   "blocks": [
     "defk-sgw.4"
   ],
+  "closed_at": "2026-10-10T12:44:31Z",
   "created": "2026-10-05T21:21:32Z",
   "description": "100 / 1M points as a list of {ts, float}. gorilla_stream 3.0.3: baseline Encoder.encode_elixir(data, []), NIF column NIF.nif_gorilla_encode(data, %{}) (C++ via fine, dirty CPU, precompiled). Compare the full encode job: the kernel builds both bit streams (timestamp delta-of-delta and value XOR) with the bitstring accumulator; headers and CRC32 in Elixir (:erlang.crc32). Agreement: byte-identical output.\n\nEvidence bar (from defk-dtw.4/defk-dtw.15): script examples/\u003cname\u003e.exs with Mix.install of the pinned anchor package; the anchor's Elixir version is the first baseline and must be optimised further in Elixir before the verdict counts (what was tried listed in the header; baseline: :optimized); realistic size declared in the header before any numbers; workload verdict at the realistic size, other size beside; ~6-point geometric sweep with crossover (smallest size where defk \u003e= 2x, or none), skipped if a large run exceeds ~1 min; NIF timing and responsiveness (max and p99 1 ms tick gap, one scheduler, large size, for Elixir/defk/NIF) via Defk.Bench.report/1; Elixir, defk and NIF outputs must agree (failure fails the script); quiet-machine run_all.exs; row added to examples/README.md.",
   "id": "defk-9p6.16",
@@ -27,8 +28,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Target workload: Gorilla encoding vs gorilla_stream",
   "type": "task",
-  "updated_at": "2026-10-10T12:42:59Z"
+  "updated_at": "2026-10-10T12:44:31Z"
 }
