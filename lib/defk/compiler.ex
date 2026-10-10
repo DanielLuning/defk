@@ -572,19 +572,50 @@ defmodule Defk.Compiler do
   # A block whose last expression is its value. It is nested in the statement
   # `env` is at (see "array values"), or is a kernel's body.
   defp lower_block(ast, env) do
+    {s, v, _env} = lower_block_env(ast, env)
+    {s, v}
+  end
+
+  # lower_block/2 and the env the block ends in (nested, see leave/2)
+  defp lower_block_env(ast, env) do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
     lives = live_after(es)
     {s1, env} = stmt_list(init, lives, nested(env))
 
-    {s2, v} =
+    {s2, v, env} =
       in_ctx(last, fn ->
         {sh, env} = enter(last, List.last(lives), env)
-        {s, v} = last_value(last, env)
-        {[sh, s], v}
+        {s, v, env} = last_value(last, env)
+        {[sh, s], v, env}
       end)
 
-    {[s1, s2], v}
+    {[s1, s2], v, env}
+  end
+
+  # A nested plain block binds into the scope around it, as in Elixir: `env`
+  # is the block's env at its end, `outer` the env the block is nested in.
+  # What the block bound is now bound in `outer`'s block, so it is at its depth.
+  defp leave(env, outer) do
+    vars =
+      Map.new(env.vars, fn
+        {n, %{depth: d} = b} when d == env.depth -> {n, %{b | depth: outer.depth}}
+        kv -> kv
+      end)
+
+    %{outer | vars: vars}
+  end
+
+  # a nested block's value, and the env with its bindings; any other expression
+  # binds nothing
+  defp lower_expr_env({:__block__, _, _} = b, env) do
+    {s, v, inner} = lower_block_env(b, env)
+    {s, v, leave(inner, env)}
+  end
+
+  defp lower_expr_env(e, env) do
+    {s, v} = lower_expr(e, env)
+    {s, v, env}
   end
 
   defp last_value({:=, _, [{{:., _, [Access, :get]}, _, [arr, _]}, _]} = last, _env) do
@@ -598,12 +629,12 @@ defmodule Defk.Compiler do
 
   defp last_value({:=, _, [lhs, rhs]} = last, env) do
     match?({:<<>>, _, _}, lhs) && bitstring_match!(last)
-    {s, v} = lower_expr(rhs, env)
-    {s2, _} = bind(lhs, v, env, last)
-    {[s, s2], v}
+    {s, v, env} = lower_expr_env(rhs, env)
+    {s2, env} = bind(lhs, v, env, last)
+    {[s, s2], v, env}
   end
 
-  defp last_value(last, env), do: lower_expr(last, env)
+  defp last_value(last, env), do: lower_expr_env(last, env)
 
   # A block evaluated only for effect, nested like lower_block's.
   defp lower_stmts(ast, env) do
@@ -672,7 +703,7 @@ defmodule Defk.Compiler do
 
   defp lower_stmt({:=, _, [lhs, rhs]} = match, env) do
     match?({:<<>>, _, _}, lhs) && bitstring_match!(match)
-    {s, v} = lower_expr(rhs, env)
+    {s, v, env} = lower_expr_env(rhs, env)
     {s2, env} = bind(lhs, v, env, match)
     {[s, s2], env}
   end
@@ -719,7 +750,7 @@ defmodule Defk.Compiler do
   end
 
   defp lower_stmt(e, env) do
-    {s, v} = lower_expr(e, env)
+    {s, v, env} = lower_expr_env(e, env)
     {[s, discard(v)], env}
   end
 

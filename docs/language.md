@@ -810,6 +810,12 @@ value, as in Elixir.
 
   Carry a value out of a loop with `reduce:` (see
   [section 7](#7-control-flow)).
+- **A plain parenthesised block does not scope**, as in Elixir:
+  `(x = a + 1; x); x * 2` sees `x`, so macro-generated bodies that arrive as
+  a nested block work. This holds for a block used as a statement, as the
+  right side of a match, or as the last expression of a block; a block nested
+  deeper inside an expression (an operand, an argument) keeps its bindings to
+  itself.
 - **`_` and `_name`** discard the value, but the right side is still
   evaluated, so `_ = x * x` raises on overflow as Elixir would.
 - **Tuple destructuring:** `{a, b} = expr`, where `expr` gives a tuple (a
