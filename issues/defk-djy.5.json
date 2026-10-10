@@ -9,11 +9,13 @@
   "created": "2026-10-10T14:58:33Z",
   "description": "One page a reader can trust about scope. Sections: What defk is (the one question, typed Elixir subset to checked native code, the runtime promises); When to use it and when Elixir or a wrapper NIF is the right choice (from examples/README.md tables and the rewrite boundary, defk-52v.14); Not yet (planned: each item with its ticket, e.g. arrays through branches, helper writes, sub-array views, SIMD/target builds defk-ulk); Won't be (by design, each with the reason: lists, maps and arbitrary BEAM terms, strings as values, anonymous functions, fast-math floats, unchecked memory access, ...). Generate the not-yet/won't-be split where possible from the error catalogue's kinds (lib/defk/errors.ex marks 'outside the kernel subset (permanent)' vs 'not supported yet') so the page can't drift from the compiler, and keep a hand-written intro. Link it from README, the Defk moduledoc and Getting started.",
   "id": "defk-djy.5",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-djy",
   "priority": 2,
   "status": "open",
   "title": "Scope page: what defk is, isn't yet, and won't be",
   "type": "task",
-  "updated_at": "2026-10-10T14:58:41Z"
+  "updated_at": "2026-10-10T14:58:43Z"
 }
