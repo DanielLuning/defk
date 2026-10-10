@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-05T15:51:24Z",
@@ -15,8 +15,8 @@
     }
   ],
   "priority": 4,
-  "status": "open",
+  "status": "in_progress",
   "title": "Guard errors should fail the clause, not raise",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:57Z"
+  "updated_at": "2026-10-10T09:54:00Z"
 }
