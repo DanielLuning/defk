@@ -23,7 +23,7 @@ defmodule Defk.Compiler do
   @facts [:lo, :hi, :lb, :ub, :len_lo, :len_lb]
 
   # forms that never yield: safepoints vanish and resume dispatch is dead code
-  @no_yield_macros "#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) 1\n#define DEFK_TICKS(W)\n#define DEFK_RESUMING 0\nint defk_rs = 0;\n"
+  @no_yield_macros "#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) ((void)(R), 1)\n#define DEFK_TICKS(W)\n#define DEFK_RESUMING 0\nint defk_rs = 0;\n"
   @undef_macros "#undef DEFK_SP\n#undef DEFK_SHORT\n#undef DEFK_TICKS\n#undef DEFK_RESUMING\n"
 
   # ---------------------------------------------------------------- entry ---
