@@ -190,7 +190,7 @@ defmodule Defk.CompileErrorsTest do
                "maps are not in the kernel subset",
                "string concatenation with <> is not in the kernel subset",
                "f/1 calls itself, and recursion is not in the kernel subset",
-               "this if gives an array ([f64]); arrays from an if are not supported yet",
+               "this if gives an array ([f64]); arrays from if branches are not supported yet",
                "Enum.map/2 is not in the kernel subset",
                "add/2 returns f64 but is declared :: i64"
              ]
