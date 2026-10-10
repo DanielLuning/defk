@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-10T11:39:26Z",
   "created": "2026-10-09T21:33:26Z",
   "description": "Found while writing examples/codecs.exs (defk-9p6.19): `alloc(u8, n)` zero-fills the buffer with one memset (defk_own in priv/defk_runtime.h), so an 85 MB allocation holds the scheduler for ~5 ms before the kernel's first loop runs; the tick gap during a 64 MB base64 encode was 4.6-6.6 ms, against the 2.3 ms a yielding loop keeps. Elixir mode defines alloc as a zeroed binary, so the zeroing must stay semantically; it does not have to be one memset.\n\nOptions: (a) zero in strips of a few MB with a safepoint between them (a loop in the generated C around the memset, charged to the budget like any loop; the frame must spill the partially-zeroed state: the alloc's slot index and the offset); (b) allocate without zeroing when the compiler can prove every element is written before any read (common: `for i \u003c- ...: out[i] = ...` over the full range), keeping the memset otherwise; (c) both. Measure (b)'s win on scale/image_resize/codecs (memset is a full extra pass over the output).\n\nDone when: an 85 MB alloc shows a worst tick gap in line with a yielding loop (bench/tick_gap.exs style test), and either (b) is implemented with a test on the generated C or recorded as a follow-up with numbers.",
   "id": "defk-ktw",
@@ -19,8 +20,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "A large alloc/2 zero-fills without a safepoint: 85 MB costs a 5 ms scheduler gap",
   "type": "task",
-  "updated_at": "2026-10-10T11:37:17Z"
+  "updated_at": "2026-10-10T11:39:26Z"
 }
