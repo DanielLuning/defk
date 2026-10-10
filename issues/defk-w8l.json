@@ -5,7 +5,9 @@
   "created": "2026-10-10T11:40:21Z",
   "description": "Follow-up of defk-zep. After safepoints spill only live locals, the Keccak round loop (a short flat loop, no safepoint inside) still has 6-11 stack stores+loads per round in the yielding kernel and 0 under yield: false; 16 MB is ~20.7 ms vs ~18.3 ms (under load). What stays live across the hot loop only in yielding kernels: defk_ticks and defk_budget (two registers where one countdown would do: DEFK_SP as (defk_left -= W) \u003c= 0), defk_rs (read by every loop header's resume dispatch), and the short loop's rem, live across the loop only for DEFK_TICKS(rem + 1) after it (charging on entry, as flat == :exits already does, is equivalent for a plain loop and frees it; tried in defk-zep: 9 -\u003e 7 spills in two orderings, inside noise on time). Measure with the spill counter approach in defk-zep's comment (cc -S with build.ex's cflags, count [sp] loads/stores in the loop with the most ror).",
   "id": "defk-w8l",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 3,
   "status": "open",
   "title": "Yield bookkeeping costs registers in hot short loops: Keccak keeps 6-11 spills per round that yield: false does not have",
