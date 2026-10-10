@@ -3730,7 +3730,18 @@ defmodule Defk.Compiler do
       Enum.reduce_while(clauses, {[], MapSet.new()}, fn clause, {arms, seen} ->
         {pat, guard, body, cm} = case_clause_head(clause)
         {test, rename} = case_pattern(pat, sv.t, subj, cm)
-        guard = guard && {:defk_guard, cm, [rename.(guard_safe!(guard))]}
+
+        guard =
+          guard &&
+            {:defk_guard, cm,
+             [
+               guard
+               |> guard_safe!()
+               |> rename.()
+               |> in_types!(env, unrename(pat, name))
+               |> Defk.GuardIn.lower()
+             ]}
+
         body = rename.(body)
 
         seen =
@@ -3937,20 +3948,11 @@ defmodule Defk.Compiler do
         match?({:ok, b} when is_binary(b), Defk.Attributes.of(a)) || attribute!(a)
         err!(a, "case-guard", "#{Macro.to_string(a)}, a binary, is not allowed in a case guard")
 
-      {:in, _, [x, list]} = other when is_list(list) and list != [] ->
-        rewrite =
-          list
-          |> Enum.map(&{:==, [], [x, &1]})
-          |> Enum.reduce(&{:or, [], [&2, &1]})
-          |> Macro.to_string()
-
-        err!(
-          other,
-          "case-guard",
-          "#{Macro.to_string(other)} in a case guard is not supported yet",
-          hint: "compare with each value",
-          rewrite: rewrite
-        )
+      {:in, _, _} = node ->
+        case Defk.GuardIn.check(node) do
+          :ok -> Enum.each(Defk.GuardIn.operands(node), &guard_safe!/1)
+          {:error, at, what, opts} -> err!(at, "case-guard", what, opts)
+        end
 
       other ->
         err!(other, "case-guard", "#{Macro.to_string(other)} is not allowed in a case guard")
@@ -3958,6 +3960,66 @@ defmodule Defk.Compiler do
 
     guard
   end
+
+  # The operands of an `in` in a guard are integers (a bool list takes a bool
+  # on the left), as in Elixir, where `1.0 in 1..3` is false; the guard's
+  # comparisons would say true for a float.
+  defp in_types!(guard, env, show) do
+    Macro.prewalk(guard, fn
+      {:in, _, [lhs, _]} = node ->
+        kind = Defk.GuardIn.kind(node)
+        [lhs_t | bound_ts] = for e <- Defk.GuardIn.operands(node), do: guard_type(e, env)
+        in_lhs_type!(node, kind, lhs, lhs_t, show)
+
+        for {e, t} <- Enum.zip(tl(Defk.GuardIn.operands(node)), bound_ts),
+            t != :i64,
+            do: in_type_err!(node, e, t, "as a bound of", show)
+
+        node
+
+      other ->
+        other
+    end)
+
+    guard
+  end
+
+  defp in_lhs_type!(node, kind, lhs, t, show) do
+    cond do
+      kind == :range and t == :i64 -> :ok
+      kind == :int_list and t == :i64 -> :ok
+      kind == :bool_list and t == :bool -> :ok
+      kind != :range and t in [:i64, :bool] -> in_never!(node, lhs, t, show)
+      true -> in_type_err!(node, lhs, t, "on the left of", show)
+    end
+  end
+
+  @spec in_never!(term(), term(), term(), term()) :: no_return()
+  defp in_never!(node, lhs, t, show) do
+    err!(
+      node,
+      "case-guard",
+      "#{show.(node)} never matches: #{show.(lhs)} is #{fmt(t)}, the list holds #{if t == :bool, do: "integers", else: "booleans"}",
+      hint: "match a value of the subject's type"
+    )
+  end
+
+  @spec in_type_err!(term(), term(), term(), term(), term()) :: no_return()
+  defp in_type_err!(node, e, t, where, show) do
+    err!(
+      node,
+      "case-guard",
+      "#{show.(e)} is #{fmt(t)}, an integer#{if Defk.GuardIn.kind(node) != :range, do: " or bool"} is needed #{where} #{show.(node)}"
+    )
+  end
+
+  # prints an AST with the case subject under the pattern variable's name
+  defp unrename({v, _, ctx}, name) when is_atom(v) and is_atom(ctx),
+    do: &Macro.to_string(rename_var(&1, name, {v, [], nil}))
+
+  defp unrename(_pat, _name), do: &Macro.to_string/1
+
+  defp guard_type(e, env), do: e |> lower_expr(env) |> elem(1) |> Map.fetch!(:t)
 
   # `weight` back-edges are charged to the budget at once
   defp safepoint(weight \\ "1") do

@@ -706,7 +706,7 @@ defmodule Defk.ElixirMode do
     Enum.reduce_while(clauses, {[], MapSet.new()}, fn {:->, _, [[head], body]}, {arms, seen} ->
       {pat, guard} = case_clause_head(head)
       {test, benv, prefix} = case_pattern(pat, s, st, env)
-      gq = guard && guard_expr(guard, guard_env(pat, s, st, env))
+      gq = guard && guard_expr(Defk.GuardIn.lower(guard), guard_env(pat, s, st, env))
 
       seen =
         if guard == nil and match?({:lit, _, _}, test),
