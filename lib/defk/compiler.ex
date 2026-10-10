@@ -2578,8 +2578,8 @@ defmodule Defk.Compiler do
   # `<<acc::bitstring, v::size(n), ...>>` evaluates acc and then every value
   # and size left to right, as Elixir does, and appends the segments in order;
   # each append checks 0 <= n <= 64 and 0 <= v < 2^n, or -2^(n-1) <= v <
-  # 2^(n-1) for a signed segment (a limit: Elixir keeps the low n bits). A value is never changed by a later append: the runtime
-  # appends in place only to a value that ends where its buffer ends, and
+  # 2^(n-1) for a signed segment (a limit: Elixir keeps the low n bits). A value is never changed by a
+  # later append: the runtime appends in place only to a value that ends where its buffer ends, and
   # copies an older value first. The empty binary literal `<<>>` is a [u8]
   # marked bits0, and becomes the empty bitstring where it is bound to a name
   # the kernel appends to, returned or assigned as a bitstring, or given by a
