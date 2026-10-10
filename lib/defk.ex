@@ -12,7 +12,7 @@ defmodule Defk do
         end
       end
 
-  Types: `i64`, `f64`, `bool`, packed arrays `[f64]`, `[i64]`, `[u8]`
+  Types: `i64`, `f64`, `bool`, packed arrays `[f64]`, `[f32]`, `[i64]`, `[i32]`, `[i16]`, `[u8]`
   (passed as binaries in native byte order), tuples as return values.
   """
 

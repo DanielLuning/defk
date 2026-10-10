@@ -165,10 +165,11 @@ That is a defk bug or a broken toolchain, not a kernel error.
 | `i64` | a signed 64-bit integer | an integer in -2^63..2^63-1; anything else (a float, a bignum) raises `ArgumentError` "argument N (name) must be an integer fitting in i64" | an integer |
 | `f64` | a double | a float, or an integer that fits in `i64` (converted to a float); anything else raises `ArgumentError` "argument N (name) must be a number" | a float, always finite: any operation that would make inf or NaN raised first |
 | `bool` | `true` or `false` | `true` or `false`; anything else (including `nil`) raises `ArgumentError` "argument N (name) must be a boolean" | `true` or `false` |
-| `[f64]`, `[i64]`, `[u8]` | an array of that element type | a binary of packed native-endian elements; not a binary, or a byte size that is not a multiple of the element size, raises `ArgumentError` | a binary of packed native-endian elements |
+| `[f64]`, `[i64]`, `[u8]`, `[f32]`, `[i32]`, `[i16]` | an array of that element type | a binary of packed native-endian elements; not a binary, or a byte size that is not a multiple of the element size, raises `ArgumentError` | a binary of packed native-endian elements |
 | `{t1, t2, ...}` | see below | not allowed ([`tuple-parameter`](#tuple-parameter)) | a tuple |
 
-**Supported:** `i64`, `f64`, `bool`, `[f64]`, `[i64]`, `[u8]`. Any other type
+**Supported:** `i64`, `f64`, `bool`, `[f64]`, `[f32]`, `[i64]`, `[i32]`,
+`[i16]`, `[u8]`. Any other type
 name is [`unknown-type`](#unknown-type), whose hint names the kernel type for
 the Elixir one (`integer` is `i64`, `float` and `number` are `f64`, `binary` is
 `[u8]`).
@@ -183,8 +184,31 @@ nest ([`nested-tuple`](#nested-tuple)), a branch cannot give one
 ([`tuple-argument`](#tuple-argument)), and a call to a kernel that returns
 one is destructured at once (`{out, n} = fill(out, v)`).
 
-An array's **element type** is `f64`, `i64` or `u8`. Reading a `[u8]` element
-gives an `i64` in 0..255.
+An array's **element type** is `f64`, `f32`, `i64`, `i32`, `i16` or `u8`
+(the unknown-type error for any other, such as `[u16]`, lists these). The
+narrow ones (`f32`, `i32`, `i16`, `u8`) exist only inside arrays; there are no
+narrow scalars. Reading an element widens it exactly, as Elixir's bitstring
+match does: a `[u8]`, `[i16]` or `[i32]` element is an `i64` in that type's
+range, an `[f32]` element is the `f64` of the same value. All arithmetic is
+`i64` or `f64`, never `f32`. A write must fit the element type (see
+[Writing](#writing)).
+
+An Elixir caller builds and reads these arrays as binaries of native-endian
+elements:
+
+| Element type | Build | Read |
+|---|---|---|
+| `f64` | `for x <- xs, into: <<>>, do: <<x::float-64-native>>` | `for <<x::float-64-native <- bin>>, do: x` |
+| `f32` | `for x <- xs, into: <<>>, do: <<x::float-32-native>>` | `for <<x::float-32-native <- bin>>, do: x` |
+| `i64` | `for x <- xs, into: <<>>, do: <<x::signed-64-native>>` | `for <<x::signed-64-native <- bin>>, do: x` |
+| `i32` | `for x <- xs, into: <<>>, do: <<x::signed-32-native>>` | `for <<x::signed-32-native <- bin>>, do: x` |
+| `i16` | `for x <- xs, into: <<>>, do: <<x::signed-16-native>>` | `for <<x::signed-16-native <- bin>>, do: x` |
+| `u8` | `:erlang.list_to_binary(xs)` | `:binary.bin_to_list(bin)` |
+
+`Nx.to_binary/1` of an `{:f, 32}`, `{:s, 16}`, ... tensor is the same layout.
+Building an `f32` element rounds to nearest; a value that rounds to inf
+(over about 3.4028235e38) makes inf bits, which the kernel rejects when it
+reads them (see [Inputs](#inputs)).
 
 **Unsupported:** maps, structs, lists, strings, atoms other than `true` and
 `false`, `nil`, functions, and arrays of `bool` or tuples. A kernel that needs
@@ -264,7 +288,7 @@ bit Elixir's. A float operation whose result would be inf or NaN raises `Arithme
 at that operation, as Elixir does: `1.0e308 * 10.0`, `x / 0.0`, `0.0 / 0.0`,
 `sqrt(-1.0)`, `log(0.0)`, `exp(1000.0)`, `:math.pow(10.0, 400.0)`. This holds
 even when the value would never be returned. Underflow to `0.0` or a subnormal
-does not raise. An `[f64]` input element whose bits are inf or NaN raises
+does not raise. An `[f64]` or `[f32]` input element whose bits are inf or NaN raises
 `ArgumentError` when it is read; elements never read don't. An `if`/`cond` arm
 that isn't taken never raises. Messages differ from Elixir's (they name the
 operation, not the line); run the kernel in Elixir mode to find the line.
@@ -701,8 +725,9 @@ end
 
 ### Allocating
 
-**Supported:** `alloc(f64 | i64 | u8, n)` returns a new array of `n` elements,
-all zero. A malformed call is [`alloc-form`](#alloc-form).
+**Supported:** `alloc(type, n)`, with `type` one of `f64`, `f32`, `i64`,
+`i32`, `i16`, `u8`, returns a new array of `n` elements, all zero. A
+malformed call is [`alloc-form`](#alloc-form).
 
 - A negative `n` raises `ArgumentError` "alloc/2: negative length n".
 - More than 2^48 bytes (the user address space of 64-bit platforms) raises
@@ -728,13 +753,25 @@ accumulator.
   array parameter of a called kernel (which must then return it, see
   [Calls to other kernels](#calls-to-other-kernels)). The caller's binary is
   never changed.
-- The stored value must have the element type: `[f64]` takes an `f64` or an
-  `i64` (widened), `[i64]` takes an `i64`, `[u8]` takes an `i64`
-  ([`type-mismatch`](#type-mismatch) otherwise).
+- The stored value must have the element type's wide type: `[f64]` and
+  `[f32]` take an `f64` or an `i64` (widened), `[i64]`, `[i32]`, `[i16]` and
+  `[u8]` take an `i64` ([`type-mismatch`](#type-mismatch) otherwise).
 - A `[u8]` write of a value outside 0..255 raises `ArgumentError` "value 300
   does not fit in u8". Elixir's `<<300::8>>` would wrap; a kernel never
   wraps silently (a limit). Write `rem(v, 256)` for a non-negative `v` if
-  wrapping is what you want.
+  wrapping is what you want. Likewise an `[i16]` write outside
+  -32768..32767 raises "value 32768 does not fit in i16", and an `[i32]`
+  write outside -2^31..2^31-1 "... does not fit in i32".
+- An `[f32]` write rounds the `f64` to the nearest `f32`, as
+  `<<v::float-32-native>>` does (`0.1` is stored as `0.10000000149011612`).
+  A value that rounds to inf (`1.0e40`, or anything from
+  `3.4028235677973366e38` up) raises `ArgumentError` "value ... does not fit
+  in f32", where Elixir would store inf (a limit). Underflow is Elixir's:
+  `1.0e-50` stores `0.0`, `1.0e-40` an `f32` subnormal.
+- The range check is left out where the compiler proves the value fits, as
+  for a clamp: `out[i] = max(min(a[i] + b[i], 32_767), -32_768)` into an
+  `[i16]` stores without a check (and clang vectorises the loop to
+  saturating adds, like the hand-written C).
 - A write has no value, so it cannot end a block that needs one
   ([`write-as-value`](#write-as-value)).
 
@@ -843,6 +880,12 @@ is copied once, into an aligned buffer, when the kernel starts. Either way the
 caller's binary is never changed: a write copies it first (see
 [Copies](#copies)).
 
+A binary whose byte size is not a multiple of the element size raises
+`ArgumentError` at the call, before the kernel runs: "argument 1 (a): byte
+size 5 is not a multiple of 4 (f32)". An `[f64]` or `[f32]` element whose
+bits are inf or NaN raises `ArgumentError` when it is read, as Elixir's
+`<<x::float-32-native>>` match fails on it; elements never read don't.
+
 ## 7. Control flow
 
 ### `if`
@@ -906,7 +949,8 @@ end
 **Supported with restrictions.** Generators:
 
 - `x <- first..last` and `x <- first..last//step` over `i64` bounds.
-- `x <- array`: each element in order (a `[u8]` element is an `i64`).
+- `x <- array`: each element in order, widened (a `[u8]`, `[i16]` or
+  `[i32]` element is an `i64`, an `[f32]` element an `f64`).
 
 Several generators nest, and filters (any `bool` expression) skip the rest of
 the body. Without `reduce:`, a `for` is a statement and its body's value is
@@ -1229,11 +1273,11 @@ end
 
 ### unknown-type
 
-Kernel types are i64, f64, bool, [f64], [i64], [u8] and tuples of them for results.
+Kernel types are i64, f64, bool, arrays of f64, f32, i64, i32, i16 and u8 ([f64], [f32], [i64], [i32], [i16], [u8]) and tuples of them for results.
 
 - kind: a mistake to fix (in the kernel or the build)
 - why: a kernel works on native numbers and packed arrays, and these are the types it has
-- hint: use i64, f64, bool, [f64], [i64] or [u8] (a tuple of them for a result)
+- hint: use i64, f64, bool, [f64], [f32], [i64], [i32], [i16] or [u8] (a tuple of them for a result)
 
 Rejected:
 
@@ -1793,7 +1837,7 @@ end
 Only arrays can be indexed with a[i].
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a[i] reads an element of an array ([f64], [i64] or [u8]), and this value is not one
+- why: a[i] reads an element of an array ([f64], [f32], [i64], [i32], [i16] or [u8]), and this value is not one
 - hint: index an array
 
 Rejected:
@@ -1890,7 +1934,7 @@ end
 
 ### alloc-form
 
-alloc/2 takes an element type (f64, i64 or u8) and a length.
+alloc/2 takes an element type (f64, f32, i64, i32, i16 or u8) and a length.
 
 - kind: a mistake to fix (in the kernel or the build)
 - why: an array's element type is fixed when it is created
@@ -3035,6 +3079,8 @@ bug.
 | an `i64` argument outside `i64` | any integer | `ArgumentError` "argument N (name) must be an integer fitting in i64" |
 | an `f64` argument that is an integer outside `i64` | converts | `ArgumentError` "argument N (name) must be a number" |
 | a `[u8]` write of a value outside 0..255 | `<<300::8>>` wraps | `ArgumentError` "value 300 does not fit in u8" |
+| an `[i16]` or `[i32]` write of a value outside its range | `<<32768::signed-16>>` wraps | `ArgumentError` "value 32768 does not fit in i16" |
+| an `[f32]` write of a value that rounds to inf | `<<1.0e40::float-32>>` stores inf | `ArgumentError` "value 1.0e40 does not fit in f32" |
 | `alloc/2` of more than 2^48 bytes | (the VM would abort) | `ArgumentError` "alloc/2: length too large" |
 | `alloc/2` of a size the allocator cannot provide | (the VM would abort) | `ArgumentError` "out of memory"; Elixir mode raises it from 2^47 bytes without trying |
 | a range whose last element is within one step of the `i64` limit, e.g. `0..9223372036854775807` | runs | `ArithmeticError` "range element ... is within one step of the i64 limit" before the loop starts, also when the loop would stop earlier |

@@ -76,9 +76,10 @@ defmodule Defk.Errors do
       code: "unknown-type",
       kind: :error,
       summary:
-        "Kernel types are i64, f64, bool, [f64], [i64], [u8] and tuples of them for results.",
+        "Kernel types are i64, f64, bool, arrays of f64, f32, i64, i32, i16 and u8 ([f64], [f32], [i64], [i32], [i16], [u8]) and tuples of them for results.",
       why: "a kernel works on native numbers and packed arrays, and these are the types it has",
-      hint: "use i64, f64, bool, [f64], [i64] or [u8] (a tuple of them for a result)",
+      hint:
+        "use i64, f64, bool, [f64], [f32], [i64], [i32], [i16] or [u8] (a tuple of them for a result)",
       example: "defk f(x :: integer) :: integer do\n  x\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  x\nend"
     },
@@ -307,7 +308,8 @@ defmodule Defk.Errors do
       code: "not-an-array",
       kind: :error,
       summary: "Only arrays can be indexed with a[i].",
-      why: "a[i] reads an element of an array ([f64], [i64] or [u8]), and this value is not one",
+      why:
+        "a[i] reads an element of an array ([f64], [f32], [i64], [i32], [i16] or [u8]), and this value is not one",
       hint: "index an array",
       example: "defk f(x :: i64) :: i64 do\n  x[0]\nend",
       rewrite: "defk f(x :: [i64]) :: i64 do\n  x[0]\nend"
@@ -347,7 +349,7 @@ defmodule Defk.Errors do
     %{
       code: "alloc-form",
       kind: :error,
-      summary: "alloc/2 takes an element type (f64, i64 or u8) and a length.",
+      summary: "alloc/2 takes an element type (f64, f32, i64, i32, i16 or u8) and a length.",
       why: "an array's element type is fixed when it is created",
       hint: "name the element type first",
       example: "defk f(n :: i64) :: [f64] do\n  alloc(n)\nend",

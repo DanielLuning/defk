@@ -155,7 +155,7 @@ defmodule Defk.Generators do
   def bool, do: boolean()
 
   @doc """
-  A packed array of `type` (`:f64`, `:i64`, `:u8`) as a binary: empty,
+  A packed array of `type` (`:f64`, `:i64`, `:u8`, `:i16`, `:i32`, `:f32`) as a binary: empty,
   length 1, up to `:max_length` (default 64), or (with `strip: true`, the
   default) 2047, 2048 or 2049 elements; sometimes an unaligned sub-binary.
   `:of` replaces the element generator, `:length` fixes the length.
@@ -180,20 +180,26 @@ defmodule Defk.Generators do
   end
 
   @doc """
-  An `[f64]` array with at least one element whose bits are inf or NaN
-  (only an input array can hold one, defk-q1c): Elixir mode raises
+  An `[f64]` (or `[f32]`) array with at least one element whose bits are inf
+  or NaN (only an input array can hold one, defk-q1c): Elixir mode raises
   ArgumentError (:non_finite_input) when it reads one.
   """
-  def array_non_finite(opts \\ []) do
-    bits =
-      member_of([0x7FF0000000000000, 0xFFF0000000000000, 0x7FF8000000000000, 0x7FF0000000000001])
+  def array_non_finite(type \\ :f64, opts \\ []) do
+    {w, bits} =
+      case type do
+        :f64 ->
+          {8, [0x7FF0000000000000, 0xFFF0000000000000, 0x7FF8000000000000, 0x7FF0000000000001]}
 
-    bind(tuple({array(:f64, Keyword.put(opts, :strip, false)), bits}), fn {a, bits} ->
-      n = div(byte_size(a), 8)
+        :f32 ->
+          {4, [0x7F800000, 0xFF800000, 0x7FC00000, 0x7F800001]}
+      end
+
+    bind(tuple({array(type, Keyword.put(opts, :strip, false)), member_of(bits)}), fn {a, bits} ->
+      n = div(byte_size(a), w)
 
       map(integer(0..n), fn at ->
-        <<pre::binary-size(^at * 8), post::binary>> = a
-        <<pre::binary, bits::64-native, post::binary>>
+        <<pre::binary-size(^at * ^w), post::binary>> = a
+        <<pre::binary, bits::size(w * 8)-native, post::binary>>
       end)
     end)
   end
@@ -205,10 +211,31 @@ defmodule Defk.Generators do
   def pack(:f64, list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
   def pack(:i64, list), do: for(x <- list, into: <<>>, do: <<x::signed-64-native>>)
   def pack(:u8, list), do: :erlang.list_to_binary(list)
+  def pack(:i16, list), do: for(x <- list, into: <<>>, do: <<x::signed-16-native>>)
+  def pack(:i32, list), do: for(x <- list, into: <<>>, do: <<x::signed-32-native>>)
+  def pack(:f32, list), do: for(x <- list, into: <<>>, do: <<x::float-32-native>>)
 
   defp elem(:f64), do: f64()
   defp elem(:i64), do: i64()
   defp elem(:u8), do: integer(0..255)
+  defp elem(:i16), do: narrow_int(16)
+  defp elem(:i32), do: narrow_int(32)
+  # an f64 that rounds to a finite f32 (|x| < 2^127), of any magnitude, or an
+  # f32 edge: 0.1 rounds, the others are subnormal in f32 or the f32 maximum
+  defp elem(:f32),
+    do:
+      one_of([
+        f64(3.0e38),
+        magnitude(126),
+        member_of([0.1, 1.0e-40, 1.0e-45, 3.402_823_466_385_288_6e38])
+      ])
+
+  # a w-bit signed integer: uniform, or its range's ends and their neighbours
+  defp narrow_int(w) do
+    hi = Bitwise.bsl(1, w - 1) - 1
+    lo = -hi - 1
+    frequency([{6, integer(lo..hi)}, {3, member_of([0, 1, -1, lo, hi, lo + 1, hi - 1])}])
+  end
 
   @doc "`bin`, or the same bytes as a sub-binary one byte into a larger binary (as demo.exs does)."
   def maybe_unaligned(gen) do
@@ -229,8 +256,9 @@ defmodule Defk.Generators do
   @doc """
   A value a kernel parameter of `type` must reject with ArgumentError:
   another term type, an integer outside i64, a float where an i64 is due, a
-  bitstring that is not a binary, or (for 8-byte elements) a binary whose
-  size is not a multiple of 8, sometimes as an unaligned sub-binary.
+  bitstring that is not a binary, or (for elements wider than a byte) a
+  binary whose size is not a multiple of the element width, sometimes as an
+  unaligned sub-binary.
   """
   def hostile(type) do
     common = [:atom, nil, [], [1], %{}, {1}, self(), <<1::3>>]
@@ -241,14 +269,18 @@ defmodule Defk.Generators do
       :f64 -> member_of(common ++ bignums ++ [true, "1.0"])
       :bool -> member_of(common ++ [0, 1, 1.0, :yes, "true"])
       {:arr, :u8} -> member_of(common ++ [1, 1.0, true, <<1, 2, 3::4>>])
-      {:arr, _} -> one_of([member_of(common ++ [1, 1.0, true]), ragged()])
+      {:arr, e} -> one_of([member_of(common ++ [1, 1.0, true]), ragged(width(e))])
     end
   end
 
-  # byte size not a multiple of 8
-  defp ragged do
-    bind(tuple({integer(0..40), integer(1..7)}), fn {n, r} ->
-      maybe_unaligned(binary(length: n * 8 + r))
+  defp width(e) when e in [:i16], do: 2
+  defp width(e) when e in [:i32, :f32], do: 4
+  defp width(_), do: 8
+
+  # byte size not a multiple of the element width w
+  defp ragged(w) do
+    bind(tuple({integer(0..40), integer(1..(w - 1))}), fn {n, r} ->
+      maybe_unaligned(binary(length: n * w + r))
     end)
   end
 end

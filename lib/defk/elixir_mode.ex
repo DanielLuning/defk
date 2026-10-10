@@ -260,7 +260,7 @@ defmodule Defk.ElixirMode do
   defp write(arr, idx, rhs, env, m) do
     {qa, {:arr, e}} = expr(arr, env)
     {pre, [qi, qv], [_, tv]} = operands([idx, rhs], env)
-    put = call(:"put_#{e}", [qa, qi, coerce(qv, tv, if(e == :f64, do: :f64, else: :i64))], m)
+    put = call(:"put_#{e}", [qa, qi, coerce(qv, tv, elem_type(e))], m)
 
     case arr do
       {name, _, ctx} when is_atom(name) and is_atom(ctx) ->
@@ -1124,9 +1124,9 @@ defmodule Defk.ElixirMode do
   defp tuple_items({a, b}), do: [a, b]
   defp tuple_items({:{}, _, items}), do: items
 
-  defp elem_type(:u8), do: :i64
-  defp elem_type(e), do: e
+  # a narrow element reads as the wide type (Defk.ElixirMode.Ops.esize/1)
+  defp elem_type(e) when e in [:f64, :f32], do: :f64
+  defp elem_type(_e), do: :i64
 
-  defp esize(:u8), do: 1
-  defp esize(_), do: 8
+  defp esize(e), do: Defk.ElixirMode.Ops.esize(e)
 end

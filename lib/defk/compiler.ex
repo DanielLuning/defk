@@ -8,10 +8,14 @@ defmodule Defk.Compiler do
   # restored on resume. A call to another kernel is inlined (see "calls"), so
   # the callee's loops are the caller's loops and yield like them.
   #
-  # Types:  :i64 | :f64 | :bool | {:arr, :f64 | :i64 | :u8} | {:tuple, [type]}
+  # Types:  :i64 | :f64 | :bool | {:arr, elem} | {:tuple, [type]}
+  # elem:   :f64 | :i64 | :u8 | :i16 | :i32 | :f32; the narrow ones (u8, i16,
+  #         i32, f32) exist only in arrays: a read widens to i64 or f64, a
+  #         write must fit (see "element types")
 
   @scalars [:i64, :f64, :bool]
-  @elems [:f64, :i64, :u8]
+  @elems [:f64, :i64, :u8, :i16, :i32, :f32]
+  @elems_text "f64, f32, i64, i32, i16 and u8"
   @float_ops %{+: "fadd", -: "fsub", *: "fmul"}
   @math1 Defk.Builtins.math1()
   # band/2 ... and the operators that are the same functions (&&& ...)
@@ -372,7 +376,7 @@ defmodule Defk.Compiler do
           [hint: "the kernel type for #{n} is #{instead[n]}"]
 
         [{n, _, ctx}] when is_atom(n) and is_atom(ctx) ->
-          [hint: "array element types are f64, i64 and u8"]
+          [hint: "array element types are #{@elems_text}"]
 
         _ ->
           []
@@ -610,12 +614,7 @@ defmodule Defk.Compiler do
     {:arr, e} = a.t
     stored = "value stored in [#{e}]"
 
-    vc =
-      case e do
-        :f64 -> coerce!(v, :f64, rhs, stored).c
-        :i64 -> coerce!(v, :i64, rhs, stored).c
-        :u8 -> "defk_to_u8(ctx, #{coerce!(v, :i64, rhs, stored).c})"
-      end
+    vc = narrowed(coerce!(v, wide(e), rhs, stored), e)
 
     # value semantics: the array is copied first if another binding may still
     # see its buffer (see "array values")
@@ -1248,30 +1247,33 @@ defmodule Defk.Compiler do
     {si, i} = lower_expr(idx, env)
     i = coerce!(i, :i64, idx, "array index")
     {:arr, e} = a.t
+    raw = widen("(#{a.c}).data[#{i.c}]", e)
 
     get =
       cond do
-        # an f64 from an input array may hold inf or NaN bits: the read raises
-        # (defk-i00); an alloc/2 array holds only what the kernel wrote (fin),
-        # a copy of an input array still holds the input's bits
-        e == :f64 and not a[:fin] and in_bounds?(a, i) ->
-          "defk_in_f64(ctx, (#{a.c}).data[#{i.c}], #{i.c})"
+        # an f64 or f32 from an input array may hold inf or NaN bits: the read
+        # raises (defk-i00); an alloc/2 array holds only what the kernel wrote
+        # (fin), a copy of an input array still holds the input's bits
+        e in [:f64, :f32] and not a[:fin] and in_bounds?(a, i) ->
+          "defk_in_f64(ctx, #{raw}, #{i.c})"
 
         e == :f64 and not a[:fin] ->
           "defk_get_in_f64(ctx, #{a.c}, #{i.c})"
 
+        e == :f32 and not a[:fin] ->
+          "defk_in_f64(ctx, (double)defk_get_f32(ctx, #{a.c}, #{i.c}), #{i.c})"
+
         in_bounds?(a, i) ->
-          "(#{a.c}).data[#{i.c}]"
+          raw
 
         true ->
-          "defk_get_#{e}(ctx, #{a.c}, #{i.c})"
+          widen("defk_get_#{e}(ctx, #{a.c}, #{i.c})", e)
       end
 
-    v = if e == :u8, do: u8_val("((int64_t)#{get})"), else: val(get, e)
+    v = elem_val(get, e)
 
     # an in-range read cannot fail but by its inf/NaN check, which a float
     # expression may defer to its own check (float_tree)
-    raw = if e == :u8, do: "((int64_t)(#{a.c}).data[#{i.c}])", else: "(#{a.c}).data[#{i.c}]"
     v = if in_bounds?(a, i), do: Map.put(v, :pure_read, raw), else: v
     {[sa, si], v}
   end
@@ -1378,8 +1380,19 @@ defmodule Defk.Compiler do
   defp lower_expr({:-, _, [a]}, env) do
     {s, v} = lower_expr(a, env)
     numeric!(v, a, :-)
-    c = if v.t == :i64, do: "defk_neg_i64#{checked(env)}, #{v.c})", else: "(-#{v.c})"
-    {s, val(c, v.t)}
+
+    cond do
+      # a negative literal (-32_768) is a constant, with its facts
+      v.t == :i64 and v.c == "INT64_C(#{v[:lo]})" and v[:lo] > -0x8000000000000000 ->
+        {s, Map.merge(val("INT64_C(#{-v[:lo]})", :i64), %{lo: -v[:lo], hi: -v[:lo]})}
+
+      v.t == :i64 ->
+        c = "defk_neg_i64#{checked(env)}, #{v.c})"
+        {s, Map.merge(val(c, :i64), %{lo: neg(v[:hi]), hi: neg(v[:lo])})}
+
+      true ->
+        {s, val("(-#{v.c})", v.t)}
+    end
   end
 
   defp lower_expr({:+, _, [a]}, env) do
@@ -1975,7 +1988,7 @@ defmodule Defk.Compiler do
     rewrite = with [n] <- args, do: "alloc(f64, #{Macro.to_string(n)})"
 
     err!(node, "alloc-form", what,
-      hint: "write alloc(f64 | i64 | u8, length)",
+      hint: "write alloc(type, length) with an element type: #{@elems_text}",
       rewrite: if(is_binary(rewrite), do: rewrite)
     )
   end
@@ -2535,15 +2548,17 @@ defmodule Defk.Compiler do
       end
 
     k = fresh("k", :i64)
-    xt = if e == :u8, do: :i64, else: e
-    x = fresh(name, xt)
-    env = put_var(env, name, if(e == :u8, do: u8_val(x), else: val(x, xt)))
+    x = fresh(name, wide(e))
+    env = put_var(env, name, elem_val(x, e))
 
     # index is in range by construction: no bounds check
     in_loop(fn id ->
       {body, flat?} = lower_quals_tracked(rest, env, inner)
-      read = "#{arr}.data[#{k}]"
-      read = if e == :f64 and not a[:fin], do: "defk_in_f64(ctx, #{read}, #{k})", else: read
+      read = widen("#{arr}.data[#{k}]", e)
+
+      read =
+        if e in [:f64, :f32] and not a[:fin], do: "defk_in_f64(ctx, #{read}, #{k})", else: read
+
       body = ["#{x} = #{read};\n", body, "#{k} += 1;\n"]
 
       strip = %{
@@ -2577,7 +2592,7 @@ defmodule Defk.Compiler do
   end
 
   # The checked helpers a flagged strip turns into flags (DEFK_NF_ forms).
-  @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log exp pow)
+  @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log exp pow to_f32)
   @nf_on Enum.map(@nf_helpers, &"#define defk_#{&1} DEFK_NF_#{&1}\n") ++
            ["#undef DEFK_FCHECK\n#define DEFK_FCHECK DEFK_NF_FCHECK\n"]
   @nf_off Enum.map(@nf_helpers, &"#undef defk_#{&1}\n") ++
@@ -3333,7 +3348,44 @@ defmodule Defk.Compiler do
   defp ub(v), do: v[:ub] || %{}
   defp len_lb(a), do: a[:len_lb] || %{}
 
-  defp u8_val(c), do: Map.merge(val(c, :i64), %{lo: 0, hi: 255})
+  # ------------------------------------------------------- element types --
+  # A narrow element (u8, i16, i32, f32) widens when read: an integer to an
+  # i64 that carries its type's range as facts, an f32 to the f64 of the same
+  # value. A write takes the wide type and must fit: the store checks the
+  # range (defk_to_*), unless the value's facts prove it fits, as for
+  # max(min(v, 32_767), -32_768) into [i16].
+
+  @int_range %{u8: {0, 255}, i16: {-32_768, 32_767}, i32: {-2_147_483_648, 2_147_483_647}}
+
+  defp wide(e) when e in [:f64, :f32], do: :f64
+  defp wide(_e), do: :i64
+
+  defp widen(c, :f32), do: "((double)#{c})"
+  defp widen(c, e) when is_map_key(@int_range, e), do: "((int64_t)#{c})"
+  defp widen(c, _e), do: c
+
+  defp elem_val(c, e) when is_map_key(@int_range, e) do
+    {lo, hi} = @int_range[e]
+    Map.merge(val(c, :i64), %{lo: lo, hi: hi})
+  end
+
+  defp elem_val(c, e), do: val(c, wide(e))
+
+  # the C value stored into [e], from v of type wide(e)
+  defp narrowed(v, :f32), do: "defk_to_f32(ctx, #{v.c})"
+
+  defp narrowed(v, e) when is_map_key(@int_range, e) do
+    {lo, hi} = @int_range[e]
+
+    if is_integer(v[:lo]) and is_integer(v[:hi]) and v[:lo] >= lo and v[:hi] <= hi,
+      do: "((#{ctype_elem(e)})#{v.c})",
+      else: "defk_to_#{e}(ctx, #{v.c})"
+  end
+
+  defp narrowed(v, _e), do: v.c
+
+  defp ctype_elem(:u8), do: "uint8_t"
+  defp ctype_elem(e), do: "#{String.replace(to_string(e), "i", "int")}_t"
 
   # 0 <= i < len(a); with a width w (a word load), 0 <= i and i + w <= len(a)
   defp in_bounds?(a, i, w \\ 1) do
