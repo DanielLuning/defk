@@ -1124,9 +1124,29 @@ end
   [`case-pattern`](#case-pattern); a subject of another type is
   [`case-subject`](#case-subject).
 - Guards (`when`): literals, variables, `+ - * /`, comparisons, `and`, `or`,
-  `not`, `div`, `rem`, `abs`, `trunc`, `round`, `min`, `max`. Kernel calls,
-  indexing, `&&`/`||` and `in` are [`case-guard`](#case-guard) (Elixir rejects
-  most of them in guards too).
+  `not`, `div`, `rem`, `abs`, `trunc`, `round`, `min`, `max`, and `in` /
+  `not in` (below). Kernel calls, indexing and `&&`/`||` are
+  [`case-guard`](#case-guard) (Elixir rejects most of them in guards too).
+- `in` in a guard: `x in [1, 2, 3]`, `x in 1..10`, `x in a..b//step`, and
+  `not in`. The left side is any guard-safe `i64` expression (a `bool` with a
+  list of `true`/`false`). The right side is
+  - a literal list of integers or of booleans (written out: no variable, no
+    `++`), lowered to `x === 1 or x === 2 ...`; an empty list matches nothing;
+  - a range of integer literals, with or without a step (`10..1` counts down by
+    one, as in Elixir). A step is a non-zero literal within
+    +-9223372036854775807. A negative step counts down (`10..1//-3` is 10, 7,
+    4, 1), and a range that cannot reach its last (`1..0//1`, `1..5//-1`) is
+    empty. Membership is exactly that of `Enum.member?/2` for integers,
+    computed at compile time (the last element is found, then `x >= first`,
+    `x <= last` and a remainder test), so no runtime arithmetic can overflow;
+  - a range with variable (guard-safe `i64`) bounds, which needs the explicit
+    step `//1` or `//-1`: `x in a..b//1` is `a <= x <= b`. Without a step
+    Elixir rejects it in a guard (its direction is only known at runtime), and
+    any other step needs literal bounds, as the remainder test is built at
+    compile time. Anything else on the right (a variable list, a list element
+    that is not a literal, a float or a zero step) is
+    [`case-guard`](#case-guard), as is a left side of the wrong type (`1.0 in
+    1..3` is false in Elixir, so a float is rejected, not compared).
 - A subject no clause matches raises `CaseClauseError`, as in Elixir, so a
   catch-all is optional.
 - **Limit:** an error inside a guard (an overflow, `rem` by zero) raises it,
@@ -2809,7 +2829,7 @@ end
 
 ### case-guard
 
-A case guard uses guard-safe expressions: variables, literals, arithmetic, comparisons, and/or/not, div, rem, abs, trunc, round, min and max.
+A case guard uses guard-safe expressions: variables, literals, arithmetic, comparisons, and/or/not, in with a literal list or a range, div, rem, abs, trunc, round, min and max.
 
 - kind: a mistake to fix (in the kernel or the build)
 - why: Elixir allows only guard-safe expressions in guards, and kernel calls and indexing are not guard-safe
