@@ -77,7 +77,7 @@ defmodule Defk.Errors do
       code: "unknown-type",
       kind: :error,
       summary:
-        "Kernel types are i64, u64, f64, bool, arrays of f64, f32, i64, i32, i16, u8 and u64 ([f64], [f32], [i64], [i32], [i16], [u8], [u64]) and tuples of them for results; bitstring is a result type too (the bitstring accumulator).",
+        "Kernel types are i64, u64, f64, bool, arrays of f64, f32, i64, i32, i16, u8 and u64 ([f64], [f32], [i64], [i32], [i16], [u8], [u64]) and tuples of them for results; bitstring is a result type too, and a parameter type of a kernel other kernels call (the bitstring accumulator).",
       why: "a kernel works on native numbers and packed arrays, and these are the types it has",
       hint:
         "use i64, u64, f64, bool, [f64], [f32], [i64], [i32], [i16], [u8] or [u64] (a tuple of them for a result)",
@@ -773,9 +773,9 @@ defmodule Defk.Errors do
       code: "bitstring-use",
       kind: :planned,
       summary:
-        "A bitstring accumulator starts from `<<>>`, is appended to, measured with `bit_size/1` and returned; nothing else.",
+        "A bitstring accumulator starts from `<<>>`, is appended to (also in a kernel it is passed to), measured with `bit_size/1` and returned; nothing else.",
       why:
-        "a bitstring is a kernel's output: reading it, starting from an input binary, taking it as a parameter or passing it to another kernel is not supported yet",
+        "a bitstring is a kernel's output: reading it or starting from an input binary is not supported yet, and only a kernel can pass one to a kernel (Elixir cannot pass one to an entry kernel)",
       hint:
         "measure it with bit_size/1, and keep what the kernel needs to read in variables or an array",
       example:

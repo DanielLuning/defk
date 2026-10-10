@@ -169,7 +169,7 @@ That is a defk bug or a broken toolchain, not a kernel error.
 | `bool` | `true` or `false` | `true` or `false`; anything else (including `nil`) raises `ArgumentError` "argument N (name) must be a boolean" | `true` or `false` |
 | `[f64]`, `[i64]`, `[u8]`, `[f32]`, `[i32]`, `[i16]`, `[u64]` | an array of that element type | a binary of packed native-endian elements; not a binary, or a byte size that is not a multiple of the element size, raises `ArgumentError` | a binary of packed native-endian elements |
 | `{t1, t2, ...}` | see below | not allowed ([`tuple-parameter`](#tuple-parameter)) | a tuple |
-| `bitstring` | a [bitstring accumulator](#the-bitstring-accumulator) | not allowed ([`bitstring-use`](#bitstring-use)) | a bitstring (any number of bits) |
+| `bitstring` | a [bitstring accumulator](#the-bitstring-accumulator) | not allowed from Elixir: only a kernel passes one, to a kernel it calls ([`bitstring-use`](#bitstring-use)) | a bitstring (any number of bits) |
 
 **Supported:** `i64`, `u64`, `f64`, `bool`, `[f64]`, `[f32]`, `[i64]`,
 `[i32]`, `[i16]`, `[u8]`, `[u64]`. Any other type
@@ -179,7 +179,9 @@ the Elixir one (`integer` is `i64`, `float` and `number` are `f64`, `binary` is
 
 **Supported with restrictions:** `bitstring`, the type of a [bitstring
 accumulator](#the-bitstring-accumulator): a result type, alone or in a tuple
-(`:: {bitstring, i64}`), never a parameter type.
+(`:: {bitstring, i64}`), and the parameter type of a kernel other kernels
+call ([Passing it to a kernel](#the-bitstring-accumulator)), never of one
+called from Elixir.
 
 **Supported with restrictions:** tuples. A tuple of scalars and arrays is a
 return type (`:: {f64, f64}`, `:: {[f64], i64}`). Inside a kernel, tuples exist
@@ -643,7 +645,39 @@ iex> Mod.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
   `Enum.reduce_while/3` accumulator (alone or in a tuple), a branch of an
   `if`, `cond` or `case`, a called kernel's result (a kernel that returns a
   `bitstring` is inlined like any other, and the caller may append to what
-  it returns), and the kernel's result, alone or in a tuple.
+  it returns), a called kernel's `bitstring` parameter (see below), and the
+  kernel's result, alone or in a tuple.
+- **Passing it to a kernel.** A kernel may take a `bitstring` parameter,
+  append to it and return it, alone or in a tuple, so a step of the
+  encoding can be its own kernel:
+
+  ```elixir
+  defk dod_bits(acc :: bitstring, dod :: i64) :: bitstring do
+    cond do
+      dod == 0 -> <<acc::bitstring, 0::1>>
+      dod >= -63 and dod <= 64 -> <<acc::bitstring, 0b10::2, band(dod, 0x7F)::7>>
+      true -> <<acc::bitstring, 0b11::2, band(dod, 0xFFFFFFFF)::32>>
+    end
+  end
+
+  defk dods(ds :: [i64]) :: bitstring do
+    for d <- ds, reduce: <<>> do
+      acc -> dod_bits(acc, d)
+    end
+  end
+  ```
+
+  The call is inlined, so the parameter is the caller's accumulator under
+  another name: appending to it appends in place, and a loop in the callee
+  yields with the bits built so far kept. It is still a plain Elixir value:
+  if the caller still holds what it passed, that value keeps its bits, as
+  after any append to an older value. A variable passed to a `bitstring`
+  parameter counts as appended to, so `<<>>` bound to it, or given as its
+  initial value, is the empty bitstring (`dod_bits(<<>>, d)` too). A kernel
+  that takes a bitstring has no function of its own (no NIF, nothing in
+  `__defk_kernels__/0`): only a kernel has a bitstring to pass, so one that
+  no kernel called from Elixir calls, directly or through other kernels, is
+  [`bitstring-use`](#bitstring-use).
 - **Measuring.** `bit_size(acc)` is its number of bits, an `i64`. Pad to a
   whole number of bytes, if you need to, with an explicit append:
   `<<acc::bitstring, 0::size(rem(8 - rem(bit_size(acc), 8), 8))>>`.
@@ -675,8 +709,8 @@ binary, bitstring and UTF segments; reading or indexing a bitstring
 (`acc[i]`, `len(acc)`, `for b <- acc`; a `<<...>> = acc` match is
 [`bitstring-match`](#bitstring-match)); starting from
 an input binary (`<<input::bitstring, ...>>` with `input :: [u8]`); a
-`bitstring` parameter; and passing a bitstring to another kernel.
-(defk-cmr)
+`bitstring` parameter of a kernel called from Elixir; and passing a
+bitstring where a kernel takes another type. (defk-cmr, defk-ooq)
 
 ### Module attributes
 
@@ -1328,6 +1362,11 @@ end
   nothing), so it is a compile error
   ([`write-not-returned`](#write-not-returned)). See [Copies](#copies) for
   when the callee's write copies.
+- A [bitstring accumulator](#the-bitstring-accumulator) argument is passed to
+  a `bitstring` parameter, which the callee may append to and return, alone
+  or in a result tuple. A kernel with a `bitstring` parameter is only
+  inlined: it has no function of its own, and some kernel called from Elixir
+  must call it ([`bitstring-use`](#bitstring-use)).
 - Recursion, direct or through other kernels, is
   [`recursion`](#recursion): write it as a `for ..., reduce:` or
   `Enum.reduce_while/3` loop.
@@ -1511,7 +1550,7 @@ end
 
 ### unknown-type
 
-Kernel types are i64, u64, f64, bool, arrays of f64, f32, i64, i32, i16, u8 and u64 ([f64], [f32], [i64], [i32], [i16], [u8], [u64]) and tuples of them for results; bitstring is a result type too (the bitstring accumulator).
+Kernel types are i64, u64, f64, bool, arrays of f64, f32, i64, i32, i16, u8 and u64 ([f64], [f32], [i64], [i32], [i16], [u8], [u64]) and tuples of them for results; bitstring is a result type too, and a parameter type of a kernel other kernels call (the bitstring accumulator).
 
 - kind: a mistake to fix (in the kernel or the build)
 - why: a kernel works on native numbers and packed arrays, and these are the types it has
@@ -3168,10 +3207,10 @@ end
 
 ### bitstring-use
 
-A bitstring accumulator starts from `<<>>`, is appended to, measured with `bit_size/1` and returned; nothing else.
+A bitstring accumulator starts from `<<>>`, is appended to (also in a kernel it is passed to), measured with `bit_size/1` and returned; nothing else.
 
 - kind: not supported yet (planned)
-- why: a bitstring is a kernel's output: reading it, starting from an input binary, taking it as a parameter or passing it to another kernel is not supported yet
+- why: a bitstring is a kernel's output: reading it or starting from an input binary is not supported yet, and only a kernel can pass one to a kernel (Elixir cannot pass one to an entry kernel)
 - hint: measure it with bit_size/1, and keep what the kernel needs to read in variables or an array
 
 Rejected:
@@ -3375,6 +3414,7 @@ bug.
 | an `[f32]` write of a value that rounds to inf | `<<1.0e40::float-32>>` stores inf | `ArgumentError` "value 1.0e40 does not fit in f32" |
 | a [bitstring accumulator](#the-bitstring-accumulator) segment `v::size(n)` with `v` outside `0..2^n - 1` (a negative `v` included) | keeps the low `n` bits | `ArgumentError` "bitstring segment value v does not fit in n bits" |
 | a bitstring segment size outside `0..64` | any non-negative size | `ArgumentError` "bitstring segment size n is outside 0..64" |
+| a `bitstring` parameter of a kernel no kernel called from Elixir calls (an entry kernel taking a bitstring) | a function taking any bitstring | compile error [`bitstring-use`](#bitstring-use) |
 | `alloc/2` of more than 2^48 bytes | (the VM would abort) | `ArgumentError` "alloc/2: length too large" |
 | `alloc/2` of a size the allocator cannot provide | (the VM would abort) | `ArgumentError` "out of memory"; Elixir mode raises it from 2^47 bytes without trying |
 | a range whose last element is within one step of the `i64` limit, e.g. `0..9223372036854775807` | runs | `ArithmeticError` "range element ... is within one step of the i64 limit" before the loop starts, also when the loop would stop earlier |

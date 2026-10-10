@@ -121,13 +121,18 @@ defmodule Defk.Bitstring do
   end
 
   @doc false
-  # The names `body` appends to: `<<name::bitstring, ...>>` anywhere in it.
-  def accumulator_names(body) do
+  # The names `body` appends to: `<<name::bitstring, ...>>` anywhere in it,
+  # or `name` passed where a helper takes a bitstring (`bits_params`: the
+  # bitstring parameter positions of each {name, arity}, defk-ooq).
+  def accumulator_names(body, bits_params \\ %{}) do
     {_, names} =
       Macro.prewalk(body, MapSet.new(), fn
         {:<<>>, _, [{:"::", _, [{name, _, ctx}, {t, _, tctx}]} | _]} = node, acc
         when is_atom(name) and is_atom(ctx) and t in [:bitstring, :bits] and is_atom(tctx) ->
           {node, MapSet.put(acc, name)}
+
+        {f, _, args} = node, acc when is_atom(f) and is_list(args) ->
+          {node, Enum.into(passed(args, Map.get(bits_params, {f, length(args)}, [])), acc)}
 
         node, acc ->
           {node, acc}
@@ -136,12 +141,33 @@ defmodule Defk.Bitstring do
     names
   end
 
+  defp passed(args, positions) do
+    for i <- positions,
+        {name, _, ctx} = Enum.at(args, i),
+        is_atom(name) and is_atom(ctx),
+        do: name
+  end
+
+  @doc false
+  # The bitstring parameter positions of each helper: %{{name, arity} => [i]}.
+  def bits_params(kernels) do
+    for k <- kernels, helper?(k), into: %{} do
+      {{k.name, k.arity}, for({{_, :bitstring}, i} <- Enum.with_index(k.params), do: i)}
+    end
+  end
+
   @doc false
   # Whether a kernel head's return type has a bitstring in it: its NIF then
   # returns {bytes, bit_length} there, and an Elixir wrapper (decode/2) makes
   # the bitstring.
   def returns_bits?({:"::", _, [_call, ret]}), do: bits_type?(ret)
   def returns_bits?(_head), do: false
+
+  @doc false
+  # Whether a kernel (or its signature) is a helper: one that takes a
+  # bitstring (defk-ooq). A helper is only inlined into the kernels that call
+  # it, so it has no NIF and no Elixir function.
+  def helper?(%{params: params}), do: Enum.any?(params, &match?({_, :bitstring}, &1))
 
   @doc false
   # The kernel name of a head, or nil (the compiler rejects such a head).

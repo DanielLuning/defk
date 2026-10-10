@@ -119,7 +119,7 @@ defmodule Defk.ElixirMode do
     kernels = Enum.zip_with(raw_kernels, sigs, fn raw, sig -> kernel(raw.body, sig, by_key) end)
 
     entries =
-      for sig <- sigs do
+      for sig <- sigs, not Defk.Bitstring.helper?(sig) do
         vs = for {p, _} <- sig.params, do: var(p)
 
         quote generated: true do
