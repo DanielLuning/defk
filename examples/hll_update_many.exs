@@ -81,7 +81,7 @@
 # 2.7-5x at 100, 12-17x from 1k to 31k, 3.2x at 100k (the GC above); the
 # crossover is 100, the smallest size.
 #
-# Native: the NIF is 2.6-2.8 ms at 100k (defk 7x faster) and 0.003 ms at
+# Native: the NIF is 2.55-2.8 ms at 100k (defk 6.9-7.4x faster) and 0.003 ms at
 # 100: its Enum.map + iodata pack is 2.3 ms of it. Fed by defk's packer it
 # is 0.46 ms (variant N'), level with defk: the loops are the same, the
 # difference is the Elixir glue. Tick gaps (1 ms ticker, one scheduler,
