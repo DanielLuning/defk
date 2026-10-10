@@ -181,19 +181,38 @@ defmodule Defk.ElixirMode do
 
   # {statements, value expression, type}
   defp block_parts(ast, env) do
+    {stmts, last, t, _env} = block_env(ast, env)
+    {stmts, last, t}
+  end
+
+  # block_parts/2 and the env the block ends in
+  defp block_env(ast, env) do
     {init, [last]} = Enum.split(exprs(ast), -1)
     {stmts, env} = stmts(init, env)
 
     case last do
       {:=, _, [lhs, rhs]} ->
-        {q, t} = expr(rhs, env)
-        {bq, _env} = bind(lhs, q, t, env)
-        {stmts, bq, t}
+        {q, t, env} = expr_env(rhs, env)
+        {bq, env} = bind(lhs, q, t, env)
+        {stmts, bq, t, env}
 
       _ ->
-        {q, t} = expr(last, env)
-        {stmts, q, t}
+        {q, t, env} = expr_env(last, env)
+        {stmts, q, t, env}
     end
+  end
+
+  # A nested plain block binds into the scope around it, as in Elixir (the
+  # quoted block does too): the env it ends in is the env after it. Any other
+  # expression binds nothing.
+  defp expr_env({:__block__, _, _} = b, env) do
+    {stmts, last, t, env} = block_env(b, env)
+    {block(stmts ++ [last]), t, env}
+  end
+
+  defp expr_env(e, env) do
+    {q, t} = expr(e, env)
+    {q, t, env}
   end
 
   defp stmts(asts, env) do
@@ -210,7 +229,7 @@ defmodule Defk.ElixirMode do
     do: {write(arr, idx, rhs, env, m), env}
 
   defp stmt({:=, _, [lhs, rhs]}, env) do
-    {q, t} = expr(rhs, env)
+    {q, t, env} = expr_env(rhs, env)
     bind(lhs, q, t, env)
   end
 
@@ -237,7 +256,10 @@ defmodule Defk.ElixirMode do
     {q, env}
   end
 
-  defp stmt(e, env), do: {elem(expr(e, env), 0), env}
+  defp stmt(e, env) do
+    {q, _t, env} = expr_env(e, env)
+    {q, env}
+  end
 
   defp raise_form!(_node, code, what, _opts),
     do: raise(ArgumentError, "defk: #{code}: #{what} reached Elixir mode")
@@ -689,7 +711,7 @@ defmodule Defk.ElixirMode do
   end
 
   # Like the kernel: the subject is evaluated once, clauses are tested in
-  # order (an error in a guard raises, a limit), and no match raises
+  # order (an error in a guard fails the clause, see guard_expr), and no match raises
   # CaseClauseError. A pattern variable is bound in its clause body.
   defp case_form(subject, clauses, mode, env, m) do
     {{bind_subject, arms}, writes} =
@@ -706,7 +728,7 @@ defmodule Defk.ElixirMode do
     Enum.reduce_while(clauses, {[], MapSet.new()}, fn {:->, _, [[head], body]}, {arms, seen} ->
       {pat, guard} = case_clause_head(head)
       {test, benv, prefix} = case_pattern(pat, s, st, env)
-      gq = guard && elem(expr(guard, guard_env(pat, s, st, env)), 0)
+      gq = guard && guard_expr(Defk.GuardIn.lower(guard), guard_env(pat, s, st, env))
 
       seen =
         if guard == nil and match?({:lit, _, _}, test),
@@ -763,6 +785,38 @@ defmodule Defk.ElixirMode do
           do: {:any, env, []},
           else: {:any, put_var(env, name, st), [{:=, [generated: true], [var(name), s]}]}
     end
+  end
+
+  # The guard's expression calls Ops (an i64 limit has no guard form), so it
+  # runs outside a real guard, with Elixir's guard rule applied by hand: an
+  # error fails the guard (false) and the next clause is tried. Only an error
+  # Elixir itself would raise does: a zero divisor, a float result of inf. An
+  # i64 limit (Ops.limit?/1) is no Elixir error and is raised, as the kernel does.
+  defp guard_expr(guard, env) do
+    {q, _} = expr(guard, env)
+
+    if fallible?(guard) do
+      quote generated: true do
+        try do
+          unquote(q)
+        rescue
+          e in ArithmeticError ->
+            if Defk.ElixirMode.Ops.limit?(e), do: reraise(e, __STACKTRACE__), else: false
+        end
+      end
+    else
+      q
+    end
+  end
+
+  # whether evaluating the guard can raise an ArithmeticError of Elixir's
+  defp fallible?(guard) do
+    guard
+    |> Macro.prewalk(false, fn
+      {op, _, [_ | _]} = n, acc -> {n, acc or op in [:+, :-, :*, :/, :div, :rem]}
+      n, acc -> {n, acc}
+    end)
+    |> elem(1)
   end
 
   # in a guard the pattern variable is the subject itself

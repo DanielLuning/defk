@@ -572,19 +572,50 @@ defmodule Defk.Compiler do
   # A block whose last expression is its value. It is nested in the statement
   # `env` is at (see "array values"), or is a kernel's body.
   defp lower_block(ast, env) do
+    {s, v, _env} = lower_block_env(ast, env)
+    {s, v}
+  end
+
+  # lower_block/2 and the env the block ends in (nested, see leave/2)
+  defp lower_block_env(ast, env) do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
     lives = live_after(es)
     {s1, env} = stmt_list(init, lives, nested(env))
 
-    {s2, v} =
+    {s2, v, env} =
       in_ctx(last, fn ->
         {sh, env} = enter(last, List.last(lives), env)
-        {s, v} = last_value(last, env)
-        {[sh, s], v}
+        {s, v, env} = last_value(last, env)
+        {[sh, s], v, env}
       end)
 
-    {[s1, s2], v}
+    {[s1, s2], v, env}
+  end
+
+  # A nested plain block binds into the scope around it, as in Elixir: `env`
+  # is the block's env at its end, `outer` the env the block is nested in.
+  # What the block bound is now bound in `outer`'s block, so it is at its depth.
+  defp leave(env, outer) do
+    vars =
+      Map.new(env.vars, fn
+        {n, %{depth: d} = b} when d == env.depth -> {n, %{b | depth: outer.depth}}
+        kv -> kv
+      end)
+
+    %{outer | vars: vars}
+  end
+
+  # a nested block's value, and the env with its bindings; any other expression
+  # binds nothing
+  defp lower_expr_env({:__block__, _, _} = b, env) do
+    {s, v, inner} = lower_block_env(b, env)
+    {s, v, leave(inner, env)}
+  end
+
+  defp lower_expr_env(e, env) do
+    {s, v} = lower_expr(e, env)
+    {s, v, env}
   end
 
   defp last_value({:=, _, [{{:., _, [Access, :get]}, _, [arr, _]}, _]} = last, _env) do
@@ -598,12 +629,12 @@ defmodule Defk.Compiler do
 
   defp last_value({:=, _, [lhs, rhs]} = last, env) do
     match?({:<<>>, _, _}, lhs) && bitstring_match!(last)
-    {s, v} = lower_expr(rhs, env)
-    {s2, _} = bind(lhs, v, env, last)
-    {[s, s2], v}
+    {s, v, env} = lower_expr_env(rhs, env)
+    {s2, env} = bind(lhs, v, env, last)
+    {[s, s2], v, env}
   end
 
-  defp last_value(last, env), do: lower_expr(last, env)
+  defp last_value(last, env), do: lower_expr_env(last, env)
 
   # A block evaluated only for effect, nested like lower_block's.
   defp lower_stmts(ast, env) do
@@ -672,7 +703,7 @@ defmodule Defk.Compiler do
 
   defp lower_stmt({:=, _, [lhs, rhs]} = match, env) do
     match?({:<<>>, _, _}, lhs) && bitstring_match!(match)
-    {s, v} = lower_expr(rhs, env)
+    {s, v, env} = lower_expr_env(rhs, env)
     {s2, env} = bind(lhs, v, env, match)
     {[s, s2], env}
   end
@@ -719,7 +750,7 @@ defmodule Defk.Compiler do
   end
 
   defp lower_stmt(e, env) do
-    {s, v} = lower_expr(e, env)
+    {s, v, env} = lower_expr_env(e, env)
     {[s, discard(v)], env}
   end
 
@@ -1403,6 +1434,8 @@ defmodule Defk.Compiler do
     end
   end
 
+  defp lower_expr({:defk_guard, _, [guard]}, env), do: guard_expr(guard, env)
+
   defp lower_expr({op, _, [a, b]} = node, env) when op in [:+, :-, :*, :/],
     do: float_tree(node, env) || lower_arith(op, a, b, node, env)
 
@@ -1541,11 +1574,11 @@ defmodule Defk.Compiler do
           i64_arith(op, va, vb, env)
 
         {:/, _, _} ->
-          val("defk_fdiv#{checked(env)}, #{to_f(va)}, #{to_f(vb)})", :f64)
+          val("defk_fdiv#{checked_float(env)}, #{to_f(va)}, #{to_f(vb)})", :f64)
 
         # a float result that is inf or NaN raises, as in Elixir (defk-i00)
         _ ->
-          val("defk_#{@float_ops[op]}#{checked(env)}, #{to_f(va)}, #{to_f(vb)})", :f64)
+          val("defk_#{@float_ops[op]}#{checked_float(env)}, #{to_f(va)}, #{to_f(vb)})", :f64)
       end
 
     {[sa, sb], v}
@@ -2016,6 +2049,11 @@ defmodule Defk.Compiler do
   defp checked(%{ovf: flag}), do: "_s(&#{flag}"
   defp checked(_env), do: "(ctx"
 
+  # a float operation in a case guard flags a non-finite result as a failed
+  # guard (an Elixir error), not as an overflow
+  defp checked_float(%{bad: flag}), do: "_s(&#{flag}"
+  defp checked_float(env), do: checked(env)
+
   # pure expressions that can only fail by i64 overflow or a non-finite float
   # result: safe to evaluate untaken, with the failure flagged
   defp speculate?({:__block__, _, [e]}), do: speculate?(e)
@@ -2024,6 +2062,9 @@ defmodule Defk.Compiler do
   defp speculate?({a, b}), do: speculate?(a) and speculate?(b)
   defp speculate?({:{}, _, items}) when is_list(items), do: Enum.all?(items, &speculate?/1)
   defp speculate?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: true
+
+  # a case guard flags its own failures (guard_expr), so it is safe untaken
+  defp speculate?({:defk_guard, _, [_]}), do: true
 
   defp speculate?({op, _, args})
        when op in [
@@ -2355,11 +2396,23 @@ defmodule Defk.Compiler do
     val("defk_f64_to_u64(#{to_f(x)})", :u64)
   end
 
-  defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, _)
+  defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, env)
        when f in [:div, :rem] and ta in @ints and tb in @ints do
-    case int_pair!(a, b, node) do
-      {:i64, a, b} -> val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
-      {:u64, a, b} -> val("defk_#{f}_u64(ctx, #{a.c}, #{b.c})", :u64)
+    case {int_pair!(a, b, node), env} do
+      {{:i64, a, b}, %{bad: bad, ovf: ovf}} when f == :div ->
+        val("defk_div_i64_g(&#{bad}, &#{ovf}, #{a.c}, #{b.c})", :i64)
+
+      {{:i64, a, b}, %{bad: bad}} ->
+        val("defk_rem_i64_g(&#{bad}, #{a.c}, #{b.c})", :i64)
+
+      {{:u64, a, b}, %{bad: bad}} ->
+        val("defk_#{f}_u64_g(&#{bad}, #{a.c}, #{b.c})", :u64)
+
+      {{:i64, a, b}, _} ->
+        val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
+
+      {{:u64, a, b}, _} ->
+        val("defk_#{f}_u64(ctx, #{a.c}, #{b.c})", :u64)
     end
   end
 
@@ -2371,10 +2424,15 @@ defmodule Defk.Compiler do
       )
 
   defp builtin(f, [%{t: t} = a], _, _) when f in [:trunc, :round] and t in @ints, do: a
-  defp builtin(:trunc, [%{t: :f64} = a], _, _), do: val("defk_trunc(ctx, #{a.c})", :i64)
-  defp builtin(:round, [%{t: :f64} = a], _, _), do: val("defk_round(ctx, #{a.c})", :i64)
+
+  defp builtin(f, [%{t: :f64} = a], _, env) when f in [:trunc, :round],
+    do: val("defk_#{f}#{checked(env)}, #{a.c})", :i64)
+
   defp builtin(:abs, [%{t: :u64} = a], _, _), do: a
-  defp builtin(:abs, [%{t: :i64} = a], _, _), do: val("defk_abs_i64(ctx, #{a.c})", :i64)
+
+  defp builtin(:abs, [%{t: :i64} = a], _, env),
+    do: val("defk_abs_i64#{checked(env)}, #{a.c})", :i64)
+
   defp builtin(:abs, [%{t: :f64} = a], _, _), do: val("fabs(#{a.c})", :f64)
 
   defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, _)
@@ -3775,7 +3833,18 @@ defmodule Defk.Compiler do
       Enum.reduce_while(clauses, {[], MapSet.new()}, fn clause, {arms, seen} ->
         {pat, guard, body, cm} = case_clause_head(clause)
         {test, rename} = case_pattern(pat, sv.t, subj, cm)
-        guard = guard && rename.(guard_safe!(guard))
+
+        guard =
+          guard &&
+            {:defk_guard, cm,
+             [
+               guard
+               |> guard_safe!()
+               |> rename.()
+               |> in_types!(env, unrename(pat, name))
+               |> Defk.GuardIn.lower()
+             ]}
+
         body = rename.(body)
 
         seen =
@@ -3887,8 +3956,61 @@ defmodule Defk.Compiler do
   end
 
   # Elixir allows only guard-safe expressions in guards: no kernel calls,
-  # indexing or `&&`. An error in a defk guard (overflow, rem by zero) raises,
-  # where Elixir would fail the clause.
+  # indexing or `&&`. An error in a guard fails its clause (defk-7a6): a zero
+  # divisor in div, rem or `/`, and a float result that is inf or NaN. The
+  # guard is computed with flagged operations: `bad` is set by those errors,
+  # and the guard is then false, as a whole (an error in the left of an `or`
+  # fails the guard too, but an operand a short-circuit skips never runs).
+  # A result outside i64 is not an Elixir error (Elixir has no i64 limit), so
+  # it keeps raising: `ovf` is set, and the guard is replayed with the
+  # raising checks, which raise as the unguarded operation does. A guard with
+  # no operation that can fail lowers as written, with no flags.
+  # A case guard as a C condition. Lowered once with placeholder flags: when
+  # no flag appears nothing can fail and that is the guard. Otherwise the
+  # flags are real locals, reset on every evaluation. Inside a speculated
+  # select (env.ovf) an overflow sets the select's own flag, which replays the
+  # clauses with a guard that raises; elsewhere it replays this guard.
+  @guard_bad "defk guard bad"
+  @guard_ovf "defk guard ovf"
+
+  defp guard_expr(guard, env) do
+    gv = Map.merge(env, %{ovf: @guard_ovf, bad: @guard_bad})
+    {s, v} = lower_expr(guard, gv)
+    0 = IO.iodata_length(s)
+    bad? = String.contains?(v.c, "&" <> @guard_bad)
+    ovf? = String.contains?(v.c, "&" <> @guard_ovf)
+    outer = Map.get(env, :ovf)
+
+    bad = bad? && fresh("gbad", :bool)
+    ovf = if ovf? and outer == nil, do: fresh("govf", :bool), else: outer
+    c = v.c |> String.replace(@guard_bad, bad || "") |> String.replace(@guard_ovf, ovf || "")
+
+    cond do
+      not (bad? or ovf?) ->
+        {[], v}
+
+      outer != nil and not bad? ->
+        {[], val(c, :bool)}
+
+      outer != nil ->
+        g = fresh("guard", :bool)
+        {[], val("(#{bad} = 0, #{g} = (#{c}), !#{bad} && #{g})", :bool)}
+
+      true ->
+        g = fresh("guard", :bool)
+        {_, plain} = lower_expr(guard, env)
+        resets = Enum.map_join([bad, ovf] -- [false, nil], ", ", &"#{&1} = 0")
+        ok = if bad?, do: "!#{bad} && #{g}", else: g
+
+        ok =
+          if ovf?,
+            do: "DEFK_UNLIKELY(#{ovf}) ? ((void)(#{plain.c}), 0) : (#{ok})",
+            else: ok
+
+        {[], val("(#{resets}, #{g} = (#{c}), #{ok})", :bool)}
+    end
+  end
+
   @guard_ops [
     :+,
     :-,
@@ -3929,20 +4051,11 @@ defmodule Defk.Compiler do
         match?({:ok, b} when is_binary(b), Defk.Attributes.of(a)) || attribute!(a)
         err!(a, "case-guard", "#{Macro.to_string(a)}, a binary, is not allowed in a case guard")
 
-      {:in, _, [x, list]} = other when is_list(list) and list != [] ->
-        rewrite =
-          list
-          |> Enum.map(&{:==, [], [x, &1]})
-          |> Enum.reduce(&{:or, [], [&2, &1]})
-          |> Macro.to_string()
-
-        err!(
-          other,
-          "case-guard",
-          "#{Macro.to_string(other)} in a case guard is not supported yet",
-          hint: "compare with each value",
-          rewrite: rewrite
-        )
+      {:in, _, _} = node ->
+        case Defk.GuardIn.check(node) do
+          :ok -> Enum.each(Defk.GuardIn.operands(node), &guard_safe!/1)
+          {:error, at, what, opts} -> err!(at, "case-guard", what, opts)
+        end
 
       other ->
         err!(other, "case-guard", "#{Macro.to_string(other)} is not allowed in a case guard")
@@ -3950,6 +4063,66 @@ defmodule Defk.Compiler do
 
     guard
   end
+
+  # The operands of an `in` in a guard are integers (a bool list takes a bool
+  # on the left), as in Elixir, where `1.0 in 1..3` is false; the guard's
+  # comparisons would say true for a float.
+  defp in_types!(guard, env, show) do
+    Macro.prewalk(guard, fn
+      {:in, _, [lhs, _]} = node ->
+        kind = Defk.GuardIn.kind(node)
+        [lhs_t | bound_ts] = for e <- Defk.GuardIn.operands(node), do: guard_type(e, env)
+        in_lhs_type!(node, kind, lhs, lhs_t, show)
+
+        for {e, t} <- Enum.zip(tl(Defk.GuardIn.operands(node)), bound_ts),
+            t != :i64,
+            do: in_type_err!(node, e, t, "as a bound of", show)
+
+        node
+
+      other ->
+        other
+    end)
+
+    guard
+  end
+
+  defp in_lhs_type!(node, kind, lhs, t, show) do
+    cond do
+      kind == :range and t == :i64 -> :ok
+      kind == :int_list and t == :i64 -> :ok
+      kind == :bool_list and t == :bool -> :ok
+      kind != :range and t in [:i64, :bool] -> in_never!(node, lhs, t, show)
+      true -> in_type_err!(node, lhs, t, "on the left of", show)
+    end
+  end
+
+  @spec in_never!(term(), term(), term(), term()) :: no_return()
+  defp in_never!(node, lhs, t, show) do
+    err!(
+      node,
+      "case-guard",
+      "#{show.(node)} never matches: #{show.(lhs)} is #{fmt(t)}, the list holds #{if t == :bool, do: "integers", else: "booleans"}",
+      hint: "match a value of the subject's type"
+    )
+  end
+
+  @spec in_type_err!(term(), term(), term(), term(), term()) :: no_return()
+  defp in_type_err!(node, e, t, where, show) do
+    err!(
+      node,
+      "case-guard",
+      "#{show.(e)} is #{fmt(t)}, an integer#{if Defk.GuardIn.kind(node) != :range, do: " or bool"} is needed #{where} #{show.(node)}"
+    )
+  end
+
+  # prints an AST with the case subject under the pattern variable's name
+  defp unrename({v, _, ctx}, name) when is_atom(v) and is_atom(ctx),
+    do: &Macro.to_string(rename_var(&1, name, {v, [], nil}))
+
+  defp unrename(_pat, _name), do: &Macro.to_string/1
+
+  defp guard_type(e, env), do: e |> lower_expr(env) |> elem(1) |> Map.fetch!(:t)
 
   # `weight` back-edges are charged to the budget at once
   defp safepoint(weight \\ "1") do

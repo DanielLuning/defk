@@ -810,6 +810,12 @@ value, as in Elixir.
 
   Carry a value out of a loop with `reduce:` (see
   [section 7](#7-control-flow)).
+- **A plain parenthesised block does not scope**, as in Elixir:
+  `(x = a + 1; x); x * 2` sees `x`, so macro-generated bodies that arrive as
+  a nested block work. This holds for a block used as a statement, as the
+  right side of a match, or as the last expression of a block; a block nested
+  deeper inside an expression (an operand, an argument) keeps its bindings to
+  itself.
 - **`_` and `_name`** discard the value, but the right side is still
   evaluated, so `_ = x * x` raises on overflow as Elixir would.
 - **Tuple destructuring:** `{a, b} = expr`, where `expr` gives a tuple (a
@@ -1135,13 +1141,44 @@ end
   [`case-pattern`](#case-pattern); a subject of another type is
   [`case-subject`](#case-subject).
 - Guards (`when`): literals, variables, `+ - * /`, comparisons, `and`, `or`,
-  `not`, `div`, `rem`, `abs`, `trunc`, `round`, `min`, `max`. Kernel calls,
-  indexing, `&&`/`||` and `in` are [`case-guard`](#case-guard) (Elixir rejects
-  most of them in guards too).
+  `not`, `div`, `rem`, `abs`, `trunc`, `round`, `min`, `max`, and `in` /
+  `not in` (below). Kernel calls, indexing and `&&`/`||` are
+  [`case-guard`](#case-guard) (Elixir rejects most of them in guards too).
+- `in` in a guard: `x in [1, 2, 3]`, `x in 1..10`, `x in a..b//step`, and
+  `not in`. The left side is any guard-safe `i64` expression (a `bool` with a
+  list of `true`/`false`). The right side is
+  - a literal list of integers or of booleans (written out: no variable, no
+    `++`), lowered to `x === 1 or x === 2 ...`; an empty list matches nothing;
+  - a range of integer literals, with or without a step (`10..1` counts down by
+    one, as in Elixir). A step is a non-zero literal within
+    +-9223372036854775807. A negative step counts down (`10..1//-3` is 10, 7,
+    4, 1), and a range that cannot reach its last (`1..0//1`, `1..5//-1`) is
+    empty. Membership is exactly that of `Enum.member?/2` for integers,
+    computed at compile time (the last element is found, then `x >= first`,
+    `x <= last` and a remainder test), so no runtime arithmetic can overflow;
+  - a range with variable (guard-safe `i64`) bounds, which needs the explicit
+    step `//1` or `//-1`: `x in a..b//1` is `a <= x <= b`. Without a step
+    Elixir rejects it in a guard (its direction is only known at runtime), and
+    any other step needs literal bounds, as the remainder test is built at
+    compile time. Anything else on the right (a variable list, a list element
+    that is not a literal, a float or a zero step) is
+    [`case-guard`](#case-guard), as is a left side of the wrong type (`1.0 in
+    1..3` is false in Elixir, so a float is rejected, not compared).
 - A subject no clause matches raises `CaseClauseError`, as in Elixir, so a
   catch-all is optional.
-- **Limit:** an error inside a guard (an overflow, `rem` by zero) raises it,
-  where Elixir would treat the guard as false and try the next clause.
+- An error inside a guard fails the guard, as in Elixir, and the next clause
+  is tried: a zero divisor in `div`, `rem` or `/`, and a float result that is
+  inf or NaN. The whole guard is false, so an error on the left of an `or`
+  fails it too, while an operand a short-circuit skips never runs. Elixir mode
+  does the same. A guard with no operation that can fail compiles as before.
+  If no later clause matches, the case raises `CaseClauseError`.
+- **Limit:** a guard result outside `i64` (`n * n > 100` at `n = 2^40`, `abs`
+  of the minimum, a `trunc` out of range) is no error in Elixir, which has
+  bignums, so it does not fail the clause: it raises `ArithmeticError`, as the
+  same operation does outside a guard. When one guard has both a zero divisor
+  and such a result, evaluated without a short-circuit between them
+  (`rem(n, y) < n * n`), the kernel raises, where Elixir mode may fail the
+  clause for the zero divisor it reaches first.
 
 ### Tuples from branches
 
@@ -2854,7 +2891,7 @@ end
 
 ### case-guard
 
-A case guard uses guard-safe expressions: variables, literals, arithmetic, comparisons, and/or/not, div, rem, abs, trunc, round, min and max.
+A case guard uses guard-safe expressions: variables, literals, arithmetic, comparisons, and/or/not, in with a literal list or a range, div, rem, abs, trunc, round, min and max.
 
 - kind: a mistake to fix (in the kernel or the build)
 - why: Elixir allows only guard-safe expressions in guards, and kernel calls and indexing are not guard-safe
@@ -3424,7 +3461,7 @@ bug.
 | `alloc/2` of more than 2^48 bytes | (the VM would abort) | `ArgumentError` "alloc/2: length too large" |
 | `alloc/2` of a size the allocator cannot provide | (the VM would abort) | `ArgumentError` "out of memory"; Elixir mode raises it from 2^47 bytes without trying |
 | a range whose last element is within one step of the `i64` limit, e.g. `0..9223372036854775807` | runs | `ArithmeticError` "range element ... is within one step of the i64 limit" before the loop starts, also when the loop would stop earlier |
-| an error inside a `case` guard (overflow, `rem` by zero) | the guard fails, the next clause is tried | the error is raised |
+| an `i64` overflow inside a `case` guard (`n * n > 100`) | the guard is computed exactly | `ArithmeticError`. A zero divisor in a guard is no limit: it fails the clause, as in Elixir |
 | ordering booleans, comparing a boolean with a number | term order | compile error [`operand-type`](#operand-type) |
 | `&&`, `\|\|`, `!` on non-boolean values | truthiness | compile error [`operand-type`](#operand-type) |
 | recursion, direct or mutual | runs | compile error [`recursion`](#recursion) |

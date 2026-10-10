@@ -432,6 +432,25 @@ static inline int64_t defk_abs_i64(defk_ctx *ctx, int64_t a) {
   return a < 0 ? defk_neg_i64(ctx, a) : a;
 }
 
+/* case guards (defk-7a6): an Elixir guard that errors fails its clause. A zero
+ * divisor sets *bad (an Elixir error: the clause fails); a result outside i64
+ * sets *ovf (not an error in Elixir, which has bignums: the guard raises, as
+ * the unguarded operation does). Neither form divides by zero or by -1 when
+ * flagging, so a flagged guard is safe to evaluate whether or not it is reached. */
+static inline int64_t defk_div_i64_g(int *bad, int *ovf, int64_t a, int64_t b) {
+  if (b == 0) { *bad = 1; return 0; }
+  if (b == -1) { *ovf |= a == INT64_MIN; return (int64_t)(0 - (uint64_t)a); }
+  return a / b;
+}
+static inline int64_t defk_rem_i64_g(int *bad, int64_t a, int64_t b) {
+  if (b == 0) { *bad = 1; return 0; }
+  if (b == -1) return 0;
+  return a % b;
+}
+static inline int64_t defk_abs_i64_s(int *ovf, int64_t a) {
+  return a < 0 ? defk_neg_i64_s(ovf, a) : a;
+}
+
 /* ---- u64 (defk-wlu) ------------------------------------------------------
  * Checked arithmetic in the u64 domain, 0..2^64 - 1: the exact result, or
  * ArithmeticError where it leaves u64 (a - b below 0 included). Masked
@@ -497,6 +516,14 @@ static inline uint64_t defk_div_u64(defk_ctx *ctx, uint64_t a, uint64_t b) {
 }
 static inline uint64_t defk_rem_u64(defk_ctx *ctx, uint64_t a, uint64_t b) {
   if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "rem/2 by zero");
+  return a % b;
+}
+static inline uint64_t defk_div_u64_g(int *bad, uint64_t a, uint64_t b) {
+  if (b == 0) { *bad = 1; return 0; }
+  return a / b;
+}
+static inline uint64_t defk_rem_u64_g(int *bad, uint64_t a, uint64_t b) {
+  if (b == 0) { *bad = 1; return 0; }
   return a % b;
 }
 /* a u64 where an i64 is expected, and an i64 where a u64 is expected: the
@@ -618,6 +645,12 @@ static inline int64_t defk_trunc(defk_ctx *ctx, double a) {
   return (int64_t)a;
 }
 static inline int64_t defk_round(defk_ctx *ctx, double a) { return defk_trunc(ctx, round(a)); }
+static inline int64_t defk_trunc_s(int *ovf, double a) {
+  int ok = a >= -0x1p63 && a < 0x1p63;
+  *ovf |= !ok;
+  return ok ? (int64_t)a : 0;
+}
+static inline int64_t defk_round_s(int *ovf, double a) { return defk_trunc_s(ovf, round(a)); }
 /* Bit builtins (Defk.Bits): on the u64 bit patterns. __builtin_clzll and
  * ctzll are undefined at 0, so 0 is guarded (the compiler folds the test into
  * the instruction where the target defines it); rotates mask the count to 0..63
