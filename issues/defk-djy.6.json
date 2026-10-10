@@ -9,11 +9,13 @@
   "created": "2026-10-10T14:58:33Z",
   "description": "Compile error footers say (defk \u003ccode\u003e: docs/language.md#\u003ccode\u003e). In a dependency or a Hex install that path doesn't exist. Make the footer point at the HexDocs page for the installed version (e.g. https://hexdocs.pm/defk/\u003cversion\u003e/compile-errors.html#\u003ccode\u003e) or a local path when running from the repo, and make the catalogue its own guide page with stable anchors generated from errors.ex. Update the tests that check footers and the catalogue/docs sync. Coordinate with the guides split.",
   "id": "defk-djy.6",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-djy",
   "priority": 2,
   "status": "open",
   "title": "Compile error links that work outside the repo",
   "type": "task",
-  "updated_at": "2026-10-10T14:58:42Z"
+  "updated_at": "2026-10-10T14:58:43Z"
 }
