@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Fix: lower_block_env/leave in compiler (statement, match rhs, block-last positions) and block_env/expr_env in elixir_mode thread the nested block's env out; leaked vars get the outer depth so before_write's input-array depth check holds. Blocks buried inside operands/arguments still scope (lower_expr returns no env); documented in section 5. if/case/for/loop guard unchanged.",
+      "timestamp": "2026-10-10T09:58:20Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "A binding inside a nested __block__ is scoped to the block, where Elixir leaks it",
   "type": "bug",
-  "updated_at": "2026-10-10T09:53:59Z"
+  "updated_at": "2026-10-10T09:58:20Z"
 }
