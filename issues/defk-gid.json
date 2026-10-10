@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-10T10:12:29Z",
   "created": "2026-10-05T15:51:24Z",
   "description": "defk-9vl case supports integer/bool literals, ^pin, _, a variable, and guards with guard-safe ops. Add: `x when x in [1, 2, 3]` with a literal list, and `x when x in 1..10` / `in a..b//s` ranges (lower to comparisons / switch ranges). Compare with Elixir in tests, including CaseClauseError when nothing matches.",
   "id": "defk-gid",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "More case patterns: literal-list in guards and ranges",
   "type": "task",
-  "updated_at": "2026-10-10T10:09:59Z"
+  "updated_at": "2026-10-10T10:12:29Z"
 }
