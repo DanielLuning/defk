@@ -90,7 +90,7 @@ defmodule Defk.StaticBinariesTest do
     c = K.__defk_source__()
     assert count(c, escaped("a different table, 0123456789")) == 1
     names = arrays(c)
-    assert length(names) == 4
+    assert [_, _, _, _] = names
     assert names == Enum.uniq(names)
     assert c =~ ~r/static const uint8_t defk_lit_\w+\[\] =\n"";/
   end
