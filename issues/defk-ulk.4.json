@@ -9,11 +9,13 @@
   "created": "2026-10-10T14:54:35Z",
   "description": "Extend the builtin pattern of clz/ctz/popcount/mulhi (defk-52v.6): a builtin with a precise integer definition, a portable C fallback, a hardware instruction where one exists, and an Elixir-mode implementation with agreement properties.\n\n- Start with crc32c(acc, word) for u8/u32/u64 words (ARMv8 CRC32C*, SSE4.2 crc32). Measure examples/hashes.exs CRC32C against crc32cer (today crc32cer is 14x faster than the kernel).\n- Then, if the research ticket supports it: carry-less multiply (CRC32/CRC64 folding, GHASH), and possibly single AES/SHA rounds; compare with :crypto.\n- Decide how a builtin picks its implementation in a portable build: only the fallback; runtime dispatch per call site (target_clones / a cached CPU-feature check); or only in an architecture build. Measure the dispatch cost.\n- Devex: how the docs and errors present a builtin that is fast on one target and slow on another (docs/language.md Builtins table).\n\nDone when crc32c is prototyped with all three implementations, agreement properties pass in both modes and under forced yields, and the speedup per target is recorded.",
   "id": "defk-ulk.4",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-ulk",
   "priority": 3,
   "status": "open",
   "title": "Prototype: hardware-instruction builtins with exact meanings (crc32c first)",
   "type": "task",
-  "updated_at": "2026-10-10T14:54:43Z"
+  "updated_at": "2026-10-10T14:54:44Z"
 }
