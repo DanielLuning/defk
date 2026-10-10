@@ -1,4 +1,10 @@
 defmodule Defk.BenchTest do
+  # Nothing here depends on how fast the machine is. Verdict and speedup
+  # arithmetic is tested on fixed inputs (Bench.compare/2 and friends); the
+  # report tests assert the shape of the JSON only. The one wall-clock
+  # assertion is tagged :timing and excluded by default:
+  #
+  #     mix test test/bench_test.exs --include timing
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
@@ -48,15 +54,36 @@ defmodule Defk.BenchTest do
                ~w(baseline correct defk_ms elixir_ms example expected reason speedup verdict)
              )
 
-    assert r.verdict == :good
+    assert r.verdict in [:good, :marginal, :poor]
+    assert json["verdict"] == Atom.to_string(r.verdict)
+    assert is_number(json["speedup"]) and is_number(json["elixir_ms"])
+  end
+
+  test "compare is the arithmetic on fixed times" do
+    assert %{elixir_ms: 8.0, defk_ms: 1.0, speedup: 8.0, verdict: :good} =
+             Bench.compare(8000, 1000)
+
+    assert %{speedup: 1.5, verdict: :marginal} = Bench.compare(3000, 2000)
+    assert %{speedup: 0.5, verdict: :poor} = Bench.compare(1000, 2000)
+    # unrounded speedup decides: 1.999 rounds to 2.0 but is not good
+    assert %{speedup: 2.0, verdict: :marginal} = Bench.compare(1999, 1000)
+    # a zero defk time cannot divide by zero
+    assert %{verdict: :good} = Bench.compare(5, 0)
+  end
+
+  test "native_speedup and sweep_row on fixed times" do
+    assert Bench.native_speedup(4.0, 1.0) == 4.0
+    assert Bench.native_speedup(1.0, 0) == 1000.0
+
+    assert Bench.sweep_row("s", 10.0, 2.0) ==
+             %{size: "s", elixir_ms: 10.0, defk_ms: 2.0, speedup: 5.0}
   end
 
   test "native adds native_ms, native_label and the speedup of defk over it" do
     {_, out, json} = report(native: {spin(4), "pkg 1.0"})
     assert json["native_label"] == "pkg 1.0"
-    assert json["native_ms"] >= 4
-    assert json["native_speedup"] > 1
-    assert json["verdict"] == "good"
+    assert is_number(json["native_ms"])
+    assert is_number(json["native_speedup"])
     assert out =~ "pkg 1.0"
 
     {_, _, kw} = report(native: [fun: spin(1), label: :kw])
@@ -74,16 +101,18 @@ defmodule Defk.BenchTest do
     {_, _, json} = report(sweep: sweep, sweep_runs: 1)
 
     assert [%{"size" => "small", "speedup" => s} | _] = json["sweep"]
-    assert s < 1
+    assert is_number(s)
     assert Enum.map(json["sweep"], & &1["size"]) == ["small", "mid", "big"]
     assert Enum.all?(json["sweep"], &(&1["elixir_ms"] && &1["defk_ms"]))
-    assert json["crossover"] == "mid"
+
+    rows = Enum.map(json["sweep"], &%{size: &1["size"], speedup: &1["speedup"]})
+    assert json["crossover"] == Bench.crossover(rows)
   end
 
   test "sweep as {sizes, fun} and a sweep without crossover" do
     {_, _, json} = report(sweep: {[1, 2], fn n -> {spin(n), spin(n * 2)} end}, sweep_runs: 1)
     assert Enum.map(json["sweep"], & &1["size"]) == [1, 2]
-    assert json["crossover"] == nil
+    assert Map.has_key?(json, "crossover")
   end
 
   test "responsiveness measures each side and restores schedulers_online" do
@@ -114,6 +143,7 @@ defmodule Defk.BenchTest do
     assert TickGap.percentile([5], 0.99) == 5
   end
 
+  @tag :timing
   test "a busy loop that never yields shows up as one big gap" do
     g = TickGap.run(fn -> :timer.sleep(1) && busy(60_000) end)
     assert g.max >= 1
