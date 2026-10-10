@@ -9,14 +9,18 @@ defmodule Defk.BitstringHelperTest.K do
   use Defk
 
   # Gorilla's delta-of-delta timestamp bits, the anchor's dod_bits as one
-  # clause. A negative dod is masked to its two's complement bits, which is
-  # what the anchor's dod::7-signed segment writes.
+  # clause. Its ranges end at 64, 256 and 2048, one past what a signed
+  # segment holds, so the top of each range is masked to its two's complement
+  # bits (what Elixir's dod::7-signed writes for it); so is a dod beyond 32
+  # bits, which Elixir's dod::32-signed truncates.
   defk dod_bits(acc :: bitstring, dod :: i64) :: bitstring do
     cond do
       dod == 0 -> <<acc::bitstring, 0::1>>
       dod >= -63 and dod <= 64 -> <<acc::bitstring, 0b10::2, band(dod, 0x7F)::7>>
-      dod >= -255 and dod <= 256 -> <<acc::bitstring, 0b110::3, band(dod, 0x1FF)::9>>
-      dod >= -2047 and dod <= 2048 -> <<acc::bitstring, 0b1110::4, band(dod, 0xFFF)::12>>
+      dod >= -255 and dod <= 255 -> <<acc::bitstring, 0b110::3, dod::9-signed>>
+      dod == 256 -> <<acc::bitstring, 0b110::3, band(dod, 0x1FF)::9>>
+      dod >= -2047 and dod <= 2047 -> <<acc::bitstring, 0b1110::4, dod::12-signed>>
+      dod == 2048 -> <<acc::bitstring, 0b1110::4, band(dod, 0xFFF)::12>>
       true -> <<acc::bitstring, 0b1111::4, band(dod, 0xFFFFFFFF)::32>>
     end
   end

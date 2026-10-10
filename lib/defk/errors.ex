@@ -760,14 +760,15 @@ defmodule Defk.Errors do
       code: "bitstring-segment",
       kind: :planned,
       summary:
-        "An append to a bitstring accumulator takes unsigned big-endian integer segments: `v::size(n)`, `v::k` or `v`.",
+        "An append to a bitstring accumulator takes big-endian integer segments, unsigned or `signed`: `v::size(n)`, `v::k` or `v`.",
       why:
-        "a kernel appends integer bits; signed, little-endian, float and binary segments are not supported until a workload needs them",
-      hint: "write unsigned big-endian integer segments: v::size(n), v::k or v (8 bits)",
+        "a kernel appends integer bits; little-endian, float and binary segments are not supported until a workload needs them",
+      hint:
+        "write big-endian integer segments: v::size(n), v::k or v (8 bits), optionally signed",
       example:
-        "defk f(x :: i64) :: bitstring do\n  acc = <<>>\n  <<acc::bitstring, x::signed-8>>\nend",
+        "defk f(x :: i64) :: bitstring do\n  acc = <<>>\n  <<acc::bitstring, x::little-16>>\nend",
       rewrite:
-        "defk f(x :: i64) :: bitstring do\n  acc = <<>>\n  <<acc::bitstring, band(x, 255)::8>>\nend"
+        "defk f(x :: i64) :: bitstring do\n  acc = <<>>\n  <<acc::bitstring, band(x, 255)::8, band(bsr(x, 8), 255)::8>>\nend"
     },
     %{
       code: "bitstring-use",

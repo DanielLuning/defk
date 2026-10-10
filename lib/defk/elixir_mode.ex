@@ -543,8 +543,15 @@ defmodule Defk.ElixirMode do
   # right, then Ops.bits/2 checks each segment (the kernel's limits) and
   # appends it
   defp append(head, parts, env, m) do
-    {pre, [hq | qs], _} = operands([head | Enum.flat_map(parts, &Tuple.to_list/1)], env)
-    segs = qs |> Enum.chunk_every(2) |> Enum.map(fn [v, n] -> {v, n} end)
+    {pre, [hq | qs], _} =
+      operands([head | Enum.flat_map(parts, fn {v, n, _signed} -> [v, n] end)], env)
+
+    segs =
+      qs
+      |> Enum.chunk_every(2)
+      |> Enum.zip(parts)
+      |> Enum.map(fn {[v, n], {_, _, signed}} -> {:{}, [], [v, n, signed]} end)
+
     {with_pre(pre, call(:bits, [hq, segs], m)), :bitstring}
   end
 

@@ -10,13 +10,13 @@ defmodule Defk.Bitstring do
   # it is bound to a name the kernel appends to (accumulator_names/1), returned
   # as a bitstring, or an arm of a branch whose other arms give one.
 
-  @segment_hint "write unsigned big-endian integer segments: v::size(n), v::k or v (8 bits)"
+  @segment_hint "write big-endian integer segments: v::size(n), v::k or v (8 bits), optionally signed"
 
   @doc false
-  # {:append, head, [{value, size}]} for `<<head::bitstring, seg, ...>>`,
+  # {:append, head, [{value, size, signed?}]} for `<<head::bitstring, seg, ...>>`,
   # {:error, node, what, opts} for an append with a segment outside the
   # subset, :error for any other node (a binary literal, say). A segment `v`
-  # has size 8, `v::k` size k.
+  # has size 8, `v::k` size k; it is unsigned unless it says `signed`.
   def parse({:<<>>, _, [{:"::", _, [head, spec]} | segs]} = node) do
     case spec do
       {t, _, ctx} when t in [:bitstring, :bits] and is_atom(ctx) ->
@@ -49,23 +49,25 @@ defmodule Defk.Bitstring do
     with :ok <- value(v, seg) do
       spec
       |> flatten()
-      |> Enum.reduce_while({:ok, nil}, fn s, {:ok, size} ->
+      |> Enum.reduce_while({:ok, nil, nil}, fn s, {:ok, size, sign} ->
         case spec_item(s, seg) do
-          {:size, n} when size == nil -> {:cont, {:ok, n}}
+          {:size, n} when size == nil -> {:cont, {:ok, n, sign}}
           {:size, _} -> {:halt, error(seg, "it has two sizes")}
-          :ok -> {:cont, {:ok, size}}
+          {:sign, g} when sign in [nil, g] -> {:cont, {:ok, size, g}}
+          {:sign, _} -> {:halt, error(seg, "it is both signed and unsigned")}
+          :ok -> {:cont, {:ok, size, sign}}
           {:error, _, _} = e -> {:halt, e}
         end
       end)
       |> case do
-        {:ok, size} -> {:ok, {v, size || 8}}
+        {:ok, size, sign} -> {:ok, {v, size || 8, sign == :signed}}
         e -> e
       end
     end
   end
 
   defp segment(v) do
-    with :ok <- value(v, v), do: {:ok, {v, 8}}
+    with :ok <- value(v, v), do: {:ok, {v, 8, false}}
   end
 
   defp value(v, seg) do
@@ -83,16 +85,12 @@ defmodule Defk.Bitstring do
   defp spec_item(n, _seg) when is_integer(n), do: {:size, n}
   defp spec_item({:size, _, [n]}, _seg), do: {:size, n}
 
-  defp spec_item({t, _, ctx}, _seg) when t in [:integer, :unsigned, :big] and is_atom(ctx),
-    do: :ok
+  defp spec_item({t, _, ctx}, _seg) when t in [:integer, :big] and is_atom(ctx), do: :ok
+  defp spec_item({:unsigned, _, ctx}, _seg) when is_atom(ctx), do: {:sign, :unsigned}
+  defp spec_item({:signed, _, ctx}, _seg) when is_atom(ctx), do: {:sign, :signed}
 
   defp spec_item({t, _, ctx}, seg) when is_atom(t) and is_atom(ctx) do
     case t do
-      :signed ->
-        error(seg, "segments are unsigned",
-          hint: "append band(v, 2^n - 1)::size(n): the same bits"
-        )
-
       t when t in [:little, :native] ->
         error(seg, "segments are big-endian")
 
