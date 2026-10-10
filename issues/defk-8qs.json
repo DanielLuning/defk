@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-10T12:29:06Z",
   "created": "2026-10-09T21:19:51Z",
   "description": "Observed in examples/monte_carlo_rtp.exs (defk-9p6.17): at 1M spins, 48 Task.async_stream tasks each running a ~0.7 ms kernel ran on only 2-3 of 12 schedulers (recorded with :erlang.system_info(:scheduler_id) inside each task), while the same tasks running the Elixir model spread across all 12. That is why the 1M point of the sweep shows ~1x and the crossover is 10M, although the per-spin kernel is 3x faster.\n\nInvestigate whether this is BEAM scheduler placement for short-lived tasks whose work is one NIF call (the calling process rarely yields, so work stealing has little to steal; a kernel yields every 250 us, which at 0.7 ms per task is 2-3 yields), or an artifact of Task.async_stream's ordered chunking. Compare: tasks started with spawn_link on explicit schedulers (`:erlang.spawn_opt(..., scheduler: n)` is not available; use `Task.async_stream` with `max_concurrency: 12` and longer tasks, or batch spins per task so each call is ~10 ms), and record the scheduler spread. If placement is the cause, the catalog guidance is \"give each kernel call enough work (\u003e= a few ms) or batch\", and examples/README.md gets a sentence; if there is a runtime lever (e.g. a kernel call that yields immediately once to let the scheduler balance, or `enif_schedule_nif` placement), file it as a runtime ticket.\n\nDone when: the cause is identified with a measurement and either the README sentence or a runtime ticket exists.",
   "id": "defk-8qs",
@@ -19,8 +20,8 @@
     }
   ],
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Short kernel tasks under Task.async_stream run on only 2-3 of 12 schedulers",
   "type": "task",
-  "updated_at": "2026-10-10T12:28:18Z"
+  "updated_at": "2026-10-10T12:29:06Z"
 }
