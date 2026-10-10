@@ -34,11 +34,17 @@
 # sha3_256_batch/2 hash k messages packed in one binary with k + 1 offsets
 # (`[i64]`) and return k * 32 bytes.
 #
-# Writing the round row by row (five rotated lanes, then their five chi
-# outputs) instead of all 25 rotates and then all of chi took the 16 MB hash
-# from 40 to 27 ms: clang spilled half the state in the first order. Naming
-# each rotate operand (`e = bxor(a6, d1)`, then rotating `e`) instead of
-# writing it inline put it back at 39 ms, with or without `yield: false`.
+# The round is written row by row (five rotated lanes, then their five chi
+# outputs). The order no longer matters (defk-zep): before, every safepoint
+# spilled every local of the kernel, so each round temporary stayed alive
+# out of the round loop into the block loop's safepoint, and clang spilled
+# 26-51 values per round depending on statement order and on whether a
+# rotate operand was named (`e = bxor(a6, d1)`) or written inline: 27 to
+# 42 ms for 16 MB. A safepoint now spills only the locals live where it
+# resumes: all four orderings compile to 9-11 stack stores per round and
+# take ~21 ms (0 spills and ~18 ms with `yield: false` on keccak256, which
+# blocks the scheduler; `yield: false` on sponge alone does nothing, since
+# keccak256 inlines it with its safepoints).
 #
 # Agreement, checked on every run: the FIPS 202 SHA3-256 vectors ("", "abc",
 # the 448-bit message, a million "a") and Keccak-256 of "" and "abc"
@@ -61,8 +67,8 @@
 #   Keccak.Elixir: each lane as two 32-bit halves    ~2.6-2.9 us
 #     (every value stays a small integer below 2^59,
 #     so no lane op allocates a bignum)
-#   defk, one kernel call per message                ~0.58 us
-#   defk batch kernel (pack + call + split)          ~0.38-0.46 us
+#   defk, one kernel call per message                ~0.55 us
+#   defk batch kernel (pack + call + split)          ~0.33-0.35 us
 #   ex_keccak, one NIF call per message              ~0.21 us
 #
 # The 32-bit halves are the one big step (about 20x): lanes above 2^59 are
@@ -70,8 +76,9 @@
 # Not tried: bit interleaving (rotates become two 32-bit rotates; it saves
 # no operations on the BEAM), lane complementing (only saves the bnot).
 #
-# Native: ex_keccak 0.7.8 (precompiled tiny-keccak NIF) is about 1.4-1.8x
-# faster than the kernel (batch and 16 MB alike); it also blocks its
+# Native: ex_keccak 0.7.8 (precompiled tiny-keccak NIF) is about 1.7x
+# faster than the kernel on the 10k x 32 B batch (per-message overhead) and
+# about the same at 16 MB (19.1 vs 20.7 ms, under load); it also blocks its
 # scheduler for the whole 16 MB message (~20 ms gap) where the kernel yields
 # (~2 ms, the ticker's own floor). :crypto's SHA3-256 (OpenSSL) is ~1.7x
 # faster than the kernel. Per-call cost (the tiny-calls lesson): one kernel
