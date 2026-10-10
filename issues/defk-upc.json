@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Measured under load (other agents running on the machine): elixir examples/codecs.exs, 4 runs before (base 9c037bf compiler) and 4 after, each figure the script's best of 7, then the best of the 4 runs. 1 MB hex encode: defk encode16 0.601 -\u003e 0.333 ms (1.8x faster); :binary.encode_hex 0.86-1.04 ms, so encode alone goes from ~1.5x to ~2.6x over the BIF. 1 MB hex decode (1 MB out): defk decode16 0.644 -\u003e 0.503 ms (1.28x faster); :binary.decode_hex 1.61-1.89 ms, so ~2.6x -\u003e ~3.2x. Round trip (the workload verdict): defk 1.243 -\u003e 0.878 ms; speedup over the optimized baseline 1.99-2.02x in the quieter before runs (one read marginal) vs 2.66-2.89x after, verdict good in all after runs. Generated C of both loops now has no defk_put/defk_get, no defk_mul_i64/defk_add_i64, no defk_to_u8 (the attribute read already carried lo 0/hi 255 since defk-qx3; test added). The header numbers in examples/codecs.exs were not updated (taken under different conditions).",
+      "timestamp": "2026-10-10T10:41:53Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Range facts for constant multiples and alloc(2 * len): out[2 * i] keeps its bounds check",
   "type": "task",
-  "updated_at": "2026-10-10T10:22:50Z"
+  "updated_at": "2026-10-10T10:41:53Z"
 }
