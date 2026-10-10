@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Heuristic in (branch defk-id9/select-cost-heuristic). Finding: integer div/rem were already never speculated (speculate? had no clause for them, so rem arm = if/else already); the only speculated division was float /, now removed. Array reads and calls are not speculated either; documented in docs/language.md s7. Measurements PROVISIONAL, taken under load from other agents. demo.exs count_primes(1M) defk yielding ms, 3 runs: before 197/202/205 (best 197), after 187/206/192 (best 187), plain C 183-199: unchanged within noise (generated C identical, the select is a count + 1). Monte Carlo example (3 runs, 100M spins): defk 446.7/455.3/507.0 ms, elixir 1418-1610 ms, 3.17x, correct true, verdict good. The example never had a pow2 select form (no hand rewrite in source or git log), so nothing to revert.",
+      "timestamp": "2026-10-10T10:32:21Z"
+    }
+  ],
   "priority": 4,
   "status": "in_progress",
   "title": "Select compilation evaluates both arms even when one contains div/rem: cost heuristic",
   "type": "task",
-  "updated_at": "2026-10-10T10:22:50Z"
+  "updated_at": "2026-10-10T10:32:21Z"
 }
