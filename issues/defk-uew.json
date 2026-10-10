@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-10T10:17:26Z",
   "created": "2026-10-09T21:27:45Z",
   "description": "Hit by three example authors today (monte_carlo_rtp.exs, geohash_crc.exs, and the guidance trio): an `if`/`cond`/`case` whose arms are tuples is rejected with branch-tuple, so an author writes one if per element. The rewrite is mechanical and the compiler can do it: lower a tuple-valued branch as one branch per element position (each element's arms are the corresponding elements of the tuple arms, with the condition evaluated once into a temporary; selects apply per element when the arms are pure), binding the result as a tuple value `%{elems: ...}` like a reduce accumulator does. Elixir mode: the tuple branch is plain Elixir already. Arrays inside such tuples stay rejected until defk-gqk (arrays through branches).\n\nTests: both modes via assert_agrees for if, cond and case with 2- and 3-tuples, mixed i64/f64 elements (type-checked per position), a select check on the generated C for pure arms, and the array-in-tuple rejection. Docs: section 7 of docs/language.md; retire or re-word the branch-tuple code (grep docs/language.md for links to it).\n\nDone when: the three examples' per-element ifs can be written as one tuple branch (update at least one), agreement holds, suite green.",
   "id": "defk-uew",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Tuples from if/cond/case: {a, b} = if c, do: {x, y}, else: {u, v}",
   "type": "task",
-  "updated_at": "2026-10-10T10:06:08Z"
+  "updated_at": "2026-10-10T10:17:26Z"
 }
