@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-10T11:22:24Z",
+  "description": "Follow-up of defk-ktw. An alloc skips zeroing only for: x = alloc(e, k * n), then (statements that do not mention x) a plain for i \u003c- 0..(n - 1)//1 that writes x[k * i + c] for every c at the top level of its body. Kernels it misses, all still zeroed (in strips): encode64 (the loop plus an if-tail writes the last quad), resize_bilinear's out (out[(y * out_w + x) * ch + c] over nested loops), and monte_carlo draws/uniforms (a for ..., reduce: that writes out[i]). Skipping the memset saved 12-23% on scale and encode16 (under load). Any extension must stay sound and be checked against the brute-force shape test in test/alloc_unzeroed_test.exs.",
+  "id": "defk-i5r",
+  "labels": [],
+  "priority": 4,
+  "status": "open",
+  "title": "Unzeroed alloc: prove full writes for reduce loops, loops plus a tail, and 2-D indices",
+  "type": "task",
+  "updated_at": "2026-10-10T11:22:24Z"
+}
