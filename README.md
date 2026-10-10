@@ -86,7 +86,6 @@ At `mix compile`, `defk` type-checks the body, emits C
 | Measurement and the DEFK_RESULT line for examples | `lib/defk/bench.ex` |
 | The builtin list shared by the compiler, Elixir mode and the error registry | `lib/defk/builtins.ex` |
 | Agreement helpers for tests | `lib/defk/test.ex`, `lib/defk/ex_unit/case.ex` |
-| Placeholder registry, see ticket defk-813 | `lib/defk/divergences.ex` |
 | StreamData generators by kernel type | `test/support/generators.ex` |
 | Runtime: arrays, checks, safepoints, frames, exceptions | `priv/defk_runtime.h` |
 | BEAM/NIF reference (execution model, lifecycles, errors, upgrade) | `docs/beam-nifs.md` |
