@@ -8,9 +8,15 @@
   "labels": [
     "needs-triage"
   ],
+  "comments": [
+    {
+      "text": "Fixed in defk-hki (branch defk-hki/branchless-strip-checks, commit 5dbf94e): flag_strip/3 now requires at least one float check (a flagged helper or a DEFK_FCHECK) before it flags a strip. Before, any strip with no ctx use passed, so integer-only loops (the report's out[2*i] = a[i] over [u8], and FuzzySearch.Kernels.search/search_blocking) got a needless snapshot + flag + replay path in the C. Test: test/report_test.exs 'a loop with no float operation is not flagged' (no 'flagged' in the loop fact, no :nonfinite fact, and the module's C has no defk:replay or defk_nf). FuzzySearch search_blocking timing before/after: noise level (min +1-2%, median +-1%, under load).",
+      "timestamp": "2026-10-10T11:24:31Z"
+    }
+  ],
   "priority": 4,
   "status": "open",
   "title": "Fast-path report prints a non-finite flag note on loops with no float operations",
   "type": "bug",
-  "updated_at": "2026-10-10T10:48:04Z"
+  "updated_at": "2026-10-10T11:24:31Z"
 }
