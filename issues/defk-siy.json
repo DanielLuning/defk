@@ -5,7 +5,9 @@
   "created": "2026-10-10T12:03:32Z",
   "description": "Found in defk-9p6.14 (PCM mixing). Summing n equal-length streams that arrive concatenated in one [i16] (m = div(len(bufs), n)) is the dominant cost of the mix kernel, and every form of the inner loop keeps a bounds check, so clang does not vectorise it (0.75 ns per element, ~70% of the kernel at 1 s chunks; the clamp loop next to it, check-free, vectorises at width 8).\n\nMinimal repro (report: :full):\n\n    defk add_blocks(bufs :: [i16], n :: i64) :: [i64] do\n      m = div(len(bufs), n)\n      sums = alloc(i64, m)\n      for j \u003c- 0..(n - 1)//1 do\n        base = max(j * m, 0)\n        for i \u003c- 0..(min(len(sums), len(bufs) - base) - 1)//1 do\n          sums[i] = sums[i] + bufs[base + i]   # bufs[base + i]: bounds check kept; nothing proves base + i \u003c len(bufs)\n        end\n      end\n      sums\n    end\n\n0 \u003c= base is proven (max with 0) and sums[i] is check-free, but i \u003c= len(bufs) - base - 1 does not give base + i \u003c len(bufs): offsets are only tracked for literals. The shifted form has the same gap from the other side:\n\n    for i \u003c- m..(min(len(acc), len(bufs)) - 1)//1 do\n      acc[i] = acc[i - m] + bufs[i]          # acc[i - m]: nothing proves 0 \u003c= i - m\n    end\n\n(the range start m is not carried as a lower bound of i). Related: defk-9za (facts from a guarding if), defk-pic (alloc length facts).\n\nDone when: both loops compile with no bounds check, in both modes, with a test; examples/pcm_mix.exs can then drop the check from its sum loop (expected: the loop vectorises).",
   "id": "defk-siy",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 3,
   "status": "open",
   "title": "Prove b[base + i] in bounds for a variable block offset (i \u003c- 0..(len(b) - base - 1), or i \u003c- m..(len(b) - 1) with b[i - m])",
