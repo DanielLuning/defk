@@ -19,11 +19,15 @@
     {
       "text": "Implemented on branch defk-wlu/u64-masked-bits (80a2f73). Decisions beyond defk-dtw.10's text: (1) an i64 whose range facts prove it \u003e= 0 (literal, len, [u8] element, narrow mask) promotes to u64 next to a u64, so h * 31 + 1 compiles; only an i64 that may be negative is u64-mix (new code, kind :subset, hint+rewrite = move inside band(..., 0xFFFFFFFFFFFFFFFF)). (2) band(x, mask) now takes a leaf operand too (band(x, 0xFFFF...) is the i64-\u003eu64 conversion); the 64-bit mask yields u64, narrower masks i64 as before. (3) bsl by a non-literal count is in the wrapped tree: count \u003e= 64 gives 0, a negative count raises ArithmeticError (limit: high bits would leak). This changes the old leaf_bsl test (band(bsl(1, 63) + 1, 255) now gives Elixir's 1 instead of raising). (4) mask constant expressions: + - * bsl of literals are folded for mask recognition only, so (1 \u003c\u003c\u003c 63) - 1 is now a mask; shift-overflow's registry example changed to band(x, 1 \u003c\u003c\u003c 63). (5) reduce: 0 with a u64 new value (or acc meeting a u64 in + - * band bor bxor div rem min max) retypes that accumulator as u64: the compiler re-lowers the fold from a saved process-dict state, Elixir mode settles types with a look-ahead (settle_accs). A literal-init acc meeting a u64 only through an if/cond branch is still branch-types. (6) Element writes: [u64] \u003c- negative i64 and [i64] \u003c- u64 \u003e 2^63-1 raise ArgumentError 'value .. does not fit in ..' like [u8]; other u64\u003c-\u003ei64 positions raise ArithmeticError. (7) Defk.Bits.clz/2, ctz/2, rotl/3, rotr/3 check width 1..64 and x in 0..2^w-1 (ArgumentError); rotl/rotr give x's type (i64 result checked). Old clz/1, ctz/1, popcount/1, rotl64/2, rotr64/2 kept; clz/ctz/popcount/1 accept u64. Kernels may call Defk.Bits.f(...) qualified.",
       "timestamp": "2026-10-10T09:42:37Z"
+    },
+    {
+      "text": "Merged main (f116e70): [u64] folded into defk-4ai's element helpers (wide(:u64)=:u64, int_stored/2 for integer stores); u64_accs and with_acc_facts share lowering_key?/restore_lowering (now including {:defk_acc_facts,_}) so retries compose; runtime field-width helpers renamed defk_field_* to avoid defk-cmr's defk_bits_fail.",
+      "timestamp": "2026-10-10T09:51:38Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Add u64, masked arithmetic and Defk.Bits",
   "type": "task",
-  "updated_at": "2026-10-10T09:42:37Z"
+  "updated_at": "2026-10-10T09:51:38Z"
 }
