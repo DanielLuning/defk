@@ -113,7 +113,8 @@ plain Elixir with the kernel's limits applied, so the two can be checked for
 agreement. `Mod.__defk_elixir__(:fun, args)` runs one call that way;
 `config :defk, mode: :elixir` (only in `:dev`/`:test`) runs every call that
 way, and `Defk.ElixirMode.with_mode/2` switches one process. It is always
-compiled in `:test`. `dbg/1` and `IO.inspect/1,2` work inside a kernel body
+compiled in `:test`; elsewhere (a `mix run` script, `:dev`) add
+`use Defk, elixir_mode: true` to get `__defk_elixir__/2`. `dbg/1` and `IO.inspect/1,2` work inside a kernel body
 there (native code ignores them), and `Mod.__defk_elixir_source__/0` shows the
 generated code.
 
