@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Decisions: in lowers via Defk.GuardIn, shared by compiler and Elixir mode. Lists: literal ints or bools (=== chain), [] is false. Ranges: literal bounds/step computed at compile time (last reached element, bounds, rem(x,k) in {r, r-k}), exact Enum.member? semantics incl. negative steps and empty ranges; no runtime overflow. Variable bounds allowed only with explicit //1 or //-1 (Elixir rejects bare a..b in guards; other steps need literals). Step nonzero and within +-(2^63-1). LHS must be i64 (bool for bool lists): float lhs rejected since 1.0 in 1..3 is false in Elixir. All errors reuse case-guard (summary updated, docs section synced).",
+      "timestamp": "2026-10-10T10:09:59Z"
+    }
+  ],
   "priority": 4,
   "status": "in_progress",
   "title": "More case patterns: literal-list in guards and ranges",
   "type": "task",
-  "updated_at": "2026-10-10T09:53:59Z"
+  "updated_at": "2026-10-10T10:09:59Z"
 }
