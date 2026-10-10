@@ -200,22 +200,23 @@ defmodule Defk.Errors do
     },
     %{
       code: "branch-tuple",
-      kind: :subset,
-      summary: "An if, cond or case used as a value gives a number or a boolean, not a tuple.",
-      why:
-        "a kernel keeps a tuple's elements in separate registers, so each branch value is a single number or boolean",
-      hint: "compute each element with its own if",
+      kind: :error,
+      summary:
+        "The arms of an if, cond or case that gives a tuple are all tuples of the same size.",
+      why: "a tuple from a branch is one branch per element, so every arm gives every element",
+      hint:
+        "give every arm a tuple of the same size; compute an element in a block before the tuple",
       example:
-        "defk f(x :: i64) :: i64 do\n  {a, b} = if x > 0, do: {1, 2}, else: {3, 4}\n  a + b\nend",
+        "defk f(x :: i64) :: i64 do\n  {a, b} = if x > 0, do: {x, 1}, else: x\n  a + b\nend",
       rewrite:
-        "defk f(x :: i64) :: i64 do\n  a = if x > 0, do: 1, else: 3\n  b = if x > 0, do: 2, else: 4\n  a + b\nend"
+        "defk f(x :: i64) :: i64 do\n  {a, b} = if x > 0, do: {x, 1}, else: {x, 0}\n  a + b\nend"
     },
     %{
       code: "array-in-branch",
       kind: :planned,
       summary:
-        "An if, cond or case used as a value gives a number or a boolean; arrays through branches are planned.",
-      why: "an if/cond/case may give numbers or booleans, not arrays yet",
+        "An if, cond or case used as a value gives no array, alone or in a tuple; arrays through branches are planned.",
+      why: "an if/cond/case may give numbers, booleans or tuples of them, not arrays yet",
       hint: "do the array work inside each branch",
       example:
         "defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do\n  c = if p, do: a, else: b\n  c[0]\nend",

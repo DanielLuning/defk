@@ -184,10 +184,10 @@ accumulator](#the-bitstring-accumulator): a result type, alone or in a tuple
 **Supported with restrictions:** tuples. A tuple of scalars and arrays is a
 return type (`:: {f64, f64}`, `:: {[f64], i64}`). Inside a kernel, tuples exist
 only where they are taken apart at once: destructured by `{a, b} = ...`,
-as `reduce:` and `Enum.reduce_while` accumulators, and as the result. A
+as `reduce:` and `Enum.reduce_while` accumulators, as the value of an `if`,
+`cond` or `case` ([section 7](#tuples-from-branches)), and as the result. A
 variable cannot hold a tuple ([`tuple-binding`](#tuple-binding)), tuples do not
-nest ([`nested-tuple`](#nested-tuple)), a branch cannot give one
-([`branch-tuple`](#branch-tuple)), a call cannot take one
+nest ([`nested-tuple`](#nested-tuple)), a call cannot take one
 ([`tuple-argument`](#tuple-argument)), and a call to a kernel that returns
 one is destructured at once (`{out, n} = fill(out, v)`).
 
@@ -1085,7 +1085,8 @@ the comparison to write for a number).
 - **As a value**, it needs an `else` ([`if-without-else`](#if-without-else)),
   and both branches have one type ([`branch-types`](#branch-types): convert
   with `float/1`, `trunc/1` or `round/1`). A branch may contain statements
-  (array writes, loops) before its value.
+  (array writes, loops) before its value, and the value may be a tuple
+  (see [Tuples from branches](#tuples-from-branches)).
 - **As a statement** (its value unused), `else` is optional and the branches
   may end in array writes.
 
@@ -1131,6 +1132,41 @@ end
   catch-all is optional.
 - **Limit:** an error inside a guard (an overflow, `rem` by zero) raises it,
   where Elixir would treat the guard as false and try the next clause.
+
+### Tuples from branches
+
+**Supported with restrictions:** an `if`, `cond` or `case` used as a value may
+give a tuple, when every arm is one of the same size
+([`branch-tuple`](#branch-tuple)):
+
+```elixir
+defk split(x :: i64, f :: f64) :: f64 do
+  {n, g} =
+    cond do
+      x > 100 -> {x - 100, f}
+      x < 0 -> {-x, -f}
+      true -> {0, f * 0.5}
+    end
+
+  float(n) + g
+end
+```
+
+- Each element position has one type, checked on its own: `{x, f}` beside
+  `{0, 0.5}` is an `{i64, f64}`, and `{x, f}` beside `{f, f}` is
+  [`branch-types`](#branch-types) for element 1.
+- An arm may be any tuple value: a literal tuple, a block that ends in one,
+  or a call to a kernel that returns one. The tuple is destructured at once,
+  returned, or is the next accumulator of a `for ..., reduce:` (a variable
+  cannot hold it, [`tuple-binding`](#tuple-binding)).
+- An element may be a bitstring accumulator, as a whole branch may: `{acc, n}`
+  beside `{<<acc::bitstring, 1::1>>, n + 1}`. An array element is
+  [`array-in-branch`](#array-in-branch), as an array branch is.
+- Natively each condition runs once and each element gets its own branch
+  value; arms of plain arithmetic become one select per element, as a
+  number branch does. Elixir mode runs the branch as written.
+
+(defk-uew)
 
 ### `for`
 
@@ -1819,17 +1855,17 @@ end
 
 ### branch-tuple
 
-An if, cond or case used as a value gives a number or a boolean, not a tuple.
+The arms of an if, cond or case that gives a tuple are all tuples of the same size.
 
-- kind: outside the kernel subset (permanent)
-- why: a kernel keeps a tuple's elements in separate registers, so each branch value is a single number or boolean
-- hint: compute each element with its own if
+- kind: a mistake to fix (in the kernel or the build)
+- why: a tuple from a branch is one branch per element, so every arm gives every element
+- hint: give every arm a tuple of the same size; compute an element in a block before the tuple
 
 Rejected:
 
 ```elixir
 defk f(x :: i64) :: i64 do
-  {a, b} = if x > 0, do: {1, 2}, else: {3, 4}
+  {a, b} = if x > 0, do: {x, 1}, else: x
   a + b
 end
 ```
@@ -1838,18 +1874,17 @@ Write instead:
 
 ```elixir
 defk f(x :: i64) :: i64 do
-  a = if x > 0, do: 1, else: 3
-  b = if x > 0, do: 2, else: 4
+  {a, b} = if x > 0, do: {x, 1}, else: {x, 0}
   a + b
 end
 ```
 
 ### array-in-branch
 
-An if, cond or case used as a value gives a number or a boolean; arrays through branches are planned.
+An if, cond or case used as a value gives no array, alone or in a tuple; arrays through branches are planned.
 
 - kind: not supported yet (planned)
-- why: an if/cond/case may give numbers or booleans, not arrays yet
+- why: an if/cond/case may give numbers, booleans or tuples of them, not arrays yet
 - hint: do the array work inside each branch
 
 Rejected:
