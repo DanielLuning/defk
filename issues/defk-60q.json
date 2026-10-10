@@ -5,10 +5,12 @@
   "created": "2026-10-10T10:48:03Z",
   "description": "Found reviewing defk-6cn. Defk.Report.print on for i \u003c- 0..(len(a) - 1)//1 do out[2 * i] = a[i] end over [u8] (no floats anywhere) shows 'loop: ...; flagged' and 'non-finite: float checks set a flag tested once per strip; a set flag replays the strip with raising checks'. Either the strip is marked flagged although it has no flagged helper (then the C pays a needless flag/replay path: check the generated C), or the report notes any flag_strip success. Done when the note appears only for loops whose strip actually contains a flagged operation, with a test, and the generated C for an integer-only loop has no replay path if it had one.",
   "id": "defk-60q",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 4,
   "status": "open",
   "title": "Fast-path report prints a non-finite flag note on loops with no float operations",
   "type": "bug",
-  "updated_at": "2026-10-10T10:48:03Z"
+  "updated_at": "2026-10-10T10:48:04Z"
 }
