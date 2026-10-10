@@ -1875,25 +1875,21 @@ defmodule Defk.Compiler do
 
   defp clause_parts({:->, _, [[c], body]}), do: {c, body}
 
-  # the one type of the values of `node` (an if, cond or case named `name`)
-  defp branch_type!(vals, name, node) do
+  # The one type of the values of `node` (an if, cond or case named `name`),
+  # or of element `pos` of the tuples they are (counted from 1).
+  defp branch_type!(vals, name, node, pos \\ nil) do
     # a u64 branch and i64 branches known to be >= 0 (a literal ...) give a u64
     u64? =
       Enum.any?(vals, &(&1.t == :u64)) and
         Enum.all?(vals, &(&1.t == :u64 or (&1.t == :i64 and nonneg?(&1))))
 
-    if u64?, do: :u64, else: branch_type1!(vals, name, node)
+    if u64?, do: :u64, else: branch_type1!(vals, name, node, pos)
   end
 
-  defp branch_type1!(vals, name, node) do
-    case Enum.uniq_by(vals, & &1.t) do
-      [%{t: {:tuple, _} = t} | _] ->
-        err!(
-          node,
-          "branch-tuple",
-          "this #{name} gives the tuple #{fmt(t)}; tuples from an #{name} are not in the kernel subset"
-        )
+  defp branch_type1!(vals, name, node, pos) do
+    of = if pos, do: " as element #{pos} of its tuples", else: ""
 
+    case Enum.uniq_by(vals, & &1.t) do
       [%{t: {:arr, _} = t} | _] ->
         rewrite =
           case node do
@@ -1908,7 +1904,7 @@ defmodule Defk.Compiler do
         err!(
           node,
           "array-in-branch",
-          "this #{name} gives an array (#{fmt(t)}); arrays from an #{name} are not supported yet",
+          "this #{name} gives an array (#{fmt(t)})#{of}; arrays from an #{name} are not supported yet",
           rewrite
         )
 
@@ -1926,12 +1922,12 @@ defmodule Defk.Compiler do
             ],
             else: []
 
-        err!(
-          node,
-          "branch-types",
-          "the branches of this #{name} have different types: #{Enum.map_join(ts, ", ", &fmt/1)}",
-          hint
-        )
+        what =
+          if pos,
+            do: "element #{pos} of the tuples from this #{name} has different types",
+            else: "the branches of this #{name} have different types"
+
+        err!(node, "branch-types", "#{what}: #{Enum.map_join(ts, ", ", &fmt/1)}", hint)
     end
   end
 
@@ -1939,6 +1935,11 @@ defmodule Defk.Compiler do
   # {cond_ast, body_ast, {stmts, c} | :else, body_stmts, body_val}.
   # A `case` without a catch-all ends in {:nomatch, stmts} instead, which
   # raises CaseClauseError.
+  #
+  # Arms that are tuples give a tuple (defk-uew): one branch per element
+  # position, each with that position's type, all assigned in one if/else
+  # chain (so every condition runs once), or a select per element when the
+  # arms are pure. The value is a tuple of the element temporaries.
   defp lower_arms(clauses, name, node, env) do
     arms =
       Enum.map(clauses, fn
@@ -1950,13 +1951,65 @@ defmodule Defk.Compiler do
           {sb, v} = lower_block(body, env)
           {c, body, cond, sb, v}
       end)
-      |> bits_arms()
 
-    t = branch_type!(for({_, _, _, _, v} <- arms, v, do: v), name, node)
-    tmp = fresh(name, t)
-    code = if select?(arms), do: select(arms, t, tmp, env), else: chain(arms, tmp)
-    {code, val(tmp, t, tmp)}
+    vals = for {_, _, _, _, v} <- arms, v, do: v
+
+    if Enum.any?(vals, &Map.has_key?(&1, :elems)) do
+      tuple_arms(arms, vals, name, node, env)
+    else
+      arms = bits_arms(arms)
+      t = branch_type!(for({_, _, _, _, v} <- arms, v, do: v), name, node)
+      tmp = fresh(name, t)
+      {lower_branch(arms, [t], [tmp], env), val(tmp, t, tmp)}
+    end
   end
+
+  defp tuple_arms(arms, vals, name, node, env) do
+    sizes = Enum.map(vals, &length(Map.get(&1, :elems, [nil])))
+
+    if not Enum.all?(vals, &Map.has_key?(&1, :elems)) or not match?([_], Enum.uniq(sizes)) do
+      err!(
+        node,
+        "branch-tuple",
+        "the arms of this #{name} give #{vals |> Enum.map(&fmt(&1.t)) |> Enum.uniq() |> Enum.join(" and ")}; every arm of a tuple-valued #{name} gives a tuple of the same size"
+      )
+    end
+
+    # per position: the arms with that element as their value
+    {arms, ts} =
+      Enum.reduce(0..(hd(sizes) - 1), {arms, []}, fn i, {arms, ts} ->
+        pos =
+          arms
+          |> Enum.map(fn {c, b, cd, sb, v} -> {c, b, cd, sb, v && Enum.at(v.elems, i)} end)
+          |> bits_arms()
+
+        t = branch_type!(for({_, _, _, _, v} <- pos, v, do: v), name, node, i + 1)
+
+        arms =
+          Enum.zip_with(arms, pos, fn
+            {c, b, cd, sb, nil}, _ ->
+              {c, b, cd, sb, nil}
+
+            {c, b, cd, sb, v}, {_, _, _, _, e} ->
+              {c, b, cd, sb, %{v | elems: List.replace_at(v.elems, i, e)}}
+          end)
+
+        {arms, ts ++ [t]}
+      end)
+
+    tmps = Enum.map(ts, &fresh(name, &1))
+    elems = Enum.zip_with(tmps, ts, &val(&1, &2, &1))
+    {lower_branch(arms, ts, tmps, env), %{t: {:tuple, ts}, elems: elems}}
+  end
+
+  # the code that assigns each of `tmps` (of types `ts`) its element of the
+  # value of the arm taken
+  defp lower_branch(arms, ts, tmps, env),
+    do: if(select?(arms), do: select(arms, ts, tmps, env), else: chain(arms, tmps))
+
+  # the C of each element of an arm's value
+  defp parts(%{elems: elems}), do: Enum.map(elems, & &1.c)
+  defp parts(%{c: c}), do: [c]
 
   # An `if` or `cond` value whose arms (and conditions after the first) are pure
   # arithmetic is compiled as a select: every arm is computed with overflow
@@ -1965,7 +2018,8 @@ defmodule Defk.Compiler do
   # if-converting the branch; it then threads the branch into the loop that
   # computed the condition, which made `if prime?(i), do: count + 1, else:
   # count` 1.7x slower than C (defk-jp3). The first condition always runs, so
-  # it is evaluated once as written and may call kernels.
+  # it is evaluated once as written and may call kernels. A tuple value gets
+  # one select per element over the same condition temporaries.
   # (A `case` with no catch-all ends in a :nomatch arm and is never a select.)
   defp select?([{_, _, {_, _}, _, _} | later] = arms) do
     case Enum.split(later, -1) do
@@ -1985,52 +2039,67 @@ defmodule Defk.Compiler do
 
   defp select?(_arms), do: false
 
-  defp select([{_, _, {sc, c}, _, _} | later] = arms, t, tmp, env) do
+  defp select([{_, _, {sc, c}, _, _} | later] = arms, ts, tmps, env) do
     later = Enum.drop(later, -1)
 
     flagged = fn flag ->
       fenv = Map.put(env, :ovf, flag)
       conds = for {ca, _, _, _, _} <- later, do: elem(lower_cond(ca, fenv), 1)
-      {conds, for({_, body, _, _, _} <- arms, do: elem(lower_block(body, fenv), 1).c)}
+      {conds, for({_, body, _, _, _} <- arms, do: parts(elem(lower_block(body, fenv), 1)))}
     end
 
     plain_conds = for {_, _, {_, cc}, _, _} <- later, do: cc
-    plain_bodies = for {_, _, _, _, v} <- arms, do: v.c
+    plain_bodies = for {_, _, _, _, v} <- arms, do: parts(v)
 
     if flagged.("_") == {plain_conds, plain_bodies} do
       # nothing can raise: clang if-converts the plain branches itself
-      chain(arms, tmp)
+      chain(arms, tmps)
     else
       ovf = fresh("ovf", :bool)
       {fconds, fbodies} = flagged.(ovf)
       [cv | cvs] = for _ <- [c | fconds], do: fresh("cond", :bool)
-      tvs = for _ <- arms, do: fresh("arm", t)
+      # per arm, a temporary per element
+      tvs = for _ <- arms, do: Enum.map(ts, &fresh("arm", &1))
+
+      replay = fn body -> Enum.map_join(body, " ", &"(void)(#{&1});") end
 
       [
         sc,
         "#{cv} = #{c};\n#{ovf} = 0;\n",
         Enum.zip_with(cvs, fconds, &"#{&1} = #{&2};\n"),
-        Enum.zip_with(tvs, fbodies, &"#{&1} = #{&2};\n"),
-        "#{tmp} = ",
-        Enum.zip_with([cv | cvs], tvs, &"#{&1} ? #{&2} : "),
-        "#{List.last(tvs)};\n",
+        Enum.zip_with(List.flatten(tvs), List.flatten(fbodies), &"#{&1} = #{&2};\n"),
+        Enum.with_index(tmps, fn tmp, i ->
+          arm_tvs = Enum.map(tvs, &Enum.at(&1, i))
+
+          [
+            "#{tmp} = ",
+            Enum.zip_with([cv | cvs], arm_tvs, &"#{&1} ? #{&2} : "),
+            "#{List.last(arm_tvs)};\n"
+          ]
+        end),
         "if (DEFK_UNLIKELY(#{ovf})) {\n",
-        Enum.zip_with([cv | plain_conds], plain_bodies, &"if (#{&1}) (void)(#{&2});\nelse "),
-        "(void)(#{List.last(plain_bodies)});\n}\n"
+        Enum.zip_with(
+          [cv | plain_conds],
+          plain_bodies,
+          &"if (#{&1}) { #{replay.(&2)} }\nelse "
+        ),
+        "{ #{replay.(List.last(plain_bodies))} }\n}\n"
       ]
     end
   end
 
-  defp chain(arms, tmp) do
+  defp chain(arms, tmps) do
+    assign = fn v -> Enum.zip_with(tmps, parts(v), &"#{&1} = #{&2};\n") end
+
     List.foldr(arms, [], fn
       {_, _, :else, sb, v}, _rest ->
-        [sb, "#{tmp} = #{v.c};\n"]
+        [sb, assign.(v)]
 
       {_, _, :nomatch, s, _}, _rest ->
         s
 
       {_, _, {sc, c}, sb, v}, rest ->
-        [sc, "if (#{c}) {\n", sb, "#{tmp} = #{v.c};\n} else {\n", rest, "}\n"]
+        [sc, "if (#{c}) {\n", sb, assign.(v), "} else {\n", rest, "}\n"]
     end)
   end
 
@@ -2046,6 +2115,9 @@ defmodule Defk.Compiler do
   # result: safe to evaluate untaken, with the failure flagged
   defp speculate?({:__block__, _, [e]}), do: speculate?(e)
   defp speculate?(x) when is_number(x) or is_boolean(x), do: true
+  # a tuple arm (defk-uew): each element
+  defp speculate?({a, b}), do: speculate?(a) and speculate?(b)
+  defp speculate?({:{}, _, items}) when is_list(items), do: Enum.all?(items, &speculate?/1)
   defp speculate?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: true
 
   # a case guard flags its own failures (guard_expr), so it is safe untaken

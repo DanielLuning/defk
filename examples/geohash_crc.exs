@@ -218,8 +218,10 @@ defmodule GeoCrc.Source do
                 bor(bsl(z, 5), t - 1)
             end
 
-          li = if nlon == nlat, do: compact(z), else: compact(bsr(z, 1))
-          oi = if nlon == nlat, do: compact(bsr(z, 1)), else: compact(z)
+          {li, oi} =
+            if nlon == nlat,
+              do: {compact(z), compact(bsr(z, 1))},
+              else: {compact(bsr(z, 1)), compact(z)}
 
           lat[i] = (float(li) + 0.5) * lat_cell - 90.0
           lon[i] = (float(oi) + 0.5) * lon_cell - 180.0
