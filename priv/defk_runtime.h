@@ -226,15 +226,26 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
 #define DEFK_ALLOC_MAX_BYTES ((uint64_t)1 << 29)
 #endif
 
+/*
+ * alloc/2 (defk-ktw): defk_alloc_raw_T leaves the buffer uninitialised, and
+ * the compiler zeroes it after (defk_zero_strip, a loop with a safepoint per
+ * strip) unless it proves every element is written before anything reads it.
+ * defk_alloc_T zeroes at once, for a length known to be small.
+ */
 #define DEFK_ALLOC_FN(T, CT)                                                     \
-  static inline defk_arr_##T defk_alloc_##T(defk_ctx *ctx, int64_t n) {          \
+  static inline defk_arr_##T defk_alloc_raw_##T(defk_ctx *ctx, int64_t n) {      \
     if (n < 0) defk_fail(ctx, DEFK_E_ARG, "alloc/2: negative length %lld", (long long)n); \
     uint64_t bytes;                                                              \
     if (DEFK_UNLIKELY(__builtin_mul_overflow((uint64_t)n, (uint64_t)sizeof(CT), &bytes) || \
                       bytes > DEFK_ALLOC_MAX_BYTES))                             \
       defk_fail(ctx, DEFK_E_ARG, "alloc/2: length too large");                   \
-    int slot = defk_own(ctx, (size_t)bytes);                                     \
+    int slot = defk_own_raw(ctx, (size_t)bytes);                                 \
     defk_arr_##T a = {(CT *)ctx->owned[slot].data, n};                           \
+    return a;                                                                    \
+  }                                                                              \
+  static inline __attribute__((unused)) defk_arr_##T defk_alloc_##T(defk_ctx *ctx, int64_t n) { \
+    defk_arr_##T a = defk_alloc_raw_##T(ctx, n);                                 \
+    memset(a.data, 0, (size_t)n * sizeof(CT));                                   \
     return a;                                                                    \
   }
 DEFK_ALLOC_FN(f64, double)
@@ -244,6 +255,28 @@ DEFK_ALLOC_FN(u64, uint64_t)
 DEFK_ALLOC_FN(i16, int16_t)
 DEFK_ALLOC_FN(i32, int32_t)
 DEFK_ALLOC_FN(f32, float)
+
+/*
+ * Zeroing an alloc/2 buffer in strips (defk-ktw): one memset of 85 MB held
+ * the scheduler ~5 ms (cold pages) before the kernel's first loop ran. The
+ * generated loop zeroes DEFK_ZERO_STRIP bytes at a time from byte `done` and
+ * passes a safepoint after each strip, charged one back-edge per 16 bytes
+ * (DEFK_ZERO_TICKS), about what a cheap loop iteration costs, so the clock
+ * is read at the usual rate. A yield spills the array and `done`. A strip
+ * of 1 MiB takes ~60 us on cold pages; 64 KiB strips made a warm 85 MB alloc
+ * ~30% slower than one memset, 1 MiB strips cost nothing measurable.
+ */
+#ifndef DEFK_ZERO_STRIP
+#define DEFK_ZERO_STRIP (1024 * 1024)
+#endif
+#define DEFK_ZERO_TICKS(BYTES) ((int64_t)((BYTES) >> 4) + 1)
+
+static inline __attribute__((unused)) uint64_t defk_zero_strip(void *data, uint64_t bytes,
+                                                               uint64_t done) {
+  uint64_t n = bytes - done < DEFK_ZERO_STRIP ? bytes - done : DEFK_ZERO_STRIP;
+  memset((char *)data + done, 0, (size_t)n);
+  return done + n;
+}
 
 /*
  * Array value semantics (defk-auo): a copy of `src` in a new owned binary,
@@ -306,7 +339,7 @@ static void defk_bind(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t, size_t esz,
               "argument %d (%s): byte size %zu is not a multiple of %zu (%s)", argn, pname,
               bin.size, esz, tname);
   if (((uintptr_t)bin.data) % esz) {
-    int slot = defk_own(ctx, bin.size);
+    int slot = defk_own_raw(ctx, bin.size);
     memcpy(ctx->owned[slot].data, bin.data, bin.size);
     *copy_slot = slot + 1;
     *data = ctx->owned[slot].data;

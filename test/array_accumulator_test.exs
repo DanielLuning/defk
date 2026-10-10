@@ -391,7 +391,8 @@ defmodule Defk.ArrayAccumulatorTest do
       for k <- [:alias_outside, :doubled, :same_init, :prefix] do
         c = kernel_c(k)
         assert copies(c) == 1, "#{k}"
-        [before_loop, _] = String.split(c, "while (", parts: 2)
+        # the kernel's loop, not the loop that zeroes the alloc (defk-ktw)
+        [before_loop, _] = String.split(c, "/* defk:loop ", parts: 2)
         assert before_loop =~ "defk_copy_", "#{k}"
       end
     end

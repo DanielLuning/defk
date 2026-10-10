@@ -713,7 +713,7 @@ defmodule Defk.Compiler do
 
   # statements `es` of one block; `lives` has the names read after each
   defp stmt_list(es, lives, env) do
-    Enum.zip(es, lives)
+    Enum.zip(unzeroed_allocs(es), lives)
     |> Enum.reduce({[], env}, fn {e, live}, {acc, env} ->
       {s, env} =
         recover(e, env, fn ->
@@ -2402,11 +2402,12 @@ defmodule Defk.Compiler do
 
   # ---------------------------------------------------------------- calls --
 
-  defp lower_call(:alloc, [{e, _, ctx}, n], _m, env) when e in @elems and is_atom(ctx) do
+  defp lower_call(:alloc, [{e, _, ctx}, n] = args, m, env) when e in @elems and is_atom(ctx) do
     {s, v} = lower_expr(n, env)
     v = coerce!(v, :i64, n, "alloc/2 length")
-    arr = %{c: "defk_alloc_#{e}(ctx, #{v.c})", t: {:arr, e}, owned: true, var: nil, fin: true}
-    {s, Map.merge(arr, %{len_lo: v[:lo], len_lb: lb(v)})}
+    {sz, c} = alloc_zeroed(e, v, {:alloc, m, args})
+    arr = %{c: c, t: {:arr, e}, owned: true, var: nil, fin: true}
+    {[s, sz], Map.merge(arr, %{len_lo: v[:lo], len_lb: lb(v)})}
   end
 
   defp lower_call(:alloc, args, m, _) do
@@ -2827,6 +2828,188 @@ defmodule Defk.Compiler do
         "write the recursion as a loop: for ..., reduce: for a fold, Enum.reduce_while/3 to stop early",
       key: {:recursion, MapSet.new([key | cycle])}
     )
+  end
+
+  # ------------------------------------------------------- alloc zeroing --
+  # alloc/2 gives zeros, as in Elixir mode, but one memset of a large buffer
+  # held the scheduler (85 MB: ~5 ms cold) before the kernel's first loop
+  # (defk-ktw). So an alloc is zeroed one of three ways:
+  #   * not at all, when the next statement provably writes every element
+  #     before anything reads it (unzeroed_allocs/1)
+  #   * at once (defk_alloc_T), when its length is known to be at most
+  #     @zero_at_once bytes, or the kernel has yield: false
+  #   * otherwise in strips of DEFK_ZERO_STRIP bytes with a safepoint after
+  #     each: a loop like any other, whose frame state is the array and the
+  #     bytes zeroed so far (fresh frame variables, spilled at a yield)
+  @zero_at_once 4096
+  @elem_bytes %{f64: 8, i64: 8, u64: 8, u8: 1, i16: 2, i32: 4, f32: 4}
+
+  defp alloc_zeroed(e, v, {:alloc, m, _} = node) do
+    {{_, _}, yield?} = Process.get(:defk_report_kernel)
+    hi = v[:hi]
+
+    cond do
+      line = m[:defk_unzeroed] ->
+        note(
+          :alloc,
+          node,
+          :unzeroed,
+          "not zeroed: the loop on line #{line} writes every element first"
+        )
+
+        {[], "defk_alloc_raw_#{e}(ctx, #{v.c})"}
+
+      is_integer(hi) and hi * @elem_bytes[e] <= @zero_at_once ->
+        note(:alloc, node, :zeroed, "zeroed at once (at most #{@zero_at_once} bytes)")
+        {[], "defk_alloc_#{e}(ctx, #{v.c})"}
+
+      not yield? ->
+        note(:alloc, node, :zeroed, "zeroed at once (yield: false)")
+        {[], "defk_alloc_#{e}(ctx, #{v.c})"}
+
+      true ->
+        note(
+          :alloc,
+          node,
+          :strips,
+          "zeroed in strips of DEFK_ZERO_STRIP bytes, a safepoint per strip"
+        )
+
+        a = fresh("alloc", {:arr, e})
+        z = fresh("zeroed", {:c, "uint64_t"})
+        bytes = "(uint64_t)#{a}.len * sizeof(*#{a}.data)"
+
+        zero =
+          in_loop(fn id ->
+            [
+              "#{a} = defk_alloc_raw_#{e}(ctx, #{v.c});\n#{z} = 0;\n",
+              "defk_l#{id}:;\nwhile (#{z} < #{bytes}) {\n",
+              "uint64_t defk_z0 = #{z};\n",
+              "#{z} = defk_zero_strip(#{a}.data, #{bytes}, #{z});\n",
+              safepoint("DEFK_ZERO_TICKS(#{z} - defk_z0)"),
+              "}\n"
+            ]
+          end)
+
+        {zero, a}
+    end
+  end
+
+  # The statements `es` of a block, each `x = alloc(e, len)` marked (meta
+  # :defk_unzeroed, the loop's line) when the statement after it writes every
+  # element of x before anything reads it. Only one form is accepted:
+  #
+  #     x = alloc(e, k * n)              # or alloc(e, n), k = 1
+  #     for i <- 0..(n - 1)//1 do        # or 0..(n - 1); len(x) - 1 for k = 1
+  #       ...
+  #       x[k * i + c] = v               # for each c in 0..k-1 exactly once
+  #       ...
+  #     end
+  #
+  # where the writes are statements of the body itself (not in a branch), x
+  # is not otherwise mentioned in the body (no read, no alias, no len/1), n
+  # does not mention x, and nothing in the body binds i (so each write's i
+  # is the loop's). Then each trip i writes k * i .. k * i + k - 1, and the
+  # trips 0..n-1 write all k * n elements; nothing reads x until the loop is
+  # done. Every way out of the loop before that is a raise, which frees the
+  # buffer, and a yield resumes inside the loop, so no unwritten element is
+  # ever seen. With `0..(n - 1)` (step -1 when n < 1) a trip writes x[0]
+  # first, which raises for n < 1 (k * n < k). Anything else is zeroed.
+  defp unzeroed_allocs(es) do
+    Enum.zip(es, Enum.drop(es, 1) ++ [nil])
+    |> Enum.map(fn {e, next} ->
+      case {e, unzeroed_by(e, next)} do
+        {{:=, m, [x, {:alloc, am, args}]}, line} when is_integer(line) ->
+          {:=, m, [x, {:alloc, [{:defk_unzeroed, line} | am], args}]}
+
+        _ ->
+          e
+      end
+    end)
+  end
+
+  # the line of the loop `next` if it writes every element of the alloc `e`
+  defp unzeroed_by(
+         {:=, _, [{x, _, xc}, {:alloc, _, [{_, _, ec}, len]}]},
+         {:for, fm, [{:<-, _, [{i, _, ic}, range]}, [do: body]]}
+       )
+       when is_atom(x) and is_atom(xc) and is_atom(ec) and is_atom(i) and is_atom(ic) and x != i do
+    {k, n} =
+      case len do
+        {:*, _, [k, n]} when is_integer(k) and k >= 1 -> {k, n}
+        n -> {1, n}
+      end
+
+    stmts =
+      case body do
+        {:__block__, _, ss} -> ss
+        s -> [s]
+      end
+
+    cs = for s <- stmts, c = unzeroed_write(s, x, i, k), do: c
+
+    ok =
+      zero_based_to(range, n, x, k) and not mentions?(len, x) and
+        Enum.sort(cs) == Enum.to_list(0..(k - 1)) and count_var(body, x) == k and
+        not binds?(body, i)
+
+    if ok, do: fm[:line] || 0
+  end
+
+  defp unzeroed_by(_e, _next), do: nil
+
+  # `range` is 0..(n - 1)//1 or 0..(n - 1), or for k = 1 also with len(x) - 1
+  defp zero_based_to({:..//, _, [0, stop, 1]}, n, x, k), do: stop_at(stop, n, x, k)
+  defp zero_based_to({:.., _, [0, stop]}, n, x, k), do: stop_at(stop, n, x, k)
+  defp zero_based_to(_range, _n, _x, _k), do: false
+
+  defp stop_at({:-, _, [m, 1]}, n, x, k) do
+    same_ast?(m, n) or (k == 1 and match?({:len, _, [{^x, _, c}]} when is_atom(c), m))
+  end
+
+  defp stop_at(_stop, _n, _x, _k), do: false
+
+  # c when `s` is x[k * i + c] = v (x[i] = v for k = 1, x[k * i] for c = 0)
+  defp unzeroed_write({:=, _, [{{:., _, [Access, :get]}, _, [{x, _, xc}, idx]}, _]}, x, i, k)
+       when is_atom(xc) do
+    case idx do
+      {^i, _, c} when is_atom(c) and k == 1 -> 0
+      {:*, _, [^k, {^i, _, c}]} when is_atom(c) -> 0
+      {:+, _, [{:*, _, [^k, {^i, _, c}]}, d]} when is_atom(c) and is_integer(d) -> d
+      _ -> nil
+    end
+  end
+
+  defp unzeroed_write(_s, _x, _i, _k), do: nil
+
+  defp same_ast?(a, b), do: strip_meta(a) == strip_meta(b)
+  defp strip_meta(ast), do: Macro.prewalk(ast, &Macro.update_meta(&1, fn _ -> [] end))
+
+  defp mentions?(ast, x), do: count_var(ast, x) > 0
+
+  defp count_var(ast, x) do
+    {_, n} =
+      Macro.prewalk(ast, 0, fn
+        {^x, _, c} = v, n when is_atom(c) -> {v, n + 1}
+        t, n -> {t, n}
+      end)
+
+    n
+  end
+
+  # whether anything in `ast` binds a variable named `i`: a match (other than
+  # an array write), a generator, or a clause pattern (case, reduce arms)
+  defp binds?(ast, i) do
+    {_, found} =
+      Macro.prewalk(ast, false, fn
+        {:=, _, [{{:., _, [Access, :get]}, _, _}, _]} = t, f -> {t, f}
+        {:=, _, [lhs, _]} = t, f -> {t, f or mentions?(lhs, i)}
+        {:<-, _, [pat, _]} = t, f -> {t, f or mentions?(pat, i)}
+        {:->, _, [pats, _]} = t, f -> {t, f or mentions?(pats, i)}
+        t, f -> {t, f}
+      end)
+
+    found
   end
 
   # ----------------------------------------------------------- bitstrings --

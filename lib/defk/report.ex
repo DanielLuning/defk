@@ -22,6 +22,10 @@ defmodule Defk.Report do
       checks: flagged (one non-finite check per strip) or not, and why
     * `{:inline, :inlined, "f/2"}` for each inlined kernel call
     * `{:copy, :copied, text}` for each copy that value semantics inserts
+    * `{:alloc, :unzeroed | :zeroed | :strips, text}` for each alloc/2: not
+      zeroed (the next loop writes every element first), zeroed at once
+      (a small constant length, or `yield: false`), or zeroed in strips with
+      a safepoint after each
     * `{:vectorize, :vectorized | :missed | :partial | :unknown, text}` for
       each loop, only with `use Defk, report: :full`
 
@@ -166,6 +170,7 @@ defmodule Defk.Report do
   defp describe({:nonfinite, _, t}), do: "non-finite: #{t}"
   defp describe({:inline, _, t}), do: "inlined #{t}"
   defp describe({:copy, _, t}), do: "copy: #{t}"
+  defp describe({:alloc, _, t}), do: "alloc: #{t}"
   defp describe({_, _, t}), do: t
 
   # ------------------------------------------------------- report: :full --
