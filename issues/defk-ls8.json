@@ -12,11 +12,15 @@
     {
       "text": "Classified nice to have (not a safety gap, not required for the verdict) by 'Which open runtime issues are safety gaps?' (defk-dtw.12).",
       "timestamp": "2026-10-05T20:49:15Z"
+    },
+    {
+      "text": "Design: defk_ctx starts with layout_tag (md5 prefix of defk_runtime.h, emitted as DEFK_HEADER_HASH, xor sizeof(defk_ctx) mix) and frame_size, stamped in defk_promote. Step fns call defk_frame_of (two compares at entry, once per resume) and raise ArgumentError on mismatch. Dtor returns early on a tag mismatch: frees nothing and leaves frames_live alone (leak accepted, no crash). Test seam: __defk_corrupt_tags__/1 flag (like __defk_force_yields__). test/frame_tag_test.exs.",
+      "timestamp": "2026-10-10T10:30:06Z"
     }
   ],
   "priority": 4,
   "status": "in_progress",
   "title": "Tag frames with a layout version as defence in depth",
   "type": "task",
-  "updated_at": "2026-10-10T10:22:50Z"
+  "updated_at": "2026-10-10T10:30:06Z"
 }
