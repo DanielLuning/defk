@@ -1877,7 +1877,7 @@ defmodule Defk.Compiler do
   defp tuple_arms(arms, vals, name, node, env) do
     sizes = Enum.map(vals, &length(Map.get(&1, :elems, [nil])))
 
-    if not Enum.all?(vals, &Map.has_key?(&1, :elems)) or length(Enum.uniq(sizes)) > 1 do
+    if not Enum.all?(vals, &Map.has_key?(&1, :elems)) or not match?([_], Enum.uniq(sizes)) do
       err!(
         node,
         "branch-tuple",
