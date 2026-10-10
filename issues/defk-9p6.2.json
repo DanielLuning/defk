@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Covered by later examples, closing as superseded: examples/hashes.exs (defk-9p6.20: xxHash64, Murmur3, SipHash, CRC32C, with :erlang.crc32 beside at 40 GB/s) and examples/geohash_crc.exs (defk-52v.4: table-driven CRC-16/CRC-64 kernels vs the crc NIF, :erlang.crc32 100x faster). Bitwise ops landed in defk-w38. Both show when the BEAM already has a native answer.",
+      "timestamp": "2026-10-10T14:08:02Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Example: checksum/hash over binaries (needs bitwise ops in defk)",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:56Z"
+  "updated_at": "2026-10-10T14:08:02Z"
 }
