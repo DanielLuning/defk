@@ -12,9 +12,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-n4r",
+  "comments": [
+    {
+      "text": "Implemented on branch defk-n4r.10/array-reduce-accumulators (d627785). Decisions: (1) an array accumulator is always loop-owned: the init is copied before the loop iff not owned or its buffer is live (read after the loop statement, read by the loop's generators/filters/body where not shadowed by the acc pattern, or an earlier accumulator); each new value at assign is copied on the same test against the loop's live set. Acc bindings get fresh buf refs, and their names are removed from the array-rebind-in-loop guard (they shadow). (2) fin/len_lo of the acc are assumed from the init; if any new value lacks them the loop is re-lowered from a snapshot of the defk_* process-dict state with those facts dropped (with_acc_facts/2). (3) inline/4 now keeps a returned array's len_lo, so {slots,..} = insert(slots,..) keeps alloc's length bound. (4) flag_strip snapshots whole-assigned array locals so a replayed strip restores swapped accumulators (found by swap_mul test: replay otherwise hit defk_nonfinite_lost). (5) array-accumulator code retired (listed in errors.ex retired comment); array-rebind-in-loop hint points to reduce accumulators. README untouched to avoid conflicts with sibling branches (line 98 could mention array accumulators).",
+      "timestamp": "2026-10-10T09:24:12Z"
+    }
+  ],
   "priority": 1,
   "status": "in_progress",
   "title": "Array accumulators in for ... reduce: and Enum.reduce_while: thread an owned array through a loop in place",
   "type": "task",
-  "updated_at": "2026-10-10T09:05:52Z"
+  "updated_at": "2026-10-10T09:24:12Z"
 }
