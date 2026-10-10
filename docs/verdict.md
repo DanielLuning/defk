@@ -22,8 +22,28 @@ TODO: filled by defk-sgw.5.
 
 ## Developer experience
 
-<!-- TODO(defk-sgw.5): three-part bar with evidence; cold-test log comes from defk-sgw.3. -->
-TODO: filled by defk-sgw.5, fed by the cold test in defk-sgw.3.
+<!-- TODO(defk-sgw.5): three-part bar with evidence. -->
+TODO: the rest of this section is filled by defk-sgw.5.
+
+### Cold test (defk-sgw.3)
+
+A fresh agent session, given only README.md, docs/language.md and the
+compiler's output (no lib/ source, no prior context), wrote a count-min
+sketch `update_many` over `[u64]` hashes, a job not in the catalog. Full log:
+[docs/cold-tests/count-min.md](cold-tests/count-min.md).
+
+- Result: the first kernel it wrote compiled and agreed with a plain Elixir
+  reference and with Elixir mode (`Mod.__defk_elixir__/2`, and
+  `Defk.Test.assert_agrees/3` over random sketch shapes, empty batches and
+  hashes with the top bit set). One attempt, no compile error.
+- Compile errors: none were hit, so this run gives no evidence on whether
+  the errors' hints get an author unstuck. That half of the bar needs a run
+  on a job that meets the subset's limits (defk-dig).
+- Doc gaps it reported, fixed: no example combined a hash-to-bucket index
+  with a counter bump in a `[u64]` table (the kernel is now the third example
+  under docs/language.md "Writing", checked by the docs example test), and
+  README did not say that a `mix run` script needs
+  `use Defk, elixir_mode: true` for `__defk_elixir__/2`.
 
 ## Limitations
 

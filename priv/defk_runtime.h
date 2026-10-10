@@ -455,7 +455,9 @@ static inline int64_t defk_bsl_i64_s(int *ovf, int64_t a, int64_t n) { return de
 static inline int64_t defk_bsr_i64_s(int *ovf, int64_t a, int64_t n) { return defk_bsr_core(ovf, a, n); }
 /* bsr by a shift known to be non-negative: it cannot overflow */
 static inline int64_t defk_bsr_nn(int64_t a, int64_t n) {
-  return n >= 64 ? (a < 0 ? -1 : 0) : a >> n;
+  /* n >= 0 is proved; the unsigned test keeps a wrong n from a failed flagged
+     operation (defk-hki) from shifting by a negative count */
+  return (uint64_t)n >= 64 ? (a < 0 ? -1 : 0) : a >> n;
 }
 static inline int64_t defk_div_i64(defk_ctx *ctx, int64_t a, int64_t b) {
   if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "div/2 by zero");
@@ -670,9 +672,12 @@ static inline double defk_pow(defk_ctx *ctx, double a, double b) {
   if (!DEFK_FINITE(r)) defk_nonfinite_call(ctx, "pow", a, b, 2);
   return r;
 }
+/* __builtin_sqrt: one instruction where -fno-builtin would make it a libm
+   call. IEEE 754 square root is correctly rounded, in hardware and in libm
+   (which :math.sqrt calls), so the result is the same bits (defk-hki). */
 static inline double defk_sqrt(defk_ctx *ctx, double a) {
   if (DEFK_UNLIKELY(a < 0.0)) defk_fail(ctx, DEFK_E_ARITH, "sqrt of negative number %g", a);
-  return sqrt(a);
+  return __builtin_sqrt(a);
 }
 static inline double defk_log(defk_ctx *ctx, double a) {
   if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, "log of non-positive number %g", a);
@@ -821,6 +826,19 @@ static inline int defk_feq_exact(double a, double b) {
   static inline void defk_put_##T(defk_ctx *ctx, defk_arr_##T a, int64_t i, CT v) { \
     if (DEFK_UNLIKELY((uint64_t)i >= (uint64_t)a.len)) defk_oob(ctx, i, a.len);     \
     a.data[i] = v;                                                                  \
+  }                                                                                 \
+  /* flagged forms (flat strips, below): never touch memory outside a */           \
+  static inline CT defk_get_##T##_f(int *nf, defk_arr_##T a, int64_t i) {           \
+    static const CT zero = 0;                                                       \
+    int bad = (uint64_t)i >= (uint64_t)a.len;                                       \
+    *nf |= bad;                                                                     \
+    return (bad ? &zero : (const CT *)a.data)[bad ? 0 : i];                         \
+  }                                                                                 \
+  static inline void defk_put_##T##_f(int *nf, CT *sink, defk_arr_##T a, int64_t i, \
+                                      CT v) {                                       \
+    int bad = (uint64_t)i >= (uint64_t)a.len;                                       \
+    *nf |= bad;                                                                     \
+    (bad ? sink : a.data)[bad ? 0 : i] = v;                                         \
   }
 DEFK_ACCESS_FN(f64, double)
 DEFK_ACCESS_FN(i64, int64_t)
@@ -912,9 +930,12 @@ static inline double defk_nf_r(int *nf, double r) {
 #define DEFK_NF_fmul(C, A, B) defk_nf_r(&defk_nf, (double)(A) * (double)(B))
 #define DEFK_NF_fdiv(C, A, B) defk_nf_r(&defk_nf, (double)(A) / (double)(B))
 #define DEFK_NF_in_f64(C, X, I) defk_nf_r(&defk_nf, (X))
+/* a read whose inf or NaN a later check of the strip is sure to see
+   (seen_later/1 in the compiler): no check of its own */
+#define defk_in_f64_later(C, X, I) (X)
 /* sqrt and log of a finite argument are inf or NaN exactly where the checked
    forms raise (a < 0.0, a <= 0.0) */
-#define DEFK_NF_sqrt(C, A) defk_nf_r(&defk_nf, sqrt(A))
+#define DEFK_NF_sqrt(C, A) defk_nf_r(&defk_nf, __builtin_sqrt(A))
 #define DEFK_NF_log(C, A) defk_nf_r(&defk_nf, log(A))
 #define DEFK_NF_exp(C, A) defk_nf_r(&defk_nf, exp(A))
 #define DEFK_NF_pow(C, A, B) defk_nf_r(&defk_nf, pow((A), (B)))
@@ -922,6 +943,65 @@ static inline double defk_nf_r(int *nf, double r) {
    through its replay, or in a flagged strip, flag and skip the replay */
 #define DEFK_FCHECK(B) if (DEFK_UNLIKELY(B))
 #define DEFK_NF_FCHECK(B) defk_nf |= (B); if (0)
+
+/*
+ * A strip with float checks may also hold i64/u64 overflow checks, bounds
+ * checks, narrow-write range checks and float-to-integer conversions
+ * (defk-hki). Their DEFK_NF_ forms OR the failure into the same defk_nf and
+ * compute on: an overflowing + - * gives the wrapped value (the builtins
+ * define it), a conversion out of range gives 0 or the truncated value. Any
+ * failure replays the strip with the raising forms, so the first error in
+ * program order still wins: up to the first failing check the flagged and
+ * the replayed run compute the same values, take the same branches and make
+ * the same writes, and the replay raises at that check.
+ *
+ * Memory safety: what the flagged run computes after its first failure is
+ * thrown away, but it still runs, so no flagged form may touch memory it
+ * should not. An element access out of bounds reads a static zero or writes
+ * the strip's local defk_sink instead: the address is selected from (array,
+ * index) or (zero/sink, 0), never formed from an index out of bounds, and
+ * there is no branch. Every other access in such a strip is an unchecked
+ * a.data[i] whose index the compiler proved in range from values the flagged
+ * run computes exactly (flag_strip/3 in the compiler: only the loop counter
+ * and values not assigned in the strip), so a wrong value from a failed
+ * operation never reaches an address. Writes to in-range elements after the
+ * failure are redone by the replay up to the raise, and the array is never
+ * returned once the kernel raises.
+ */
+typedef union {
+  double f64;
+  float f32;
+  int64_t i64;
+  uint64_t u64;
+  int32_t i32;
+  int16_t i16;
+  uint8_t u8;
+} defk_nf_sink;
+#define DEFK_NF_add_i64(C, A, B) defk_add_i64_s(&defk_nf, (A), (B))
+#define DEFK_NF_sub_i64(C, A, B) defk_sub_i64_s(&defk_nf, (A), (B))
+#define DEFK_NF_mul_i64(C, A, B) defk_mul_i64_s(&defk_nf, (A), (B))
+#define DEFK_NF_neg_i64(C, A) defk_neg_i64_s(&defk_nf, (A))
+#define DEFK_NF_abs_i64(C, A) defk_abs_i64_s(&defk_nf, (A))
+#define DEFK_NF_add_u64(C, A, B) defk_add_u64_s(&defk_nf, (A), (B))
+#define DEFK_NF_sub_u64(C, A, B) defk_sub_u64_s(&defk_nf, (A), (B))
+#define DEFK_NF_mul_u64(C, A, B) defk_mul_u64_s(&defk_nf, (A), (B))
+#define DEFK_NF_trunc(C, A) defk_trunc_s(&defk_nf, (A))
+#define DEFK_NF_round(C, A) defk_round_s(&defk_nf, (A))
+#define DEFK_NF_get_in_f64(C, A, I) defk_nf_r(&defk_nf, defk_get_f64_f(&defk_nf, (A), (I)))
+#define DEFK_NF_get_f64(C, A, I) defk_get_f64_f(&defk_nf, (A), (I))
+#define DEFK_NF_get_i64(C, A, I) defk_get_i64_f(&defk_nf, (A), (I))
+#define DEFK_NF_get_u8(C, A, I) defk_get_u8_f(&defk_nf, (A), (I))
+#define DEFK_NF_get_u64(C, A, I) defk_get_u64_f(&defk_nf, (A), (I))
+#define DEFK_NF_get_i16(C, A, I) defk_get_i16_f(&defk_nf, (A), (I))
+#define DEFK_NF_get_i32(C, A, I) defk_get_i32_f(&defk_nf, (A), (I))
+#define DEFK_NF_get_f32(C, A, I) defk_get_f32_f(&defk_nf, (A), (I))
+#define DEFK_NF_put_f64(C, A, I, V) defk_put_f64_f(&defk_nf, &defk_sink.f64, (A), (I), (V))
+#define DEFK_NF_put_i64(C, A, I, V) defk_put_i64_f(&defk_nf, &defk_sink.i64, (A), (I), (V))
+#define DEFK_NF_put_u8(C, A, I, V) defk_put_u8_f(&defk_nf, &defk_sink.u8, (A), (I), (V))
+#define DEFK_NF_put_u64(C, A, I, V) defk_put_u64_f(&defk_nf, &defk_sink.u64, (A), (I), (V))
+#define DEFK_NF_put_i16(C, A, I, V) defk_put_i16_f(&defk_nf, &defk_sink.i16, (A), (I), (V))
+#define DEFK_NF_put_i32(C, A, I, V) defk_put_i32_f(&defk_nf, &defk_sink.i32, (A), (I), (V))
+#define DEFK_NF_put_f32(C, A, I, V) defk_put_f32_f(&defk_nf, &defk_sink.f32, (A), (I), (V))
 
 static inline uint8_t defk_to_u8(defk_ctx *ctx, int64_t v) {
   if (DEFK_UNLIKELY(v < 0 || v > 255)) defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in u8", (long long)v);
@@ -942,6 +1022,16 @@ static inline int32_t defk_to_i32(defk_ctx *ctx, int64_t v) {
     defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in i32", (long long)v);
   return (int32_t)v;
 }
+/* their flagged forms (defk-hki): the truncated value, the failure flagged */
+#define DEFK_NF_to_u8(C, V) defk_to_narrow_f(&defk_nf, (V), 0, 255, uint8_t)
+#define DEFK_NF_to_i16(C, V) defk_to_narrow_f(&defk_nf, (V), INT16_MIN, INT16_MAX, int16_t)
+#define DEFK_NF_to_i32(C, V) defk_to_narrow_f(&defk_nf, (V), INT32_MIN, INT32_MAX, int32_t)
+#define defk_to_narrow_f(NF, V, LO, HI, CT)                                         \
+  ({                                                                                \
+    int64_t defk_v_ = (V);                                                          \
+    *(NF) |= defk_v_ < (LO) || defk_v_ > (HI);                                      \
+    (CT) defk_v_;                                                                   \
+  })
 
 /*
  * An [f32] write: v rounded to nearest, as Elixir's <<v::float-32-native>>
