@@ -115,6 +115,15 @@ defmodule Defk.TupleBranchTest.Select do
   defk step(c :: bool, x :: i64, y :: i64) :: {i64, i64} do
     if c, do: {x + y, y}, else: {x, y * 2}
   end
+
+  # a division in one element keeps the whole tuple a branch (defk-id9)
+  defk step_rem(c :: bool, x :: i64, y :: i64) :: {i64, i64} do
+    if c, do: {x + y, y}, else: {x, rem(y, 7)}
+  end
+
+  defk step_fdiv(c :: bool, x :: f64, y :: f64) :: {f64, f64} do
+    if c, do: {x + y, y}, else: {x, x / y}
+  end
 end
 
 defmodule Defk.TupleBranchTest do
@@ -187,6 +196,21 @@ defmodule Defk.TupleBranchTest do
     assert [_, _] = Regex.scan(~r/= v_cond_\d+ \? /, c)
   end
 
+  test "a tuple arm with a division is a branch, not a select per element (defk-id9)" do
+    c = File.read!(String.replace_suffix(Select.__defk_lib__(), ".so", ".c"))
+
+    for name <- ~w(step_rem step_fdiv) do
+      [_, rest] = String.split(c, "/* ---- #{name}/", parts: 2)
+      body = rest |> String.split("/* ---- ", parts: 2) |> hd()
+      assert body =~ "if (p_c)", name
+      refute body =~ "_s(&", name
+      refute body =~ ~r/= v_cond_\d+ \? /, name
+    end
+
+    assert Select.step_rem(false, 3, 15) == {3, 1}
+    assert Select.step_fdiv(false, 1.0, 4.0) == {1.0, 0.25}
+  end
+
   describe "compile errors" do
     defp compile_error(body, ret \\ "i64") do
       src = """
@@ -249,5 +273,5 @@ defmodule Defk.TupleBranchTest do
     bits_reset: []
   )
 
-  agreement(Select, step: [])
+  agreement(Select, step: [], step_rem: [], step_fdiv: [])
 end
