@@ -3052,8 +3052,8 @@ bug.
 ## 13. Known divergences
 
 A divergence is a different value or behaviour without raising; the one rule
-does not allow any. The `Defk.Divergences` registry is still a placeholder
-(defk-813), so this list is kept by hand. Each entry is a bug with a ticket.
+does not allow any. There is no registry: this list is kept by hand, and each
+entry is a bug with a ticket until it is fixed or turned into a limit.
 
 None at the moment. (The last, an array write visible through another
 variable naming the same array, was removed by giving arrays value semantics,
