@@ -11,9 +11,15 @@
   "labels": [
     "needs-triage"
   ],
+  "comments": [
+    {
+      "text": "From defk-9p6.16 (examples/gorilla_encode.exs): the two-32-bit-halves split is not needed for Gorilla's XOR bits today. The full 64-bit case can be written as x::64-signed (a signed 64-bit segment takes every i64 and writes its u64 pattern), and narrower windows of a pattern with the top bit set come out of a logical shift on the u64 view, bsr(band(x, 0xFFFFFFFFFFFFFFFF), s)::size(k), whose value fits an i64 because s \u003e= 1 there. Accepting u64 values in 64-bit segments would still make this read like gorilla_stream's own code (one meaningful_value::size(k) segment).",
+      "timestamp": "2026-10-10T12:39:36Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Accept u64 values in 64-bit bitstring segments",
   "type": "task",
-  "updated_at": "2026-10-10T09:53:48Z"
+  "updated_at": "2026-10-10T12:39:36Z"
 }
