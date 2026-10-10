@@ -12,11 +12,15 @@
     {
       "text": "Per 'What is the one rule a kernel author keeps in their head?' (defk-dtw.7): a guard error raising instead of failing the clause is a limit (raises where Elixir succeeds): allowed and documented; this ticket stays nice-to-have.",
       "timestamp": "2026-10-05T20:25:40Z"
+    },
+    {
+      "text": "Decision: only genuine Elixir guard errors fail the clause (zero divisor in div/rem//, float inf/NaN). An i64 overflow (and abs of MIN, trunc out of range, MIN div -1) still raises: Elixir has bignums, so failing the clause would silently give a different answer than Elixir, a divergence not a limit (the one rule). Native: guard lowered via guard_expr with two flags, gbad (guard false) and govf (replays the plain guard to raise with the usual message); no flags and no change in C when the guard has no op that can fail. In a speculated select an overflow sets the select flag as before. Elixir mode: guard wrapped in try/rescue ArithmeticError only when it has + - * / div rem, reraising Ops.limit?/1 errors. Known edge: guard with both an overflow and a zero divisor raises (limit) in native; Elixir mode answers by evaluation order.",
+      "timestamp": "2026-10-10T10:01:53Z"
     }
   ],
   "priority": 4,
   "status": "in_progress",
   "title": "Guard errors should fail the clause, not raise",
   "type": "task",
-  "updated_at": "2026-10-10T09:54:00Z"
+  "updated_at": "2026-10-10T10:01:53Z"
 }
