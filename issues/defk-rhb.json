@@ -14,9 +14,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Convention: a kernel block (a line starting 'defk name') followed by an iex\u003e block (blank lines only between) runs in native and Elixir mode, which must agree (Defk.Test.reason for raises) and give the documented native result (=== value, or exact '** (Module) message'). Other kernel blocks need an HTML comment on the line above the fence: \u003c!-- defk-example compiles | error: \u003ccode\u003e | skip: \u003creason\u003e | known-failure: \u003cticket\u003e --\u003e; anything else fails. iex lines call the module as M (or its own defmodule name). The generated error reference in section 11 is skipped: it is the registry's text (language_doc_test) and its examples/rewrites are compiled by compile_errors_test. Modules are named Defk.LanguageDoc.Ex\u003cmd5 of source\u003e so unchanged examples hit the native build cache; compiled concurrently in setup_all. Chose compile-only markers over adding new iex blocks to keep doc edits minimal while other branches edit language.md; 14 compile-only examples could gain iex lines later.",
+      "timestamp": "2026-10-10T10:01:55Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Check docs/language.md examples in both modes",
   "type": "task",
-  "updated_at": "2026-10-10T09:53:58Z"
+  "updated_at": "2026-10-10T10:01:55Z"
 }
