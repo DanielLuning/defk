@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Generated C of examples/hashes.exs kernels module (Hashes.CRC32CTables + Hashes.Kernels), byte_size(__defk_source__()): before 2,115,100 bytes, after 326,375 bytes (-85%). Each binary attribute/literal is now one static const uint8_t defk_lit_\u003csha256-prefix\u003e[] declared before all functions.",
+      "timestamp": "2026-10-10T09:58:55Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "A binary attribute is emitted as a fresh string literal at every inlined use site",
   "type": "task",
-  "updated_at": "2026-10-10T09:54:00Z"
+  "updated_at": "2026-10-10T09:58:55Z"
 }
