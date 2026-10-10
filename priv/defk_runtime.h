@@ -1212,7 +1212,7 @@ static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
  * or NULL after setting *exc to a clean ArgumentError; a frame that is not ours
  * is never read beyond its first two words.
  */
-static inline void *defk_get_frame(ErlNifEnv *env, ERL_NIF_TERM t, size_t size, ERL_NIF_TERM *exc) {
+static inline void *defk_frame_of(ErlNifEnv *env, ERL_NIF_TERM t, size_t size, ERL_NIF_TERM *exc) {
   defk_ctx *ctx;
   if (DEFK_LIKELY(enif_get_resource(env, t, defk_frame_rt, (void **)&ctx) &&
                   ctx->layout_tag == DEFK_LAYOUT_TAG && ctx->frame_size == size))
