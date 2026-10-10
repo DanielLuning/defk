@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-52v.15",
@@ -13,8 +13,8 @@
   ],
   "parent": "defk-n4r",
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Array accumulators in for ... reduce: and Enum.reduce_while: thread an owned array through a loop in place",
   "type": "task",
-  "updated_at": "2026-10-09T22:03:23Z"
+  "updated_at": "2026-10-10T09:05:52Z"
 }
