@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Second repro from defk-9p6.11 (examples/batched_levenshtein.exs, under load): 12 Task.async_stream tasks each calling Lev.Kernels.lev_myers on ~20k words (~0.5 ms per call) ran on schedulers 1-2 only (:erlang.system_info(:scheduler_id) before and after the call), 3.6-4.7 ms total vs 5.6 ms for the 12 calls in sequence; the same split running Elixir spread over 10-12 schedulers. :erlang.yield() before the call: still 2 schedulers; Process.sleep(1) before it: 4. This makes the batched Levenshtein verdict poor (Elixir chunks 3.8-4.2 ms vs defk chunks 4.3-4.6 ms) although the kernel is 2.4-2.8x in one process.",
+      "timestamp": "2026-10-10T12:01:31Z"
+    }
+  ],
   "priority": 4,
   "status": "open",
   "title": "Short kernel tasks under Task.async_stream run on only 2-3 of 12 schedulers",
   "type": "task",
-  "updated_at": "2026-10-09T21:19:52Z"
+  "updated_at": "2026-10-10T12:01:31Z"
 }
