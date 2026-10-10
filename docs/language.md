@@ -644,6 +644,15 @@ iex> Mod.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
   `if`, `cond` or `case`, a called kernel's result (a kernel that returns a
   `bitstring` is inlined like any other, and the caller may append to what
   it returns), and the kernel's result, alone or in a tuple.
+- **Signed segments.** `v::size(n)-signed` and `v::k-signed` (the
+  specifiers in any order) take a negative `v` and write its two's
+  complement bits, which is what `band(v, 2^n - 1)::size(n)` also gives:
+  `<<1::1, 0::1, dod::7-signed>>` appends the two flag bits and the 7-bit
+  two's complement of `dod`. The value must be in `-2^(n-1)..2^(n-1) - 1`
+  (see Limits), so `::1-signed` takes `-1..0` and `::64-signed` every `i64`.
+  A signed segment of width 0 holds no bits and only 0 fits it, as an
+  unsigned one. `signed` together with `unsigned` is
+  [`bitstring-segment`](#bitstring-segment).
 - **Measuring.** `bit_size(acc)` is its number of bits, an `i64`. Pad to a
   whole number of bytes, if you need to, with an explicit append:
   `<<acc::bitstring, 0::size(rem(8 - rem(bit_size(acc), 8), 8))>>`.
@@ -655,7 +664,8 @@ iex> Mod.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
 - **Limits.** A segment value outside `0..2^n - 1` raises `ArgumentError`
   "bitstring segment value v does not fit in n bits", where Elixir keeps the
   low `n` bits: mask it first (`band(v, 255)::8`), which also writes a
-  negative value's two's complement bits. A size outside `0..64` raises
+  negative value's two's complement bits. A `signed` segment's range is
+  `-2^(n-1)..2^(n-1) - 1`, and its message ends "in n signed bits". A size outside `0..64` raises
   `ArgumentError` "bitstring segment size n is outside 0..64". Elixir mode
   raises both too. A value with the top bit of a 64-bit segment set is a
   negative `i64`, so it does not fit `::64`; append it as two 32-bit halves
@@ -670,7 +680,7 @@ iex> Mod.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
   Elixir mode.
 
 **Unsupported, until a workload needs them** ([`bitstring-segment`](#bitstring-segment),
-[`bitstring-use`](#bitstring-use)): signed, little- or native-endian, float,
+[`bitstring-use`](#bitstring-use)): little- or native-endian, float,
 binary, bitstring and UTF segments; reading or indexing a bitstring
 (`acc[i]`, `len(acc)`, `for b <- acc`; a `<<...>> = acc` match is
 [`bitstring-match`](#bitstring-match)); starting from
@@ -3177,18 +3187,18 @@ end
 
 ### bitstring-segment
 
-An append to a bitstring accumulator takes unsigned big-endian integer segments: `v::size(n)`, `v::k` or `v`.
+An append to a bitstring accumulator takes big-endian integer segments, unsigned or `signed`: `v::size(n)`, `v::k` or `v`.
 
 - kind: not supported yet (planned)
-- why: a kernel appends integer bits; signed, little-endian, float and binary segments are not supported until a workload needs them
-- hint: write unsigned big-endian integer segments: v::size(n), v::k or v (8 bits)
+- why: a kernel appends integer bits; little-endian, float and binary segments are not supported until a workload needs them
+- hint: write big-endian integer segments: v::size(n), v::k or v (8 bits), optionally signed
 
 Rejected:
 
 ```elixir
 defk f(x :: i64) :: bitstring do
   acc = <<>>
-  <<acc::bitstring, x::signed-8>>
+  <<acc::bitstring, x::little-16>>
 end
 ```
 
@@ -3197,7 +3207,7 @@ Write instead:
 ```elixir
 defk f(x :: i64) :: bitstring do
   acc = <<>>
-  <<acc::bitstring, band(x, 255)::8>>
+  <<acc::bitstring, band(x, 255)::8, band(bsr(x, 8), 255)::8>>
 end
 ```
 
@@ -3409,6 +3419,7 @@ bug.
 | an `[i16]` or `[i32]` write of a value outside its range | `<<32768::signed-16>>` wraps | `ArgumentError` "value 32768 does not fit in i16" |
 | an `[f32]` write of a value that rounds to inf | `<<1.0e40::float-32>>` stores inf | `ArgumentError` "value 1.0e40 does not fit in f32" |
 | a [bitstring accumulator](#the-bitstring-accumulator) segment `v::size(n)` with `v` outside `0..2^n - 1` (a negative `v` included) | keeps the low `n` bits | `ArgumentError` "bitstring segment value v does not fit in n bits" |
+| a bitstring accumulator segment `v::size(n)-signed` with `v` outside `-2^(n-1)..2^(n-1) - 1` (a width of 0 takes only 0) | keeps the low `n` bits | `ArgumentError` "bitstring segment value v does not fit in n signed bits" |
 | a bitstring segment size outside `0..64` | any non-negative size | `ArgumentError` "bitstring segment size n is outside 0..64" |
 | `alloc/2` of more than 2^48 bytes | (the VM would abort) | `ArgumentError` "alloc/2: length too large" |
 | `alloc/2` of a size the allocator cannot provide | (the VM would abort) | `ArgumentError` "out of memory"; Elixir mode raises it from 2^47 bytes without trying |
