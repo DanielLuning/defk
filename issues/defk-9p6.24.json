@@ -17,11 +17,15 @@
     {
       "text": "Third instance, at the 2x line this time: examples/codecs.exs hex measures 2.02-2.04x (expected good); a slow run reads marginal. The script now tolerates marginal for hex; a band at both thresholds would make this systematic.",
       "timestamp": "2026-10-09T21:33:27Z"
+    },
+    {
+      "text": "defk-9p6.16 (gorilla_encode.exs) measured 1.96-2.38x at the realistic size: 1 run in 8 reads marginal and the script exits 1 against expected :good, as batched_levenshtein can read marginal against :poor. Both need the tie band.",
+      "timestamp": "2026-10-10T12:44:31Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Defk.Bench verdict has no tie band: a 1.0x result flips between marginal and poor run to run",
   "type": "task",
-  "updated_at": "2026-10-09T21:33:27Z"
+  "updated_at": "2026-10-10T12:44:31Z"
 }
