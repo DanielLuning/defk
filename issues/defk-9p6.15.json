@@ -20,11 +20,15 @@
     {
       "text": "Per defk-i2e: writes to the input register array are legal (copied once before the first write), so update_many can be written as plain regs[i] = ... and return regs. Blocked on defk-auo.",
       "timestamp": "2026-10-06T07:51:12Z"
+    },
+    {
+      "text": "Done on branch defk-9p6.15/hll-update-many (5aa8569, merge 6b98bb7, 6e8db76): examples/hll_update_many.exs, README row under 'Where defk helps'. PROVISIONAL, measured under load (pcm/cosine agents running). Rust backend: precompiled NIF installed fine (rustler_precompiled, aarch64-apple-darwin). Pure backend read: bucket = h \u003e\u003e\u003e (64-p), rank = clz of the low 64-p bits counted in a (64-p)-bit field + 1 (all-zero field -\u003e 64-p+1); state = 4-byte header + 2^p u8 registers. Kernel: for h \u003c- hashes, state[4 + bsr(h, bits)] = max(.., min(clz(band(bsl(h,p), mask64)), bits) + 1), input state copied once; plain loop (defk-fun not hit). Realistic size 100k hashes, p=14, sketch pre-filled with 50k; other size 100. Elixir variants (best of 7, ms at 100 / 1k / 10k / 100k): E0 anchor Pure 0.044/0.17/3.1/17-24; E1 top-down rank 0.036/0.10/2.5/10.3; E2 sorted int keys + splice 0.019/0.058/1.6/9.2 (baseline \u003c5k); E3 :atomics + one rebuild 0.48/0.21/0.50/3.3 (baseline \u003e=5k); E4 bit-syntax split 4.0 at 100k; E5 :array 5.4; E6 tuple put_elem 8.5 at 10k (not run beyond); E7 per-hash bit-syntax update 0.026 at 100, 8.6 at 100k; E8 parallel tasks 4.4. Verdict at 100k: Elixir 3.4-3.5 ms, defk 0.36-0.38 ms (kernel 0.07, pack the rest), 9.2-9.4x good; 100 hashes 10-15x (mean of 5000 calls). Pack variants at 100k: append 4/iter 0.28, append 1/iter 1.1, comprehension 2.4, Enum.map+iodata 2.3. Sweep 100..100k x3.16: 2.7-5x, 7x, 12x, 15-17x, 15x, 13-14x, 3.2x (the 100k sweep point is 1.06 ms: GC artefact, filed defk-9p6.27); crossover 100. NIF Backend.Rust 2.55-2.8 ms at 100k (defk 6.9-7.4x; its Enum.map+iodata pack is 2.3 ms); NIF fed defk's pack 0.46 ms, level with defk. Tick gaps 100k one scheduler: ~2 ms max/p99 for all three (floor; NIF dirty \u003e10k). Agreement: byte-identical state across 8 Elixir variants, baseline, defk, Elixir mode, NIF, NIF+defk pack; p=4/10/14/16, empty/filled state, edge hashes, random batches; mismatch halts. mix ci green after merging main (1276 passed).",
+      "timestamp": "2026-10-10T12:15:52Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Target workload: HLL update_many vs ex_data_sketch",
   "type": "task",
-  "updated_at": "2026-10-10T12:03:44Z"
+  "updated_at": "2026-10-10T12:15:52Z"
 }
