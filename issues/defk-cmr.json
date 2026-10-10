@@ -14,9 +14,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Implemented on branch defk-cmr/bitstring-accumulator (8d05ae0). Decisions: (1) Runtime value is defk_bits {nbits, slot+1} over an owned binary whose first 8 bytes hold the buffer's end; append in place only when the value ends at the buffer end, else copy first, so full Elixir value semantics without static linearity analysis (also makes flagged-strip replays safe). (2) \u003c\u003c\u003e\u003e stays the empty [u8] literal (existing tests use len(\u003c\u003c\u003e\u003e)); it becomes the empty bitstring when bound to / used as accumulator init for a name the kernel appends to (Defk.Bitstring.accumulator_names/1 lookahead), when coerced to a bitstring return, or beside a bitstring branch arm. (3) Kernels returning bitstring register their NIF as __defk_native_\u003cname\u003e__ in every mode; the generated def decodes {bytes, len} with \u003c\u003cb::bitstring-size(^len), _::bitstring\u003e\u003e. The NIF copies the bytes out (tight binary, buffer slack not kept). (4) Two new codes: bitstring-segment, bitstring-use (both :planned). (5) Gorilla reference: ported gorilla_stream 3.0.3 ValueCompression logic into test/support/gorilla_reference.ex with MIT attribution instead of the dep (dep builds a C++ NIF via elixir_make/fine/cc_precompiler). i64-only: 64-bit segment values with the top bit set must be split in two 32-bit halves until u64 lands (defk-wlu).",
+      "timestamp": "2026-10-10T09:29:55Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Add the bitstring accumulator",
   "type": "task",
-  "updated_at": "2026-10-10T09:05:52Z"
+  "updated_at": "2026-10-10T09:29:55Z"
 }
