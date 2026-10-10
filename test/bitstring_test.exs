@@ -15,6 +15,26 @@ defmodule Defk.BitstringTest.K do
     end
   end
 
+  # each element of xs as a signed n-bit integer
+  defk pack_signed(xs :: [i64], n :: i64) :: bitstring do
+    for x <- xs, reduce: <<>> do
+      acc -> <<acc::bitstring, x::size(n)-signed>>
+    end
+  end
+
+  # the anchor of Gorilla's timestamp encoding: two flag bits, then a signed
+  # 7-bit delta of deltas (written with the type first, and a literal size)
+  defk anchor(dod :: i64) :: bitstring do
+    acc = <<>>
+    <<acc::bitstring, 1::1, 0::1, dod::signed-7>>
+  end
+
+  # signed beside unsigned, a literal-size and a default-size signed segment
+  defk mixed_signed(x :: i64, y :: i64) :: bitstring do
+    acc = <<>>
+    <<acc::bitstring, x::5-signed, y::3, x::signed-integer-big-size(5), y::signed-8>>
+  end
+
   # lead set bits, then x in n bits twice
   defk at_offset(lead :: i64, x :: i64, n :: i64) :: bitstring do
     acc =
@@ -312,6 +332,108 @@ defmodule Defk.BitstringTest do
     end
   end
 
+  describe "signed segments" do
+    defp bounds(n), do: {-Bitwise.bsl(1, n - 1), Bitwise.bsl(1, n - 1) - 1}
+
+    test "the boundary values of every width 1..64 agree with Elixir" do
+      for n <- 1..64 do
+        {lo, hi} = bounds(n)
+        xs = Enum.uniq(Enum.filter([lo, lo + 1, -1, 0, 1, hi - 1, hi], &(&1 in lo..hi)))
+        expect = for x <- xs, into: <<>>, do: <<x::signed-size(n)>>
+        assert {:ok, expect} == agrees(:pack_signed, [i64s(xs), n])
+        assert K.pack_signed(i64s(xs), n) == expect
+      end
+    end
+
+    test "a value just outside the signed range raises in both modes" do
+      for n <- 1..64 do
+        {lo, hi} = bounds(n)
+
+        for x <- [lo - 1, hi + 1], x in -(2 ** 63)..(2 ** 63 - 1) do
+          assert {:raise, %ArgumentError{} = e} = agrees(:pack_signed, [i64s([x]), n])
+          assert Defk.Test.reason(e) == :segment_fit
+
+          assert Exception.message(e) =~
+                   "bitstring segment value #{x} does not fit in #{n} signed bits"
+        end
+      end
+
+      # Elixir itself would keep the low bits
+      assert <<128::signed-8>> == <<-128::signed-8>>
+    end
+
+    test "a width of 0 holds no bits, and only 0 fits" do
+      assert agrees(:pack_signed, [i64s([0, 0]), 0]) == {:ok, <<>>}
+
+      for x <- [1, -1] do
+        assert {:raise, %ArgumentError{}} = agrees(:pack_signed, [i64s([x]), 0])
+      end
+    end
+
+    test "a size outside 0..64 raises, as for unsigned segments" do
+      for n <- [65, -1] do
+        assert {:raise, %ArgumentError{} = e} = agrees(:pack_signed, [i64s([0]), n])
+        assert Defk.Test.reason(e) == :segment_size
+      end
+    end
+
+    test "a negative value stores its two's complement bits" do
+      assert agrees(:pack_signed, [i64s([-1, -2, 3]), 4]) == {:ok, <<0b1111_1110_0011::12>>}
+      assert agrees(:anchor, [-64]) == {:ok, <<0b10_1000000::9>>}
+      assert agrees(:anchor, [63]) == {:ok, <<0b10_0111111::9>>}
+      assert {:raise, %ArgumentError{}} = agrees(:anchor, [64])
+      assert {:raise, %ArgumentError{}} = agrees(:anchor, [-65])
+    end
+
+    test "signed beside unsigned, with the specifiers in any order" do
+      assert agrees(:mixed_signed, [-3, 5]) ==
+               {:ok, <<-3::signed-5, 5::3, -3::signed-5, 5::signed-8>>}
+
+      assert {:raise, %ArgumentError{}} = agrees(:mixed_signed, [16, 5])
+      assert {:raise, %ArgumentError{}} = agrees(:mixed_signed, [0, 8])
+    end
+
+    test "a signed build grows across forced yields" do
+      xs = for i <- 1..20_000, do: rem(i * 37, 128) - 64
+      K.__defk_force_yields__(true)
+
+      try do
+        assert {:ok, packed} = agrees(:pack_signed, [i64s(xs), 7])
+        assert packed == for(x <- xs, into: <<>>, do: <<x::signed-7>>)
+      after
+        K.__defk_force_yields__(false)
+      end
+    end
+
+    property "(width, value) pairs, in range or just outside, agree with Elixir" do
+      check all(
+              n <- StreamData.integer(1..64),
+              pick <- StreamData.integer(0..5),
+              r <- StreamData.integer(0..0xFFFFFFFFFFFFFFFF),
+              max_runs: 300
+            ) do
+        {lo, hi} = bounds(n)
+
+        x =
+          case pick do
+            0 -> lo - 1
+            1 -> hi + 1
+            2 -> lo
+            3 -> hi
+            _ -> lo + rem(r, hi - lo + 1)
+          end
+
+        if x in -(2 ** 63)..(2 ** 63 - 1) do
+          result = agrees(:pack_signed, [i64s([x]), n])
+
+          if x in lo..hi,
+            do: assert(result == {:ok, <<x::signed-size(n)>>}),
+            else: assert({:raise, %ArgumentError{}} = result)
+        end
+      end
+    end
+  end
+
   describe "the runtime contract" do
     test "an output that grows across forced yields" do
       xs = for i <- 0..199_999, do: rem(i * 7919, 8192)
@@ -435,7 +557,6 @@ defmodule Defk.BitstringTest do
             {"x::binary", "segments are integers, and binary is not"},
             {"acc::bitstring", "segments are integers, and bitstring is not"},
             {"\"ab\"", "segments are integers"},
-            {"x::signed-8", "segments are unsigned"},
             {"x::little-16", "segments are big-endian"},
             {"x::utf8", "segments are integers, and utf8 is not"},
             {"x::size(8)-unit(2)", "unit(2) is not a segment size or type"},
@@ -445,6 +566,14 @@ defmodule Defk.BitstringTest do
         assert codes(msg) == ["bitstring-segment"], "#{seg}: #{msg}"
         assert msg =~ "the bitstring segment #{seg} is not supported yet", msg
         assert msg =~ why, msg
+      end
+    end
+
+    test "signed with unsigned, or either endianness conflict" do
+      for seg <- ["x::signed-unsigned-8", "x::unsigned-signed-8"] do
+        msg = rejected(appends("<<acc::bitstring, #{seg}>>"))
+        assert codes(msg) == ["bitstring-segment"], msg
+        assert msg =~ "both signed and unsigned", msg
       end
     end
 
@@ -503,6 +632,11 @@ defmodule Defk.BitstringTest do
 
   agreement(K,
     pack: [args: StreamData.fixed_list([G.array(:i64, of: G.i64(0..300)), G.i64(-2..70)])],
+    pack_signed: [
+      args: StreamData.fixed_list([G.array(:i64, of: G.i64(-300..300)), G.i64(-2..70)])
+    ],
+    anchor: [args: StreamData.fixed_list([G.i64(-70..70)])],
+    mixed_signed: [args: StreamData.fixed_list([G.i64(-20..20), G.i64(-3..10)])],
     at_offset: [args: StreamData.fixed_list([G.i64(-1..9), G.i64(0..3), G.i64(0..65)])],
     flags: [],
     evens_and_bits: [],
