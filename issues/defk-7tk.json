@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-10T12:10:45Z",
+  "description": "Found in defk-9p6.13 (cosine_topk.exs). matmul.exs says EXLA was not measured because {:exla, \"0.10.0\"} did not compile on this machine (xla_extension headers vs Apple clang -Winvalid-specialization). {:nx, \"== 0.13.1\"}, {:exla, \"== 0.13.1\"} installs and compiles in ~25 s on the same machine (precompiled XLA 0.10.0 aarch64-darwin-cpu; exla 0.13.1 passes -Wno-invalid-specialization itself), and cosine_topk.exs uses it. matmul's header and README row ('EXLA's BLAS ... did not compile, not measured') can now be measured: add an EXLA row (Nx.Defn.jit with compiler: EXLA, tensors on EXLA.Backend) to matmul.exs and update the recommendation with a number.",
+  "id": "defk-7tk",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Re-measure matmul.exs with EXLA 0.13.1: it compiles here now",
+  "type": "task",
+  "updated_at": "2026-10-10T12:10:45Z"
+}
