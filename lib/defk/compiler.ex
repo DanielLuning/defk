@@ -3908,6 +3908,7 @@ defmodule Defk.Compiler do
     end
   end
 
+  @spec in_never!(term(), term(), term(), term()) :: no_return()
   defp in_never!(node, lhs, t, show) do
     err!(
       node,
@@ -3917,6 +3918,7 @@ defmodule Defk.Compiler do
     )
   end
 
+  @spec in_type_err!(term(), term(), term(), term(), term()) :: no_return()
   defp in_type_err!(node, e, t, where, show) do
     err!(
       node,
