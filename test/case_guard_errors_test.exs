@@ -181,7 +181,24 @@ defmodule Defk.CaseGuardErrorsTest.K do
     end
   end
 
+  # in (defk-gid) beside a guard error: the zero divisor fails only its clause
+  defk in_rem_guard(x :: i64, y :: i64) :: i64 do
+    case x do
+      n when n in 1..10 and rem(n, y) == 0 -> 1
+      n when n in [0, 20, 100] or div(y, n) > 1 -> 2
+      _ -> 3
+    end
+  end
+
   # The same guards in plain Elixir, which is what a guard error means there
+  def ex_in_rem_guard(x, y) do
+    case x do
+      n when n in 1..10 and rem(n, y) == 0 -> 1
+      n when n in [0, 20, 100] or div(y, n) > 1 -> 2
+      _ -> 3
+    end
+  end
+
   def ex_rem_guard(x, y) do
     case x do
       n when rem(n, y) == 0 -> 1
@@ -338,6 +355,7 @@ defmodule Defk.CaseGuardErrorsTest do
         same_as_elixir(:lit_then_guard, [x, y])
         same_as_elixir(:sel_guard, [x, y])
         same_as_elixir(:sel_second, [x, y])
+        same_as_elixir(:in_rem_guard, [x, y])
       end
 
       assert K.rem_guard(5, 0) == 2
@@ -438,6 +456,7 @@ defmodule Defk.CaseGuardErrorsTest do
   end
 
   agreement(K, [
+    :in_rem_guard,
     :rem_guard,
     :div_guard,
     :fdiv_guard,

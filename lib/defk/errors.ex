@@ -614,7 +614,7 @@ defmodule Defk.Errors do
       code: "case-guard",
       kind: :error,
       summary:
-        "A case guard uses guard-safe expressions: variables, literals, arithmetic, comparisons, and/or/not, div, rem, abs, trunc, round, min and max.",
+        "A case guard uses guard-safe expressions: variables, literals, arithmetic, comparisons, and/or/not, in with a literal list or a range, div, rem, abs, trunc, round, min and max.",
       why:
         "Elixir allows only guard-safe expressions in guards, and kernel calls and indexing are not guard-safe",
       hint: "compute the value before the case, and use the variable in the guard",

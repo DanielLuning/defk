@@ -181,19 +181,38 @@ defmodule Defk.ElixirMode do
 
   # {statements, value expression, type}
   defp block_parts(ast, env) do
+    {stmts, last, t, _env} = block_env(ast, env)
+    {stmts, last, t}
+  end
+
+  # block_parts/2 and the env the block ends in
+  defp block_env(ast, env) do
     {init, [last]} = Enum.split(exprs(ast), -1)
     {stmts, env} = stmts(init, env)
 
     case last do
       {:=, _, [lhs, rhs]} ->
-        {q, t} = expr(rhs, env)
-        {bq, _env} = bind(lhs, q, t, env)
-        {stmts, bq, t}
+        {q, t, env} = expr_env(rhs, env)
+        {bq, env} = bind(lhs, q, t, env)
+        {stmts, bq, t, env}
 
       _ ->
-        {q, t} = expr(last, env)
-        {stmts, q, t}
+        {q, t, env} = expr_env(last, env)
+        {stmts, q, t, env}
     end
+  end
+
+  # A nested plain block binds into the scope around it, as in Elixir (the
+  # quoted block does too): the env it ends in is the env after it. Any other
+  # expression binds nothing.
+  defp expr_env({:__block__, _, _} = b, env) do
+    {stmts, last, t, env} = block_env(b, env)
+    {block(stmts ++ [last]), t, env}
+  end
+
+  defp expr_env(e, env) do
+    {q, t} = expr(e, env)
+    {q, t, env}
   end
 
   defp stmts(asts, env) do
@@ -210,7 +229,7 @@ defmodule Defk.ElixirMode do
     do: {write(arr, idx, rhs, env, m), env}
 
   defp stmt({:=, _, [lhs, rhs]}, env) do
-    {q, t} = expr(rhs, env)
+    {q, t, env} = expr_env(rhs, env)
     bind(lhs, q, t, env)
   end
 
@@ -237,7 +256,10 @@ defmodule Defk.ElixirMode do
     {q, env}
   end
 
-  defp stmt(e, env), do: {elem(expr(e, env), 0), env}
+  defp stmt(e, env) do
+    {q, _t, env} = expr_env(e, env)
+    {q, env}
+  end
 
   defp raise_form!(_node, code, what, _opts),
     do: raise(ArgumentError, "defk: #{code}: #{what} reached Elixir mode")
@@ -706,7 +728,7 @@ defmodule Defk.ElixirMode do
     Enum.reduce_while(clauses, {[], MapSet.new()}, fn {:->, _, [[head], body]}, {arms, seen} ->
       {pat, guard} = case_clause_head(head)
       {test, benv, prefix} = case_pattern(pat, s, st, env)
-      gq = guard && guard_expr(guard, guard_env(pat, s, st, env))
+      gq = guard && guard_expr(Defk.GuardIn.lower(guard), guard_env(pat, s, st, env))
 
       seen =
         if guard == nil and match?({:lit, _, _}, test),
