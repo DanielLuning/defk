@@ -711,6 +711,11 @@ iex> M.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
   end
   ```
 
+  ```elixir
+  iex> M.dods(<<0::64-native, -1::64-native, 100::64-native>>)
+  <<0::1, 0b10::2, -1::7-signed, 0b11::2, 100::32>>
+  ```
+
   The call is inlined, so the parameter is the caller's accumulator under
   another name: appending to it appends in place, and a loop in the callee
   yields with the bits built so far kept. It is still a plain Elixir value:
