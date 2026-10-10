@@ -5,6 +5,7 @@
     "defk-9p6.16",
     "defk-sgw.3"
   ],
+  "closed_at": "2026-10-10T10:50:20Z",
   "created": "2026-10-06T09:08:21Z",
   "description": "Allow a kernel to be written as Elixir writes multi-clause functions: one bodiless typed head (`defk dod_bits(acc :: bitstring, dod :: i64) :: bitstring`), then clauses whose parameters use the patterns `case` already supports (integer/bool literals, variables, `_`) with optional guards. Compiles to a `case` over the parameters (no cost over the hand `cond`); no clause matching raises FunctionClauseError, as in Elixir. Applies to entry and helper kernels. Needed by Gorilla's delta-of-delta bucket choice (gorilla_stream encoder/delta_encoding.ex).\n\nEach accepted convenience construct needs: an Elixir-mode meaning, agreement tests (Defk.Case, both modes), and a docs/language.md entry. Decided in 'Which convenience constructs do the six target workloads need?' (defk-dtw.18); sketches on branch prototype/defk-dtw.18-sketches (prototypes/convenience_sketches.exs).\n\nDone when the Gorilla dod_bits shape compiles, both modes agree including FunctionClauseError, and a clause without a head (or with types in a non-head clause) gets an actionable compile error.",
   "id": "defk-u9c",
@@ -18,8 +19,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Multi-clause kernels with a typed function head",
   "type": "task",
-  "updated_at": "2026-10-10T10:46:22Z"
+  "updated_at": "2026-10-10T10:50:20Z"
 }
