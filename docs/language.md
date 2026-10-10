@@ -33,6 +33,17 @@ Each construct below is marked **supported**, **supported with restrictions**
 or **unsupported** (with the error code it gets). Examples are kernels inside a
 module that has `use Defk`; `iex>` lines show what a call returns or raises.
 
+The tests run every example (`test/language_doc_examples_test.exs`). A
+block with a kernel in it is followed by a block of `iex>` lines calling the
+module as `M` (or by its own `defmodule` name), which run in native code and
+in Elixir mode and must give the result shown; or it has one of these
+comments on the line above its opening fence:
+`<!-- defk-example compiles: <reason> -->` (compiled only, where a run makes
+no sense), `<!-- defk-example error: <code> -->` (must fail with that code),
+`<!-- defk-example skip: <reason> -->` (a fragment, not checked), or
+`<!-- defk-example known-failure: <ticket> -->` (checked, and must still fail
+until the ticket is fixed). A kernel block with none of these fails the tests.
+
 ## 1. What a kernel is, and the one rule
 
 A **kernel** is a function written in the kernel subset with `defk`, compiled
@@ -240,6 +251,11 @@ defk mean_var(a :: [f64]) :: {f64, f64} do
 end
 ```
 
+```elixir
+iex> M.mean_var(<<1.0::float-native, 2.0::float-native, 3.0::float-native, 4.0::float-native>>)
+{2.5, 1.25}
+```
+
 ### Literals
 
 - Integer literals must fit in `i64` or `u64`
@@ -330,6 +346,13 @@ non-negative integer Elixir has.
       acc -> acc + h
     end
   end
+  ```
+
+  ```elixir
+  iex> M.total(<<9223372036854775808::unsigned-64-native, 1::unsigned-64-native>>)
+  9223372036854775809
+  iex> M.total(<<18446744073709551615::unsigned-64-native, 1::unsigned-64-native>>)
+  ** (ArithmeticError) u64 overflow in 18446744073709551615 + 1
   ```
 
 - A `case` on a `u64` is [`case-subject`](#case-subject).
@@ -506,6 +529,13 @@ defk fnv1a64(bytes :: [u8]) :: u64 do
 end
 ```
 
+```elixir
+iex> M.fnv1a64("")
+14695981039346656037
+iex> M.fnv1a64("a")
+12638187200555641996
+```
+
 The rule, the same in native code and Elixir mode:
 
 - The **wrapped tree** is the contiguous tree of `+`, `-` (binary and
@@ -562,6 +592,11 @@ defk mix32(h :: i64, k :: i64) :: i64 do
 end
 ```
 
+```elixir
+iex> M.mix32(0, 1)
+651101558
+```
+
 (defk-n4r.2, defk-wlu)
 
 ### Binary literals
@@ -596,6 +631,15 @@ end
 defk is_ham?(s :: [u8]) :: bool, do: starts_with?(s, "Ham")
 ```
 
+```elixir
+iex> M.hex_digit(255)
+102
+iex> M.is_ham?("Hamburg")
+true
+iex> M.starts_with?("Ha", "Ham")
+false
+```
+
 A write to a literal bound to a variable copies it first, like an input
 array's ([Copies](#copies)); a literal cannot be returned unwritten
 ([`return-input-array`](#return-input-array)), and it is not a `case`
@@ -624,7 +668,7 @@ end
 ```
 
 ```
-iex> Mod.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
+iex> M.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
 <<41, 1::size(1)>>
 ```
 
@@ -665,6 +709,11 @@ iex> Mod.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
       acc -> dod_bits(acc, d)
     end
   end
+  ```
+
+  ```elixir
+  iex> M.dods(<<0::64-native, -1::64-native, 100::64-native>>)
+  <<0::1, 0b10::2, -1::7-signed, 0b11::2, 100::32>>
   ```
 
   The call is inlined, so the parameter is the caller's accumulator under
@@ -755,6 +804,15 @@ end
 defk ones(i :: i64) :: i64 do
   @table[band(i, 7)]
 end
+```
+
+```elixir
+iex> M.clip(40_000)
+32767
+iex> M.clip(-40_000)
+-32768
+iex> M.ones(10)
+3
 ```
 
 A binary attribute is an array like an input array: it can be indexed (a
@@ -945,6 +1003,13 @@ defk sum_words(b :: [u8]) :: i64 do
 end
 ```
 
+```elixir
+iex> M.sum_words(<<1::64-little, 2::64-little, 7>>)
+3
+iex> M.sum_words(<<-1::64-little, 1::64-little>>)
+0
+```
+
 (defk-n4r.2)
 
 ### Allocating
@@ -1014,6 +1079,12 @@ defk histogram(bytes :: [u8]) :: [i64] do
 
   h
 end
+```
+
+```elixir
+iex> h = M.histogram(<<1, 1, 255>>)
+iex> {byte_size(h), :binary.part(h, 8, 8)}
+{2048, <<2::64-native>>}
 ```
 
 An input array is written the same way; here a HyperLogLog register update:
@@ -1168,6 +1239,15 @@ defk classify(x :: i64, y :: i64) :: i64 do
 end
 ```
 
+```elixir
+iex> M.classify(3, 3)
+0
+iex> M.classify(12, 0)
+12
+iex> M.classify(11, 0)
+2
+```
+
 - Patterns: integer literals (also negative), `true`/`false` for a `bool`
   subject, `^pinned` variables, `_`, and a variable, which binds the subject.
   A literal of the wrong type is [`case-pattern-type`](#case-pattern-type);
@@ -1233,6 +1313,15 @@ defk split(x :: i64, f :: f64) :: f64 do
 end
 ```
 
+```elixir
+iex> M.split(150, 1.0)
+51.0
+iex> M.split(-3, 2.0)
+1.0
+iex> M.split(7, 3.0)
+1.5
+```
+
 - Each element position has one type, checked on its own: `{x, f}` beside
   `{0, 0.5}` is an `{i64, f64}`, and `{x, f}` beside `{f, f}` is
   [`branch-types`](#branch-types) for element 1.
@@ -1268,6 +1357,13 @@ defk even_sum(n :: i64) :: i64 do
     acc -> acc + i
   end
 end
+```
+
+```elixir
+iex> M.even_sum(10)
+30
+iex> M.even_sum(-1)
+0
 ```
 
 - `reduce:` takes one `acc -> body` clause
@@ -1311,6 +1407,13 @@ defk prime_early?(x :: i64) :: bool do
 end
 ```
 
+```elixir
+iex> M.prime_early?(97)
+true
+iex> M.prime_early?(91)
+false
+```
+
 - `Enum.reduce_while(src, init, fn x, acc -> ... end)`: the accumulator may be
   a tuple. **The tail rule:** every path through the `fn` body ends in a
   literal `{:cont, acc}` or `{:halt, acc}`, directly or through
@@ -1349,6 +1452,12 @@ defk tally(keys :: [i64]) :: {[i64], [i64], i64} do
 end
 ```
 
+```elixir
+iex> {_slots, counts, n} = M.tally(<<1::64-native, 2::64-native, 1::64-native>>)
+iex> {:binary.part(counts, 8, 16), n}
+{<<2::64-native, 1::64-native>>, 2}
+```
+
 - The value the body gives (or the `acc` of `{:cont, acc}` and
   `{:halt, acc}`) is the accumulator of the next iteration, and after the
   last one the loop's value, as in Elixir. `tally` returns both tables.
@@ -1384,6 +1493,13 @@ defk fft_size(n :: i64) :: i64 do
   if n < 1 or band(n, n - 1) != 0, do: raise(ArgumentError, "n must be a power of two")
   ctz(n)
 end
+```
+
+```elixir
+iex> M.fft_size(1024)
+10
+iex> M.fft_size(12)
+** (ArgumentError) n must be a power of two
 ```
 
 - **A statement**, anywhere a statement goes: in a block before its value, in
@@ -1431,6 +1547,11 @@ defk prime?(x :: i64) :: bool do
     p -> p and rem(x, d) != 0
   end
 end
+```
+
+```elixir
+iex> M.count_primes(100)
+25
 ```
 
 - The call is inlined: the callee's body is compiled into the caller, so its
@@ -1582,7 +1703,6 @@ and replace everything from the first `###` heading of this section to the
 end of the section with its output (`test/language_doc_test.exs` fails until
 they match).
 
-Compiling 2 files (.ex)
 ### kernel-head
 
 A kernel head is `name(arg :: type, ...) :: return_type`.
