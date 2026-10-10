@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Measured provisionally UNDER LOAD (other agents building/testing, load avg 5-7.5), branch 5dbf94e (+ merge 0d5c424). bench/float_checks.exs, 1M elements, 3 runs x 11 interleaved rounds, best of 5 per round, main measured in the same session between runs:\n- mean_std cost: run medians +8.2%, +7.1%, +8.5% (min/min 8.2%, 9.7%, 8.6%; single rounds 2.9..11.9%). Main same session: 38.2%, 37.1%, 39.2%. Within 10% on medians, not in every round.\n- mean_std absolute: checks on 1937-1956 us (main 2621-2637), checks off 1788-1816 us (main 1893-1899).\n- dot/cosine: run medians -1.8..0.9% (noise). scale (unchanged C): 7.7-14.8% this session, main measured 4.3-14.9% in the same session -\u003e noise under load.\nDirection 2 (joined branchless flags) alone did NOT pay for mean_std: on main-equivalent sqrt it measured +15% slower checks-on and +11-14% slower checks-off than main's predicted branches (loop is scalar, nothing to vectorise); with __builtin_sqrt +6-8% on, ~0 off. What pays is what flagging allows: seen_later/1 leaves out checks whose inf/NaN always reaches a later checked float expression (the two [f64] reads feeding the sticky window sums, and mean feeding the variance expression), sqrt(max(x, 0.0)) needs no check, and sqrt is __builtin_sqrt. Hand-edited C experiments (same session): flagged body with those three checks removed = +7-8% vs +32-42% with them. Direction 1 (conditional facts from the guarding if) not implemented: x[i - w] would also need w \u003e= 0, which nothing in the kernel proves (w \u003c= 0 always raises in Elixir mode too), and i - w / w - 1 / m + i - w + 1 overflow checks stay; so for this kernel (1) cannot make the strip check-free. Follow-up filed. Other catalog loops: only Examples.Kernels.mean_var newly flagged (min 3495-3502 us vs main 3452-3477, ~+1%, noise level); FuzzySearch search loops no longer flagged (defk-60q), min +1-2%/median +-1% (noise).",
+      "timestamp": "2026-10-10T11:24:18Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Strips with mixed checks (bounds, overflow, float) keep per-operation float checks: rolling mean_std still +30%",
   "type": "task",
-  "updated_at": "2026-10-10T10:50:44Z"
+  "updated_at": "2026-10-10T11:24:18Z"
 }
