@@ -112,8 +112,99 @@ iex> Stats.dot(<<1.0::float-native, 2.0::float-native>>, <<3.0::float-native, 4.
   (`defk f(x :: i64) :: i64, yield: false do ... end`). It compiles the kernel
   without safepoints (see [section 9](#9-yielding-and-the-runtime-contract-in-practice)).
   Any other option is [`unknown-option`](#unknown-option).
-- Each name/arity is defined once; multi-clause kernels are not supported yet
-  ([`duplicate-kernel`](#duplicate-kernel)).
+- Each name/arity is defined once ([`duplicate-kernel`](#duplicate-kernel)):
+  by one typed definition with a body, or by a bodiless head and its clauses
+  ([below](#multi-clause-kernels)).
+
+### Multi-clause kernels
+
+**Supported with restrictions:** a kernel written as Elixir writes a
+multi-clause function. A head without a body gives the types, then each
+clause gives patterns, an optional guard, and a body:
+
+```elixir
+defk classify(x :: i64, strict :: bool) :: i64
+defk classify(0, _), do: 0
+defk classify(x, true) when x in 1..9, do: 1
+defk classify(x, _strict) when x > 0, do: 2
+defk classify(_, false), do: -1
+```
+
+```elixir
+iex> M.classify(0, true)
+0
+iex> M.classify(5, true)
+1
+iex> M.classify(50, true)
+2
+iex> M.classify(-3, false)
+-1
+iex> M.classify(-3, true)
+** (FunctionClauseError) no function clause matching in M.classify/2
+```
+
+- **The head** is `defk name(param :: type, ...) :: return_type` with no
+  body, optionally followed by `, yield: false`. The clauses come after it,
+  with the same name and arity, without types
+  ([`clause-types`](#clause-types)) or options
+  ([`unknown-option`](#unknown-option)). Clauses without a head, or before
+  it, are [`clause-head`](#clause-head); a head without clauses is
+  [`no-body`](#no-body).
+- **Patterns:** an integer literal for an `i64` parameter (also negative),
+  `true`/`false` for a `bool`, `_`, or a variable, which names that
+  parameter in the clause's guard and body. A literal of the wrong type, a
+  float, a tuple, `^pin` (a function head has no variable to pin) and a
+  variable named twice (`f(x, x)`: write `when x == y`) are
+  [`clause-pattern`](#clause-pattern). A parameter of any type may be a
+  variable or `_`.
+- **Scope:** as in Elixir, a clause sees only its own variables: a head
+  parameter's name that the clause does not bind at its position is
+  [`undefined-variable`](#undefined-variable) there (a body may still bind
+  it as a new local), and `_name` patterns give no warnings.
+- **Guards** are `case` guards ([`case`](#case)): the same expressions,
+  `in` with literal lists and ranges, and an error in a guard (a zero
+  divisor, an inf or NaN) fails the clause, so the next one is tried.
+- **No clause matching** raises `FunctionClauseError` with the kernel's
+  `module`, `function` and `arity`, and `kind`, `args` and `clauses` `nil`,
+  field for field what Elixir raises for the same `def` clauses. For a
+  kernel another kernel calls, `function` is that kernel, as for a `defp`
+  in Elixir. Elixir mode raises the same.
+- **Values:** every clause gives a value of one type (one tuple shape), as
+  the arms of a `case` do ([`branch-types`](#branch-types)), and the
+  result converts to the return type as a body's would.
+- **Entry kernels and helpers alike:** a multi-clause kernel may be called
+  from Elixir or from other kernels, including one that takes a
+  [bitstring accumulator](#the-bitstring-accumulator).
+- Clauses are tried in order. The kernel compiles to one `case` over its
+  parameters: the first parameter that a clause matches with a literal is
+  the subject, and a literal at another parameter is a test in front of that
+  clause's guard. Nothing is copied: the C is what the same `case` or `cond`
+  written by hand gives, an if-chain over the parameter (which clang turns
+  into a switch where that pays). (defk-u9c)
+
+A helper over the bitstring accumulator, as Gorilla's encoder writes its
+delta-of-delta buckets:
+
+```elixir
+defk dod_bits(acc :: bitstring, dod :: i64) :: bitstring
+defk dod_bits(acc, 0), do: <<acc::bitstring, 0::1>>
+
+defk dod_bits(acc, dod) when dod >= -64 and dod <= 63,
+  do: <<acc::bitstring, 0b10::2, dod::7-signed>>
+
+defk dod_bits(acc, dod), do: <<acc::bitstring, 0b11::2, band(dod, 0xFFFFFFFF)::32>>
+
+defk dods(ds :: [i64]) :: bitstring do
+  for d <- ds, reduce: <<>> do
+    acc -> dod_bits(acc, d)
+  end
+end
+```
+
+```elixir
+iex> M.dods(<<0::64-native, -1::64-native, 100::64-native>>)
+<<0::1, 0b10::2, -1::7-signed, 0b11::2, 100::32>>
+```
 
 ### What `use Defk` generates
 
@@ -720,6 +811,7 @@ iex> M.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
   <<0::1, 0b10::2, -1::7-signed, 0b11::2, 100::32>>
   ```
 
+  Such a kernel may also be written as [clauses](#multi-clause-kernels).
   The call is inlined, so the parameter is the caller's accumulator under
   another name: appending to it appends in place, and a loop in the callee
   yields with the bits built so far kept. It is still a plain Elixir value:
@@ -1855,11 +1947,11 @@ defk f(x :: i64) :: i64, do: x
 
 ### duplicate-kernel
 
-A kernel name and arity is defined once; multi-clause kernels are planned.
+A kernel name and arity is defined once: one typed definition with a body, or one bodiless head and its clauses.
 
-- kind: not supported yet (planned)
-- why: a kernel has one head and one body
-- hint: merge the clauses into one body with case or cond
+- kind: a mistake to fix (in the kernel or the build)
+- why: a kernel has one typed head; several bodies are clauses, which follow a bodiless head without types, as in Elixir
+- hint: for several clauses, write the typed head once without a body, then the clauses without types
 
 Rejected:
 
@@ -1879,6 +1971,77 @@ Write instead:
 defk f(x :: i64) :: i64 do
   x + 1
 end
+```
+
+### clause-head
+
+A multi-clause kernel starts with a bodiless typed head, before its clauses.
+
+- kind: a mistake to fix (in the kernel or the build)
+- why: a clause has patterns, not types; the head gives the kernel its parameter and return types, and Elixir reads the head first too
+- hint: write `defk name(param :: type, ...) :: return_type` without a body above the first clause
+
+Rejected:
+
+```elixir
+defk f(0), do: 1
+defk f(x), do: x * 2
+```
+
+Write instead:
+
+```elixir
+defk f(x :: i64) :: i64
+defk f(0), do: 1
+defk f(x), do: x * 2
+```
+
+### clause-types
+
+Only the head of a multi-clause kernel has types; its clauses have patterns.
+
+- kind: a mistake to fix (in the kernel or the build)
+- why: the head declares each parameter's type and the result once, for every clause
+- hint: remove the types from the clause
+
+Rejected:
+
+```elixir
+defk f(x :: i64) :: i64
+defk f(0 :: i64) :: i64, do: 1
+defk f(x), do: x * 2
+```
+
+Write instead:
+
+```elixir
+defk f(x :: i64) :: i64
+defk f(0), do: 1
+defk f(x), do: x * 2
+```
+
+### clause-pattern
+
+A clause parameter is an integer literal (i64), true/false (bool), a variable or _, each variable once, with an optional guard.
+
+- kind: outside the kernel subset (permanent)
+- why: the clauses compile to a case over the parameters, which matches single i64 and bool values; a function head has no variables to pin
+- hint: match a literal, a variable or _, and test the rest in the guard
+
+Rejected:
+
+```elixir
+defk f(x :: i64, y :: i64) :: i64
+defk f(x, x), do: 0
+defk f(x, y), do: x - y
+```
+
+Write instead:
+
+```elixir
+defk f(x :: i64, y :: i64) :: i64
+defk f(x, y) when x == y, do: 0
+defk f(x, y), do: x - y
 ```
 
 ### return-type

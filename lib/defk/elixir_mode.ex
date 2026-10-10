@@ -120,7 +120,7 @@ defmodule Defk.ElixirMode do
 
     entries =
       for sig <- sigs, not Defk.Bitstring.helper?(sig) do
-        vs = for {p, _} <- sig.params, do: var(p)
+        vs = Defk.arg_vars(sig.params)
 
         quote generated: true do
           def __defk_elixir__(unquote(sig.name), [unquote_splicing(vs)] = args) do
@@ -718,13 +718,13 @@ defmodule Defk.ElixirMode do
       scoped(fn ->
         {sq, st} = expr(subject, env)
         s = temp("case")
-        {{:=, [generated: true], [s, sq]}, case_arms(clauses, s, st, mode, env)}
+        {{:=, [generated: true], [s, sq]}, case_arms(clauses, s, st, mode, env, m)}
       end)
 
     finish(arms, threaded(writes, env), mode, m, [bind_subject])
   end
 
-  defp case_arms(clauses, s, st, mode, env) do
+  defp case_arms(clauses, s, st, mode, env, m) do
     Enum.reduce_while(clauses, {[], MapSet.new()}, fn {:->, _, [[head], body]}, {arms, seen} ->
       {pat, guard} = case_clause_head(head)
       {test, benv, prefix} = case_pattern(pat, s, st, env)
@@ -746,7 +746,24 @@ defmodule Defk.ElixirMode do
         Enum.reverse(arms)
 
       {arms, _} ->
-        Enum.reverse([{:raise, quote(do: raise(CaseClauseError, term: unquote(s)))} | arms])
+        Enum.reverse([{:raise, no_clause(s, m)} | arms])
+    end
+  end
+
+  # CaseClauseError, or the FunctionClauseError of the multi-clause kernel
+  # the case stands for (Defk.Clauses), as Elixir raises it
+  defp no_clause(s, m) do
+    case m[:defk_clauses] do
+      {name, arity} ->
+        quote do:
+                raise(FunctionClauseError,
+                  module: __MODULE__,
+                  function: unquote(name),
+                  arity: unquote(arity)
+                )
+
+      nil ->
+        quote do: raise(CaseClauseError, term: unquote(s))
     end
   end
 
@@ -1263,7 +1280,7 @@ defmodule Defk.ElixirMode do
       scoped(fn ->
         {sq, st} = expr(subject, env)
         s = temp("case")
-        {sq, s, case_arms(clauses, s, st, {:tail, leaf}, env)}
+        {sq, s, case_arms(clauses, s, st, {:tail, leaf}, env, m)}
       end)
 
     block([{:=, [generated: true], [s, sq]}, tail_finish(arms, writes, env, m)])

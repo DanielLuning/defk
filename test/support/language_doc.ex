@@ -382,7 +382,7 @@ defmodule Defk.LanguageDoc do
     native = eval(:native, src, binding)
     elixir = eval(:elixir, src, binding)
     agree!(where, native, elixir)
-    documented!(where, native, s.expected)
+    documented!(where, native, s.expected, {inspect(mod), ex.name})
 
     case native do
       {:ok, _, binding} -> binding
@@ -412,19 +412,21 @@ defmodule Defk.LanguageDoc do
   defp agree!(where, native, elixir),
     do: flunk("#{where}: native #{show(native)}, Elixir mode #{show(elixir)}")
 
-  defp documented!(_, _, nil), do: :ok
+  # `as`: {the module's name, the name the iex lines call it}, which a
+  # message naming the module (a FunctionClauseError's) is documented with
+  defp documented!(_, _, nil, _as), do: :ok
 
-  defp documented!(where, {:ok, value, _}, {:value, src}) do
+  defp documented!(where, {:ok, value, _}, {:value, src}, _as) do
     {expected, _} = Code.eval_string(src)
     assert value === expected, "#{where}: documented #{src}, got #{inspect(value)}"
   end
 
-  defp documented!(where, {:raise, e}, {:raise, mod, msg}) do
-    got = {inspect(e.__struct__), Exception.message(e)}
+  defp documented!(where, {:raise, e}, {:raise, mod, msg}, {real, name}) do
+    got = {inspect(e.__struct__), String.replace(Exception.message(e), real, name)}
     assert got == {mod, msg}, "#{where}: documented ** (#{mod}) #{msg}, got #{show({:raise, e})}"
   end
 
-  defp documented!(where, native, expected),
+  defp documented!(where, native, expected, _as),
     do: flunk("#{where}: documented #{inspect(expected)}, got #{show(native)}")
 
   defp show({:ok, v, _}), do: inspect(v)

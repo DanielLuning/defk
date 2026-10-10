@@ -115,12 +115,47 @@ defmodule Defk.Errors do
     },
     %{
       code: "duplicate-kernel",
-      kind: :planned,
-      summary: "A kernel name and arity is defined once; multi-clause kernels are planned.",
-      why: "a kernel has one head and one body",
-      hint: "merge the clauses into one body with case or cond",
+      kind: :error,
+      summary:
+        "A kernel name and arity is defined once: one typed definition with a body, or one bodiless head and its clauses.",
+      why:
+        "a kernel has one typed head; several bodies are clauses, which follow a bodiless head without types, as in Elixir",
+      hint:
+        "for several clauses, write the typed head once without a body, then the clauses without types",
       example: "defk f(x :: i64) :: i64 do\n  x\nend\n\ndefk f(x :: i64) :: i64 do\n  x + 1\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  x + 1\nend"
+    },
+    %{
+      code: "clause-head",
+      kind: :error,
+      summary: "A multi-clause kernel starts with a bodiless typed head, before its clauses.",
+      why:
+        "a clause has patterns, not types; the head gives the kernel its parameter and return types, and Elixir reads the head first too",
+      hint:
+        "write `defk name(param :: type, ...) :: return_type` without a body above the first clause",
+      example: "defk f(0), do: 1\ndefk f(x), do: x * 2",
+      rewrite: "defk f(x :: i64) :: i64\ndefk f(0), do: 1\ndefk f(x), do: x * 2"
+    },
+    %{
+      code: "clause-types",
+      kind: :error,
+      summary: "Only the head of a multi-clause kernel has types; its clauses have patterns.",
+      why: "the head declares each parameter's type and the result once, for every clause",
+      hint: "remove the types from the clause",
+      example: "defk f(x :: i64) :: i64\ndefk f(0 :: i64) :: i64, do: 1\ndefk f(x), do: x * 2",
+      rewrite: "defk f(x :: i64) :: i64\ndefk f(0), do: 1\ndefk f(x), do: x * 2"
+    },
+    %{
+      code: "clause-pattern",
+      kind: :subset,
+      summary:
+        "A clause parameter is an integer literal (i64), true/false (bool), a variable or _, each variable once, with an optional guard.",
+      why:
+        "the clauses compile to a case over the parameters, which matches single i64 and bool values; a function head has no variables to pin",
+      hint: "match a literal, a variable or _, and test the rest in the guard",
+      example: "defk f(x :: i64, y :: i64) :: i64\ndefk f(x, x), do: 0\ndefk f(x, y), do: x - y",
+      rewrite:
+        "defk f(x :: i64, y :: i64) :: i64\ndefk f(x, y) when x == y, do: 0\ndefk f(x, y), do: x - y"
     },
 
     # -- results and blocks
