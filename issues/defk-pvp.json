@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-09T22:06:51Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "A binding inside a nested __block__ is scoped to the block, where Elixir leaks it",
   "type": "bug",
-  "updated_at": "2026-10-09T22:06:51Z"
+  "updated_at": "2026-10-10T09:53:59Z"
 }
