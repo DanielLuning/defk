@@ -1,0 +1,16 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-10T14:27:48Z",
+  "description": "Found by defk-9p6.12 (examples/ws_masking.exs). A kernel that implements a behaviour callback (Bandit.PrimitiveOps.WebSocket.ws_mask/2) cannot carry @impl true: written before the defk, the attribute attaches to the first function the macro generates, __defk_load__/0, and Elixir warns 'got @impl true for __defk_load__/0 but no behaviour specifies such callback'. The kernel still satisfies the behaviour, so the example leaves @impl out (noted in its header). Done when @impl (true or a behaviour module) before a defk applies to the kernel's public function and the generated helpers carry none, with a test that a behaviour-implementing kernel compiles without warnings under --warnings-as-errors.",
+  "id": "defk-ltt",
+  "labels": [
+    "needs-triage"
+  ],
+  "priority": 3,
+  "status": "open",
+  "title": "@impl true before a defk attaches to __defk_load__/0, not the kernel",
+  "type": "bug",
+  "updated_at": "2026-10-10T14:27:48Z"
+}
