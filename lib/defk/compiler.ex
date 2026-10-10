@@ -80,14 +80,24 @@ defmodule Defk.Compiler do
 
     sigs = Map.new(kernels, &{{&1.name, &1.arity}, &1})
 
-    # per kernel, the names it appends to: `<<>>` bound to one is a bitstring
+    # per kernel, the names it appends to or passes to a helper's bitstring
+    # parameter: `<<>>` bound to one is a bitstring
+    bits_params = Defk.Bitstring.bits_params(kernels)
+
     Process.put(
       :defk_bits_names,
-      Map.new(kernels, &{{&1.name, &1.arity}, Defk.Bitstring.accumulator_names(&1.body)})
+      Map.new(
+        kernels,
+        &{{&1.name, &1.arity}, Defk.Bitstring.accumulator_names(&1.body, bits_params)}
+      )
     )
 
+    # a kernel taking a bitstring is a helper: only inlined, never an entry
+    {helpers, entries} = Enum.split_with(kernels, &Defk.Bitstring.helper?/1)
+    unreached_helpers!(helpers, entries, sigs)
+
     lowered =
-      Enum.flat_map(kernels, fn k ->
+      Enum.flat_map(entries, fn k ->
         case attempt({k.name, k.arity}, k.head, fn -> lower_kernel(k, sigs) end) do
           {:ok, l} -> [l]
           :error -> []
@@ -115,8 +125,62 @@ defmodule Defk.Compiler do
       ]
       |> IO.iodata_to_binary()
 
-    {c, Enum.map(lowered, &Map.take(&1, [:name, :arity, :params, :ret]))}
+    # every kernel's signature, helpers included (Elixir mode defines them too)
+    {c, Enum.map(kernels, &Map.take(&1, [:name, :arity, :params, :ret]))}
   end
+
+  # A helper (a kernel with a bitstring parameter, defk-ooq) has no NIF: it
+  # is compiled only where a kernel inlines it, since only a kernel has a
+  # bitstring to pass. One that no entry kernel reaches would be an entry
+  # kernel taking a bitstring from Elixir, so it is rejected.
+  defp unreached_helpers!(helpers, entries, sigs) do
+    reached = reach(Enum.map(entries, &{&1.name, &1.arity}), sigs, %{})
+
+    for k <- helpers, not Map.has_key?(reached, {k.name, k.arity}) do
+      {p, _} = Enum.find(k.params, &match?({_, :bitstring}, &1))
+      param = Enum.find(params_ast(k.head), &match?({:"::", _, [{^p, _, _}, _]}, &1))
+
+      attempt_err!(
+        {k.name, k.arity},
+        k.head,
+        "bitstring-use",
+        "#{k.name}/#{k.arity} takes the bitstring #{p}, so only a kernel can call it, and no kernel called from Elixir does: Elixir cannot pass a bitstring accumulator to an entry kernel",
+        at: param,
+        hint:
+          "call #{k.name}/#{k.arity} from the kernel that builds the accumulator, which inlines it; a kernel called from Elixir takes bytes as a [u8] parameter"
+      )
+    end
+  end
+
+  # `keys` and the kernels they call, directly or through other kernels, as
+  # the keys of `seen` (a map, not a MapSet: dialyzer treats a MapSet built
+  # up in a recursion as opaque)
+  defp reach([], _sigs, seen), do: seen
+
+  defp reach([key | rest], sigs, seen) do
+    if Map.has_key?(seen, key) do
+      reach(rest, sigs, seen)
+    else
+      reach(callees(sigs[key].body, sigs) ++ rest, sigs, Map.put(seen, key, true))
+    end
+  end
+
+  defp callees(body, sigs) do
+    {_, keys} =
+      Macro.prewalk(body, [], fn
+        {name, _, args} = node, acc when is_atom(name) and is_list(args) ->
+          key = {name, length(args)}
+          {node, if(Map.has_key?(sigs, key), do: [key | acc], else: acc)}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    keys
+  end
+
+  defp params_ast({:"::", _, [{_, _, params}, _]}) when is_list(params), do: params
+  defp params_ast(_head), do: []
 
   # ---------------------------------------------------------- rejections ---
   # err!/4 throws a rejection with a code from Defk.Errors. A rejected
@@ -176,12 +240,14 @@ defmodule Defk.Compiler do
   # `attempt/3` for a rejection that is the whole action: records it and
   # returns nil. The throwing call is written inline rather than in a fun,
   # which Dialyzer would flag as a no-return anonymous function.
-  defp attempt_err!(key, head, code, what) do
+  # opts: `at:` the node to report at (default: the head), and err!/4's
+  defp attempt_err!(key, head, code, what, opts \\ []) do
     Process.put(:defk_fun, key)
     Process.put(:defk_ctx, head)
+    {at, opts} = Keyword.pop(opts, :at)
 
     try do
-      err!(head, code, what)
+      err!(at || head, code, what, opts)
     catch
       {:defk_reject, d} -> record(d)
     end
@@ -339,15 +405,6 @@ defmodule Defk.Compiler do
 
   defp parse_param({:"::", _, [{p, _, ctx}, t]} = param) when is_atom(p) and is_atom(ctx) do
     ty = parse_type(t, param)
-
-    ty == :bitstring &&
-      err!(
-        param,
-        "bitstring-use",
-        "the bitstring parameter #{p} :: bitstring is not supported yet: a kernel builds bitstrings but does not take them",
-        hint: "pass bytes as a [u8] parameter",
-        rewrite: "#{p} :: [u8]"
-      )
 
     if match?({:tuple, _}, ty) do
       {:tuple, ts} = ty
@@ -2533,7 +2590,7 @@ defmodule Defk.Compiler do
     # bind each argument to a parameter once, as `p = arg` binds it
     {binds, vars} =
       Enum.zip_with([vals, k.params, args], fn [v, {p, t}, a] ->
-        v.t == :bitstring && bits_argument!(a, k)
+        (v.t == :bitstring and t != :bitstring) && bits_argument!(a, k, p, t)
         v = coerce!(v, t, a, "argument #{p} of #{k.name}/#{k.arity}")
 
         if match?({:arr, _}, t) do
@@ -2759,13 +2816,14 @@ defmodule Defk.Compiler do
     )
   end
 
-  @spec bits_argument!(term(), term()) :: no_return()
-  defp bits_argument!(a, k) do
+  @spec bits_argument!(term(), term(), atom(), term()) :: no_return()
+  defp bits_argument!(a, k, p, t) do
     err!(
       a,
       "bitstring-use",
-      "passing the bitstring #{Macro.to_string(a)} to #{k.name}/#{k.arity} is not supported yet",
-      hint: "append in the caller: a called kernel can return the values and sizes to append"
+      "passing the bitstring #{Macro.to_string(a)} to #{k.name}/#{k.arity} as #{p} :: #{fmt(t)} is not supported: a bitstring is not read",
+      hint:
+        "declare the parameter #{p} :: bitstring to append to it in #{k.name}/#{k.arity}, and return it"
     )
   end
 
