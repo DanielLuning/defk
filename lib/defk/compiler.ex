@@ -1641,23 +1641,48 @@ defmodule Defk.Compiler do
     {[sa, sb], v}
   end
 
-  # i64 + - * checked for overflow, with range facts
+  # i64 + - * checked for overflow, with range facts; no check when the
+  # operands' facts keep every result inside i64 (defk-upc)
   defp i64_arith(op, va, vb, env) do
-    case {op, va.t, vb.t} do
-      {:+, :i64, :i64} ->
-        Map.merge(
-          val("defk_add_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
-          add_facts(va, vb)
-        )
+    {fun, facts, {lo, hi}} =
+      case op do
+        :+ ->
+          {"add", add_facts(va, vb), {add(lo_of(va), lo_of(vb)), add(hi_of(va), hi_of(vb))}}
 
-      {:-, :i64, :i64} ->
-        Map.merge(
-          val("defk_sub_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64),
-          sub_facts(va, vb)
-        )
+        :- ->
+          {"sub", sub_facts(va, vb),
+           {add(lo_of(va), neg(hi_of(vb))), add(hi_of(va), neg(lo_of(vb)))}}
 
-      {:*, :i64, :i64} ->
-        val("defk_mul_i64#{checked(env)}, #{va.c}, #{vb.c})", :i64)
+        :* ->
+          {"mul", mul_facts(va, vb), mul_range(va, vb)}
+      end
+
+    c =
+      if in_i64?(lo, hi),
+        do: "(#{va.c} #{op} #{vb.c})",
+        else: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"
+
+    Map.merge(val(c, :i64), facts)
+  end
+
+  # div or rem of two integers, checked for a zero divisor (and i64 div for
+  # overflow)
+  defp int_div(f, a, b, node, env) do
+    case {int_pair!(a, b, node), env} do
+      {{:i64, a, b}, %{bad: bad, ovf: ovf}} when f == :div ->
+        val("defk_div_i64_g(&#{bad}, &#{ovf}, #{a.c}, #{b.c})", :i64)
+
+      {{:i64, a, b}, %{bad: bad}} ->
+        val("defk_rem_i64_g(&#{bad}, #{a.c}, #{b.c})", :i64)
+
+      {{:u64, a, b}, %{bad: bad}} ->
+        val("defk_#{f}_u64_g(&#{bad}, #{a.c}, #{b.c})", :u64)
+
+      {{:i64, a, b}, _} ->
+        val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
+
+      {{:u64, a, b}, _} ->
+        val("defk_#{f}_u64(ctx, #{a.c}, #{b.c})", :u64)
     end
   end
 
@@ -2455,21 +2480,14 @@ defmodule Defk.Compiler do
 
   defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, env)
        when f in [:div, :rem] and ta in @ints and tb in @ints do
-    case {int_pair!(a, b, node), env} do
-      {{:i64, a, b}, %{bad: bad, ovf: ovf}} when f == :div ->
-        val("defk_div_i64_g(&#{bad}, &#{ovf}, #{a.c}, #{b.c})", :i64)
+    v = int_div(f, a, b, node, env)
 
-      {{:i64, a, b}, %{bad: bad}} ->
-        val("defk_rem_i64_g(&#{bad}, #{a.c}, #{b.c})", :i64)
+    case {f, v, b} do
+      {:div, %{t: :i64}, %{lo: k, hi: k}} when is_integer(k) and k > 0 ->
+        Map.merge(v, div_facts_of(a, k))
 
-      {{:u64, a, b}, %{bad: bad}} ->
-        val("defk_#{f}_u64_g(&#{bad}, #{a.c}, #{b.c})", :u64)
-
-      {{:i64, a, b}, _} ->
-        val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
-
-      {{:u64, a, b}, _} ->
-        val("defk_#{f}_u64(ctx, #{a.c}, #{b.c})", :u64)
+      _ ->
+        v
     end
   end
 
@@ -3056,18 +3074,12 @@ defmodule Defk.Compiler do
     near_limit =
       cond do
         is_integer(k) and k > 0 ->
-          safe? =
-            (is_integer(vb[:hi]) and vb[:hi] <= @i64_max - k) or
-              (k <= @i64_max - 2 ** 61 and Enum.any?(ub(vb), fn {_, d} -> d <= 0 end))
-
-          if !safe?, do: "#{e} > INT64_C(#{@i64_max - k})"
+          hi = hi_of(vb)
+          if !(is_integer(hi) and hi <= @i64_max - k), do: "#{e} > INT64_C(#{@i64_max - k})"
 
         is_integer(k) ->
-          safe? =
-            (is_integer(vb[:lo]) and vb[:lo] >= @i64_min - k) or
-              Enum.any?(lb(vb), fn {_, d} -> d >= @i64_min - k end)
-
-          if !safe?, do: "#{e} < INT64_C(#{@i64_min - k})"
+          lo = lo_of(vb)
+          if !(is_integer(lo) and lo >= @i64_min - k), do: "#{e} < INT64_C(#{@i64_min - k})"
 
         true ->
           "(#{k} > 0 ? #{e} > INT64_MAX - #{k} : #{e} < INT64_MIN - #{k})"
@@ -4193,15 +4205,56 @@ defmodule Defk.Compiler do
   # ---------------------------------------------------------- range facts --
   # An i64 value may carry facts that let a[i] skip its bounds check:
   #   lo, hi - constants with lo <= v <= hi (nil = unknown)
-  #   lb, ub - %{array_cvar => k}: v >= len(array) + k, v <= len(array) + k
+  #   lb, ub - %{array_cvar => k}: v >= len(array) + k, v <= len(array) + k;
+  #            a multiple or quotient of a length (defk-upc) has the key
+  #            {array_cvar, p, q}, p >= 0 and q >= 1 coprime and not both 1:
+  #            q * v >= p * len(array) + k, q * v <= p * len(array) + k
   # An array may carry len_lo / len_lb: the same lower bounds for its length.
   # Facts are exact for checked arithmetic (an overflow raises, never wraps).
   # They name array C variables, which are assigned in one place, never change
   # length, and stay in scope only where every fact about them was derived.
+  # Every length is below 2^61 (DEFK_ALLOC_MAX_BYTES, and the largest
+  # binary), so an ub fact also bounds v by a constant (hi_of/1).
 
   defp lb(v), do: v[:lb] || %{}
   defp ub(v), do: v[:ub] || %{}
   defp len_lb(a), do: a[:len_lb] || %{}
+
+  @len_max 2 ** 61 - 1
+
+  defp scale({_arr, _p, _q} = key), do: key
+  defp scale(arr), do: {arr, 1, 1}
+
+  # the fact q * v <= p * len(arr) + k (dir :ub) or >= (:lb), with p and q
+  # made coprime: dividing by their gcd rounds k down for ub, up for lb
+  defp norm_fact(arr, p, q, k, dir) do
+    g = Integer.gcd(p, q)
+    k = if dir == :ub, do: Integer.floor_div(k, g), else: -Integer.floor_div(-k, g)
+
+    case {div(p, g), div(q, g)} do
+      {1, 1} -> {arr, k}
+      {p, q} -> {{arr, p, q}, k}
+    end
+  end
+
+  # the constant bounds v's facts give, its lb/ub facts included
+  defp lo_of(v) do
+    Enum.reduce(lb(v), v[:lo], fn {key, k}, lo ->
+      {_, _, q} = scale(key)
+      either(lo, -Integer.floor_div(-k, q), &max/2)
+    end)
+  end
+
+  defp hi_of(v) do
+    Enum.reduce(ub(v), v[:hi], fn {key, k}, hi ->
+      {_, p, q} = scale(key)
+      either(hi, Integer.floor_div(p * @len_max + k, q), &min/2)
+    end)
+  end
+
+  # a value within lo..hi needs no i64 overflow check
+  defp in_i64?(lo, hi),
+    do: is_integer(lo) and is_integer(hi) and lo >= @i64_min and hi <= @i64_max
 
   # ------------------------------------------------------- element types --
   # A narrow element (u8, i16, i32, f32) widens when read: an integer to an
@@ -4263,14 +4316,28 @@ defmodule Defk.Compiler do
 
   # 0 <= i < len(a); with a width w (a word load), 0 <= i and i + w <= len(a)
   defp in_bounds?(a, i, w \\ 1) do
+    lo = lo_of(i)
     i = if w == 1, do: i, else: %{lo: i[:lo], hi: add(i[:hi], w - 1), ub: shift(ub(i), w - 1)}
+    hi = hi_of(i)
 
     below? =
-      Map.get(ub(i), a.c, 0) < 0 or
-        (is_integer(a[:len_lo]) and is_integer(i[:hi]) and i[:hi] < a[:len_lo]) or
-        Enum.any?(len_lb(a), fn {y, d} -> match?(%{^y => o} when o - d < 0, ub(i)) end)
+      (is_integer(a[:len_lo]) and is_integer(hi) and hi < a[:len_lo]) or
+        Enum.any?(ub(i), &below_len?(&1, a.c, len_lb(a)))
 
-    is_integer(i[:lo]) and i[:lo] >= 0 and below?
+    is_integer(lo) and lo >= 0 and below?
+  end
+
+  # q * i <= p * len(y) + o proves i < len(a): y is a with p <= q and o < 0,
+  # or len(a) has a lower bound q1 * len(a) >= p1 * len(y) + d with
+  # p / q <= p1 / q1 and o / q < d / q1
+  defp below_len?({key, o}, arr, len_lb) do
+    {y, p, q} = scale(key)
+
+    (y == arr and p <= q and o < 0) or
+      Enum.any?(len_lb, fn {key1, d} ->
+        {y1, p1, q1} = scale(key1)
+        y1 == y and p * q1 <= p1 * q and o * q1 < d * q
+      end)
   end
 
   defp add_facts(a, b) do
@@ -4288,6 +4355,56 @@ defmodule Defk.Compiler do
       hi: add(a[:hi], neg(b[:lo])),
       lb: shift(lb(a), neg(b[:hi])),
       ub: shift(ub(a), neg(b[:lo]))
+    }
+  end
+
+  # a product: lo..hi from the operands' (nil when one is unbounded), and
+  # for a constant k >= 1 times v, v's facts scaled by k
+  defp mul_facts(a, b) do
+    case {a, b} do
+      {%{lo: k, hi: k}, v} when is_integer(k) and k > 0 ->
+        scaled(v, k)
+
+      {v, %{lo: k, hi: k}} when is_integer(k) and k > 0 ->
+        scaled(v, k)
+
+      _ ->
+        Map.new(
+          Enum.zip([:lo, :hi], Tuple.to_list(mul_bounds({a[:lo], a[:hi]}, {b[:lo], b[:hi]})))
+        )
+    end
+  end
+
+  defp scaled(v, k) do
+    %{
+      lo: v[:lo] && v[:lo] * k,
+      hi: v[:hi] && v[:hi] * k,
+      lb: scale_facts(lb(v), k, :lb),
+      ub: scale_facts(ub(v), k, :ub)
+    }
+  end
+
+  # every value of a * b, with the bounds lb/ub facts give (lo_of, hi_of)
+  defp mul_range(a, b), do: mul_bounds({lo_of(a), hi_of(a)}, {lo_of(b), hi_of(b)})
+
+  defp mul_bounds({a1, a2}, {b1, b2})
+       when is_integer(a1) and is_integer(a2) and is_integer(b1) and is_integer(b2) do
+    ps = [a1 * b1, a1 * b2, a2 * b1, a2 * b2]
+    {Enum.min(ps), Enum.max(ps)}
+  end
+
+  defp mul_bounds(_a, _b), do: {nil, nil}
+
+  # div(v, k) for a literal k >= 1: div is monotonic, and v's facts divided
+  # (ub only for v >= 0, where div rounds down rather than towards zero)
+  defp div_facts_of(v, k) do
+    ub = if is_integer(lo_of(v)) and lo_of(v) >= 0, do: div_facts(ub(v), k, :ub), else: %{}
+
+    %{
+      lo: v[:lo] && div(v[:lo], k),
+      hi: v[:hi] && div(v[:hi], k),
+      lb: div_facts(lb(v), k, :lb),
+      ub: ub
     }
   end
 
@@ -4355,8 +4472,32 @@ defmodule Defk.Compiler do
   defp neg(x) when is_integer(x), do: -x
   defp neg(_), do: nil
 
+  # the facts of v + k from those of v
   defp shift(_facts, nil), do: %{}
-  defp shift(facts, k), do: Map.new(facts, fn {arr, o} -> {arr, o + k} end)
+
+  defp shift(facts, k) do
+    Map.new(facts, fn {key, o} ->
+      {_, _, q} = scale(key)
+      {key, o + q * k}
+    end)
+  end
+
+  # the facts of v * k, k >= 1, or div(v, k), k >= 1 (the ub facts only for
+  # v >= 0, where div rounds down): q * div(v, k) * k <= q * v, and
+  # q * div(v, k) * k >= q * (v - k + 1)
+  defp scale_facts(facts, k, dir) do
+    Map.new(facts, fn {key, o} ->
+      {arr, p, q} = scale(key)
+      norm_fact(arr, k * p, q, k * o, dir)
+    end)
+  end
+
+  defp div_facts(facts, k, dir) do
+    Map.new(facts, fn {key, o} ->
+      {arr, p, q} = scale(key)
+      norm_fact(arr, p, k * q, if(dir == :ub, do: o, else: o - q * (k - 1)), dir)
+    end)
+  end
 
   # combine optional bounds: `both` needs both known, `either` is valid with one
   defp both(x, y, f) when is_integer(x) and is_integer(y), do: f.(x, y)
