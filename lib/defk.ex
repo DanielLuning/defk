@@ -115,6 +115,8 @@ defmodule Defk do
       def __defk_kernels__, do: unquote(Macro.escape(sigs))
       @doc "Testing: `true` makes this module's kernels yield at every clock read."
       def __defk_force_yields__(_on), do: :erlang.nif_error(:defk_not_loaded)
+      @doc false
+      def __defk_corrupt_tags__(_on), do: :erlang.nif_error(:defk_not_loaded)
       unquote_splicing(stubs)
       unquote_splicing(elixir_mode)
     end
