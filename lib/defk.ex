@@ -16,6 +16,10 @@ defmodule Defk do
   (passed as binaries in native byte order), tuples as return values, and
   `bitstring` as a return value (the bitstring accumulator) or as the
   parameter of a kernel that other kernels call.
+
+  Every module also gets `__defk_report__/0`, the fast-path report
+  (`Defk.Report`); `use Defk, report: :full` adds clang's vectorisation of
+  each loop to it.
   """
 
   # compile-time attribute: the defk app is not loaded when this module is
@@ -26,14 +30,17 @@ defmodule Defk do
 
   defmacro __using__(opts) do
     elixir_mode = Keyword.get(opts, :elixir_mode, false)
+    report = Keyword.get(opts, :report)
 
-    if Keyword.keys(opts) -- [:elixir_mode] != [] or not is_boolean(elixir_mode) do
+    if Keyword.keys(opts) -- [:elixir_mode, :report] != [] or not is_boolean(elixir_mode) or
+         report not in [nil, :full] do
       raise ArgumentError,
-            "use Defk accepts only `elixir_mode: true | false`, got: #{Macro.to_string(opts)}"
+            "use Defk accepts only `elixir_mode: true | false` and `report: :full`, got: #{Macro.to_string(opts)}"
     end
 
     quote do
       @defk_elixir_mode unquote(elixir_mode)
+      @defk_report unquote(report)
       import Defk, only: [defk: 2, defk: 3]
       Module.register_attribute(__MODULE__, :defk_kernels, accumulate: true)
       @defk_mode Application.compile_env(:defk, :mode, :native)
@@ -87,6 +94,13 @@ defmodule Defk do
     {c_src, all_sigs} = Defk.Compiler.compile(env.module, kernels, env.file, nif_name: nif_name)
     lib = Defk.Build.build!(env.module, c_src, env.file)
 
+    # the fast-path report: defk's own notes, and clang's vectorisation under
+    # `report: :full` (an extra compiler pass, Defk.Report.full/3)
+    report =
+      if Module.get_attribute(env.module, :defk_report) == :full,
+        do: Defk.Report.full(Defk.Compiler.report(), c_src, lib),
+        else: Defk.Compiler.report()
+
     # a helper (a kernel taking a bitstring) is only inlined: no function
     sigs = Enum.reject(all_sigs, &Defk.Bitstring.helper?/1)
 
@@ -107,6 +121,8 @@ defmodule Defk do
       def __defk_load__, do: :erlang.load_nif(unquote(String.to_charlist(lib)), 0)
       @doc "Generated C source."
       def __defk_source__, do: unquote(c_src)
+      @doc "The fast-path report, `[{kernel, line, fact}]`; see `Defk.Report`."
+      def __defk_report__, do: unquote(Macro.escape(report))
       @doc "Path of the compiled NIF library."
       def __defk_lib__, do: unquote(lib <> ".so")
       @doc "Runtime counters: frames_live, promotions, yields."
