@@ -10,9 +10,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Decision (b), delete. Evidence: defk-ne6 (agreement properties) is closed and every divergence it or defk-63k found (t11.2, 9xh, i00, 6g6, 776) was fixed, none open (bw list --grep diverg shows none). Nothing references Defk.Divergences except a docs/language.md sentence and a README row. CONTEXT.md policy: each divergence is a bug to remove or a limit in docs/language.md. A registry would only be needed for a divergence unfixable before the verdict; none exists. Removed the module, updated README and language.md section 13.",
+      "timestamp": "2026-10-10T09:07:05Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Implement the Defk.Divergences registry per defk-63k, or delete the stub",
   "type": "task",
-  "updated_at": "2026-10-10T09:05:53Z"
+  "updated_at": "2026-10-10T09:07:05Z"
 }
