@@ -3,7 +3,9 @@
   "blocked_by": [
     "defk-ulk.1"
   ],
-  "blocks": [],
+  "blocks": [
+    "defk-ulk.7"
+  ],
   "created": "2026-10-10T14:54:36Z",
   "description": "Before any language work, find out what a portable vector type would buy and cost.\n\n- Ceiling: hand-write two SIMD algorithms in C with GCC/Clang vector extensions (__attribute__((vector_size)), __builtin_shufflevector), not per-arch intrinsics, compiled for portable and architecture targets: simdutf8-style UTF-8 validation (vs examples/utf8_valid.exs and String.valid?) and a SIMD substring search (vs :binary.match). Measure; this bounds what a defk vector type could reach.\n- Design sketch (no implementation): a lane type (e.g. v128 of u8/i32/f64, or a width chosen at build time), element-wise ops, lane reductions, shuffles/table lookups, compares to masks, masked/tail-safe loads that keep the bounds guarantee. Elixir-mode semantics (lanes as tuples or binaries) and the cost of agreement properties per op. Float lane reductions vs bit-exactness. How it reads as Elixir.\n- Compare with Zig @Vector, Wasm SIMD128, Rust portable_simd.\n\nDone when the ceiling numbers and the design sketch are in docs/research/simd.md, with a recommendation (build it, defer it, or rule it out) for the decision ticket.",
   "id": "defk-ulk.5",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Research and ceiling study: portable vector values in the subset",
   "type": "task",
-  "updated_at": "2026-10-10T14:54:42Z"
+  "updated_at": "2026-10-10T14:54:43Z"
 }
