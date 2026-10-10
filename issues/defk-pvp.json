@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-10T10:14:05Z",
   "created": "2026-10-09T22:06:51Z",
   "description": "Found while writing examples/hash_chain.exs (defk-9p6.18). In a kernel, `(x = a + 1; x); x * 2` fails with \"undefined variable x\", although in Elixir a plain parenthesised block (`__block__`, not an if/case/for) binds into the enclosing scope and `x` is visible after it. It matters for macro-generated kernel bodies, where spliced AST often arrives as a nested block (the author worked around it with unquote_splicing). docs/language.md section 5 does not list it as a limit.\n\nFix: in lib/defk/compiler.ex, `lower_expr({:__block__, _, _} = b, env)` lowers through `lower_block`, which returns the value but discards the environment with the block's bindings; thread the bindings out for a nested block used as a statement (`lower_stmt`) and as an expression (the block's bindings then stay bound afterwards, as Elixir does); if/cond/case/for keep their own scoping (Elixir's too). Elixir mode: check `value_block/2` and `block_parts/2` for the same. Tests: both modes via assert_agrees for a nested block binding used after it, a nested block as the kernel's last expression, and a macro-generated body spliced as a block. Docs: a sentence in section 5.\n\nDone when: the repro compiles and agrees, and the suite is green.",
   "id": "defk-pvp",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "A binding inside a nested __block__ is scoped to the block, where Elixir leaks it",
   "type": "bug",
-  "updated_at": "2026-10-10T09:58:20Z"
+  "updated_at": "2026-10-10T10:14:05Z"
 }
