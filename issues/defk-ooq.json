@@ -13,9 +13,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Decisions: (1) A kernel with a bitstring parameter is a helper: only inlined, no NIF, no Elixir function, not in __defk_kernels__ (Elixir mode still defines its private function for callers). The compiler does not lower it standalone; its rejections surface where it is inlined (once, in the helper). (2) 'Entry kernel taking a bitstring' = a helper not reached from any non-helper kernel through the call graph; that is bitstring-use at the parameter, with a hint to call it from the kernel that builds the accumulator. No syntax for entry vs helper was added. (3) A variable passed at a helper's bitstring parameter position counts as an accumulator name (Defk.Bitstring.accumulator_names/2 + bits_params/1), so reduce: \u003c\u003c\u003e\u003e / acc = \u003c\u003c\u003e\u003e become the empty bitstring when the only append is in the helper. (4) Passing a bitstring to a non-bitstring parameter stays bitstring-use (message names the parameter and its type); passing a [u8] to a bitstring parameter is type-mismatch. (5) No runtime change: binding the parameter copies the defk_bits {nbits, slot}; defk_bits_end already copies when appending to an older value, so a helper appending to a value the caller still holds agrees (tested, also across forced yields in a helper loop). (6) dod_bits test kernel uses signed segments (defk-dki, merged from main) where the range fits, masking at the anchor's +64/+256/+2048 range ends and for the 32-bit case, which Elixir's signed segments truncate. Tests in test/bitstring_helper_test.exs.",
+      "timestamp": "2026-10-10T10:08:24Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Pass the bitstring accumulator through helper kernels",
   "type": "task",
-  "updated_at": "2026-10-10T09:53:59Z"
+  "updated_at": "2026-10-10T10:08:24Z"
 }
