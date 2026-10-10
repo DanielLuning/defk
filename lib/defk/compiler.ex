@@ -4323,8 +4323,7 @@ defmodule Defk.Compiler do
 
   # ------------------------------------------------------ more rejections --
 
-  # The bytes of `b` as a C string literal of octal escapes, 64 bytes a line.
-  # a read-only [u8] view over a static C string; its length is a known fact
+  # a read-only [u8] view over a static C array; its length is a known fact.
   # The bytes are one `static const uint8_t` array per module, named by a hash
   # of the contents (defk-qx3), however often a use site is inlined.
   defp static_u8(b) do
@@ -4342,6 +4341,7 @@ defmodule Defk.Compiler do
     end
   end
 
+  # The bytes of `b` as a C string literal of octal escapes, 64 bytes a line.
   defp c_bytes(""), do: ~s("")
 
   defp c_bytes(b) do
