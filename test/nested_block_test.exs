@@ -112,9 +112,13 @@ defmodule Defk.NestedBlockTest.K do
 
   # the block binds an input array's alias that is then written
   defk alias_input(a :: [i64]) :: i64 do
-    (b = a)
+    (
+      z = 1
+      b = a
+    )
+
     a[0] = 9
-    b[0] + a[0]
+    b[0] + a[0] + z
   end
 
   # if keeps its own scope: the branch's x does not reach the outer x
@@ -122,8 +126,10 @@ defmodule Defk.NestedBlockTest.K do
     x = a
 
     if a > 0 do
+      y = x
+
       (
-        x = x + 100
+        x = y + 100
         x
       )
     end
@@ -183,7 +189,7 @@ defmodule Defk.NestedBlockTest do
   test "array writes and bindings in a nested block keep value semantics" do
     assert {:ok, 15} = Defk.Test.assert_agrees(K, :writes_array, [3])
     assert {:ok, 7} = Defk.Test.assert_agrees(K, :array_after, [3])
-    assert {:ok, 9} = Defk.Test.assert_agrees(K, :alias_input, [i64s([0, 1])])
+    assert {:ok, 10} = Defk.Test.assert_agrees(K, :alias_input, [i64s([0, 1])])
   end
 
   test "if keeps its own scope" do
@@ -237,9 +243,12 @@ defmodule Defk.NestedBlockTest do
     :macro_body,
     :rebind,
     :if_scope,
-    {:in_loop, args: StreamData.tuple({StreamData.integer(0..40)}) |> StreamData.map(&Tuple.to_list/1)},
-    {:writes_array, args: StreamData.tuple({StreamData.integer(1..20)}) |> StreamData.map(&Tuple.to_list/1)},
-    {:array_after, args: StreamData.tuple({StreamData.integer(1..20)}) |> StreamData.map(&Tuple.to_list/1)},
+    {:in_loop,
+     args: StreamData.tuple({StreamData.integer(0..40)}) |> StreamData.map(&Tuple.to_list/1)},
+    {:writes_array,
+     args: StreamData.tuple({StreamData.integer(1..20)}) |> StreamData.map(&Tuple.to_list/1)},
+    {:array_after,
+     args: StreamData.tuple({StreamData.integer(1..20)}) |> StreamData.map(&Tuple.to_list/1)},
     :alias_input
   ])
 end
