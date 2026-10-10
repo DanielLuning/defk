@@ -1377,8 +1377,9 @@ defmodule Defk.Compiler do
     {[], Map.merge(v, %{lo: n, hi: n})}
   end
 
+  # nonneg: the float is never below 0.0 (sqrt/1 of one needs no check)
   defp lower_expr(f, _env) when is_float(f),
-    do: {[], val(:erlang.float_to_binary(f, [:short]), :f64)}
+    do: {[], Map.put(val(:erlang.float_to_binary(f, [:short]), :f64), :nonneg, f >= 0)}
 
   defp lower_expr(true, _env), do: {[], val("1", :bool)}
   defp lower_expr(false, _env), do: {[], val("0", :bool)}
@@ -1791,7 +1792,7 @@ defmodule Defk.Compiler do
     bad = Enum.map_join([f | divisors], " | ", &"DEFK_NONFIN(#{&1})")
 
     # DEFK_FCHECK: the replay runs on a failed check, or a flagged strip
-    # (flag_strip/2) flags it and skips the replay
+    # (flag_strip/3) flags it and skips the replay
     c =
       "({ double #{f} = #{fast}; DEFK_FCHECK(#{bad}) { #{replay}(void)#{r}; " <>
         "defk_nonfinite_lost(ctx); } #{f}; })"
@@ -1806,7 +1807,7 @@ defmodule Defk.Compiler do
   end
 
   # The variables (C names) whose inf or NaN would make the expression's
-  # result inf or NaN: + - * keep one, and so does a numerator (flag_strip/2
+  # result inf or NaN: + - * keep one, and so does a numerator (flag_strip/3
   # uses this to check a reduce accumulator once per strip).
   defp sticky_leaves({op, _, [a, b]}, env) when op in [:+, :-, :*],
     do: sticky_leaves(a, env) ++ sticky_leaves(b, env)
@@ -2553,7 +2554,8 @@ defmodule Defk.Compiler do
   defp builtin(:abs, [%{t: :i64} = a], _, env),
     do: val("defk_abs_i64#{checked(env)}, #{a.c})", :i64)
 
-  defp builtin(:abs, [%{t: :f64} = a], _, _), do: val("fabs(#{a.c})", :f64)
+  defp builtin(:abs, [%{t: :f64} = a], _, _),
+    do: Map.put(val("fabs(#{a.c})", :f64), :nonneg, true)
 
   defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, _)
        when f in [:min, :max] and ta in @ints and tb in @ints do
@@ -2566,8 +2568,17 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp builtin(f, [%{t: :f64} = a, %{t: :f64} = b], _, _) when f in [:min, :max],
-    do: val("defk_#{f}_f64(#{a.c}, #{b.c})", :f64)
+  # max(x, 0.0) is never below 0.0, and neither is the min of two such
+  defp builtin(f, [%{t: :f64} = a, %{t: :f64} = b], _, _) when f in [:min, :max] do
+    nonneg = if f == :max, do: a[:nonneg] || b[:nonneg], else: a[:nonneg] && b[:nonneg]
+    Map.put(val("defk_#{f}_f64(#{a.c}, #{b.c})", :f64), :nonneg, nonneg == true)
+  end
+
+  # sqrt of a value never below 0.0 cannot raise, and its result is finite
+  # when the value is (a non-finite one was checked where it was made), so it
+  # needs no check, also in a flagged strip (defk-hki)
+  defp builtin(:sqrt, [%{t: :f64, nonneg: true} = a], _node, _),
+    do: Map.put(val("__builtin_sqrt(#{a.c})", :f64), :nonneg, true)
 
   defp builtin(f, [a], node, _) when f in @math1 do
     numeric!(a, arg(node, 0), "#{f}/1")
@@ -3423,13 +3434,17 @@ defmodule Defk.Compiler do
     {body, flat}
   end
 
-  # The checked helpers a flagged strip turns into flags (DEFK_NF_ forms).
+  # The checked helpers a flagged strip turns into flags (DEFK_NF_ forms):
+  # the float checks, which make a strip worth flagging, and the other checks
+  # that may join them (defk-hki): i64/u64 overflow, element access, narrow
+  # write ranges and float-to-integer conversions.
   @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log exp pow to_f32)
-  @nf_on Enum.map(@nf_helpers, &"#define defk_#{&1} DEFK_NF_#{&1}\n") ++
-           ["#undef DEFK_FCHECK\n#define DEFK_FCHECK DEFK_NF_FCHECK\n"]
-  @nf_off Enum.map(@nf_helpers, &"#undef defk_#{&1}\n") ++
-            ["#undef DEFK_FCHECK\n#define DEFK_FCHECK(B) if (DEFK_UNLIKELY(B))\n"]
+  @nf_joins ~w(add_i64 sub_i64 mul_i64 neg_i64 abs_i64 add_u64 sub_u64 mul_u64 trunc round
+               get_in_f64 to_u8 to_i16 to_i32) ++
+              for(t <- ~w(f64 i64 u8 u64 i16 i32 f32), op <- ~w(get put), do: "#{op}_#{t}")
+  @nf_all @nf_helpers ++ @nf_joins
   @nf_call ~r/\bdefk_(?:#{Enum.join(@nf_helpers, "|")})\(ctx,/
+  @nf_join_call ~r/\bdefk_(?:#{Enum.join(@nf_joins, "|")})\(ctx,/
   # a float_tree check's replay: no braces inside (its operands are pure)
   @nf_replay ~r/DEFK_FCHECK\([^{}]*\) \{[^{}]*\}/
   @nf_scalars ~w(int64_t double int uint64_t)
@@ -3450,25 +3465,30 @@ defmodule Defk.Compiler do
   # never yield define DEFK_SHORT as 1 and the strip version is dead code.
   #   strip.remaining - trips left after the next one, as uint64
   #   strip.done_at   - the loop's exit test against a given last index
-  # A flat loop whose body can fail only by a float check runs flagged
-  # (flagged_loop/5).
+  # A flat loop with float checks whose other checks can all become flags
+  # runs flagged (flagged_loop/5).
   # Each form is noted for the fast-path report (note_loop/2) and marked in
   # the C for clang's remarks (Defk.Report).
   defp loop(id, done, strip, :plain = flat, body) when is_map(strip) do
-    case flag_strip(id, body) do
+    case flag_strip(id, body, strip.var) do
       nil ->
         mark = note_loop(:strips, @strips)
-        note_unflagged(body)
+        note_unflagged(body, strip.var)
         [mark, strip_loop(id, done, strip, flat, body), @loop_end]
 
       flagged ->
         mark = note_loop(:strips, @strips <> "; flagged")
 
+        checks =
+          if flagged.joined,
+            do: "float, overflow and bounds checks",
+            else: "float checks"
+
         note(
           :nonfinite,
           Process.get(:defk_report_loop),
           :flagged,
-          "float checks set a flag tested once per strip; a set flag replays the strip with raising checks"
+          "#{checks} set a flag tested once per strip; a set flag replays the strip with raising checks"
         )
 
         [mark, flagged_loop(id, done, strip, body, flagged), @loop_end]
@@ -3541,8 +3561,8 @@ defmodule Defk.Compiler do
     ]
   end
 
-  # strip_loop/5 for a flat loop whose body can fail only by a float check
-  # (flag_strip/2): the short loop and each strip run the body with a flag
+  # strip_loop/5 for a flat loop whose checks can all become flags
+  # (flag_strip/3): the short loop and each strip run the body with a flag
   # (DEFK_NF_ forms in the runtime) and test it once at their end, before the
   # safepoint, so the body has no branch or call for its checks and clang can
   # vectorise it. A set flag replays that strip, restored from the snapshot
@@ -3561,11 +3581,13 @@ defmodule Defk.Compiler do
       [
         snap,
         "defk_nf = 0;\n",
-        @nf_on,
+        Enum.map(fl.helpers, &"#define defk_#{&1} DEFK_NF_#{&1}\n"),
+        "#undef DEFK_FCHECK\n#define DEFK_FCHECK DEFK_NF_FCHECK\n",
         "while (!(#{cond})) {\n",
         fl.body,
         "}\n",
-        @nf_off,
+        Enum.map(fl.helpers, &"#undef defk_#{&1}\n"),
+        "#undef DEFK_FCHECK\n#define DEFK_FCHECK(B) if (DEFK_UNLIKELY(B))\n",
         "if (DEFK_UNLIKELY(defk_nf#{fl.test})) goto defk_rp#{id};\n"
       ]
     end
@@ -3574,6 +3596,7 @@ defmodule Defk.Compiler do
       "{\n",
       decls,
       "int defk_nf;\n",
+      if(fl.joined, do: "defk_nf_sink defk_sink;\n", else: []),
       "#{r} = #{strip.remaining};\nif (DEFK_SHORT(#{r})) {\n",
       "#{se} = #{e};\n",
       flagged.(done),
@@ -3591,17 +3614,26 @@ defmodule Defk.Compiler do
   # Whether a flat loop body can run flagged, and if so how: the snapshot
   # (decls, snap, restore), the flagged body and the extra end-of-strip test
   # (sticky_trees/1). It can when:
-  #   * the only use of ctx (every error goes through it) is in a float check
-  #     that becomes a flag: any other error (a bounds check, i64 overflow, a
-  #     CaseClauseError) could be raised before an earlier flagged one;
+  #   * it has a float check: a strip without one gains nothing (defk-60q);
+  #   * the only use of ctx (every error goes through it) is in a check that
+  #     becomes a flag: a float check, or one that joins it (@nf_joins: i64
+  #     overflow, an element access, defk-hki). Any other error (a
+  #     CaseClauseError, a division by zero) could be raised before an earlier
+  #     flagged one;
+  #   * with a joined check, every unchecked a.data[i] has an index made only
+  #     of the loop counter and values not assigned in the strip
+  #     (fixed_indices?/3), so a wrong value from a failed check, which the
+  #     flagged run computes on with, never reaches an address;
   #   * every local it mentions is a scalar, so a snapshot of those restores
   #     the strip's start state (unchanged ones fold away), or an array (in
   #     the snapshot when it is assigned whole, as array accumulators are);
   #   * an array it writes is not otherwise mentioned (no read of it, so the
   #     replay recomputes the values it wrote) and no input array is written.
-  defp flag_strip(id, body) do
+  defp flag_strip(id, body, var) do
     text = IO.iodata_to_binary(body)
-    rest = text |> String.replace(@nf_replay, "") |> String.replace(@nf_call, "")
+
+    rest = unflagged_rest(text)
+    joined = Regex.match?(@nf_join_call, text)
     types = Map.new(Process.get(:defk_decls))
 
     vars =
@@ -3614,7 +3646,9 @@ defmodule Defk.Compiler do
 
     {params, locals} = Enum.split_with(others, &String.starts_with?(&1, "p_"))
 
-    with false <- Regex.match?(~r/\bctx\b/, rest),
+    with true <- Regex.match?(@nf_call, text) or String.contains?(text, "DEFK_FCHECK("),
+         false <- Regex.match?(~r/\bctx\b/, rest),
+         true <- not joined or fixed_indices?(text, var),
          true <- Enum.all?(locals, &(types[&1] in @nf_scalars)),
          false <- Enum.any?(params, &(written?(text, &1) or array_write?(text, &1))),
          true <- arrays_replayable?(text, arrays) do
@@ -3627,17 +3661,205 @@ defmodule Defk.Compiler do
         Enum.reduce(sticky, text, fn {_, f}, t ->
           String.replace(t, "DEFK_FCHECK(DEFK_NONFIN(#{f}))", "if (0)")
         end)
+        |> seen_later()
 
       %{
         decls: Enum.map(named, fn {_, s, t} -> "#{t} #{s};\n" end),
         snap: Enum.map(named, fn {v, s, _} -> "#{s} = #{v};\n" end),
         restore: Enum.map(named, fn {v, s, _} -> "#{v} = #{s};\n" end),
         body: flagged,
-        test: Enum.map(sticky, fn {x, _} -> " | DEFK_NONFIN(#{x})" end)
+        test: Enum.map(sticky, fn {x, _} -> " | DEFK_NONFIN(#{x})" end),
+        joined: joined,
+        # the checked helpers the body calls, each #defined to its flagged form
+        helpers: Enum.filter(@nf_all, &String.contains?(flagged, "defk_#{&1}(ctx,"))
       }
     else
       _ -> nil
     end
+  end
+
+  # A flagged strip only has to notice that some check failed; the replay
+  # finds which. So it can leave out the check of a value y whose inf or NaN
+  # always reaches a later checked float expression (defk-hki): y is one of
+  # that expression's sticky_leaves/2 (directly or through copies z = y), the
+  # expression runs whenever y's statement did (runs_after?/3), and y, like
+  # every copy, keeps its value until then (unchanged?/4). y is an [f64]
+  # input element read (y = defk_in_f64(...) or defk_get_in_f64(...), whose
+  # bounds check stays) or a float expression whose own check is then
+  # skipped. The later
+  # expression's check is kept (or is itself skipped for a still later one,
+  # or tested at the strip's end, sticky_trees/1), and + - * and a numerator
+  # turn an inf or NaN operand into an inf or NaN result, so the failure
+  # still sets the flag. It saves a compare per element read in rolling
+  # mean_std, where the reads are the leaves of the sticky window sums.
+  defp seen_later(text) do
+    reads =
+      for [{at, _}, {y, yl}, {h, hl}] <-
+            Regex.scan(~r/^(v_\w+) = (defk_(?:get_)?in_f64)\(ctx, /m, text, return: :index),
+          y_reaches?(text, binary_part(text, y, yl), at),
+          do: {h, hl, binary_part(text, h, hl)}
+
+    trees =
+      for [{at, _}, {y, yl}, {f, fl}] <-
+            Regex.scan(~r/^(v_\w+) = \(\{ double (f_\d+) = /m, text, return: :index),
+          y_reaches?(text, binary_part(text, y, yl), at),
+          do: binary_part(text, f, fl)
+
+    # the reads, last first so earlier offsets stay put
+    text =
+      reads
+      |> Enum.sort(:desc)
+      |> Enum.reduce(text, fn {at, len, h}, t ->
+        later = if h == "defk_in_f64", do: "defk_in_f64_later", else: "defk_get_f64"
+        binary_part(t, 0, at) <> later <> binary_part(t, at + len, byte_size(t) - at - len)
+      end)
+
+    Enum.reduce(trees, text, &String.replace(&2, "DEFK_FCHECK(DEFK_NONFIN(#{&1}))", "if (0)"))
+  end
+
+  # whether y, assigned by the statement at `at`, reaches a later checked
+  # float expression as a sticky leaf, directly or through copies
+  defp y_reaches?(text, y, at) do
+    leaves = Process.get(:defk_fsticky, %{})
+
+    uses =
+      for [{t, _}, {f, fl}] <- Regex.scan(~r/\(\{ double (f_\d+) = /, text, return: :index),
+          t > at,
+          y in Map.get(leaves, binary_part(text, f, fl), []),
+          do: t
+
+    copies =
+      for [{c, _}, {z, zl}] <-
+            Regex.scan(~r/^(v_\w+) = #{Regex.escape(y)};$/m, text, return: :index),
+          c > at,
+          do: {c, binary_part(text, z, zl)}
+
+    reached? = &(runs_after?(text, at, &1) and unchanged?(text, y, at, &1))
+
+    Enum.any?(uses, reached?) or
+      Enum.any?(copies, fn {c, z} -> reached?.(c) and y_reaches?(text, z, c) end)
+  end
+
+  # y, assigned at `from`, still holds that value at `to`: every other write
+  # of y between them is in the else block of an if whose then block holds
+  # `from`, so it never runs in the same iteration
+  defp unchanged?(text, y, from, to) do
+    for([{w, _} | _] <- Regex.scan(write_re(y), text, return: :index), w > from, w < to, do: w)
+    |> Enum.all?(fn w ->
+      case block_end(text, from + 1, 0) do
+        nil ->
+          false
+
+        k ->
+          case Regex.run(~r/\A\}\s*else\s*\{/, binary_part(text, k, byte_size(text) - k)) do
+            [m] -> w > k and block_end(text, k + byte_size(m), 0) > w
+            _ -> false
+          end
+      end
+    end)
+  end
+
+  # the position of the `}` closing the block open at `at`
+  defp block_end(text, at, depth) when at < byte_size(text) do
+    case :binary.at(text, at) do
+      ?} when depth == 0 -> at
+      ?} -> block_end(text, at + 1, depth - 1)
+      ?{ -> block_end(text, at + 1, depth + 1)
+      _ -> block_end(text, at + 1, depth)
+    end
+  end
+
+  defp block_end(_text, _at, _depth), do: nil
+
+  # Whether the code at `to` runs whenever the statement at `from` did, later
+  # in the same iteration: `to` is in a block enclosing `from`'s (every block
+  # opened between them is closed again, the flat body has no early exit),
+  # and in its own statement nothing before it is conditional (?:, && or ||).
+  defp runs_after?(text, from, to) do
+    {depth, low, start} =
+      text
+      |> binary_part(from, to - from)
+      |> scan_blocks(0, 0, 0, %{0 => from}, from)
+
+    depth == low and
+      not String.contains?(binary_part(text, start, to - start), ["?", "&&", "||"])
+  end
+
+  # {depth, lowest depth, start of the statement at the end}: block depth
+  # relative to the start, and where the last statement at each depth began
+  defp scan_blocks(<<>>, depth, low, _at, starts, _base), do: {depth, low, starts[depth]}
+
+  defp scan_blocks(<<c, rest::binary>>, depth, low, at, starts, base) do
+    here = base + at + 1
+
+    case c do
+      ?{ ->
+        scan_blocks(rest, depth + 1, low, at + 1, Map.put(starts, depth + 1, here), base)
+
+      ?} ->
+        scan_blocks(
+          rest,
+          depth - 1,
+          min(low, depth - 1),
+          at + 1,
+          Map.put(starts, depth - 1, here),
+          base
+        )
+
+      ?; ->
+        scan_blocks(rest, depth, low, at + 1, Map.put(starts, depth, here), base)
+
+      _ ->
+        scan_blocks(rest, depth, low, at + 1, starts, base)
+    end
+  end
+
+  # the body without the checks a flagged strip turns into flags: any ctx
+  # left is a check that must raise where it fails
+  defp unflagged_rest(text) do
+    text
+    |> String.replace(@nf_replay, "")
+    |> String.replace(@nf_call, "")
+    |> String.replace(@nf_join_call, "")
+  end
+
+  # Every unchecked element access in a strip is a[i] (not a word load's
+  # a.data + i) whose index names only the loop counter `var`, values the
+  # strip does not assign, literals, casts, lengths and i64 arithmetic on
+  # these: values the flagged run computes exactly whatever failed before.
+  # Its bounds proof (range facts) holds for them, so the access stays in
+  # bounds while the strip runs on after a failed check. (A value assigned in
+  # the strip may come from a failed check that computed on with a wrong
+  # value, which the facts that proved the access do not describe.)
+  defp fixed_indices?(text, var) do
+    text
+    |> String.split(".data")
+    |> tl()
+    |> Enum.all?(fn
+      "[" <> after_at -> fixed_index?(index_text(after_at, 1, []), text, var)
+      _ -> false
+    end)
+  end
+
+  defp index_text(_rest, 0, acc), do: acc |> tl() |> Enum.reverse() |> IO.iodata_to_binary()
+  defp index_text("", _, _acc), do: nil
+  defp index_text("[" <> rest, n, acc), do: index_text(rest, n + 1, ["[" | acc])
+  defp index_text("]" <> rest, n, acc), do: index_text(rest, n - 1, ["]" | acc])
+  defp index_text(<<c, rest::binary>>, n, acc), do: index_text(rest, n, [<<c>> | acc])
+
+  # an i64 + - * of such values in an index computes the checked value: the
+  # bounds proof bounds the result, so it cannot overflow
+  @index_words ~w(INT64_C UINT64_C int64_t uint64_t len ctx defk_add_i64 defk_sub_i64 defk_mul_i64)
+
+  defp fixed_index?(nil, _text, _var), do: false
+
+  defp fixed_index?(idx, text, var) do
+    Regex.scan(~r/[A-Za-z_]\w*/, idx)
+    |> List.flatten()
+    |> Enum.all?(fn w ->
+      w in @index_words or w == var or
+        (Regex.match?(~r/^[vp]_\w+$/, w) and not written?(text, w))
+    end)
   end
 
   # The float expressions (float_tree) of a strip whose check can wait for its
@@ -3708,14 +3930,17 @@ defmodule Defk.Compiler do
     |> Enum.map(fn [{at, _}] -> at end)
   end
 
+  # (a).data[...] = ..., or a checked write defk_put_T(ctx, a, ...)
   defp array_write_at?(text, a, at) do
     after_at = binary_part(text, at + byte_size(a), byte_size(text) - at - byte_size(a))
+    before = binary_part(text, max(at - 24, 0), min(at, 24))
 
-    at > 0 and binary_part(text, at - 1, 1) == "(" and
-      case after_at do
-        ").data[" <> idx -> match?("=" <> _, skip_assign(close_bracket(idx, 1)))
-        _ -> false
-      end
+    Regex.match?(~r/\bdefk_put_\w+\(ctx, \z/, before) or
+      (at > 0 and binary_part(text, at - 1, 1) == "(" and
+         case after_at do
+           ").data[" <> idx -> match?("=" <> _, skip_assign(close_bracket(idx, 1)))
+           _ -> false
+         end)
   end
 
   defp close_bracket(rest, 0), do: rest
@@ -5516,16 +5741,21 @@ defmodule Defk.Compiler do
   end
 
   # a flat loop that is not flagged: why its float checks stay
-  defp note_unflagged(body) do
+  defp note_unflagged(body, var) do
     text = IO.iodata_to_binary(body)
 
     if Regex.match?(@nf_call, text) do
-      rest = text |> String.replace(@nf_replay, "") |> String.replace(@nf_call, "")
-
       why =
-        if Regex.match?(~r/\bctx\b/, rest),
-          do: "the body can also raise otherwise (a bounds check, an overflow, a no-match)",
-          else: "the body's state cannot be restored from a snapshot to replay a strip"
+        cond do
+          Regex.match?(~r/\bctx\b/, unflagged_rest(text)) ->
+            "the body can also raise otherwise (a division, a no-match, a check that cannot set a flag)"
+
+          not fixed_indices?(text, var) ->
+            "an unchecked element access uses an index assigned in the loop body, which a flagged strip could compute wrongly after a failed check"
+
+          true ->
+            "the body's state cannot be restored from a snapshot to replay a strip"
+        end
 
       note(
         :nonfinite,
