@@ -6,6 +6,7 @@
   "blocks": [
     "defk-9p6.15",
     "defk-9p6.16",
+    "defk-oit",
     "defk-sgw.3"
   ],
   "created": "2026-10-05T21:21:32Z",
@@ -18,5 +19,5 @@
   "status": "in_progress",
   "title": "Add u64, masked arithmetic and Defk.Bits",
   "type": "task",
-  "updated_at": "2026-10-10T09:05:51Z"
+  "updated_at": "2026-10-10T09:30:08Z"
 }
