@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-09T22:02:11Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Strips with mixed checks (bounds, overflow, float) keep per-operation float checks: rolling mean_std still +30%",
   "type": "task",
-  "updated_at": "2026-10-09T22:02:11Z"
+  "updated_at": "2026-10-10T10:50:44Z"
 }
