@@ -5,10 +5,12 @@
   "created": "2026-10-10T12:10:45Z",
   "description": "Found in defk-9p6.13 (cosine_topk.exs). Repro (Defk.Report with report: :full):\n\n  defk scores(m :: [f32], q :: [f64]) :: [f64] do\n    dim = len(q)\n    n = div(len(m), dim)\n    out = alloc(f64, n)\n    for r \u003c- 0..(n - 1)//1 do\n      out[r] = for j \u003c- 0..(dim - 1)//1, reduce: 0.0 do\n        acc -\u003e acc + m[r * dim + j] * q[j]\n      end\n    end\n    out\n  end\n\nReport: 'm[r * dim + j]: bounds check kept; nothing proves 0 \u003c= r * dim + j and r * dim + j \u003c len(m)' and 'out[r]: bounds check kept; nothing proves r \u003c len(out)' (the second is surprising: out = alloc(f64, n) and r \u003c- 0..(n - 1)). With a guard 'if not (n \u003e 0 and dim \u003e 0 and len(m) == n * dim and len(q) == dim), do: raise' and n, dim as parameters, the same checks stay. Workaround used: a literal dimension (@dim 384, n = div(len(m), @dim)) drops both checks, and q copied into a 384-element alloc drops q[j]'s. Measured with 8 partial sums, 100k x 384: 25 ms with runtime dim vs 20 ms with the literal (loaded machine). A row-major matrix with a runtime row length is a common kernel shape (embeddings, images with a stride). Related: defk-siy (variable block offset), defk-pic (alloc with n = min(...)), defk-9za (facts from a guarding if).",
   "id": "defk-n7k",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 3,
   "status": "open",
   "title": "Row-major m[r * dim + j] with a runtime dim keeps its bounds checks; out[r] too when out = alloc(f64, div(len(m), dim))",
   "type": "task",
-  "updated_at": "2026-10-10T12:10:45Z"
+  "updated_at": "2026-10-10T12:10:46Z"
 }
