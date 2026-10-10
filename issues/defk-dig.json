@@ -5,10 +5,12 @@
   "created": "2026-10-10T10:54:26Z",
   "description": "The first cold test (defk-sgw.3, docs/cold-tests/count-min.md) finished in one attempt with no compile error, so it says nothing about whether error messages and hints get an author unstuck, which is half of the devex bar (defk-dtw.4). Run another fresh, docs-only session (README.md, docs/language.md and compiler output only; no lib/, test/, examples/, bw or git history) on a job not in the catalog whose natural Elixir spelling meets several limits: e.g. a streaming top-k / small-heap over [f64] with early exit, a run-length or varint decoder that wants Enum/binary pattern matching and returns a bitstring, or a small state machine that returns arrays from branches. Do not hint at the limits. Record every compile error verbatim with helped / partly / no, fix or ticket each unhelpful one (defk-vku format or a missing docs/language.md entry), rerun until a run completes from the docs alone, and append the log to docs/verdict.md's Developer experience section next to the first cold test.",
   "id": "defk-dig",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "priority": 2,
   "status": "open",
   "title": "Second devex cold test on a job that meets the subset's limits (exercise the compile errors)",
   "type": "task",
-  "updated_at": "2026-10-10T10:54:26Z"
+  "updated_at": "2026-10-10T10:54:30Z"
 }
