@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-10T10:05:28Z",
   "created": "2026-10-09T21:40:28Z",
   "description": "Hit in examples/hashes.exs (defk-9p6.20): an 8 KB binary attribute (`@t \u003c\u003c...\u003e\u003e`) read with `u32_le(@t, ...)` inside a helper kernel called 8 times from one kernel appears 9 times in the generated C, once per inlined use site, as a fresh string literal. Repro: `@t \u003c\u003c...8 KB...\u003e\u003e`, `defk f(k :: i64, x :: i64) :: i64, do: u32_le(@t, ...)`, called 8x in one kernel; count the literal in `__defk_source__/0`. Emit each binary attribute (and each binary literal, defk-n4r.5, which shares `static_u8/1`) once per module as a `static const uint8_t` array named by a hash of its contents, and reference it from every use site. Clang may merge identical literals anyway, but the C file size and compile time grow (defk-6ag). Also noted there: indexing into the table goes through checked `defk_mul_i64`/`defk_bsl_i64`; see defk-upc (range facts for constant multiples).\n\nDone when: a repeated attribute or literal appears once in the generated C (test on `__defk_source__`), and the examples' generated C shrinks accordingly (record the before/after size for hashes.exs).",
   "id": "defk-qx3",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "A binary attribute is emitted as a fresh string literal at every inlined use site",
   "type": "task",
-  "updated_at": "2026-10-10T09:58:55Z"
+  "updated_at": "2026-10-10T10:05:28Z"
 }
