@@ -52,7 +52,25 @@ typedef struct { float *data; int64_t len; } defk_arr_f32;
 
 /* ---- per-call context (first member of every frame) --------------------- */
 
+/*
+ * Frame layout tag (defk-ls8), defence in depth. Frames of one library image
+ * only ever meet that image's own code (defk-nbl: a resource type per image),
+ * so a mismatch should be impossible. If that invariant ever breaks (a shared
+ * type name, a separate runtime NIF), the destructor and the step functions
+ * must not read a foreign layout. defk_promote stamps every resource frame
+ * with DEFK_LAYOUT_TAG (a hash of this header, emitted by the compiler as
+ * DEFK_HEADER_HASH, mixed with sizeof(defk_ctx)) and its own struct size.
+ * The tag and the size are the first two members of defk_ctx, at fixed
+ * offsets 0 and 8, so even a foreign layout can be asked for them.
+ */
+#ifndef DEFK_HEADER_HASH
+#define DEFK_HEADER_HASH 0
+#endif
+#define DEFK_LAYOUT_TAG ((uint64_t)(DEFK_HEADER_HASH) ^ ((uint64_t)sizeof(defk_ctx) * 0x9E3779B97F4A7C15ULL))
+
 typedef struct {
+  uint64_t layout_tag; /* DEFK_LAYOUT_TAG, set when the frame becomes a resource; keep first */
+  uint64_t frame_size; /* sizeof the kernel's frame struct, likewise; keep second */
   sigjmp_buf jb; /* sigsetjmp(jb, 0): plain setjmp saves the signal mask on macOS = a syscall per call */
   int err;
   int64_t err_index; /* for out-of-bounds */
@@ -71,6 +89,8 @@ static _Atomic long defk_stat_promotions = 0;
 static _Atomic long defk_stat_yields = 0;
 /* testing: yield at every clock read, so every safepoint's resume path runs */
 static _Atomic int defk_force_yields = 0;
+/* testing: stamp promoted frames with a wrong tag, to exercise the mismatch path */
+static _Atomic int defk_corrupt_tags = 0;
 
 __attribute__((noreturn, cold, format(printf, 3, 4))) static void
 defk_fail(defk_ctx *ctx, int kind, const char *fmt, ...) {
@@ -155,6 +175,11 @@ static void defk_finish(defk_ctx *ctx) {
 static void defk_frame_dtor(ErlNifEnv *env, void *obj) {
   (void)env;
   defk_ctx *ctx = (defk_ctx *)obj;
+  /* A foreign layout (defk-ls8): ctx->owned and ctx->finished are not where
+     this code expects them, so neither is safe to touch. Free nothing and do
+     not touch the frames_live counter, which a foreign frame was never counted
+     in. The leak (the binaries it owned) is accepted; a crash is not. */
+  if (DEFK_UNLIKELY(ctx->layout_tag != DEFK_LAYOUT_TAG)) return;
   defk_finish(ctx); /* process died mid-kernel: free what it allocated */
   atomic_fetch_sub(&defk_stat_frames_live, 1);
 }
@@ -1212,6 +1237,29 @@ static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
   return enif_raise_exception(env, map);
 }
 
+/*
+ * Frame entry check for step functions (defk-ls8): one compare of the tag and
+ * one of the size, once per resume, never per loop iteration. Returns the frame
+ * or NULL after setting *exc to a clean ArgumentError; a frame that is not ours
+ * is never read beyond its first two words.
+ */
+static inline void *defk_frame_of(ErlNifEnv *env, ERL_NIF_TERM t, size_t size, ERL_NIF_TERM *exc) {
+  defk_ctx *ctx;
+  if (DEFK_LIKELY(enif_get_resource(env, t, defk_frame_rt, (void **)&ctx) &&
+                  ctx->layout_tag == DEFK_LAYOUT_TAG && ctx->frame_size == size))
+    return ctx;
+  ERL_NIF_TERM keys[3] = {enif_make_atom(env, "__struct__"), enif_make_atom(env, "__exception__"),
+                          enif_make_atom(env, "message")};
+  static const char text[] = "defk: suspended kernel frame has a foreign layout (layout tag mismatch)";
+  ERL_NIF_TERM msg;
+  memcpy(enif_make_new_binary(env, sizeof text - 1, &msg), text, sizeof text - 1);
+  ERL_NIF_TERM vals[3] = {enif_make_atom(env, "Elixir.ArgumentError"), enif_make_atom(env, "true"), msg};
+  ERL_NIF_TERM map;
+  enif_make_map_from_arrays(env, keys, vals, 3, &map);
+  *exc = enif_raise_exception(env, map);
+  return NULL;
+}
+
 /* ---- stats + load hooks -------------------------------------------------- */
 
 static ERL_NIF_TERM defk_stats_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
@@ -1225,6 +1273,12 @@ static ERL_NIF_TERM defk_stats_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
   ERL_NIF_TERM map;
   enif_make_map_from_arrays(env, keys, vals, 3, &map);
   return map;
+}
+
+static ERL_NIF_TERM defk_corrupt_tags_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+  atomic_store(&defk_corrupt_tags, enif_is_identical(argv[0], enif_make_atom(env, "true")));
+  return enif_make_atom(env, "ok");
 }
 
 static ERL_NIF_TERM defk_force_yields_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
@@ -1277,6 +1331,8 @@ static void *defk_promote(ErlNifEnv *env, void *stack_frame, size_t size, ERL_NI
   void *res = enif_alloc_resource(defk_frame_rt, size);
   memcpy(res, stack_frame, size);
   ((defk_ctx *)res)->is_resource = 1;
+  ((defk_ctx *)res)->layout_tag = DEFK_LAYOUT_TAG ^ (uint64_t)atomic_load(&defk_corrupt_tags);
+  ((defk_ctx *)res)->frame_size = size;
   *term = enif_make_resource(env, res);
   enif_release_resource(res); /* the term now keeps it alive */
   atomic_fetch_add(&defk_stat_frames_live, 1);
