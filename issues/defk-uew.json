@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Decisions: (1) branch-tuple code kept (codes are never renamed) but re-worded and re-kinded :subset -\u003e :error: it now means arms that are not all tuples of the same size. (2) Tuple arms lower to ONE if/else chain assigning every element temp (conditions run once), or, when all arms are pure, one select per element over shared cond temps with a single overflow flag and replay. (3) Per-position types via branch_type!/4 (branch-types message names the element, 1-based; array element -\u003e array-in-branch). (4) Bitstring elements supported the same way bitstring branches are (bits_arms per position; \u003c\u003c\u003e\u003e beside a bitstring arm is the empty bitstring), tested. (5) Examples: geohash_crc decode and sort_u64_keys use one tuple branch; monte_carlo_rtp and the other guidance scripts had no per-element kernel ifs left on main.",
+      "timestamp": "2026-10-10T10:06:08Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Tuples from if/cond/case: {a, b} = if c, do: {x, y}, else: {u, v}",
   "type": "task",
-  "updated_at": "2026-10-10T09:53:58Z"
+  "updated_at": "2026-10-10T10:06:08Z"
 }
