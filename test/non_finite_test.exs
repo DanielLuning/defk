@@ -166,6 +166,64 @@ defmodule Defk.NonFiniteTest.K do
       acc -> acc / 2.0 + 1.0 / x
     end
   end
+
+  # strips that can also fail by i64 overflow (ix[i] * k) and an index out
+  # of bounds (a[j], out[j]) run flagged too, every check setting the flag
+  # (defk-hki): a gather read and a scatter write, whose flagged forms never
+  # touch memory outside the array
+  defk gather(a :: [f64], ix :: [i64], k :: i64) :: f64 do
+    for i <- 0..(len(ix) - 1)//1, reduce: 0.0 do
+      acc -> acc + a[ix[i] * k] * 2.0
+    end
+  end
+
+  defk scatter(a :: [f64], ix :: [i64], k :: i64) :: [f64] do
+    out = alloc(f64, len(a))
+
+    for i <- 0..(min(len(a), len(ix)) - 1)//1 do
+      out[ix[i] * k] = a[i] * 2.0
+    end
+
+    out
+  end
+
+  # x[j] is proved in bounds from j's facts, but j is assigned in the strip:
+  # a strip that also flags an overflow (ix[i] * 2) stays checked, since a
+  # flagged run computes on after a failure (defk-hki)
+  defk shifted_sum(x :: [f64], ix :: [i64]) :: f64 do
+    n = min(len(x), len(ix))
+
+    for i <- 0..(n - 2)//1, reduce: 0.0 do
+      acc ->
+        j = i + 1
+        acc + x[j] + float(ix[i] * 2)
+    end
+  end
+
+  # sqrt of a value never below 0.0 needs no check (defk-hki); of one that
+  # may be below it, the check stays
+  defk root_clamped(x :: f64) :: f64 do
+    sqrt(max(x, 0.0))
+  end
+
+  defk root_abs(x :: f64, y :: f64) :: f64 do
+    sqrt(min(abs(x), max(y, 1.0)))
+  end
+
+  defk root_shifted(x :: f64) :: f64 do
+    sqrt(max(x, -1.0))
+  end
+
+  # an integer-only loop has no float check to flag (defk-60q)
+  defk spread(a :: [u8]) :: [u8] do
+    out = alloc(u8, 2 * len(a))
+
+    for i <- 0..(len(a) - 1)//1 do
+      out[2 * i] = a[i]
+    end
+
+    out
+  end
 end
 
 defmodule Defk.NonFiniteTest do
@@ -382,6 +440,175 @@ defmodule Defk.NonFiniteTest do
     flagged_strips(true)
   end
 
+  # Mixed-error strips (defk-hki). Each kind of error is made at one
+  # iteration by the index ix[i] it reads: an i64 overflow of ix[i] * 2, an
+  # index out of bounds (past the end, negative, far away), a NaN input
+  # element, and a product overflowing to inf. a holds 0.5 except a NaN at 2
+  # and 1.0e308 at 4; ix is 0 (a[0]) elsewhere.
+  @mixed_len 8
+  @kinds [:overflow, :past_end, :negative, :far, :nan, :inf]
+
+  defp ix_of(:overflow), do: 2 ** 62
+  defp ix_of(:past_end), do: div(@mixed_len, 2)
+  defp ix_of(:negative), do: -1
+  defp ix_of(:far), do: 2 ** 40
+  defp ix_of(:nan), do: 1
+  defp ix_of(:inf), do: 2
+
+  defp reason_of(:overflow), do: {ArithmeticError, :overflow}
+  defp reason_of(:nan), do: {ArgumentError, :non_finite_input}
+  defp reason_of(:inf), do: {ArithmeticError, :non_finite}
+  defp reason_of(_oob), do: {Enum.OutOfBoundsError, :index}
+
+  defp mixed_a,
+    do: pack(for i <- 0..(@mixed_len - 1), do: Map.get(%{2 => :nan, 4 => 1.0e308}, i, 0.5))
+
+  # ix of length n with kind kinds[j] at position at[j]
+  defp mixed_ix(n, placed) do
+    m = Map.new(placed)
+    for i <- 0..(n - 1), into: <<>>, do: <<Map.get(m, i, 0)::64-signed-native>>
+  end
+
+  # the kernel raises the first placed error in program order, as Elixir mode
+  defp first_error(fun, args, kind) do
+    {module, reason} = reason_of(kind)
+    assert {:raise, %^module{} = e} = agrees(fun, args)
+    assert Defk.Test.reason(e) == reason
+    refute e.message == "float result is inf or NaN"
+  end
+
+  defp mixed_strips(force?) do
+    K.__defk_force_yields__(force?)
+    a = mixed_a()
+    # scatter reads a[i] for i < len(a), so it runs over a longer a of 0.5s;
+    # its own errors are the index ones and a NaN or inf at a[i]
+    try do
+      for n <- [100, 2 * @strip + 3],
+          p <- positions(n),
+          gap <- [1, @strip],
+          q = p + gap,
+          q < n,
+          k1 <- @kinds,
+          k2 <- @kinds,
+          k1 != k2 do
+        ix = mixed_ix(n, [{p, ix_of(k1)}, {q, ix_of(k2)}])
+        first_error(:gather, [a, ix, 2], k1)
+      end
+
+      # three errors in one strip, in every order
+      n = 2 * @strip + 3
+
+      for p <- [0, @strip - 3, @strip + 7],
+          [k1, k2, k3] <- permutations([:overflow, :far, :nan, :inf], 3) do
+        ix = mixed_ix(n, [{p, ix_of(k1)}, {p + 1, ix_of(k2)}, {p + 2, ix_of(k3)}])
+        first_error(:gather, [a, ix, 2], k1)
+      end
+
+      # an empty array: every read is out of bounds
+      first_error(:gather, [<<>>, mixed_ix(n, []), 2], :far)
+      assert {:ok, +0.0} = agrees(:gather, [<<>>, <<>>, 2])
+      assert {:ok, x} = agrees(:gather, [a, mixed_ix(n, []), 2])
+      assert x == n * 1.0
+
+      for n <- [100, 2 * @strip + 3], p <- positions(n), gap <- [1, @strip], q = p + gap, q < n do
+        big = with_bad(n, -1, nil, 0.5)
+
+        for {k1, k2} <- [
+              {:overflow, :far},
+              {:far, :overflow},
+              {:negative, :overflow},
+              {:past, :far}
+            ] do
+          ix = mixed_ix(n, [{p, scatter_ix(k1, n)}, {q, scatter_ix(k2, n)}])
+          first_error(:scatter, [big, ix, 2], scatter_kind(k1))
+        end
+
+        # an index error before a float error and the reverse
+        nan_at_q = with_bad(n, q, :nan)
+        first_error(:scatter, [nan_at_q, mixed_ix(n, [{p, 2 ** 40}]), 2], :far)
+        first_error(:scatter, [with_bad(n, p, 1.0e308), mixed_ix(n, [{q, -5}]), 2], :inf)
+        first_error(:scatter, [with_bad(n, p, :nan), mixed_ix(n, [{q, 2 ** 62}]), 2], :nan)
+        first_error(:scatter, [nan_at_q, mixed_ix(n, [{p, 2 ** 62}]), 2], :overflow)
+      end
+
+      assert {:ok, out} = agrees(:scatter, [with_bad(n, -1, nil, 0.5), mixed_ix(n, []), 2])
+      assert out == pack([1.0] ++ List.duplicate(0.0, n - 1))
+    after
+      K.__defk_force_yields__(false)
+    end
+  end
+
+  defp scatter_ix(:past, n), do: n
+  defp scatter_ix(kind, _n), do: ix_of(kind)
+  defp scatter_kind(:past), do: :past_end
+  defp scatter_kind(kind), do: kind
+
+  defp permutations(_, 0), do: [[]]
+
+  defp permutations(xs, k),
+    do: for(x <- xs, rest <- permutations(xs -- [x], k - 1), do: [x | rest])
+
+  test "a strip with overflow, bounds and float checks raises the first error in any order" do
+    mixed_strips(false)
+  end
+
+  test "a mixed-error strip raises the first error under forced yields" do
+    mixed_strips(true)
+  end
+
+  test "sqrt of a value never below 0.0 is unchecked and agrees" do
+    assert {:ok, +0.0} = agrees(:root_clamped, [-4.0])
+    assert {:ok, 2.0} = agrees(:root_clamped, [4.0])
+    assert {:ok, 2.0} = agrees(:root_abs, [-4.0, 9.0])
+    assert {:ok, 1.0} = agrees(:root_abs, [-4.0, -9.0])
+    assert {:ok, +0.0} = agrees(:root_shifted, [0.0])
+    non_finite(:root_shifted, [-0.5])
+    c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
+    assert c =~ "__builtin_sqrt(defk_max_f64(p_x, 0.0))"
+    assert c =~ ~r/defk_sqrt\(ctx, defk_max_f64\(p_x, \(?-1\.0/
+  end
+
+  test "rolling mean_std raises its first error: a NaN read before the read past the end" do
+    rolling = fn x, w -> Defk.Test.assert_agrees(Rolling.Kernels, :mean_std, [x, w]) end
+
+    for n <- [100, 2 * @strip + 3], p <- positions(n), p < n - 1 do
+      # w = -1 reads x[i + 1]: past the end at i = n - 1, after the NaN
+      assert {:raise, %ArgumentError{}} = rolling.(with_bad(n, p, :nan), -1)
+      assert {:raise, %ArithmeticError{}} = rolling.(with_bad(n, p, 1.0e200), -1)
+      assert {:raise, %Enum.OutOfBoundsError{}} = rolling.(with_bad(n, -1, nil), -1)
+      assert {:raise, %ArgumentError{}} = rolling.(with_bad(n, p, :inf), 3)
+      # w = 0 divides by zero at the first window, after a NaN read at 0
+      first = if p == 0, do: ArgumentError, else: ArithmeticError
+      assert {:raise, %^first{}} = rolling.(with_bad(n, p, :nan), 0)
+    end
+
+    # the window sums check the reads they add, once per strip (seen_later/1)
+    c = File.read!(String.replace_suffix(Rolling.Kernels.__defk_lib__(), ".so", ".c"))
+    assert c =~ "defk_in_f64_later(ctx, "
+    assert c =~ "#define defk_get_f64 DEFK_NF_get_f64"
+  end
+
+  test "mixed-error strips run flagged, with no unchecked access to a computed index" do
+    c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
+    assert c =~ "#define defk_get_in_f64 DEFK_NF_get_in_f64"
+    assert c =~ "#define defk_put_f64 DEFK_NF_put_f64"
+    assert c =~ "#define defk_mul_i64 DEFK_NF_mul_i64"
+
+    nonfinite = fn kernel ->
+      for {^kernel, _, {:nonfinite, kind, _}} <- K.__defk_report__(), do: kind
+    end
+
+    assert nonfinite.({:gather, 3}) == [:flagged]
+    assert nonfinite.({:scatter, 3}) == [:flagged]
+    assert nonfinite.({:shifted_sum, 2}) == [:checked]
+
+    n = 2 * @strip + 3
+    x = with_bad(n, -1, nil, 0.5)
+    assert {:ok, _} = agrees(:shifted_sum, [x, mixed_ix(n, [])])
+    first_error(:shifted_sum, [with_bad(n, 9, :nan), mixed_ix(n, [{@strip, 2 ** 62}])], :nan)
+    first_error(:shifted_sum, [with_bad(n, @strip, :nan), mixed_ix(n, [{9, 2 ** 62}])], :overflow)
+  end
+
   test "flat float loops run flagged, with the accumulator checked once per strip" do
     c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
     assert c =~ "#define defk_fmul DEFK_NF_fmul"
@@ -430,6 +657,29 @@ defmodule Defk.NonFiniteTest do
         ])
     ],
     moments: [args: fixed_list([one_of([G.array(:f64), G.array_non_finite()])])],
-    halving: [args: fixed_list([one_of([G.array(:f64), G.array_non_finite()])])]
+    halving: [args: fixed_list([one_of([G.array(:f64), G.array_non_finite()])])],
+    gather: [
+      args:
+        fixed_list([
+          one_of([G.array(:f64), G.array_non_finite()]),
+          G.array(:i64),
+          G.i64()
+        ])
+    ],
+    scatter: [
+      args:
+        fixed_list([
+          one_of([G.array(:f64), G.array_non_finite()]),
+          G.array(:i64),
+          G.i64(-3..3)
+        ])
+    ],
+    spread: [],
+    root_clamped: [],
+    root_abs: [],
+    root_shifted: [],
+    shifted_sum: [
+      args: fixed_list([one_of([G.array(:f64), G.array_non_finite()]), G.array(:i64)])
+    ]
   )
 end
