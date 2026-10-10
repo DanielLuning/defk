@@ -2113,7 +2113,10 @@ defmodule Defk.Compiler do
   defp checked_float(env), do: checked(env)
 
   # pure expressions that can only fail by i64 overflow or a non-finite float
-  # result: safe to evaluate untaken, with the failure flagged
+  # result: safe to evaluate untaken, with the failure flagged. Only cheap
+  # arithmetic is speculated (defk-id9): a division (div, rem and the float
+  # `/`, tens of cycles each) is not, so an arm holding one is a branch that
+  # skips it when untaken. Array reads and calls are not speculated either.
   defp speculate?({:__block__, _, [e]}), do: speculate?(e)
   defp speculate?(x) when is_number(x) or is_boolean(x), do: true
   # a tuple arm (defk-uew): each element
@@ -2129,7 +2132,6 @@ defmodule Defk.Compiler do
               :+,
               :-,
               :*,
-              :/,
               :==,
               :!=,
               :===,

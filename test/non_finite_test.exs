@@ -306,10 +306,11 @@ defmodule Defk.NonFiniteTest do
     non_finite(:cond_ratio, [1.0e300, 1.0e-300])
   end
 
-  test "float arms compile to a select" do
+  test "float arms compile to a select, a division arm to a branch" do
     c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
-    assert c =~ "defk_fdiv_s(&"
     assert c =~ "defk_fmul_s(&"
+    # a division is not speculated (defk-id9)
+    refute c =~ "defk_fdiv_s(&"
   end
 
   # DEFK_STRIP: positions in the first strip, at its end and in the next one
