@@ -25,7 +25,7 @@ defmodule Defk.YieldFalseStripTest do
     File.mkdir_p!(dir)
     c = Path.join(dir, "k.c")
     File.write!(c, src)
-    priv = Path.expand("../priv", __DIR__)
+    priv = Application.app_dir(:defk, "priv")
 
     {out, status} =
       System.cmd(
