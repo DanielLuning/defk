@@ -678,6 +678,12 @@ The rule, the same in native code and Elixir mode:
   `m`, is an ordinary `band`: its operand is checked arithmetic and raises on
   overflow.
 
+A mask keeps the low bits and drops the rest without raising, in both
+modes, as Elixir's `band` does. A decoder that must reject values wider than
+the mask checks for it: an LEB128 varint decoder that masks to 64 bits
+accepts an over-long varint (11 bytes or more) and returns its low 64 bits,
+so it should raise when the shift reaches 64.
+
 MurmurHash3's 32-bit mixing stays in `i64` with 32-bit masks:
 
 ```elixir
@@ -768,7 +774,8 @@ iex> M.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
 ```
 
 - **Appending.** `<<acc::bitstring, seg, ...>>` gives a new bitstring with
-  the segments after `acc`'s bits. A segment is an `i64` expression `v` in 8
+  the segments after `acc`'s bits. A segment is an `i64` expression `v` (or
+  a [`u64`](#u64) one, up to `2^64 - 1`, in an unsigned segment) in 8
   bits, `v::k` with a literal `k`, or `v::size(n)` with any `i64` expression
   `n`; it is unsigned and big-endian (most significant bit first), Elixir's
   default, so `unsigned`, `big` and `integer` may be written and change
@@ -962,6 +969,7 @@ that compiles. The error for each says the same.
 | `Enum.min([a, b, c])` | `min(min(a, b), c)` | [`unsupported-call`](#unsupported-call) |
 | `for {x, i} <- Enum.with_index(a)` | `for i <- 0..(len(a) - 1)//1` and `x = a[i]` in the body | [`generator-pattern`](#generator-pattern) |
 | `for x <- a, do: x * 2` as a value, or `for ..., into:` | `out = alloc(f64, len(a))`, a `for` that writes `out[i]`, then `out` | [`for-collect`](#for-collect) |
+| `[x \| acc]` then `Enum.reverse(acc)` to build a result of unknown length | append to a [bitstring accumulator](#the-bitstring-accumulator) started at `<<>>`: `<<acc::bitstring, x::64>>`, read in Elixir with `for <<x::64 <- out>>, do: x`; or `alloc` the largest size and return `{out, count}` | [`unsupported-list`](#unsupported-list) |
 | `<<a, b, _::16, rest::binary>> = arr` | indexed reads `a = arr[0]`, `b = arr[1]` | [`bitstring-match`](#bitstring-match) |
 | `<<b::64>> = <<x::float-64>>` | convert in Elixir before the call | [`bitstring-match`](#bitstring-match) |
 | `x ** 2` | `x * x`, or `pow(x, 2)` for a float | [`unsupported-expression`](#unsupported-expression) |
@@ -3383,7 +3391,7 @@ Lists are not in the kernel subset; a kernel takes packed arrays.
 
 - kind: outside the kernel subset (permanent)
 - why: a list is a linked BEAM term; a kernel works on packed arrays
-- hint: pass the values as an array, a binary such as `for x <- list, into: <<>>, do: <<x::float-native-64>>`
+- hint: pass the values as an array, a binary such as `for x <- list, into: <<>>, do: <<x::float-native-64>>`; build a result of unknown length by appending to a bitstring, `<<acc::bitstring, x::64>>`
 
 Rejected:
 

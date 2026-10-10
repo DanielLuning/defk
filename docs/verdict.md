@@ -45,6 +45,31 @@ sketch `update_many` over `[u64]` hashes, a job not in the catalog. Full log:
   README did not say that a `mix run` script needs
   `use Defk, elixir_mode: true` for `__defk_elixir__/2`.
 
+### Second cold test (defk-dig)
+
+The same setup on a job chosen to meet the subset's limits: a batch decoder
+for packed LEB128 varints (raising on a truncated one) and a streaming top-k
+over `[f64]` with a small sorted buffer and early exit. The prompt did not
+mention any limit. Full log:
+[docs/cold-tests/leb128-topk.md](cold-tests/leb128-topk.md).
+
+- Result: both kernels compiled and agreed with plain Elixir references
+  (fixed cases and 200 random inputs each) and with Elixir mode after four
+  attempts, from the docs alone.
+- Compile errors: four were hit, all with the full why/hint/code frame.
+  Rated by the author: unknown-type (`binary` -> `[u8]`) helped,
+  array-in-branch ("do the array work inside each branch") helped,
+  clause-head helped for its line but hid the real blocker (binary patterns
+  in clause heads, ticketed defk-x4o), unsupported-list helped for inputs
+  and only partly for a result. The redesign (array in, `{array, count}`
+  out) came from docs/language.md; the error catalogue was never needed.
+- One runtime error, an `i64` overflow in `bsl(1, 63)`, named its cause; the
+  `u64` masking fix was in the docs but spread over two places.
+- Fixed after the run: unsupported-list's hint and a docs row for results of
+  unknown length; a bug the bitstring recipe exposed (`u64` segment values
+  of 2^63 and up raised natively, not in Elixir mode); a docs note that a
+  mask drops high bits silently; README instructions for depending on defk.
+
 ## Limitations
 
 <!-- TODO(defk-sgw.5): limitations and what would change the verdict. -->

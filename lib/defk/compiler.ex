@@ -3076,17 +3076,25 @@ defmodule Defk.Compiler do
     {ss, args} =
       Enum.map_reduce(parts, [], fn {v_ast, n_ast, signed}, acc ->
         {sv, v} = lower_expr(v_ast, env)
-        v = coerce!(v, :i64, v_ast, "a bitstring segment value")
+        # an unsigned segment takes a u64 as it is (2^63 and up included)
+        t = if v.t == :u64 and not signed, do: :u64, else: :i64
+        v = coerce!(v, t, v_ast, "a bitstring segment value")
         {sn, n} = lower_expr(n_ast, env)
         n = coerce!(n, :i64, n_ast, "a bitstring segment size")
-        tv = fresh("seg", :i64)
+        tv = fresh("seg", t)
         {sn, nc} = segment_size(sn, n, n_ast)
-        {[sv, "#{tv} = #{v.c};\n", sn], [{tv, nc, signed} | acc]}
+        {[sv, "#{tv} = #{v.c};\n", sn], [{tv, nc, signed, t} | acc]}
       end)
 
     puts =
-      for {tv, nc, signed} <- Enum.reverse(args) do
-        put = if signed, do: "defk_bits_put_signed", else: "defk_bits_put"
+      for {tv, nc, signed, t} <- Enum.reverse(args) do
+        put =
+          cond do
+            signed -> "defk_bits_put_signed"
+            t == :u64 -> "defk_bits_put_u64"
+            true -> "defk_bits_put"
+          end
+
         "#{r} = #{put}(ctx, #{r}, #{tv}, #{nc});\n"
       end
 

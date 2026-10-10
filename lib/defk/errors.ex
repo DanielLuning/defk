@@ -698,7 +698,7 @@ defmodule Defk.Errors do
       summary: "Lists are not in the kernel subset; a kernel takes packed arrays.",
       why: "a list is a linked BEAM term; a kernel works on packed arrays",
       hint:
-        "pass the values as an array, a binary such as `for x <- list, into: <<>>, do: <<x::float-native-64>>`",
+        "pass the values as an array, a binary such as `for x <- list, into: <<>>, do: <<x::float-native-64>>`; build a result of unknown length by appending to a bitstring, `<<acc::bitstring, x::64>>`",
       example: "defk f(x :: i64) :: i64 do\n  xs = [x, x + 1]\n  x\nend",
       rewrite: "defk f(xs :: [i64]) :: i64 do\n  xs[0] + xs[1]\nend"
     },
