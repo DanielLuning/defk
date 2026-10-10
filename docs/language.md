@@ -626,9 +626,12 @@ value, as in Elixir.
   gone after the loop. Reading it after the loop would give the array from
   before the loop, which is never what the code means, so it is a compile
   error ([`array-rebind-in-loop`](#array-rebind-in-loop)): write the array's
-  elements instead (`a[i] = v`, which does carry over), or use a new name
-  inside the loop. Binding it again in an `if` or `case` branch follows
-  Elixir's scoping like any variable.
+  elements instead (`a[i] = v`, which does carry over), carry the array as
+  a `reduce:` accumulator, which is how a rebound array such as
+  `{slots, n} = insert(slots, ...)` reaches the next iteration (see
+  [Array accumulators](#array-accumulators)), or use a new name inside the
+  loop. Binding it again in an `if` or `case` branch follows Elixir's
+  scoping like any variable.
 
 ## 6. Arrays
 
@@ -795,6 +798,14 @@ where it cannot prove that:
   the array it passed (after the call, or in a later iteration): the callee
   copies. When the caller rebinds the result instead
   (`{out, n} = fill(out, v)`), the callee writes the caller's array in place.
+- **An array accumulator** (see [Array accumulators](#array-accumulators))
+  starts as a copy of its initial array when that is an input array, or
+  when another variable with the same buffer is read in the loop or after
+  it; and the array the body gives for the next iteration is copied on the
+  same test (an input array, an array from outside the loop that the loop
+  reads, or one array given to two accumulators). Otherwise the
+  accumulator's buffer is the loop's alone and every write to it, in the
+  body or in a called kernel that returns it, is in place.
 
 Renaming copies nothing: `b = a`, a swap `{prev, cur} = {cur, prev}`, passing
 an array to a kernel and returning one are each a pointer move. So does a
@@ -831,9 +842,10 @@ without a copy. Returning an input array it never writes is
 already has it.
 
 Arrays cannot be the value of an `if`, `cond` or `case`
-([`array-in-branch`](#array-in-branch), not supported yet), nor a `reduce:`
-or `Enum.reduce_while` accumulator
-([`array-accumulator`](#array-accumulator)).
+([`array-in-branch`](#array-in-branch), not supported yet). They can be a
+`reduce:` or `Enum.reduce_while` accumulator, alone or in a tuple, which is
+how an array rebound in a loop body is carried out of the loop (see
+[Array accumulators](#array-accumulators)).
 
 ### Inputs
 
@@ -924,7 +936,9 @@ end
   ([`reduce-clauses`](#reduce-clauses)). The accumulator may be a tuple,
   `{a, b} -> ...`, with an initial tuple of the same size
   ([`accumulator-shape`](#accumulator-shape)); other accumulator patterns are
-  [`accumulator-pattern`](#accumulator-pattern).
+  [`accumulator-pattern`](#accumulator-pattern). An accumulator, or a tuple
+  element of one, may be an array (see
+  [Array accumulators](#array-accumulators)).
 - A `for` without `reduce:` used as a value, and `into:`, are
   [`for-collect`](#for-collect); other options are
   [`for-option`](#for-option); a generator over anything but a range or an
@@ -971,6 +985,52 @@ end
 - There is no `while`, `break` or `return`, and no `Enum.reduce/3`
   ([`enum-reduce`](#enum-reduce)) or `Enum.find`/`find_index`
   ([`enum-find`](#enum-find)) yet.
+
+### Array accumulators
+
+**Supported:** an array, alone or as an element of a tuple accumulator, in
+`for ..., reduce:` and `Enum.reduce_while/3`. This is how a loop body binds
+an array again, typically through a kernel that writes it and returns it,
+and carries the result to the next iteration and out of the loop:
+
+```elixir
+defk insert(slots :: [i64], counts :: [i64], key :: i64) :: {[i64], [i64], i64} do
+  j = band(key, len(slots) - 1)
+  new = if counts[j] == 0, do: 1, else: 0
+  slots[j] = key
+  counts[j] = counts[j] + 1
+  {slots, counts, new}
+end
+
+defk tally(keys :: [i64]) :: {[i64], [i64], i64} do
+  for k <- keys, reduce: {alloc(i64, 64), alloc(i64, 64), 0} do
+    {slots, counts, n} ->
+      {slots, counts, new} = insert(slots, counts, k)
+      {slots, counts, n + new}
+  end
+end
+```
+
+- The value the body gives (or the `acc` of `{:cont, acc}` and
+  `{:halt, acc}`) is the accumulator of the next iteration, and after the
+  last one the loop's value, as in Elixir. `tally` returns both tables.
+- **The accumulator array is threaded in place.** Its buffer is the loop's
+  own, so the body's writes, and those of a called kernel that returns it,
+  go to that buffer, and `tally` copies nothing. The initial array, or a
+  new value, is copied first only where another variable could see the
+  change (see [Copies](#copies)): `tally(keys)` with
+  `reduce: {slots0, ...}` copies `slots0` once, before the loop, if
+  `slots0` is read after it.
+- An array cannot be the value of an `if`, `cond` or `case`
+  ([`array-in-branch`](#array-in-branch)), so a body that changes the array
+  only sometimes writes its elements in a branch, or calls the kernel that
+  writes it on every iteration. In `Enum.reduce_while/3` each tail is its
+  own value, so `if done, do: {:halt, {slots, n}}, else: {:cont, {slots, n + 1}}`
+  works.
+- Elixir mode runs the same `for ..., reduce:` or `Enum.reduce_while/3`,
+  with the arrays as binaries.
+
+(defk-n4r.10)
 
 ### `raise`
 
@@ -2385,38 +2445,6 @@ defk f(n :: i64) :: i64 do
 end
 ```
 
-### array-accumulator
-
-Arrays are not accumulators; allocate the array before the loop and write it in the body.
-
-- kind: outside the kernel subset (permanent)
-- why: an accumulator is a number or a boolean (or a tuple of them); an array is written in place
-- hint: allocate the array before the loop and write it in the body
-
-Rejected:
-
-```elixir
-defk f(n :: i64) :: [f64] do
-  for i <- 0..(n - 1)//1, reduce: alloc(f64, n) do
-    out -> out
-  end
-end
-```
-
-Write instead:
-
-```elixir
-defk f(n :: i64) :: [f64] do
-  out = alloc(f64, n)
-
-  for i <- 0..(n - 1)//1 do
-    out[i] = float(i)
-  end
-
-  out
-end
-```
-
 ### case-form
 
 A `case` has a do block of `pattern -> body` clauses.
@@ -2945,11 +2973,11 @@ end
 
 ### array-rebind-in-loop
 
-An array variable read after a loop is not bound again inside the loop body; write its elements instead.
+An array variable read after a loop is not bound again inside the loop body; write its elements, or carry it as a reduce accumulator.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` is what changes the array for the rest of the kernel
-- hint: write the array's elements in the loop (a[i] = v), or give the array bound inside the loop a new name
+- why: as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` changes the array for the rest of the kernel, and a reduce accumulator carries a rebound array to the next iteration and out of the loop
+- hint: write the array's elements in the loop (a[i] = v); to bind it again, as {a, k} = helper(a, ...) does, make it a reduce accumulator: {a, n} = for ..., reduce: {a, 0} do {a, n} -> ... end; or give the array bound inside the loop a new name
 
 Rejected:
 

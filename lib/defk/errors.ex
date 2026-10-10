@@ -49,7 +49,8 @@ defmodule Defk.Errors do
   # defk-w38), "module-attribute" (attributes are constants since defk-ivt),
   # "read-only-array" (an input array is copied before a write since
   # defk-auo), "tuple-return-call" (a kernel returning a tuple is called from
-  # kernels since defk-auo).
+  # kernels since defk-auo), "array-accumulator" (an owned array is threaded
+  # through a reduce accumulator since defk-n4r.10).
 
   @codes [
     # -- kernel definitions
@@ -551,19 +552,6 @@ defmodule Defk.Errors do
       rewrite:
         "defk f(n :: i64) :: i64 do\n  for i <- 1..n//1, reduce: 0 do\n    acc -> if acc < 100, do: acc + i, else: acc\n  end\nend"
     },
-    %{
-      code: "array-accumulator",
-      kind: :subset,
-      summary:
-        "Arrays are not accumulators; allocate the array before the loop and write it in the body.",
-      why:
-        "an accumulator is a number or a boolean (or a tuple of them); an array is written in place",
-      hint: "allocate the array before the loop and write it in the body",
-      example:
-        "defk f(n :: i64) :: [f64] do\n  for i <- 0..(n - 1)//1, reduce: alloc(f64, n) do\n    out -> out\n  end\nend",
-      rewrite:
-        "defk f(n :: i64) :: [f64] do\n  out = alloc(f64, n)\n\n  for i <- 0..(n - 1)//1 do\n    out[i] = float(i)\n  end\n\n  out\nend"
-    },
 
     # -- case
     %{
@@ -797,11 +785,11 @@ defmodule Defk.Errors do
       code: "array-rebind-in-loop",
       kind: :error,
       summary:
-        "An array variable read after a loop is not bound again inside the loop body; write its elements instead.",
+        "An array variable read after a loop is not bound again inside the loop body; write its elements, or carry it as a reduce accumulator.",
       why:
-        "as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` is what changes the array for the rest of the kernel",
+        "as in Elixir, a variable bound inside a loop body is gone after the loop, so the array after the loop is still the one from before it; an element write `a[i] = v` changes the array for the rest of the kernel, and a reduce accumulator carries a rebound array to the next iteration and out of the loop",
       hint:
-        "write the array's elements in the loop (a[i] = v), or give the array bound inside the loop a new name",
+        "write the array's elements in the loop (a[i] = v); to bind it again, as {a, k} = helper(a, ...) does, make it a reduce accumulator: {a, n} = for ..., reduce: {a, 0} do {a, n} -> ... end; or give the array bound inside the loop a new name",
       example:
         "defk f(n :: i64) :: [i64] do\n  a = alloc(i64, n)\n\n  for i <- 0..(n - 1)//1 do\n    a = alloc(i64, n)\n    a[i] = i\n  end\n\n  a\nend",
       rewrite:
