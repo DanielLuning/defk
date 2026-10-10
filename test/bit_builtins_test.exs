@@ -121,11 +121,11 @@ defmodule Defk.BitBuiltinsTest do
     Exception.message(e)
   end
 
-  test "operands must be i64" do
+  test "operands must be integers" do
     for {body, sig, takes} <- [
-          {"clz(a)", "a :: f64", "clz/1 takes an i64 value, and is called here with (f64)"},
+          {"clz(a)", "a :: f64", "clz/1 takes an integer, and is called here with (f64)"},
           {"popcount(a)", "a :: bool",
-           "popcount/1 takes an i64 value, and is called here with (bool)"},
+           "popcount/1 takes an integer, and is called here with (bool)"},
           {"rotl64(a, b)", "a :: i64, b :: f64",
            "rotl64/2 takes two i64 values, and is called here with (i64, f64)"},
           {"mulhi(a)", "a :: i64", "mulhi/2 takes two i64 values, and is called here with (i64)"}

@@ -54,6 +54,10 @@ defmodule Defk.Test do
   @arith [
     {"i64 overflow", :overflow},
     {"does not fit in i64", :overflow},
+    # u64 arithmetic leaving 0..2^64 - 1, an i64 < 0 where a u64 is expected
+    {"u64 overflow", :overflow},
+    {"does not fit in u64", :overflow},
+    {"negative count", :negative_shift},
     # Elixir's float arithmetic giving inf or NaN, and the kernel's checks for
     # the same (x / 0.0, sqrt/log out of domain, a non-finite result)
     {"bad argument in arithmetic expression", :non_finite},
@@ -73,6 +77,11 @@ defmodule Defk.Test do
     {"out of memory", :out_of_memory},
     {"negative length", :negative_length},
     {"does not fit in u8", :element_range},
+    {"does not fit in u64", :element_range},
+    {"does not fit in i64", :element_range},
+    # Defk.Bits.clz/2 and friends
+    {"is not in 1..64", :bits_width},
+    {"-bit field", :bits_range},
     {"step", :zero_step}
   ]
 

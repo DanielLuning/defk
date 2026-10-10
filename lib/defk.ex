@@ -145,6 +145,7 @@ defmodule Defk do
   end
 
   defp spec(:i64, _), do: quote(do: integer())
+  defp spec(:u64, _), do: quote(do: non_neg_integer())
   defp spec(:f64, :in), do: quote(do: number())
   defp spec(:f64, :out), do: quote(do: float())
   defp spec(:bool, _), do: quote(do: boolean())

@@ -281,9 +281,9 @@ defmodule Defk.AttributesTest do
     end
 
     test "a bignum attribute is the integer-literal error" do
-      msg = rejected(kernel("@big 9_223_372_036_854_775_808", "i + @big"))
+      msg = rejected(kernel("@big 18_446_744_073_709_551_616", "i + @big"))
       assert codes(msg) == ["integer-literal"]
-      assert whats(msg) == ["@big is 9223372036854775808, which does not fit in i64"]
+      assert whats(msg) == ["@big is 18446744073709551616, which does not fit in i64 or u64"]
     end
 
     test "a bad attribute in a case pattern or guard names the attribute" do

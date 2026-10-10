@@ -2,6 +2,13 @@ defmodule Defk.Bits do
   @moduledoc """
   Integer bit operations with a plain Elixir meaning, which a kernel can also
   call as builtins and which give the same value in plain Elixir.
+
+  A kernel calls them by their bare names (`clz(x, 32)`) or as
+  `Defk.Bits.clz(x, 32)`; the compiler maps them to machine instructions,
+  and Elixir mode calls these functions, whose bodies are what the kernel
+  computes. `clz/2`, `ctz/2`, `rotl/3` and `rotr/3` take a width, so a
+  32-bit hash rotates as 32 bits; `clz/1`, `ctz/1`, `popcount/1`, `rotl64/2`
+  and `rotr64/2` work on the 64-bit pattern of any integer.
   """
 
   @doc """
@@ -129,6 +136,109 @@ defmodule Defk.Bits do
   """
   @spec rotr64(integer(), integer()) :: integer()
   def rotr64(x, n) when is_integer(x) and is_integer(n), do: rotl64(x, 64 - Bitwise.band(n, 63))
+
+  @doc """
+  The number of leading zero bits of `x` as a `width`-bit value: 0 to
+  `width`, and `width` for 0. `width` is 1 to 64 and `x` is in
+  `0..2^width - 1`; anything else raises `ArgumentError`. A kernel's
+  `clz(x, w)` is one instruction (`__builtin_clzll`) plus the range check.
+
+      iex> Defk.Bits.clz(1, 32)
+      31
+      iex> Defk.Bits.clz(0, 64)
+      64
+      iex> Defk.Bits.clz(0xFFFFFFFFFFFFFFFF, 64)
+      0
+  """
+  @spec clz(non_neg_integer(), 1..64) :: non_neg_integer()
+  def clz(x, width) do
+    field!("clz/2", x, width)
+    width - bit_length(x, 0)
+  end
+
+  @doc """
+  The number of trailing zero bits of `x` as a `width`-bit value: 0 to
+  `width`, and `width` for 0. The arguments are checked as `clz/2`'s.
+
+      iex> Defk.Bits.ctz(0x50, 8)
+      4
+      iex> Defk.Bits.ctz(0, 32)
+      32
+      iex> Defk.Bits.ctz(0x8000000000000000, 64)
+      63
+  """
+  @spec ctz(non_neg_integer(), 1..64) :: non_neg_integer()
+  def ctz(x, width) do
+    field!("ctz/2", x, width)
+    if x == 0, do: width, else: bit_length(Bitwise.band(x, -x), 0) - 1
+  end
+
+  @doc """
+  Rotate the `width`-bit value `x` left by `n` bits (`n` taken modulo
+  `width`, so it may be negative). `width` is 1 to 64 and `x` is in
+  `0..2^width - 1`; anything else raises `ArgumentError`. The result is in
+  `0..2^width - 1`. MurmurHash3's `rotl32(k, 15)` is `rotl(k, 15, 32)`.
+
+      iex> Defk.Bits.rotl(0x80000001, 1, 32)
+      3
+      iex> Defk.Bits.rotl(1, -1, 64)
+      0x8000000000000000
+      iex> Defk.Bits.rotl(0b0011, 3, 4)
+      0b1001
+  """
+  @spec rotl(non_neg_integer(), integer(), 1..64) :: non_neg_integer()
+  def rotl(x, n, width) when is_integer(n) do
+    field!("rotl/3", x, width)
+    rotate(x, Integer.mod(n, width), width)
+  end
+
+  @doc """
+  Rotate the `width`-bit value `x` right by `n` bits, as `rotl(x, -n, width)`.
+
+      iex> Defk.Bits.rotr(3, 1, 32)
+      0x80000001
+      iex> Defk.Bits.rotr(0x0123456789ABCDEF, 64, 64)
+      0x0123456789ABCDEF
+  """
+  @spec rotr(non_neg_integer(), integer(), 1..64) :: non_neg_integer()
+  def rotr(x, n, width) when is_integer(n) do
+    field!("rotr/3", x, width)
+    rotate(x, Integer.mod(-n, width), width)
+  end
+
+  @doc """
+  The IEEE 754 bits of the float `x` as an unsigned 64-bit integer, as
+  `<<b::64>> = <<x::float-64>>` gives them. An integer is converted to a
+  float first, as in that match. A kernel's `f64_to_u64(x)` returns a `u64`.
+
+      iex> Defk.Bits.f64_to_u64(1.0)
+      0x3FF0000000000000
+      iex> Defk.Bits.f64_to_u64(-0.0)
+      0x8000000000000000
+      iex> Defk.Bits.f64_to_u64(2)
+      0x4000000000000000
+  """
+  @spec f64_to_u64(number()) :: non_neg_integer()
+  def f64_to_u64(x) when is_number(x) do
+    <<b::64>> = <<x::float-64>>
+    b
+  end
+
+  # x is a width-bit value, 1 <= width <= 64
+  defp field!(f, _x, width) when not is_integer(width) or width < 1 or width > 64,
+    do: raise(ArgumentError, "Defk.Bits.#{f}: width #{inspect(width)} is not in 1..64")
+
+  defp field!(f, x, width) do
+    (is_integer(x) and x >= 0 and Bitwise.bsr(x, width) == 0) ||
+      raise ArgumentError, "Defk.Bits.#{f}: #{inspect(x)} does not fit in a #{width}-bit field"
+  end
+
+  defp rotate(x, 0, _width), do: x
+
+  defp rotate(x, k, width) do
+    mask = Bitwise.bsl(1, width) - 1
+    Bitwise.band(Bitwise.bor(Bitwise.bsl(x, k), Bitwise.bsr(x, width - k)), mask)
+  end
 
   defp u64(x), do: Bitwise.band(x, @mask64)
 

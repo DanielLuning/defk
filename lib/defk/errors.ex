@@ -76,9 +76,9 @@ defmodule Defk.Errors do
       code: "unknown-type",
       kind: :error,
       summary:
-        "Kernel types are i64, f64, bool, [f64], [i64], [u8] and tuples of them for results.",
+        "Kernel types are i64, u64, f64, bool, [f64], [i64], [u8], [u64] and tuples of them for results.",
       why: "a kernel works on native numbers and packed arrays, and these are the types it has",
-      hint: "use i64, f64, bool, [f64], [i64] or [u8] (a tuple of them for a result)",
+      hint: "use i64, u64, f64, bool, [f64], [i64], [u8] or [u64] (a tuple of them for a result)",
       example: "defk f(x :: integer) :: integer do\n  x\nend",
       rewrite: "defk f(x :: i64) :: i64 do\n  x\nend"
     },
@@ -275,11 +275,12 @@ defmodule Defk.Errors do
     %{
       code: "integer-literal",
       kind: :error,
-      summary: "Integer literals fit in i64.",
-      why: "kernel integers are i64 (-2^63..2^63 - 1); a kernel never uses bignums",
+      summary: "Integer literals fit in i64 or u64 (-2^63..2^64 - 1).",
+      why:
+        "kernel integers are i64 (-2^63..2^63 - 1) or u64 (0..2^64 - 1, a literal from 2^63 up); a kernel never uses bignums",
       hint: "use a value that fits, or compute in f64",
-      example: "defk f(x :: i64) :: i64 do\n  x + 9_223_372_036_854_775_808\nend",
-      rewrite: "defk f(x :: i64) :: f64 do\n  x + 9.223372036854776e18\nend"
+      example: "defk f(x :: i64) :: i64 do\n  x + 18_446_744_073_709_551_616\nend",
+      rewrite: "defk f(x :: i64) :: f64 do\n  x + 1.8446744073709552e19\nend"
     },
 
     # -- types and operators
@@ -302,6 +303,18 @@ defmodule Defk.Errors do
       hint: "turn the value into the type the operator takes",
       example: "defk f(x :: i64, b :: bool) :: i64 do\n  x + b\nend",
       rewrite: "defk f(x :: i64, b :: bool) :: i64 do\n  if b, do: x + 1, else: x\nend"
+    },
+    %{
+      code: "u64-mix",
+      kind: :subset,
+      summary:
+        "Outside a mask, + - * band bor bxor div rem min max mix a u64 only with a u64 or an i64 known to be >= 0.",
+      why:
+        "outside a mask a kernel computes a u64 operation exactly in 0..2^64 - 1 and an i64 one in i64, and with an i64 that may be negative no type holds every result Elixir gives; inside band(..., 2^k - 1) only the low bits count, so i64 and u64 mix freely there",
+      hint:
+        "to wrap, as hashes do, move the arithmetic inside band(..., 0xFFFFFFFFFFFFFFFF); to stay exact, make the i64 a u64 first with band(x, 0xFFFFFFFFFFFFFFFF), or keep both i64",
+      example: "defk f(h :: u64, x :: i64) :: u64 do\n  h * 31 + x\nend",
+      rewrite: "defk f(h :: u64, x :: i64) :: u64 do\n  band(h * 31 + x, 0xFFFFFFFFFFFFFFFF)\nend"
     },
     %{
       code: "not-an-array",
@@ -347,7 +360,7 @@ defmodule Defk.Errors do
     %{
       code: "alloc-form",
       kind: :error,
-      summary: "alloc/2 takes an element type (f64, i64 or u8) and a length.",
+      summary: "alloc/2 takes an element type (f64, i64, u8 or u64) and a length.",
       why: "an array's element type is fixed when it is created",
       hint: "name the element type first",
       example: "defk f(n :: i64) :: [f64] do\n  alloc(n)\nend",
@@ -715,9 +728,9 @@ defmodule Defk.Errors do
       why:
         "bsl/<<< gives the exact result as Elixir does, and raises ArithmeticError when it does not fit in i64; with literal operands it would raise every time",
       hint:
-        "a mask (1 <<< n) - 1 can be computed in i64 for n <= 62; write the 63-bit one as 0x7FFFFFFFFFFFFFFF, and drop a mask that the value already fits",
-      example: "defk f(x :: i64) :: i64 do\n  band(x, (1 <<< 63) - 1)\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  band(x, 0x7FFFFFFFFFFFFFFF)\nend"
+        "write a value past 2^63 - 1 as a u64 literal (0x8000000000000000); a mask (1 <<< k) - 1 directly in band(x, mask) is computed at compile time, for k up to 64",
+      example: "defk f(x :: i64) :: i64 do\n  band(x, 1 <<< 63)\nend",
+      rewrite: "defk f(x :: u64) :: u64 do\n  band(x, 0x8000000000000000)\nend"
     },
     # -- module attributes
     %{
@@ -734,7 +747,7 @@ defmodule Defk.Errors do
       code: "attribute-value",
       kind: :subset,
       summary:
-        "A module attribute read in a kernel holds an integer (in i64), a float, a boolean or a binary.",
+        "A module attribute read in a kernel holds an integer (in i64 or u64), a float, a boolean or a binary.",
       why:
         "a kernel inlines an attribute as a constant: a number or boolean as its literal, a binary as a [u8] that a write copies first; other terms such as lists, tuples, maps and atoms are BEAM terms it cannot hold",
       hint: "pass the value as a parameter; pack a list of bytes into a binary attribute",

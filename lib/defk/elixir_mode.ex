@@ -6,7 +6,8 @@ defmodule Defk.ElixirMode do
   Its results define what the same code gives in Elixir, with the kernel
   subset's limits applied, so a kernel and its Elixir mode can agree exactly:
 
-    * every integer operation is range-checked to i64 (`ArithmeticError`)
+    * every integer operation is range-checked to i64, or to u64 for a u64
+      operation, and a u64 used as an i64 is checked (`ArithmeticError`)
     * `a[i]` out of range raises `Enum.OutOfBoundsError`, as the kernel does
     * an array write whose value doesn't fit the element type raises
       `ArgumentError` (a `[u8]` write of 300, as the kernel does)
@@ -46,6 +47,7 @@ defmodule Defk.ElixirMode do
   @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
   @loads Defk.Builtins.loads()
   @bits Defk.Builtins.bits()
+  @ints [:i64, :u64]
 
   @doc """
   Runs `fun` with this process's kernel calls in `mode` (`:native` or
@@ -256,11 +258,13 @@ defmodule Defk.ElixirMode do
     {{:=, [generated: true], [tuple(pvars), q]}, env}
   end
 
-  # out[i] = v: `out` gets a new binary
+  # out[i] = v: `out` gets a new binary; put_* checks that an integer fits
+  # the element type
   defp write(arr, idx, rhs, env, m) do
     {qa, {:arr, e}} = expr(arr, env)
-    {pre, [qi, qv], [_, tv]} = operands([idx, rhs], env)
-    put = call(:"put_#{e}", [qa, qi, coerce(qv, tv, if(e == :f64, do: :f64, else: :i64))], m)
+    {pre, [qi, qv], [ti, tv]} = operands([idx, rhs], env)
+    qv = if e == :f64, do: coerce(qv, tv, :f64), else: qv
+    put = call(:"put_#{e}", [qa, coerce(qi, ti, :i64), qv], m)
 
     case arr do
       {name, _, ctx} when is_atom(name) and is_atom(ctx) ->
@@ -275,6 +279,7 @@ defmodule Defk.ElixirMode do
   # ----------------------------------------------------------- expressions --
   # expr(ast, env) :: {quoted, type}
 
+  defp expr(n, _env) when is_integer(n) and n > 0x7FFFFFFFFFFFFFFF, do: {n, :u64}
   defp expr(n, _env) when is_integer(n), do: {n, :i64}
   defp expr(f, _env) when is_float(f), do: {f, :f64}
   defp expr(b, _env) when is_boolean(b), do: {b, :bool}
@@ -304,8 +309,8 @@ defmodule Defk.ElixirMode do
   defp expr({:{}, _, items}, env), do: tuple_expr(items, env)
 
   defp expr({{:., _, [Access, :get]}, m, [arr, idx]}, env) do
-    {pre, [qa, qi], [{:arr, e}, _]} = operands([arr, idx], env)
-    {with_pre(pre, call(:"get_#{e}", [qa, qi], m)), elem_type(e)}
+    {pre, [qa, qi], [{:arr, e}, ti]} = operands([arr, idx], env)
+    {with_pre(pre, call(:"get_#{e}", [qa, coerce(qi, ti, :i64)], m)), elem_type(e)}
   end
 
   defp expr({:if, m, [c, kw]}, env) when is_list(kw), do: if_form(c, kw, :value, env, m)
@@ -355,6 +360,7 @@ defmodule Defk.ElixirMode do
 
   defp expr({op, m, [a, b]}, env) when op in [:+, :-, :*, :/] do
     {pre, [qa, qb], [ta, tb]} = operands([a, b], env)
+    op != :/ && note_u64_mix([a, b], [ta, tb], env)
 
     {q, t} =
       case {op, ta, tb} do
@@ -362,6 +368,8 @@ defmodule Defk.ElixirMode do
         {:+, :i64, :i64} -> {call(:add, [qa, qb], m), :i64}
         {:-, :i64, :i64} -> {call(:sub, [qa, qb], m), :i64}
         {:*, :i64, :i64} -> {call(:mul, [qa, qb], m), :i64}
+        # a u64 with a u64 or an i64 >= 0 (the compiler rejects other mixes)
+        {_, ta, tb} when ta in @ints and tb in @ints -> {u64_op(op, [qa, qb], m), :u64}
         _ -> {{op, gm(m), [qa, qb]}, :f64}
       end
 
@@ -421,8 +429,12 @@ defmodule Defk.ElixirMode do
 
   defp expr({{:., _, [:math, fun]}, m, args}, env), do: fun_call(fun, args, m, env)
 
+  defp expr({{:., _, [{:__aliases__, _, [:Defk, :Bits]}, f]}, m, args}, env)
+       when f in [:wrap64 | @bits],
+       do: expr({f, m, args}, env)
+
   # band(a, b), a &&& b, Bitwise.band(a, b) and :erlang.band(a, b) (the
-  # compiler accepted only i64 operands): qualified Bitwise calls, so the
+  # compiler accepted only integer operands): qualified Bitwise calls, so the
   # generated code needs no import, and Ops for the shifts' i64 limit
   defp expr({op, m, args}, env) when op in @bitwise_names and is_list(args) do
     f = Defk.Builtins.bitwise_fun(op)
@@ -442,21 +454,42 @@ defmodule Defk.ElixirMode do
       masked(expr, mask, m, env)
     else
       _ ->
-        {pre, qs, _} = operands(args, env)
-        q = if f in [:bsl, :bsr], do: call(f, qs, m), else: remote(Bitwise, f, qs, m)
-        {with_pre(pre, q), :i64}
+        {pre, qs, ts} = operands(args, env)
+
+        {q, t} =
+          case {f, ts} do
+            # a u64 shifted: exact, bsl raises past 2^64 - 1 (the count may
+            # be a u64, converted)
+            {f, [:u64, tn]} when f in [:bsl, :bsr] ->
+              [qa, qn] = qs
+              {call(:"#{f}_u64", [qa, coerce(qn, tn, :i64)], m), :u64}
+
+            {f, [_, tn]} when f in [:bsl, :bsr] ->
+              [qa, qn] = qs
+              {call(f, [qa, coerce(qn, tn, :i64)], m), :i64}
+
+            # with a u64 operand the compiler accepted only a u64 or i64 >= 0
+            {_, ts} ->
+              note_u64_mix(args, ts, env)
+              {remote(Bitwise, f, qs, m), if(:u64 in ts, do: :u64, else: :i64)}
+          end
+
+        {with_pre(pre, q), t}
     end
   end
 
   # Masked arithmetic (Defk.Masked): the tree under the mask is Elixir's own
-  # + - * on bignums, unchecked, and the mask is Bitwise.band of the exact
-  # result. Leaves are checked as usual.
+  # arithmetic and Bitwise on bignums, unchecked, and the mask is
+  # Bitwise.band of the exact result. Leaves are checked as usual. The
+  # 64-bit mask gives a u64.
   defp masked(expr, mask, m, env) do
     {q, _} = wrapped(expr, env)
-    {remote(Bitwise, :band, [q, mask], m), :i64}
+    {remote(Bitwise, :band, [q, mask], m), if(mask == 0xFFFFFFFFFFFFFFFF, do: :u64, else: :i64)}
   end
 
   defp wrapped(ast, env) do
+    m = with {_, m, _} when is_list(m) <- ast, do: m
+
     case Defk.Masked.tree_node(ast) do
       nil ->
         expr(ast, env)
@@ -466,18 +499,39 @@ defmodule Defk.ElixirMode do
 
       {:neg, a} ->
         {q, _} = wrapped(a, env)
-        {{:-, gm(elem(ast, 1)), [q]}, :i64}
+        {{:-, gm(m), [q]}, :i64}
+
+      {:bnot, a} ->
+        {q, _} = wrapped(a, env)
+        {remote(Bitwise, :bnot, [q], m), :i64}
 
       {:bsl, a, n} ->
         {q, _} = wrapped(a, env)
-        {call(:wbsl, [q, n], elem(ast, 1)), :i64}
+        {call(:wbsl, [q, n], m), :i64}
+
+      # by a count that is not a literal: a negative one raises, as in the kernel
+      {:bsl_var, a, n} ->
+        lower = fn
+          {:tree, x}, e -> wrapped(x, e)
+          {:leaf, x}, e -> expr(x, e)
+        end
+
+        {pre, [qa, qn], _} = operands([{:tree, a}, {:leaf, n}], env, lower)
+        {with_pre(pre, call(:wbsl_var, [qa, qn], m)), :i64}
+
+      {op, a, b} when op in [:band, :bor, :bxor] ->
+        {pre, [qa, qb], _} = operands([a, b], env, &wrapped/2)
+        {with_pre(pre, remote(Bitwise, op, [qa, qb], m)), :i64}
 
       {op, a, b} ->
         {pre, [qa, qb], _} = operands([a, b], env, &wrapped/2)
         eop = %{add: :+, sub: :-, mul: :*}[op]
-        {with_pre(pre, {eop, gm(elem(ast, 1)), [qa, qb]}), :i64}
+        {with_pre(pre, {eop, gm(m), [qa, qb]}), :i64}
     end
   end
+
+  # + - * on two integers of which one is a u64: checked in u64
+  defp u64_op(op, qs, m), do: call(%{+: :add_u64, -: :sub_u64, *: :mul_u64}[op], qs, m)
 
   defp tuple_expr(items, env) do
     {pre, qs, ts} = operands(items, env)
@@ -487,12 +541,13 @@ defmodule Defk.ElixirMode do
   # ----------------------------------------------------------------- calls --
 
   defp fun_call(:alloc, [{e, _, _}, n], m, env) do
-    {q, _} = expr(n, env)
-    {call(:alloc, [q, esize(e)], m), {:arr, e}}
+    {q, t} = expr(n, env)
+    {call(:alloc, [coerce(q, t, :i64), esize(e)], m), {:arr, e}}
   end
 
   defp fun_call(name, args, m, env) do
     {pre, qs, ts} = operands(args, env)
+    name in [:div, :rem, :min, :max] && note_u64_mix(args, ts, env)
     {q, t} = builtin(name, qs, ts, m) || kernel_call(name, qs, ts, m, env)
     {with_pre(pre, q), t}
   end
@@ -503,19 +558,42 @@ defmodule Defk.ElixirMode do
   defp builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl64, :rotr64],
     do: {remote(Defk.Bits, f, [a, b], m), :i64}
 
-  defp builtin(f, [a], [:i64], m) when f in @bits,
+  # clz/2, ctz/2, rotl/3, rotr/3, f64_to_u64/1 (defk-wlu): Defk.Bits as it
+  # is; rotl/rotr of an i64 give an i64, checked
+  defp builtin(f, [x, w], [_, tw], m) when f in [:clz, :ctz],
+    do: {remote(Defk.Bits, f, [x, coerce(w, tw, :i64)], m), :i64}
+
+  defp builtin(f, [x, n, w], [tx, tn, tw], m) when f in [:rotl, :rotr] do
+    q = remote(Defk.Bits, f, [x, coerce(n, tn, :i64), coerce(w, tw, :i64)], m)
+    {coerce(q, :u64, tx), tx}
+  end
+
+  defp builtin(:f64_to_u64, [x], [tx], m),
+    do: {remote(Defk.Bits, :f64_to_u64, [coerce(x, tx, :f64)], m), :u64}
+
+  defp builtin(f, [a], [t], m) when f in @bits and t in @ints,
     do: {remote(Defk.Bits, f, [a], m), :i64}
 
   defp builtin(f, [a, b], [:i64, :i64], m) when f in [:div, :rem], do: {call(f, [a, b], m), :i64}
-  defp builtin(:float, [a], [:i64], m), do: {{{:., gm(m), [:erlang, :float]}, gm(m), [a]}, :f64}
+
+  defp builtin(f, [a, b], [ta, tb], m) when f in [:div, :rem] and ta in @ints and tb in @ints,
+    do: {call(:"#{f}_u64", [a, b], m), :u64}
+
+  defp builtin(:float, [a], [t], m) when t in @ints,
+    do: {{{:., gm(m), [:erlang, :float]}, gm(m), [a]}, :f64}
+
   defp builtin(:float, [a], [:f64], _m), do: {a, :f64}
-  defp builtin(f, [a], [:i64], _m) when f in [:trunc, :round], do: {a, :i64}
+  defp builtin(f, [a], [t], _m) when f in [:trunc, :round] and t in @ints, do: {a, t}
   defp builtin(f, [a], [:f64], m) when f in [:trunc, :round], do: {call(f, [a], m), :i64}
   defp builtin(:abs, [a], [:i64], m), do: {call(:abs, [a], m), :i64}
+  defp builtin(:abs, [a], [:u64], _m), do: {a, :u64}
   defp builtin(:abs, [a], [:f64], m), do: {remote(Kernel, :abs, [a], m), :f64}
 
-  defp builtin(f, [a, b], [t, t], m) when f in [:min, :max] and t in [:i64, :f64],
+  defp builtin(f, [a, b], [t, t], m) when f in [:min, :max] and t in [:i64, :u64, :f64],
     do: {remote(Kernel, f, [a, b], m), t}
+
+  defp builtin(f, [a, b], [ta, tb], m) when f in [:min, :max] and ta in @ints and tb in @ints,
+    do: {remote(Kernel, f, [a, b], m), :u64}
 
   defp builtin(f, [a], [_], m) when f in @math1, do: {remote(:math, f, [a], m), :f64}
   defp builtin(:pow, [a, b], [_, _], m), do: {remote(:math, :pow, [a, b], m), :f64}
@@ -679,12 +757,10 @@ defmodule Defk.ElixirMode do
   # `cond` condition is not), every arm ending in the threaded arrays.
   # A tail chain (mode {:tail, _}) threads nothing: its leaves carry the arrays.
   defp finish(arms, w, mode, m, pre \\ []) do
-    t =
-      Enum.find_value(arms, fn
-        {:when, _, {_, _, t}} -> t
-        {:else, {_, _, t}} -> t
-        _ -> nil
-      end)
+    ts = arms |> Enum.map(&arm_type/1) |> Enum.reject(&is_nil/1)
+
+    # a u64 arm with i64 arms >= 0 makes a u64, as in the kernel
+    t = if :u64 in ts, do: :u64, else: List.first(ts)
 
     nested? = w != []
     tail? = match?({:tail, _}, mode)
@@ -739,6 +815,10 @@ defmodule Defk.ElixirMode do
     {q, t}
   end
 
+  defp arm_type({:when, _, {_, _, t}}), do: t
+  defp arm_type({:else, {_, _, t}}), do: t
+  defp arm_type(_), do: nil
+
   # Nested mode: each when-arm wraps the rest, the first else/raise ends the chain.
   defp nested_arms(arms, out, m) do
     List.foldr(arms, nil, fn
@@ -776,13 +856,13 @@ defmodule Defk.ElixirMode do
 
   # {pre, enumerable, element type}
   defp gen_source({:.., _, [a, b]}, env) do
-    {pre, [qa, qb], _} = operands([a, b], env)
-    {pre, call(:range, [qa, qb], []), :i64}
+    {pre, qs, ts} = operands([a, b], env)
+    {pre, call(:range, Enum.zip_with(qs, ts, &coerce(&1, &2, :i64)), []), :i64}
   end
 
   defp gen_source({:..//, m, [a, b, s]}, env) do
-    {pre, qs, _} = operands([a, b, s], env)
-    {pre, call(:range, qs, m), :i64}
+    {pre, qs, ts} = operands([a, b, s], env)
+    {pre, call(:range, Enum.zip_with(qs, ts, &coerce(&1, &2, :i64)), m), :i64}
   end
 
   defp gen_source(src, env) do
@@ -813,7 +893,8 @@ defmodule Defk.ElixirMode do
             # the init is evaluated before the generators, as in the kernel
             {iq, it} = expr(init_ast, env)
             {levels, benv} = quals(quals, env)
-            acc = acc_parts(pat, it)
+
+            acc = settle_accs(acc_parts(pat, it), init_ast, &[body_type(body, benv, &1)])
             {{iq, it}, levels, block_parts(body, put_accs(benv, acc)), acc}
         end
       end)
@@ -823,6 +904,12 @@ defmodule Defk.ElixirMode do
     if w == [],
       do: for_direct(init, levels, body_parts, acc, m),
       else: for_threaded(init, levels, body_parts, acc, w, m)
+  end
+
+  # the type of a reduce body's value with accumulators `acc` (a look ahead)
+  defp body_type(body, env, acc) do
+    {{_, _, t}, _} = trial(fn -> block_parts(body, put_accs(env, acc)) end)
+    t
   end
 
   defp quals(quals, env) do
@@ -845,7 +932,9 @@ defmodule Defk.ElixirMode do
 
   defp put_accs(env, acc) do
     Enum.reduce(acc, env, fn {name, t}, e ->
-      if underscore?(name), do: e, else: put_var(e, name, t)
+      if underscore?(name),
+        do: e,
+        else: %{e | vars: Map.put(e.vars, name, %{t: t, id: fresh_id(), acc: true})}
     end)
   end
 
@@ -928,7 +1017,22 @@ defmodule Defk.ElixirMode do
       scoped(fn ->
         {{iq, it}, iw} = scoped(fn -> expr(init_ast, env) end)
         {src_pre, srcq, xt} = gen_source(src, env)
-        acc = acc_parts(acc_pat_ast, it)
+
+        acc =
+          settle_accs(acc_parts(acc_pat_ast, it), init_ast, fn acc ->
+            fenv = put_accs(bind_gen(x, xt, env), acc)
+            outer = Process.put(:defk_em_leaf_types, [])
+
+            record = fn _tag, v_ast, lenv ->
+              {_, vt} = expr(v_ast, lenv)
+              Process.put(:defk_em_leaf_types, [vt | Process.get(:defk_em_leaf_types)])
+              nil
+            end
+
+            trial(fn -> tail(body, fenv, record) end)
+            Process.put(:defk_em_leaf_types, outer) || []
+          end)
+
         fenv = bind_gen(x, xt, env)
         fenv = put_accs(fenv, acc)
 
@@ -974,6 +1078,65 @@ defmodule Defk.ElixirMode do
       {block(src_pre ++ [{:=, [generated: true], [tuple([res | vars(w)]), call]}, res]), at}
     end
   end
+
+  # An accumulator whose initial value is a non-negative integer literal is a
+  # u64 when a new value is, as in the kernel (u64_accs in Defk.Compiler):
+  # `new_ts.(acc)` gives the types of the new values with accumulator types
+  # `acc`, and an i64 accumulator meeting a u64 there becomes a u64 until
+  # nothing changes.
+  defp settle_accs(acc, init_ast, new_ts) do
+    items = if match?([_], acc), do: [init_ast], else: literal_items(init_ast)
+
+    lits =
+      for {{name, :i64}, item} <- Enum.zip(acc, items), is_integer(item) and item >= 0, do: name
+
+    if lits == [] do
+      acc
+    else
+      # during the look ahead, an operation mixing one of `lits` with a u64
+      # records it (note_u64_mix/3), as the kernel's u64_mix! retries
+      {cands, hits} = {Process.get(:defk_em_u64_cands, []), Process.get(:defk_em_u64_hits, [])}
+      Process.put(:defk_em_u64_cands, cands ++ lits)
+      Process.put(:defk_em_u64_hits, [])
+      news = Enum.map(new_ts.(acc), fn t -> with {:tuple, ts} <- t, do: ts end)
+      mixed = Process.get(:defk_em_u64_hits)
+      Process.put(:defk_em_u64_cands, cands)
+      Process.put(:defk_em_u64_hits, hits ++ (mixed -- lits))
+
+      acc2 =
+        acc
+        |> Enum.with_index()
+        |> Enum.map(fn {{name, t}, i} ->
+          u64? =
+            name in mixed or
+              Enum.any?(news, &((is_list(&1) and Enum.at(&1, i) == :u64) or &1 == :u64))
+
+          if name in lits and u64?, do: {name, :u64}, else: {name, t}
+        end)
+
+      if acc2 == acc, do: acc, else: settle_accs(acc2, init_ast, new_ts)
+    end
+  end
+
+  # operands `asts` of types `ts`: an i64 accumulator variable that may
+  # become a u64 (settle_accs/3) meeting a u64 is recorded
+  defp note_u64_mix(asts, ts, env) do
+    cands = Process.get(:defk_em_u64_cands, [])
+
+    if :u64 in ts and cands != [] do
+      for {{name, _, ctx}, :i64} <- Enum.zip(asts, ts),
+          is_atom(name) and is_atom(ctx) and name in cands and
+            Map.get(env.vars, name, %{})[:acc] == true do
+        Process.put(:defk_em_u64_hits, [name | Process.get(:defk_em_u64_hits)])
+      end
+    end
+
+    :ok
+  end
+
+  defp literal_items({a, b}), do: [a, b]
+  defp literal_items({:{}, _, items}), do: items
+  defp literal_items(_), do: []
 
   defp hoist(q, pre) do
     t = temp("init")
@@ -1083,8 +1246,12 @@ defmodule Defk.ElixirMode do
   # i64 -> f64 where the kernel converts (returns, arguments, accumulators, stores)
   defp coerce(q, t, t), do: q
 
-  defp coerce(q, :i64, :f64),
+  defp coerce(q, t, :f64) when t in @ints,
     do: {{:., [generated: true], [:erlang, :float]}, [generated: true], [q]}
+
+  # a u64 where an i64 is expected and back: checked, as in the kernel
+  defp coerce(q, :u64, :i64), do: call(:u64_to_i64, [q], [])
+  defp coerce(q, :i64, :u64), do: call(:i64_to_u64, [q], [])
 
   defp coerce(q, {:tuple, ts}, {:tuple, rts}) do
     tmps = Enum.map(ts, fn _ -> temp("el") end)
