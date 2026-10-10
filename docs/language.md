@@ -1158,8 +1158,19 @@ end
   most of them in guards too).
 - A subject no clause matches raises `CaseClauseError`, as in Elixir, so a
   catch-all is optional.
-- **Limit:** an error inside a guard (an overflow, `rem` by zero) raises it,
-  where Elixir would treat the guard as false and try the next clause.
+- An error inside a guard fails the guard, as in Elixir, and the next clause
+  is tried: a zero divisor in `div`, `rem` or `/`, and a float result that is
+  inf or NaN. The whole guard is false, so an error on the left of an `or`
+  fails it too, while an operand a short-circuit skips never runs. Elixir mode
+  does the same. A guard with no operation that can fail compiles as before.
+  If no later clause matches, the case raises `CaseClauseError`.
+- **Limit:** a guard result outside `i64` (`n * n > 100` at `n = 2^40`, `abs`
+  of the minimum, a `trunc` out of range) is no error in Elixir, which has
+  bignums, so it does not fail the clause: it raises `ArithmeticError`, as the
+  same operation does outside a guard. When one guard has both a zero divisor
+  and such a result, evaluated without a short-circuit between them
+  (`rem(n, y) < n * n`), the kernel raises, where Elixir mode may fail the
+  clause for the zero divisor it reaches first.
 
 ### `for`
 
@@ -3412,7 +3423,7 @@ bug.
 | `alloc/2` of more than 2^48 bytes | (the VM would abort) | `ArgumentError` "alloc/2: length too large" |
 | `alloc/2` of a size the allocator cannot provide | (the VM would abort) | `ArgumentError` "out of memory"; Elixir mode raises it from 2^47 bytes without trying |
 | a range whose last element is within one step of the `i64` limit, e.g. `0..9223372036854775807` | runs | `ArithmeticError` "range element ... is within one step of the i64 limit" before the loop starts, also when the loop would stop earlier |
-| an error inside a `case` guard (overflow, `rem` by zero) | the guard fails, the next clause is tried | the error is raised |
+| an `i64` overflow inside a `case` guard (`n * n > 100`) | the guard is computed exactly | `ArithmeticError`. A zero divisor in a guard is no limit: it fails the clause, as in Elixir |
 | ordering booleans, comparing a boolean with a number | term order | compile error [`operand-type`](#operand-type) |
 | `&&`, `\|\|`, `!` on non-boolean values | truthiness | compile error [`operand-type`](#operand-type) |
 | recursion, direct or mutual | runs | compile error [`recursion`](#recursion) |
