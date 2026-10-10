@@ -112,6 +112,17 @@ defmodule Defk.Build do
     |> binary_part(0, 10)
   end
 
+  @doc """
+  A 64-bit hash of the runtime header, the base of the frame layout tag
+  (`DEFK_LAYOUT_TAG`, defk-ls8): a frame stamped by a different header never
+  passes the check.
+  """
+  @spec header_hash() :: non_neg_integer()
+  def header_hash do
+    <<h::64, _::binary>> = :erlang.md5(File.read!(Path.join(@priv, "defk_runtime.h")))
+    h
+  end
+
   # A cross-build's headers differ from the running ERTS's, so they key the cache.
   defp erts_include_override do
     case System.get_env("ERTS_INCLUDE_DIR", "") do

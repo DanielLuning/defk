@@ -1218,8 +1218,11 @@ the comparison to write for a number).
   may end in array writes.
 
 Only the branch taken is evaluated, as in Elixir. (An `if` whose branches are
-plain arithmetic may be compiled to compute both sides; an integer overflow in
-the branch not taken never raises.)
+cheap arithmetic (`+ - *`, comparisons, `band`/`bor`/`bxor`, shifts) may be
+compiled to compute both sides, so an untaken branch can still be evaluated;
+an integer overflow in it never raises. A branch holding a division (`div/2`,
+`rem/2`, or the float `/`), an array read or a call is never computed untaken:
+the `if` is compiled to a real branch, which skips the division.)
 
 ### `cond`
 
