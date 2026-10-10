@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-djy.1"
+  ],
   "blocks": [],
   "created": "2026-10-10T14:58:34Z",
   "description": "package/0 in mix.exs (description, licenses, links, maintainers, files: include priv/defk_runtime.h and anything the build needs, exclude tests/examples/bench), version policy and CHANGELOG, a README that works on Hex (relative links), and mix hex.build dry run checked into CI. Whether and when to publish is gated on the verdict (defk-sgw.5: library vs research result) and the package name; this ticket only makes the package publishable and records what's missing.",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Hex package metadata and publishing readiness",
   "type": "task",
-  "updated_at": "2026-10-10T14:58:34Z"
+  "updated_at": "2026-10-10T14:58:41Z"
 }
