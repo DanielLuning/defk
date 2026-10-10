@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-10T10:34:03Z",
   "created": "2026-10-09T21:19:51Z",
   "description": "Observed in examples/monte_carlo_rtp.exs (defk-9p6.17): `i = if pow2, do: band(v, n - 1), else: rem(v, n)` compiled as a select (both arms computed, README design decision 2 / select/4 in the compiler) cost 48 ns/spin, against 41.5 ns/spin for a plain `rem(v, n)`; a branch would have skipped the division. Also noted: a branch-free run count built from band/if selects was slower (45 ns/spin) than a `cond` that stops at the first mismatch (27 ns/spin).\n\nAdd a cost heuristic to `select?/1`: arms containing div, rem, or a float division (and later: loads, calls) are not speculated; they compile as branches. Measure on count_primes (which the select was introduced for, defk-jp3) that nothing regresses, and on the Monte Carlo example. Document in docs/language.md section 7 that an untaken arm may still be evaluated when it is cheap arithmetic, and is skipped when it contains a division.\n\nDone when: the heuristic is in with a test on the generated C (a rem arm produces an if/else, an add arm a select), count_primes is unchanged within noise, and the example's index selection is simplified back to the if form.",
   "id": "defk-id9",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Select compilation evaluates both arms even when one contains div/rem: cost heuristic",
   "type": "task",
-  "updated_at": "2026-10-10T10:32:21Z"
+  "updated_at": "2026-10-10T10:34:03Z"
 }
