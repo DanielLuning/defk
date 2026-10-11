@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-11T13:12:29Z",
   "created": "2026-10-11T12:47:53Z",
   "description": "Found by the HexDocs cold test (defk-djy.9, docs/cold-tests/hexdocs-entropy.md, point 8). Counting bytes (a 256-bin histogram, per window or over a whole binary, then Shannon entropy) is a common job with no catalog entry and no docs/performance.md entry, so building a fair optimised Elixir baseline meant guessing (:counters, 8 bytes per binary-pattern step from performance.md 2.2/2.3, results appended to a binary per 2.1). The cold tester's own numbers (in the log, loaded machine, not a catalog measurement): first pass bin_to_list |\u003e Enum.frequencies 9 MB/s; :counters + 8-byte steps 138 MB/s; kernel ~2250 MB/s (16x, one process vs one call, not split over schedulers).\n\nDone when examples/ has a byte-histogram (and windowed-entropy) example in the usual shape (Defk.Bench.report, expected verdict declared before the numbers, realistic size declared), the Elixir side tries at least Enum.frequencies, :counters/:atomics, a tuple of counts, binary-pattern steps of 1 and 8 bytes and a split over all schedulers, the kernel is compared one process vs one call and over all schedulers, and docs/performance.md gets an entry (section 2, 'counting bytes') with numbers, conditions and status; measuring.md's pointer to '2.12 Dense counters' is updated to the new entry if it is the better one.",
   "id": "defk-9p6.28",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Catalog: byte histogram and windowed entropy, with optimised Elixir baselines",
   "type": "task",
-  "updated_at": "2026-10-11T13:12:28Z"
+  "updated_at": "2026-10-11T13:12:29Z"
 }
