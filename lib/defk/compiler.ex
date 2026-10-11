@@ -695,7 +695,7 @@ defmodule Defk.Compiler do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
     lives = live_after(es)
-    {s1, env} = stmt_list(init, lives, nested(env))
+    {s1, env} = stmt_list(init, lives, nested(env, ast))
 
     {s2, v, env} =
       in_ctx(last, fn ->
@@ -753,7 +753,7 @@ defmodule Defk.Compiler do
   # A block evaluated only for effect, nested like lower_block's.
   defp lower_stmts(ast, env) do
     es = exprs(ast)
-    stmt_list(es, live_after(es), nested(env))
+    stmt_list(es, live_after(es), nested(env, ast))
   end
 
   # statements `es` of one block; `lives` has the names read after each
@@ -1067,8 +1067,10 @@ defmodule Defk.Compiler do
   # construct's bindings that are read anywhere in its statement are live for
   # its nested blocks (env.nest), which covers later iterations of a loop and
   # the rest of the statement; this is conservative, so it may copy where
-  # Elixir would not need to. Inside a callee, what the caller reads after the
-  # call is live.
+  # Elixir would not need to. An arm of an if, cond or case leaves out what
+  # its other arms read (nested/2): they run instead of it, so a helper call
+  # in one arm that rebinds the array the other arm reads writes in place
+  # (defk-33b). Inside a callee, what the caller reads after the call is live.
   #
   # Where copies go:
   #   * at a write `a[i] = v`: when a is an input array, or a binding that
@@ -1103,8 +1105,70 @@ defmodule Defk.Compiler do
     }
   end
 
-  # the env of a block nested in the statement `env` is at
-  defp nested(env), do: %{env | out: env.nest, depth: env.depth + 1}
+  # the env of block `ast` nested in the statement `env` is at. An arm of an
+  # if, cond or case runs instead of its other arms, so what they read is not
+  # read after it (defk-33b): its live set is what is read after the
+  # statement, and what the statement reads outside the branch's arms. Any
+  # other nested block (a loop or fn body, run again) keeps env.nest.
+  defp nested(env, ast) do
+    out =
+      if arm?(env.stmt, ast),
+        do: MapSet.union(env.live, pairs(env, reads_outside(taken(env.stmt, ast), ast))),
+        else: env.nest
+
+    %{env | out: out, depth: env.depth + 1}
+  end
+
+  # `ast` is one arm of an if, cond or case in `stmt`, and nowhere else in it
+  defp arm?(nil, _ast), do: false
+
+  defp arm?(stmt, ast) do
+    occurrences(stmt, ast) == 1 and
+      elem(Macro.prewalk(stmt, false, &{&1, &2 or ast in arms(&1)}), 1)
+  end
+
+  defp occurrences(ast, node) do
+    {_, n} = Macro.prewalk(ast, 0, fn x, n -> {x, if(x == node, do: n + 1, else: n)} end)
+    n
+  end
+
+  # Statement `stmt` as it runs when `node` does: every if, cond and case arm
+  # that is an alternative to the arm holding `node` is left out. `stmt`
+  # whole when `node` is not exactly once in it.
+  defp taken(stmt, node) do
+    if occurrences(stmt, node) == 1,
+      do: Macro.prewalk(stmt, &if(holds_arm?(&1, node), do: other_arms_out(&1, node), else: &1)),
+      else: stmt
+  end
+
+  # `x` is an if, cond or case with `node` in one of its arms
+  defp holds_arm?(x, node), do: Enum.any?(arms(x), &(occurrences(&1, node) > 0))
+
+  # the arm bodies of an if, cond or case node
+  defp arms({:if, _, [_c, kw]}) when is_list(kw), do: for({k, b} <- kw, k in [:do, :else], do: b)
+
+  defp arms({:cond, _, [[do: clauses]]}) when is_list(clauses),
+    do: for({:->, _, [_, body]} <- clauses, do: body)
+
+  defp arms({:case, _, [_subject, [do: clauses]]}) when is_list(clauses),
+    do: for({:->, _, [_, body]} <- clauses, do: body)
+
+  defp arms(_ast), do: []
+
+  defp other_arms_out({:if, m, [c, kw]}, node),
+    do: {:if, m, [c, for({k, b} <- kw, do: {k, arm_or_nil(b, node)})]}
+
+  defp other_arms_out({:cond, m, [[do: clauses]]}, node),
+    do: {:cond, m, [[do: clauses_out(clauses, node)]]}
+
+  defp other_arms_out({:case, m, [subject, [do: clauses]]}, node),
+    do: {:case, m, [subject, [do: clauses_out(clauses, node)]]}
+
+  defp clauses_out(clauses, node) do
+    for {:->, cm, [head, body]} <- clauses, do: {:->, cm, [head, arm_or_nil(body, node)]}
+  end
+
+  defp arm_or_nil(body, node), do: if(occurrences(body, node) == 0, do: nil, else: body)
 
   # a parameter is bound in the kernel's body block (depth 1)
   defp array_ids({:arr, _}), do: %{id: make_ref(), buf: make_ref(), fin: false, depth: 1}
@@ -4393,7 +4457,7 @@ defmodule Defk.Compiler do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
     lives = live_after(es)
-    {s, env} = stmt_list(init, lives, nested(env))
+    {s, env} = stmt_list(init, lives, nested(env, ast))
 
     [
       s,
