@@ -5563,8 +5563,11 @@ defmodule Defk.Compiler do
   defp for_collect!(node, quals, body, into, env, what) do
     rewrite =
       case quals do
-        [{:<-, _, [x, src]}] when body != nil -> Defk.Errors.collect_rewrites(src, x, body, into)
-        _ -> nil
+        [{:<-, _, [x, src]}] when body != nil ->
+          Defk.Errors.collect_rewrites(src, x, body, into, &type_in(&1, env))
+
+        _ ->
+          nil
       end
 
     err!(node, "for-collect", what, checked_rewrite([rewrite: rewrite], env))
