@@ -1248,6 +1248,7 @@ out = copy_back(out, op + lit, off, ln - lit)
 # slow: the helper in one branch, the array read in the other
 if last, do: {:halt, {out, op}}, else: (out = copy_back(out, op, off, ml); {:cont, {out, op + ml}})
 ```
+
 ### 6.16 Target flags: on arm64 the CPU features buy nothing, the tuning does
 
 A kernel built for the host CPU (`-mcpu=native`, Apple M4) or for armv8.2-a
