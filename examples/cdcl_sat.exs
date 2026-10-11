@@ -26,25 +26,30 @@
 #                   S5 beside it: the tick gaps at n = 300 (seed 7)
 #
 # Pre-registered (defk-52v.15) and measured (M4 Pro, OTP 29, Elixir 1.20.2,
-# load 3.5-5 on a machine shared with other agents: provisional; two runs):
+# load 3.5-7.7 on a machine shared with other agents: provisional; four
+# runs, the last after merging main):
 #
-#   size  expected   measured  defk vs best Elixir             vs picosat
-#   S1    marginal   good      2.6-3.5x (4.1-5.2 vs 1.5 ms     1.65-1.76x
+#   size  expected   measured  defk vs best Elixir              vs picosat_elixir
+#   S1    marginal   good      2.3-5.3x (3.8-8.2 vs 1.5-1.6 ms  1.63-1.76x
 #                              per 200 calls)
-#   S2    good       good      2.58x (23.1-23.3 vs 8.9-9.0 ms  1.72-1.75x
-#                              per 200 calls)
-#   S3    good       good      12.4x (222-224 vs 18.0 ms)       4.1x (Crux + picosat 73 ms)
-#   S4    good       good      5.7-5.8x (1176-1185 vs 205 ms)   0.65x (picosat 133 ms)
-#   S5    tick gap   (beside)  Elixir 2.1-2.4 ms, defk 2.5-2.9 ms, picosat 1270-1282 ms
-#                              (idle floor 2.05 ms; the solve: picosat 1.28 s,
-#                              defk 1.97 s, Elixir CDCL 11.0 s)
+#   S2    good       good      2.48-2.58x (23.0-23.4 vs         1.68-1.75x
+#                              8.9-9.4 ms per 200 calls; near
+#                              the 2x line: may read marginal
+#                              under heavier load)
+#   S3    good       good      11.8-12.4x (217-224 vs 17.5-18.7 ms)  4.05-4.09x (Crux + picosat 71-73 ms)
+#   S4    good       good      5.7-5.8x (1167-1198 vs 201-207 ms)    0.65x (picosat 131-134 ms)
+#   S5    tick gap   (beside)  max (p99) ms: Elixir 2.1-3.0 (2.0-2.1; one run 136),
+#                              defk 2.5-6.0 (2.25-2.26), picosat 1270-1342
+#                              (one gap: the whole solve); idle floor 2.0.
+#                              The solve itself: picosat 1.27-1.30 s, defk
+#                              1.95-1.98 s, Elixir CDCL 10.8-11.3 s
 #
 # S1 was expected marginal because the research's DPLL sketch was within
 # 1.3x of picosat at that size; the kernel's call, packing and unpacking cost
-# 15-16 us per formula, less than picosat's NIF (12-15 us) and well under the
-# best Elixir (DPLL 20-39 us, the Elixir CDCL 30-52 us, which pays its
-# :atomics allocation and setup per call). The batch form is still where it
-# helps most: 12x, against 2.6x per call.
+# 7-16 us per formula, about picosat's NIF (12-15 us) and under the best
+# Elixir (DPLL 20-54 us, the Elixir CDCL 30-52 us, which pays its :atomics
+# allocation and setup per call). The batch form is still where it helps
+# most: 12x, against 2.3-5.3x per call.
 #
 # The kernel (SatEx.Kernels). One state array, st :: [i64], holds everything,
 # at offsets kept in its first 48 words (the header; module attributes name
