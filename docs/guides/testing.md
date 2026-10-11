@@ -5,14 +5,6 @@ hold that result. The way to check this is to run the same kernel as plain
 Elixir and compare. This guide shows how, from one call to generated inputs,
 and how to test the code paths a kernel takes when it yields.
 
-> #### The test helpers are not public API yet {: .warning}
->
-> The modules Defk.Test (`assert_agrees`, `reason`) and Defk.Case
-> (`in_both_modes`) work as shown here, but they are hidden from the API
-> reference today (`@moduledoc false`), and which of them become public, and
-> under what names, is still being decided (ticket `defk-djy.2`). Expect the
-> names on this page to change.
-
 ## Elixir mode is the oracle
 
 Each kernel body is also compiled to plain Elixir, with the kernel subset's
@@ -122,22 +114,7 @@ and writes one agreement property per kernel
 They are test support, not part of the library, but you can copy the
 approach.
 
-### Running a whole block both ways
-
-`use Defk.Case` gives `in_both_modes do ... end`, which runs a block once natively and
-once in Elixir mode, so its assertions check both:
-
-```elixir
-defmodule StatsBothModesTest do
-  use Defk.Case, async: true
-
-  test "the empty sum is 0.0" do
-    in_both_modes do
-      assert Stats.sum(<<>>) === 0.0
-    end
-  end
-end
-```
+### Running a whole suite in Elixir mode
 
 To run the whole suite in Elixir mode, set `config :defk, mode: :elixir` in
 `config/test.exs`. It is refused outside `:dev` and `:test`.
