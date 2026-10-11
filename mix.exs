@@ -39,7 +39,7 @@ defmodule Defk.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:vibe_kit, "~> 0.1", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.34", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.1", only: :test},
       {:igniter, "~> 0.6", optional: true}
     ]
