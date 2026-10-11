@@ -530,6 +530,41 @@ bh = band(bsr(th, 24) + bsl(tl, 8), 0xFFFFFFFF)   # th, tl: b ^ c
 a = band(a + b + x, 0xFFFFFFFFFFFFFFFF)
 ```
 
+### 2.15 LZ-style decoders in Elixir: copy each match with `binary_part/3`, and match the input
+
+An LZ4 or Snappy decoder appends to one output binary, and a match copies
+earlier output. Copying a match as one `binary_part/3` of the output (or
+`:binary.copy/2` of the offset-long pattern when the match overlaps itself)
+is 3-4x faster than copying it byte by byte with `:binary.at/2`; reading the
+input by matching the rest of the binary beats indexing it with
+`binary_part/3` and `:binary.at/2`. iodata output is not an option: a match
+reads output up to 64 KB back. A block stored as one literal (incompressible
+data) is a sub-binary of the input in Elixir, with no copy at all.
+
+- **Numbers:** 64 KB JSON-like block, Snappy / LZ4: byte-by-byte match
+  copies 650-820 us / 0.7-1.4 ms; `binary_part` copies 175-240 us /
+  230-450 us; positional input 310-325 us / 295-320 us; the kernels 63-72 us
+  / 70-77 us. Incompressible 64 KB: Elixir 0.6-1 us, kernel 15 us (it copies
+  every byte); 4 MB: 0.08-0.7 ms against 0.95 ms. The `binary_part` times
+  were bimodal (230 or 450 us for the same LZ4 call in one run, a GC before
+  every sample).
+- **Conditions:** best of interleaved rounds, three runs, load averages 24-85.
+- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs), `defk-52v.3`.
+- **Status:** provisional.
+
+<!-- defk-example skip: a fragment, the match copy of the Elixir decoders without its offset checks -->
+```elixir
+# fast: one copy per match, the overlap as a repeated pattern
+if off >= l do
+  <<out::binary, binary_part(out, size - off, l)::binary>>
+else
+  pat = binary_part(out, size - off, off)
+  <<out::binary, :binary.copy(pat, div(l, off))::binary, binary_part(pat, 0, rem(l, off))::binary>>
+end
+# slow: a byte at a time
+bytes(<<out::binary, :binary.at(out, from)>>, from + 1, l - 1)
+```
+
 ---
 
 ## 3. BIFs and OTP libraries that are already native
@@ -1182,6 +1217,38 @@ d = rotr(bxor(d, a), 16, 32)                               # one ror
 d = band(bsr(t, 16) + bsl(t, 16), 0xFFFFFFFF)              # lsl + bfxil
 ```
 
+### 6.15 Byte copies: eight bytes per `u64_le`, and call an array-writing helper outside branches
+
+A kernel can only store one element at a time, so a byte-copy loop (an LZ
+decoder's literals and matches) pays a bounds check and an overflow check
+per byte; clang does not merge eight checked byte stores into one 64-bit
+store. Loading a word with `u64_le` and storing its eight bytes, with a
+7-byte overshoot when the buffers have slack, is the best spelling today;
+a word store or copy builtin (`defk-52v.16`) would remove the per-byte
+checks. Separately, a helper kernel that writes and returns the output must
+be called at the top of the loop body: called in one branch of an `if`
+whose other branch reads the array, it copies the whole buffer on every
+iteration and keeps every copy until the kernel returns (`defk-33b`).
+
+- **Numbers:** 4 MB of text, LZ4 / Snappy: byte loops 5.3 / 9.6-10.1 ms,
+  byte loops over the destination index 5.7-6.2 / 9.0-9.6 ms, words 4.7-4.8
+  / 8.0 ms; `yield: false` saved 10-20% (it blocks the scheduler, so it is not used). Per LZ4 sequence about 13 ns against
+  optimised liblz4's 2 ns. The helper in a branch: 47-53 ms instead of 0.1
+  ms at 64 KB, and the BEAM was SIGKILLed (out of memory) at 4 MB; a 1-byte
+  reproduction is quadratic (40k iterations 202 ms against 7 us hoisted).
+- **Conditions:** under load (load averages 13-85).
+- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (header), `defk-52v.3`, `defk-33b`, `defk-52v.16`.
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code (u64_le, array writes, helper kernels), not plain Elixir -->
+```elixir
+# fast: both helpers on every element, one length 0
+out = copy_lit(out, op, src, s, lit)
+out = copy_back(out, op + lit, off, ln - lit)
+# slow: the helper in one branch, the array read in the other
+if last, do: {:halt, {out, op}}, else: (out = copy_back(out, op, off, ml); {:cont, {out, op + ml}})
+```
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -1267,6 +1334,28 @@ normal schedulers instead ([`beam-nifs.md`](https://github.com/DanielLuning/defk
 - **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs), `defk-52v.2`.
 - **Status:** provisional.
 
+### 7.6 Hex NIFs built by rebar3's port compiler may be unoptimised; check the flags before comparing
+
+rebar3's `pc` plugin adds no `-O` flag: a package that sets none builds its
+C at `-O0`. lz4_erl 0.2.4 (liblz4 1.7.5) sets no CFLAGS; snappyer 1.2.10
+sets `-O2` in CFLAGS but compiles its C++ with CXXFLAGS, which has none. So
+`mix deps.get` gives -O0 builds of both reference libraries. Rebuilt with
+`CFLAGS=-O3 CXXFLAGS=-O2` (a separate `MIX_INSTALL_DIR`, or `mix deps.compile
+--force` with the variables set), they are the speed the libraries are known
+for, and much faster than a from-scratch kernel.
+
+- **Numbers:** 64 KB / 4 MB JSON-like block: snappyer as installed 99-184 us
+  / 5.9-6.8 ms, rebuilt 23-26 us / 1.6 ms; lz4_erl as installed 92-97 us /
+  5.2-5.5 ms, rebuilt 8-9 us / 0.9 ms; nimble_lz4 (lz4_flex, a precompiled
+  Rust release build) 20-24 us / 1.1-2.3 ms. The kernels 63-77 us / 4.1-4.9
+  ms: 1.3-1.6x faster than the as-installed NIFs, 3x (Snappy) and 9x (LZ4)
+  slower than the optimised builds. lz4_erl runs on a normal scheduler: a
+  4 MB decode gaps a 1 ms ticker by 5.1-11.3 ms as installed, 0.9 ms
+  rebuilt; the kernels stay at the ~2 ms floor.
+- **Conditions:** under load (load averages 24-85).
+- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (`LZ_NIF_OPT=1`), `defk-52v.3`.
+- **Status:** provisional.
+
 ---
 
 ## 8. Myths we disproved and open questions
@@ -1350,4 +1439,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-t11.5`, `defk-6g6`, `defk-j5n`, `defk-qx3`, `defk-z69`, `defk-t11.2`,
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
-  `defk-sve`, `defk-ulk`.
+  `defk-sve`, `defk-ulk`, `defk-33b`.
