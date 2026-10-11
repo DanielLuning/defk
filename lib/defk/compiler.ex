@@ -4377,9 +4377,10 @@ defmodule Defk.Compiler do
           err!(node, "reduce-clauses", "this for ..., reduce: has no `acc -> body` clause")
       end
 
-    # the outer names the loop reads: its generators and filters, and its
-    # body where the accumulator does not shadow them
-    loop_reads = MapSet.union(reads(quals), MapSet.difference(reads(body), reads(pat)))
+    # the outer names the loop reads while it runs: its generators and
+    # filters (quals_reads/1), and its body where the accumulator does not
+    # shadow them
+    loop_reads = MapSet.union(quals_reads(quals), MapSet.difference(reads(body), reads(pat)))
     lenv = loop_env(env, node)
 
     u64_accs(fn u64s ->
@@ -4437,7 +4438,10 @@ defmodule Defk.Compiler do
 
   defp reduce_while_loop({src, init_ast, x, acc_pat, body}, env, m, node, u64s) do
     loop_reads =
-      MapSet.union(reads(src), MapSet.difference(reads(body), reads([x, acc_pat])))
+      MapSet.union(
+        quals_reads([{:<-, m, [x, src]}]),
+        MapSet.difference(reads(body), reads([x, acc_pat]))
+      )
 
     {si, accs} =
       reduce_accs(acc_pat, init_ast, "the initial accumulator", env, node, loop_reads, u64s)
@@ -4470,6 +4474,18 @@ defmodule Defk.Compiler do
     {[si, loops, halt], acc_result(accs)}
   end
 
+  # The outer names a loop's generators and filters read while it runs. The
+  # first generator's range (start, end and step) is evaluated once, before
+  # the first iteration and so before the body writes anything (defk-8tw):
+  # `for k <- 0..(st[0] - 1)//1, reduce: st` reads st's buffer before the
+  # accumulator takes it, and later iterations read the accumulator. An array
+  # the first generator walks, later generators (evaluated again for each
+  # value of the ones before) and filters are read during the loop.
+  defp quals_reads([{:<-, _, [_pat, {op, _, [_ | _]}]} | rest]) when op in [:.., :..//],
+    do: reads(rest)
+
+  defp quals_reads(quals), do: reads(quals)
+
   # Accumulators [{name, cvar, acc}] from `acc` or `{a, b, ...}` and the
   # initial value, where acc is what the body sees: %{t: type}, and for an
   # array also its facts (owned, fin, len_lo).
@@ -4479,7 +4495,9 @@ defmodule Defk.Compiler do
   # it, without a copy. The initial array is copied before the loop when it is
   # not owned (an input, a binary attribute), or when another binding of its
   # buffer is live: read after the loop statement, read in the loop
-  # (`loop_reads`, the outer names its generators, filters and body read),
+  # (`loop_reads`, the outer names its generators, filters and body read
+  # while it runs; not the first range nor the initial value, evaluated
+  # before the first iteration),
   # or an earlier accumulator. The new value at the end of each iteration is
   # copied on the same test (assign_accs/6), so no buffer but the
   # accumulator's own is seen across an iteration. `node` is the loop.
