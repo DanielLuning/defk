@@ -9,9 +9,15 @@
     "ready-for-human"
   ],
   "parent": "defk-djy",
+  "comments": [
+    {
+      "text": "Maintainer picked option (a), 2026-10-11: keep README as the main page and trim it; move the repo-internal sections to a repo-only page linked from README.",
+      "timestamp": "2026-10-11T13:16:06Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "HexDocs main page: README is repo-internal; choose a user-facing landing page",
   "type": "task",
-  "updated_at": "2026-10-11T12:47:55Z"
+  "updated_at": "2026-10-11T13:16:06Z"
 }
