@@ -23,6 +23,8 @@ defmodule Defk.MixProject do
   def application, do: [extra_applications: [:logger]]
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
+  # demo.exs and bench/ use the example kernels; deps compile as :prod and skip them
+  defp elixirc_paths(:dev), do: ["lib", "test/support/examples.ex"]
   defp elixirc_paths(_), do: ["lib"]
 
   def cli do
@@ -74,6 +76,8 @@ defmodule Defk.MixProject do
     [
       main: "readme",
       source_ref: "v#{@version}",
+      # the example kernels compile in :dev for demo.exs and bench/, not as API
+      filter_modules: fn mod, _meta -> mod != Examples.Kernels end,
       extras: @guides ++ @reference,
       groups_for_extras: [Guides: @guides, Reference: @reference],
       groups_for_modules: [
