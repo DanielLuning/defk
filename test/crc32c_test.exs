@@ -91,6 +91,21 @@ defmodule Defk.Crc32cTest do
 
   @widths [8, 16, 32, 64]
 
+  # The portable library picks its implementation once, at its first call,
+  # so make that first call here, with the variable set, before any test
+  # (in random order) calls it
+  setup_all do
+    System.put_env("DEFK_PORTABLE_BUILTINS", "1")
+
+    try do
+      _ = P.step(0, 0, 8)
+    after
+      System.delete_env("DEFK_PORTABLE_BUILTINS")
+    end
+
+    :ok
+  end
+
   # one bit at a time, straight from the definition
   defp ref(c, x, w) do
     Enum.reduce(0..(w - 1), c, fn i, c ->
@@ -216,15 +231,8 @@ defmodule Defk.Crc32cTest do
     on_hw? = :erlang.system_info(:system_architecture) |> to_string() =~ ~r/aarch64|x86_64/
     if on_hw?, do: assert(hw == :instruction), else: assert(hw == :table)
 
-    assert P.__defk_stats__().crc32c == :not_called
-    System.put_env("DEFK_PORTABLE_BUILTINS", "1")
-
-    try do
-      _ = P.step(0, 0, 8)
-    after
-      System.delete_env("DEFK_PORTABLE_BUILTINS")
-    end
-
+    # P chose its implementation at its first call, in setup_all, with
+    # DEFK_PORTABLE_BUILTINS set
     assert P.__defk_stats__().crc32c == :table
 
     :rand.seed(:exsss, {1, 2, 3})
