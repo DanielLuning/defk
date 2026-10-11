@@ -81,6 +81,10 @@ typedef struct {
   int nowned, cap;
   int finished;
   int is_resource;
+  /* this call's slice (defk-04y): slice_us until short_left us of kernel
+     time have run (0: no limit), then DEFK_SLICE_US; see defk_slice_init */
+  int64_t slice_us;
+  int64_t short_left;
 } defk_ctx;
 
 static ErlNifResourceType *defk_frame_rt;
@@ -1576,6 +1580,7 @@ typedef struct {
   ErlNifTime last;
   ErlNifTime unreported; /* microseconds x 100 not yet charged to the process */
   int64_t budget;        /* adapted back-edge budget, kept across a yield */
+  defk_ctx *ctx;         /* the call's slice state */
 } defk_clock;
 
 #define DEFK_BUDGET0 256
@@ -1604,9 +1609,42 @@ typedef struct {
 #define DEFK_STRIP 2048
 #endif
 
-static void defk_clock_init(defk_clock *c) {
+/*
+ * A crowded run queue gets a short slice for the call's first millisecond
+ * (defk-04y). ERTS wakes an idle scheduler from a run queue with waiting
+ * processes by the reductions run there, and a kernel charges a whole
+ * timeslice (4000 reductions) per slice, so at 250 us short kernel calls
+ * fanned out from one process (Task.async_stream) stayed on 2-3 of 12
+ * schedulers. At 50 us they charge five times faster and spread. A lone call
+ * keeps 250 us (a 50 us slice costs it ~7-8% on a busy scheduler), and so
+ * does a crowded call after its first millisecond: calls that long spread
+ * anyway. The generated Elixir function passes the hint as an extra last
+ * argument, :erlang.statistics(:total_run_queue_lengths) (~9 ns); the NIF
+ * API has no run-queue length. docs/performance.md 4.9.
+ */
+#ifndef DEFK_SHORT_SLICE_US
+#define DEFK_SHORT_SLICE_US 50
+#endif
+#ifndef DEFK_SHORT_FOR_US
+#define DEFK_SHORT_FOR_US 1000
+#endif
+
+/* hint: the run-queue length the caller saw (NULL: none passed) */
+__attribute__((unused)) static void defk_slice_init(ErlNifEnv *env, defk_ctx *ctx, const ERL_NIF_TERM *hint) {
+  int64_t waiting;
+  if (hint && enif_get_int64(env, *hint, &waiting) && waiting > 0) {
+    ctx->slice_us = DEFK_SHORT_SLICE_US;
+    ctx->short_left = DEFK_SHORT_FOR_US;
+  } else {
+    ctx->slice_us = DEFK_SLICE_US;
+    ctx->short_left = 0;
+  }
+}
+
+static void defk_clock_init(defk_clock *c, defk_ctx *ctx) {
   c->last = enif_monotonic_time(ERL_NIF_USEC);
   c->unreported = 0;
+  c->ctx = ctx;
 }
 
 __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c, int64_t budget) {
@@ -1614,14 +1652,17 @@ __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c
   if (atomic_load_explicit(&defk_force_yields, memory_order_relaxed)) return 0;
   ErlNifTime now = enif_monotonic_time(ERL_NIF_USEC);
   ErlNifTime dt = now - c->last;
+  defk_ctx *ctx = c->ctx;
+  int64_t slice = ctx->slice_us;
   c->last = now;
-  if (dt < DEFK_SLICE_US / 10 && budget < (1 << 24)) budget *= 2;
-  else if (dt > DEFK_SLICE_US / 4 && budget > 16) budget /= 2;
+  if (dt < slice / 10 && budget < (1 << 24)) budget *= 2;
+  else if (dt > slice / 4 && budget > 16) budget /= 2;
   c->budget = budget;
   c->unreported += dt * 100;
-  long pct = (long)(c->unreported / DEFK_SLICE_US);
+  long pct = (long)(c->unreported / slice);
+  if (DEFK_UNLIKELY(ctx->short_left > 0) && (ctx->short_left -= dt) <= 0) ctx->slice_us = DEFK_SLICE_US;
   if (pct >= 1) {
-    c->unreported -= pct * DEFK_SLICE_US;
+    c->unreported -= pct * slice;
     if (enif_consume_timeslice(env, pct > 100 ? 100 : (int)pct)) return 0;
   }
   return budget;

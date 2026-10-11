@@ -36,11 +36,19 @@ process (the
 Use it only for kernels that always finish in well under a millisecond: the
 same loop without safepoints left an 867 ms gap.
 
-What preemption does not fix: short kernel calls charge the scheduler less
-than Elixir code of the same length does, so many sub-millisecond kernel
-calls from `Task.async_stream/3` stay on a few schedulers instead of
-spreading (ticket `defk-6lr`; see
+A kernel charges its process a whole timeslice per slice, far fewer
+reductions per millisecond than Elixir code, and the BEAM wakes idle
+schedulers by the reductions run on a crowded run queue. So that short calls
+fanned out from one process (`Task.async_stream/3`) still spread, a
+yielding kernel's function checks whether any processes are waiting
+(`:erlang.statistics(:total_run_queue_lengths)`, about 9 ns a call) and, if
+so, yields every 50 µs instead of 250 µs for the call's first millisecond.
+A lone call is unchanged. 48 calls of 0.65 ms under `Task.async_stream/3`
+went from 3 schedulers and 13.6 ms to 10-11 schedulers and 5.6-5.7 ms
+(`defk-04y`; see
 [Parallelism and schedulers](../performance.md#4-parallelism-and-schedulers)).
+`use Defk, adaptive_slice: false` turns this off. `+swt very_low` spreads
+such calls further.
 
 ## 2. Isolation: an error is an exception in the caller
 
