@@ -874,7 +874,7 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
 
 ### 5.1 A call costs tens to a hundred-odd nanoseconds; never call per element
 
-- **Numbers:** README micro-benchmark: kernel call 12 ns against 1.6 ns for
+- **Numbers:** results-snapshot micro-benchmark: kernel call 12 ns against 1.6 ns for
   an Elixir call. `poor_tiny_calls`: "each NIF call adds ~10 ns", about the
   whole per-element cost of the Elixir version, so a kernel call per element
   inside `Enum.map` is 0.38-0.43x. `ws_masking`: at 125 B the call is the
@@ -882,8 +882,8 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
   `hashes`: a kernel call costs ~35 ns more than siphash's NIF call (one call
   per key 0.085 ms for 1k keys, the batch 0.048-0.055 ms). These figures
   disagree (see 8.2, open questions).
-- **Conditions:** README "noisy, single runs"; ws_masking under load.
-- **Source:** [README Results](../README.md), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs).
+- **Conditions:** results snapshot "noisy, single runs"; ws_masking under load.
+- **Source:** [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot-m-series-mac-otp-29-elixir-120-noisy-single-runs), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs).
 - **Status:** measured; ws_masking provisional.
 
 <!-- defk-example run: packed = <<1.0::float-64-native>>; readings = [1.0, 2.0] | defs: defmodule Clamp.Kernels do def clamp_all(packed), do: packed; def clamp(x, lo, hi), do: x |> max(lo) |> min(hi) end -->
@@ -972,7 +972,7 @@ because of term encoding. The kernel's error path uses `sigsetjmp(jb, 0)`:
 plain `setjmp` saves the signal mask on macOS, a syscall that cost 160 ns
 per call.
 
-- **Source:** [README design decisions](../README.md#design-decisions-the-benchmarks-validated), [`beam-nifs.md`](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md), [`nif-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nif-workloads.md) (external number).
+- **Source:** [design decisions](https://github.com/DanielLuning/defk/blob/main/docs/project.md#design-decisions-the-benchmarks-validated), [`beam-nifs.md`](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md), [`nif-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nif-workloads.md) (external number).
 - **Status:** measured (the 160 ns); external (the term-encoding numbers).
 
 ### 5.7 A large `alloc` used to block the scheduler; it is now zeroed in strips
@@ -1014,7 +1014,7 @@ names each kept bounds check and the fact that would drop it. See
   (binary comprehension), defk 0.58, C 0.64; `dot` Elixir 12.2 (list), defk
   0.50, C 0.50. `count_primes(1M)`: Elixir 1400 ms, defk 180, C 186.
 - **Conditions:** "noisy, single runs".
-- **Source:** [README Results](../README.md), `bench/native.c`.
+- **Source:** [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot-m-series-mac-otp-29-elixir-120-noisy-single-runs), `bench/native.c`.
 - **Status:** measured. Later runs give `dot` ~0.56 and `sum` 0.50-0.53 ns/elem (`defk-jlk`).
 
 ### 6.2 Write loops whose indices the compiler can prove in range
@@ -1055,7 +1055,7 @@ and in strips of 2048 with one safepoint each above that.
   1.20x originally, 1.10-1.12x after bounds-check elimination, 1.08-1.09x
   after strips. `DEFK_STRIP` 512 split `prime?`'s 1000-trip loop into two
   strips, +5-6% against `yield: false`; at 2048 the ratio is back to ~1.00.
-- **Source:** `defk-88q`, `defk-5s3` comments 2026-10-05 (commit a6bca78), `defk-jaj` comment 2026-10-05, [README](../README.md#design-decisions-the-benchmarks-validated).
+- **Source:** `defk-88q`, `defk-5s3` comments 2026-10-05 (commit a6bca78), `defk-jaj` comment 2026-10-05, [design decisions](https://github.com/DanielLuning/defk/blob/main/docs/project.md#design-decisions-the-benchmarks-validated).
 - **Status:** measured; the 1.08-1.09x is superseded by 6.4.
 
 ### 6.4 Resume through loop headers; yielding is then nearly free
@@ -1070,7 +1070,7 @@ for LLVM. Resuming through each loop's header fixed it.
   ms to 1.1 ms. Each yield costs ~6-9 us of scheduler work, mostly the I/O
   poll (macOS): 2-3% on `count_primes`, which yields ~3,300 times a second.
 - **Conditions:** load not recorded; Linux not measured.
-- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [README](../README.md).
+- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md).
 - **Status:** measured; a later loaded run disagrees (see 8.2, open questions).
 
 ### 6.5 Float checks: flag the strip, replay on failure
@@ -1093,9 +1093,11 @@ with raising checks if it is set.
   branches). What paid was leaving out checks whose inf/NaN always reaches a
   later checked expression, `sqrt(max(x, 0.0))` needing no check, and `sqrt`
   as one instruction.
+- **Cost:** a flat loop's body is emitted three times instead of twice (the
+  4 benchmark kernels: 12.9 KB to 14.9 KB of code).
 - **Conditions:** 3 runs of 11 interleaved rounds, best of 5 per round;
   shared machine; `defk-hki` under load (load average 5-7.5).
-- **Source:** [README Known limitations](../README.md#known-limitations), [`bench/float_checks.exs`](https://github.com/DanielLuning/defk/blob/main/bench/float_checks.exs) (3737d1a), `defk-6tt`, `defk-hki` comment 2026-10-10 (897e9c4, 042c2f4).
+- **Source:** [language.md, 12. Limits](language.md#12-limits), [`bench/float_checks.exs`](https://github.com/DanielLuning/defk/blob/main/bench/float_checks.exs) (3737d1a), `defk-6tt`, `defk-hki` comment 2026-10-10 (897e9c4, 042c2f4).
 - **Status:** per-expression numbers superseded by `defk-6tt` and `defk-hki`; `defk-hki` provisional.
 
 ### 6.6 What still blocks vectorisation
@@ -1443,7 +1445,7 @@ The wrapper jobs and what would reopen each are in
   bandit_native one 16 MiB frame 8.9-9.0 ms (Elixir 2.0-2.1, defk 0.44-0.66);
   1BRC Rustler plain NIF on a ~28 MB chunk 55 ms (Elixir 13.3, DirtyCpu
   5.6); ex_keccak on 16 MB ~20 ms (kernel ~2 ms); picosat on a hard random
-  3-SAT instance 3,870 ms (`+S 1`); a `yield: false` kernel 867 ms (README;
+  3-SAT instance 3,870 ms (`+S 1`); a `yield: false` kernel 867 ms (results snapshot;
   500-570 ms in later runs). Under HTTP load, a blocking kernel pushed
   `/health` to 33 ms median and 77-90 ms p99 against 1.1 ms and 8-10 ms for
   the yielding kernel.
@@ -1526,7 +1528,7 @@ for, and much faster than a from-scratch kernel.
 
 ### 8.2 Open questions
 
-- **Per-call cost.** Sources give ~10 ns (`poor_tiny_calls`), 12 ns (README
+- **Per-call cost.** Sources give ~10 ns (`poor_tiny_calls`), 12 ns (results snapshot
   micro-benchmark), ~35 ns more than a NIF call (`hashes`), ~0.1-0.2 us
   (`per_pair_distance`) and ~0.12-0.13 us (`ws_masking`, under load), and a
   bitstring result adds ~0.1 us (`defk-cao`). No source says which costs are
@@ -1541,7 +1543,7 @@ for, and much faster than a from-scratch kernel.
 - **`mean_std` float-check cost** reads 23%, 29-33%, ~30% and 37-39% on main
   in different sessions, depending on load; only the `defk-hki` result
   (+7.1-8.5%) has its own same-session comparison.
-- **`yield: false` worst gap**: 867 ms in the README, 500-570 ms in later
+- **`yield: false` worst gap**: 867 ms in the results snapshot, 500-570 ms in later
   demo runs (`defk-yzw`).
 - **Not tried or not profiled yet:** Elixir on a one-scheduler VM is slower
   per spin than one process on 12 (185 vs 109 ns, `monte_carlo_rtp`); why
@@ -1568,7 +1570,7 @@ example or close a workload ticket, add its entries and its line here.
 - [`examples/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/README.md): every row, "Measuring
   correctly", "How verdicts work", "Where a wrapper is the right choice".
 - [`beam-nifs.md`](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md), [`verdict.md`](https://github.com/DanielLuning/defk/blob/main/docs/verdict.md) (no numbers yet),
-  [`fast-path-report.md`](https://github.com/DanielLuning/defk/blob/main/docs/fast-path-report.md), the README's Results, design
+  [`fast-path-report.md`](https://github.com/DanielLuning/defk/blob/main/docs/fast-path-report.md), the results snapshot, design
   decisions and Known limitations, `docs/adr/`, `docs/cold-tests/` (no
   performance content), [`language.md`](language.md) (copies, bounds facts,
   strips), `bench/`.
