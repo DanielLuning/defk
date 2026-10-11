@@ -10,6 +10,12 @@
   "labels": [
     "needs-triage"
   ],
+  "comments": [
+    {
+      "text": "Coordinator, 2026-10-11: the documented guidance (Task.async + await_many, bigger chunks, +swt very_low) is the default answer; one lever left to try, as defk-04y (a short slice only when the caller's run queue is crowded). Close this ticket when defk-04y records its decision.",
+      "timestamp": "2026-10-11T17:26:08Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Runtime: short parallel kernel calls do not wake idle schedulers (wakeup-other sees 4000 reds per 250 us)",
