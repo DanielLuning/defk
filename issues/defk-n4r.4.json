@@ -11,6 +11,7 @@
     "defk-52v.9",
     "defk-n4r.6"
   ],
+  "closed_at": "2026-10-11T11:49:19Z",
   "created": "2026-10-09T18:40:51Z",
   "description": "Today `inline/4` in lib/defk/compiler.ex binds every array argument of an inlined callee with owned: false, so `h[i] = v` inside a helper kernel is rejected with read-only-array even when the caller created h with alloc/2. Any text kernel wants `insert(table, keys, stats, name_start, name_len, temp)` as a helper; without this, the whole hash table update has to be written inline in the one kernel body, and so does every other array-mutating helper.\n\nOptions:\n(a) Pass ownership through inlining: an argument whose value is owned stays owned in the callee (it is the same C variable after aliasing). Simple, and since the callee is inlined the write happens in the caller's frame anyway. Elixir mode already threads written arrays out of blocks; a callee writing a parameter needs the same threading across the call: the Elixir-mode call returns the written arrays alongside its result (Ops-level tuple), which value semantics (defk-auo) requires anyway.\n(b) An explicit marker in the head, e.g. `insert(h :: mut [i64], ...)`, so the signature says which parameters are written. More visible, and gives the Elixir-mode emitter the list of threaded arrays without inspecting the body.\n\nRecommendation: (b), because it keeps the \"a write gives that variable a new array\" story readable at the call site (`h = insert(h, ...)` is still how Elixir mode sees it) and because defk-auo will need the list. Decide with defk-auo's owner; that is why this is needs-triage.\n\nDone when: a helper kernel can write to a mut array parameter, the write is visible to the caller after the call in both modes, writes to a non-mut parameter are still rejected with a clear error and rewrite, and resume tests cover a helper writing inside a yielding loop.",
   "id": "defk-n4r.4",
@@ -37,7 +38,7 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "Helper kernels can write to arrays their caller allocated",
   "type": "task",
   "updated_at": "2026-10-11T11:49:19Z"
