@@ -254,6 +254,22 @@ defmodule Defk.ReportTest do
     end
   end
 
+  describe "report: :full, a torn cache" do
+    @describetag :clang
+
+    test "an empty cached .remarks file is a miss, not the answer" do
+      src = Full.__defk_c_source__()
+      base = String.trim_trailing(Full.__defk_lib__(), ".so")
+      [cached] = Path.wildcard(base <> "-*.remarks")
+      good = File.read!(cached)
+      on_exit(fn -> File.write!(cached, good) end)
+
+      File.write!(cached, "")
+      assert {:ok, [_ | _]} = Defk.Build.remarks!(src, base)
+      assert File.read!(cached) == good
+    end
+  end
+
   describe "report: :full when CC is not clang" do
     setup do
       saved = System.get_env("CC")
