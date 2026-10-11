@@ -15,7 +15,7 @@ mix test                      # resumed kernels match yield: false, incl. a forc
 
 Needs Elixir ≥ 1.20 (OTP 29 tested) and a C compiler (`cc`, or set `CC`; set `ERTS_INCLUDE_DIR` to build against another ERTS's headers, as with elixir_make).
 
-To use it in your own code, add it as a dependency (`{:defk, path: "../defk"}` in a Mix project's `deps`, or `Mix.install([{:defk, path: "../defk"}])` in a script; it is not on Hex) and write kernels in any module with `use Defk`; [`docs/language.md`](docs/language.md) starts there. Kernels compile with the module, so `mix compile` or running the script builds the NIF.
+To use it in your own code, add it as a dependency (`{:defk, path: "../defk"}` in a Mix project's `deps`, or `Mix.install([{:defk, path: "../defk"}])` in a script; it is not on Hex) and write kernels in any module with `use Defk`; [Getting started](docs/guides/getting-started.md) walks through a first kernel, and the guides beside it cover testing, measuring, the runtime contract and deploying. [`docs/language.md`](docs/language.md) is the full reference. Kernels compile with the module, so `mix compile` or running the script builds the NIF.
 
 ## Purpose: help Elixir, not compete with it
 

@@ -23,6 +23,8 @@ defmodule Defk.MixProject do
   def application, do: [extra_applications: [:logger]]
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
+  # demo.exs and bench/ use the example kernels; deps compile as :prod and skip them
+  defp elixirc_paths(:dev), do: ["lib", "test/support/examples.ex"]
   defp elixirc_paths(_), do: ["lib"]
 
   def cli do
@@ -53,13 +55,29 @@ defmodule Defk.MixProject do
   # research, cold tests, verdict.md, fast-path-report.md and beam-nifs.md are
   # project history for people inside the repo, so they are left out of
   # HexDocs (they stay in the repo and are linked from the README).
-  @guides ["README.md", "docs/scope.md", "docs/performance.md"]
-  @reference ["docs/language.md"]
+  #
+  # Choice (defk-djy.4): the how-to guides live in docs/guides/, apart from
+  # the reference and the project history in docs/. README stays the main
+  # page (what defk is and why, as on GitHub) and Getting started comes
+  # right after it; the cheatsheet is a lookup page beside the reference.
+  @guides [
+    "README.md",
+    "docs/guides/getting-started.md",
+    "docs/guides/testing.md",
+    "docs/guides/measuring.md",
+    "docs/guides/runtime-contract.md",
+    "docs/guides/deploying.md",
+    "docs/scope.md",
+    "docs/performance.md"
+  ]
+  @reference ["docs/language.md", "docs/guides/cheatsheet.cheatmd"]
 
   defp docs do
     [
       main: "readme",
       source_ref: "v#{@version}",
+      # the example kernels compile in :dev for demo.exs and bench/, not as API
+      filter_modules: fn mod, _meta -> mod != Examples.Kernels end,
       extras: @guides ++ @reference,
       groups_for_extras: [Guides: @guides, Reference: @reference],
       groups_for_modules: [

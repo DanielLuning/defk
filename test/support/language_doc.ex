@@ -304,12 +304,14 @@ defmodule Defk.LanguageDoc do
   # ---------------------------------------------------------------- extras --
 
   @doc """
-  The Markdown extras of the HexDocs build, from the project's `:docs` config
+  The Markdown extras (`.md` and cheatsheets, `.cheatmd`) of the HexDocs build, from the project's `:docs` config
   (the one list in mix.exs), so a new page is covered by the doc checks as soon
   as it is an extra.
   """
   def extras do
-    for path <- Mix.Project.config()[:docs][:extras], Path.extname(path) == ".md", do: path
+    for path <- Mix.Project.config()[:docs][:extras],
+        Path.extname(path) in [".md", ".cheatmd"],
+        do: path
   end
 
   # ----------------------------------------------------------------- links --
