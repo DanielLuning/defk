@@ -41,4 +41,4 @@ State travels as values: binaries and scalars in, a new binary or tuple out.
   defk could grow* and not built. See `CONTEXT.md` for what an *expansion
   candidate* means.
 - Suspended-kernel frames are unaffected: they are runtime-owned bookkeeping
-  (README design decision 4), not state a kernel can see.
+  (design decision 4 in docs/project.md), not state a kernel can see.
