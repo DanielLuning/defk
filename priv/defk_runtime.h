@@ -805,6 +805,154 @@ static inline uint64_t defk_rotl_i(defk_ctx *ctx, int64_t x, int64_t n, int64_t 
 static inline uint64_t defk_rotl_u(defk_ctx *ctx, uint64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotl/3", x, 0, n, w, 0); }
 static inline uint64_t defk_rotr_i(defk_ctx *ctx, int64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotr/3", (uint64_t)x, x < 0, n, w, 1); }
 static inline uint64_t defk_rotr_u(defk_ctx *ctx, uint64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotr/3", x, 0, n, w, 1); }
+/* ---- hardware builtins (defk-ulk.4) --------------------------------------
+ *
+ * Defk.Bits.crc32c/3: one CRC32C (Castagnoli, reflected polynomial
+ * 0x82F63B78) update step over the w/8 bytes of x, least significant byte
+ * first, with no pre- or post-inversion: what ARMv8 CRC32C{B,H,W,X} and
+ * SSE4.2 crc32{b,w,l,q} compute. Two implementations, picked at run time:
+ *
+ *   - the instruction, where the CPU has it: always on Apple arm64 and every
+ *     arm64 with __ARM_FEATURE_CRC32; Linux arm64 when getauxval(AT_HWCAP)
+ *     has HWCAP_CRC32; x86-64 when CPUID reports SSE4.2;
+ *   - a portable slicing-by-8 table (8 x 256 u32, built on first use)
+ *     everywhere else, and when DEFK_PORTABLE_BUILTINS is set to anything
+ *     but "" or "0" when a kernel library first calls the builtin (for
+ *     testing and measuring the fallback, as OPENSSL_ia32cap does; set in
+ *     the shell or with System.put_env/2).
+ *
+ * The choice is made once per kernel library (a cached state, read with a
+ * relaxed load per call: a predicted branch, measured at no cost against
+ * the bare instruction). The instruction is inline asm, not the intrinsic,
+ * so it inlines into code compiled without the feature (a portable Linux
+ * build: GCC will not inline a target("+crc") function into one without
+ * it, which cost 1.7x); it only runs after the check said the CPU has it,
+ * so no CPU without it ever sees the instruction (never SIGILL). */
+#include <pthread.h>
+#if defined(__aarch64__) && !defined(DEFK_NO_HW_BUILTINS)
+#define DEFK_HW_CRC32C 1
+#if defined(__linux__)
+#include <sys/auxv.h>
+#ifndef HWCAP_CRC32
+#define HWCAP_CRC32 (1 << 7)
+#endif
+#endif
+static int defk_cpu_crc32c(void) {
+#if defined(__ARM_FEATURE_CRC32) || defined(__APPLE__)
+  return 1;
+#elif defined(__linux__)
+  return (getauxval(AT_HWCAP) & HWCAP_CRC32) != 0;
+#else
+  return 0;
+#endif
+}
+/* c and the result are 64-bit registers whose top half is 0 (writing a W
+   register clears it), so the chain needs no zero-extending mov, which
+   cost a cycle per step (536 vs 389 us for 4 MB) */
+static inline uint64_t defk_crc32c_hw(uint64_t c, uint64_t x, int w) {
+  switch (w) {
+  case 8: __asm__(".arch_extension crc\n\tcrc32cb %w0, %w0, %w1" : "+r"(c) : "r"(x)); return c;
+  case 16: __asm__(".arch_extension crc\n\tcrc32ch %w0, %w0, %w1" : "+r"(c) : "r"(x)); return c;
+  case 32: __asm__(".arch_extension crc\n\tcrc32cw %w0, %w0, %w1" : "+r"(c) : "r"(x)); return c;
+  default: __asm__(".arch_extension crc\n\tcrc32cx %w0, %w0, %x1" : "+r"(c) : "r"(x)); return c;
+  }
+}
+#elif defined(__x86_64__) && !defined(DEFK_NO_HW_BUILTINS)
+#define DEFK_HW_CRC32C 1
+#include <cpuid.h>
+static int defk_cpu_crc32c(void) {
+  unsigned a, b, c, d;
+  return __get_cpuid(1, &a, &b, &c, &d) && (c & bit_SSE4_2) != 0;
+}
+/* as on arm64: a 32-bit destination clears the top half of the register */
+static inline uint64_t defk_crc32c_hw(uint64_t c, uint64_t x, int w) {
+  switch (w) {
+  case 8: __asm__("crc32b %b1, %k0" : "+r"(c) : "q"(x)); return c;
+  case 16: __asm__("crc32w %w1, %k0" : "+r"(c) : "r"(x)); return c;
+  case 32: __asm__("crc32l %k1, %k0" : "+r"(c) : "r"(x)); return c;
+  default: __asm__("crc32q %1, %0" : "+r"(c) : "r"(x)); return c;
+  }
+}
+#endif
+
+__attribute__((unused)) static uint32_t defk_crc32c_t[8][256];
+__attribute__((unused)) static atomic_int defk_crc32c_state; /* 0 unknown, 1 instruction, 2 table */
+__attribute__((unused)) static pthread_once_t defk_crc32c_once = PTHREAD_ONCE_INIT;
+__attribute__((unused)) static void defk_crc32c_init_once(void) {
+  int hw = 0;
+#ifdef DEFK_HW_CRC32C
+  /* enif_getenv reads the emulator's environment, which System.put_env/2
+     changes (getenv does not see it) */
+  char e[8];
+  size_t n = sizeof e;
+  int portable = enif_getenv("DEFK_PORTABLE_BUILTINS", e, &n);
+  portable = portable == 1 || (portable == 0 && n > 0 && strcmp(e, "0") != 0);
+  hw = !portable && defk_cpu_crc32c();
+#endif
+  if (!hw) {
+    for (uint32_t n = 0; n < 256; n++) {
+      uint32_t c = n;
+      for (int k = 0; k < 8; k++) c = (c >> 1) ^ (0x82F63B78u & (0u - (c & 1u)));
+      defk_crc32c_t[0][n] = c;
+    }
+    for (int k = 1; k < 8; k++)
+      for (uint32_t n = 0; n < 256; n++) {
+        uint32_t c = defk_crc32c_t[k - 1][n];
+        defk_crc32c_t[k][n] = (c >> 8) ^ defk_crc32c_t[0][c & 255];
+      }
+  }
+  atomic_store_explicit(&defk_crc32c_state, hw ? 1 : 2, memory_order_release);
+}
+__attribute__((noinline, cold, unused)) static int defk_crc32c_init(void) {
+  pthread_once(&defk_crc32c_once, defk_crc32c_init_once);
+  return atomic_load_explicit(&defk_crc32c_state, memory_order_acquire);
+}
+/* table k advances a byte by k + 1 bytes: slicing-by-8 for a 64-bit word */
+static inline uint32_t defk_crc32c_sw(uint32_t c, uint64_t x, int w) {
+  uint32_t(*t)[256] = defk_crc32c_t;
+  switch (w) {
+  case 8: return (c >> 8) ^ t[0][(c ^ (uint32_t)x) & 255];
+  case 16: c ^= (uint32_t)x; return (c >> 16) ^ t[1][c & 255] ^ t[0][(c >> 8) & 255];
+  case 32:
+    c ^= (uint32_t)x;
+    return t[3][c & 255] ^ t[2][(c >> 8) & 255] ^ t[1][(c >> 16) & 255] ^ t[0][c >> 24];
+  default: {
+    uint32_t lo = c ^ (uint32_t)x, hi = (uint32_t)(x >> 32);
+    return t[7][lo & 255] ^ t[6][(lo >> 8) & 255] ^ t[5][(lo >> 16) & 255] ^ t[4][lo >> 24] ^
+           t[3][hi & 255] ^ t[2][(hi >> 8) & 255] ^ t[1][(hi >> 16) & 255] ^ t[0][hi >> 24];
+  }
+  }
+}
+/* w is 8, 16, 32 or 64, c < 2^32 and x < 2^w */
+static inline uint64_t defk_crc32c(uint64_t c, uint64_t x, int w) {
+  int s = atomic_load_explicit(&defk_crc32c_state, memory_order_relaxed);
+#ifdef DEFK_HW_CRC32C
+  if (DEFK_LIKELY(s == 1)) return defk_crc32c_hw(c, x, w);
+#endif
+  if (DEFK_UNLIKELY(s != 2)) s = defk_crc32c_init();
+#ifdef DEFK_HW_CRC32C
+  if (s == 1) return defk_crc32c_hw(c, x, w);
+#endif
+  atomic_thread_fence(memory_order_acquire);
+  return defk_crc32c_sw((uint32_t)c, x, w);
+}
+/* the checks of Defk.Bits.crc32c/3, in its order: the width, then crc as a
+ * 32-bit value, then x as a w-bit value; the forms the compiler calls take
+ * an i64 (sign checked) or a u64 crc and x */
+__attribute__((noreturn, cold, unused)) static void defk_crc32c_width(defk_ctx *ctx, int64_t w) {
+  defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.crc32c/3: width %lld is not 8, 16, 32 or 64", (long long)w);
+}
+static inline int64_t defk_crc32c_k(defk_ctx *ctx, uint64_t c, int cneg, uint64_t x, int xneg,
+                                    int64_t w) {
+  if (DEFK_UNLIKELY(w != 8 && w != 16 && w != 32 && w != 64)) defk_crc32c_width(ctx, w);
+  c = defk_field_arg(ctx, "crc32c/3", c, cneg, 32);
+  x = defk_field_arg(ctx, "crc32c/3", x, xneg, w);
+  return (int64_t)defk_crc32c(c, x, (int)w);
+}
+static inline int64_t defk_crc32c_ii(defk_ctx *ctx, int64_t c, int64_t x, int64_t w) { return defk_crc32c_k(ctx, (uint64_t)c, c < 0, (uint64_t)x, x < 0, w); }
+static inline int64_t defk_crc32c_iu(defk_ctx *ctx, int64_t c, uint64_t x, int64_t w) { return defk_crc32c_k(ctx, (uint64_t)c, c < 0, x, 0, w); }
+static inline int64_t defk_crc32c_ui(defk_ctx *ctx, uint64_t c, int64_t x, int64_t w) { return defk_crc32c_k(ctx, c, 0, (uint64_t)x, x < 0, w); }
+static inline int64_t defk_crc32c_uu(defk_ctx *ctx, uint64_t c, uint64_t x, int64_t w) { return defk_crc32c_k(ctx, c, 0, x, 0, w); }
 static inline uint64_t defk_min_u64(uint64_t a, uint64_t b) { return a < b ? a : b; }
 static inline uint64_t defk_max_u64(uint64_t a, uint64_t b) { return a > b ? a : b; }
 static inline uint64_t defk_f64_to_u64(double x) {
@@ -1412,13 +1560,17 @@ static inline void *defk_frame_of(ErlNifEnv *env, ERL_NIF_TERM t, size_t size, E
 static ERL_NIF_TERM defk_stats_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
   (void)argv;
-  ERL_NIF_TERM keys[3] = {enif_make_atom(env, "frames_live"), enif_make_atom(env, "promotions"),
-                          enif_make_atom(env, "yields")};
-  ERL_NIF_TERM vals[3] = {enif_make_long(env, atomic_load(&defk_stat_frames_live)),
+  /* which crc32c this library picked at its first call (defk-ulk.4) */
+  int crc = atomic_load(&defk_crc32c_state);
+  const char *crc_impl = crc == 1 ? "instruction" : crc == 2 ? "table" : "not_called";
+  ERL_NIF_TERM keys[4] = {enif_make_atom(env, "frames_live"), enif_make_atom(env, "promotions"),
+                          enif_make_atom(env, "yields"), enif_make_atom(env, "crc32c")};
+  ERL_NIF_TERM vals[4] = {enif_make_long(env, atomic_load(&defk_stat_frames_live)),
                           enif_make_long(env, atomic_load(&defk_stat_promotions)),
-                          enif_make_long(env, atomic_load(&defk_stat_yields))};
+                          enif_make_long(env, atomic_load(&defk_stat_yields)),
+                          enif_make_atom(env, crc_impl)};
   ERL_NIF_TERM map;
-  enif_make_map_from_arrays(env, keys, vals, 3, &map);
+  enif_make_map_from_arrays(env, keys, vals, 4, &map);
   return map;
 }
 
