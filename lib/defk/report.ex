@@ -250,7 +250,7 @@ defmodule Defk.Report do
     vec =
       if Defk.Build.clang?() do
         case Defk.Build.remarks!(c_src, base) do
-          {:ok, remarks} -> vectorization(loops, c_src, base <> ".c", remarks)
+          {:ok, remarks} -> vectorization(loops, c_src, Path.basename(base <> ".c"), remarks)
           {:error, _} -> unknown(loops, "vectorised: unknown (clang's remark pass failed)")
         end
       else

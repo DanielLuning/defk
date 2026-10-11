@@ -153,10 +153,14 @@ defmodule Defk.Build do
 
   @remark ~r/^(.+?):(\d+):\d+: remark: (.*) \[-Rpass(|-missed|-analysis)=loop-vectorize\]$/
 
+  # The file is kept as its basename: the cached text names the .c of the
+  # checkout that built it, which is not this one after a moved project, a
+  # copied _build or a restored CI cache (defk-fr7). The basename carries the
+  # module and the cache key, so it still names exactly this kernel's C.
   defp parse_remarks(out) do
     for line <- String.split(out, "\n"), [_, file, l, msg, kind] <- [Regex.run(@remark, line)] do
       kind = %{"" => :passed, "-missed" => :missed, "-analysis" => :analysis}[kind]
-      {file, String.to_integer(l), kind, msg}
+      {Path.basename(file), String.to_integer(l), kind, msg}
     end
   end
 

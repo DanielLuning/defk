@@ -270,6 +270,35 @@ defmodule Defk.ReportTest do
     end
   end
 
+  describe "report: :full, a cache built in another directory" do
+    @describetag :clang
+
+    # The cached .remarks name the .c of the checkout that built them; a
+    # worktree with a copied _build, a moved project or a restored CI cache
+    # has the same cache key at another path (defk-fr7).
+    test "gives the same facts as the directory that built it" do
+      src = Full.__defk_c_source__()
+      base = String.trim_trailing(Full.__defk_lib__(), ".so")
+      other = Path.join(System.tmp_dir!(), "defk-fr7-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(other)
+      on_exit(fn -> File.rm_rf!(other) end)
+
+      for f <- Path.wildcard(base <> "*"), do: File.cp!(f, Path.join(other, Path.basename(f)))
+      moved = Path.join(other, Path.basename(base))
+
+      assert Enum.any?(
+               Path.wildcard(moved <> "-*.remarks"),
+               &(File.read!(&1) =~ Path.dirname(base))
+             )
+
+      bare = Enum.reject(Full.__defk_report__(), &match?({_, _, {:vectorize, _, _}}, &1))
+      moved_report = Defk.Report.full(bare, src, moved)
+
+      assert moved_report == Full.__defk_report__()
+      assert Enum.any?(moved_report, &match?({_, _, {:vectorize, :vectorized, _}}, &1))
+    end
+  end
+
   describe "report: :full when CC is not clang" do
     setup do
       saved = System.get_env("CC")
