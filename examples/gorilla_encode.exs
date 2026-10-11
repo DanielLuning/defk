@@ -129,8 +129,8 @@
 # machine; the quiet-machine run is defk-sgw.4). M-series Mac, OTP 29,
 # Elixir 1.20:
 #   100-point blocks (verdict), 1,000 series: Elixir 4.6-5.1 ms, defk
-#     2.1-2.45 ms: 1.96-2.38x, good in 7 of 8 runs (one 1.96x, marginal,
-#     with best of 7; the script now takes best of 15). Close to the bar:
+#     2.1-2.45 ms: 1.96-2.38x, good in 8 of 8 runs under the 1.9x tie band (one 1.96x
+#     read marginal before it, with best of 7; the script now takes best of 15). Close to the bar:
 #     the headers and CRC32 (0.27 us per block) are the same on both sides,
 #     and packing the list is a third of defk's time. The NIF 6.0-7.2 ms:
 #     defk 2.75-2.9x faster (each NIF call hops to a dirty scheduler).
