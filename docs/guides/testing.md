@@ -64,6 +64,7 @@ When they disagree, the assertion fails with both outcomes in the message.
 The same calls in an ExUnit module, with an agreement property over inputs
 from `stream_data`:
 
+<!-- defk-example exunit: Stats from docs/guides/getting-started.md -->
 ```elixir
 defmodule StatsTest do
   use ExUnit.Case, async: true
@@ -165,6 +166,7 @@ its own with `async: false`, and turn it off in an `after`. Check
 `__defk_stats__/0` to make sure the kernel really yielded; a kernel with no
 loops, or an input too short to reach a safepoint, never does:
 
+<!-- defk-example exunit: Stats from docs/guides/getting-started.md -->
 ```elixir
 defmodule StatsYieldTest do
   use ExUnit.Case, async: false

@@ -20,9 +20,15 @@ defmodule Defk.LanguageDocExamplesTest do
 
   @dir Path.join(System.tmp_dir!(), "defk_language_doc_examples_test")
 
-  # every example's module, compiled concurrently: %{line => compile result}
+  @isolated LanguageDoc.isolated_jobs(@examples)
+
+  # every example's module, compiled concurrently: %{line => compile result};
+  # and the blocks that run in a BEAM of their own (sketches, ExUnit files,
+  # scripts), started first, as they take longest
   setup_all do
     File.mkdir_p!(@dir)
+    isolated = Task.async(fn -> Defk.LanguageDoc.Isolated.run(@isolated, @dir) end)
+    announce_skips()
 
     compiled =
       @examples
@@ -33,7 +39,24 @@ defmodule Defk.LanguageDocExamplesTest do
       )
       |> Map.new(fn {:ok, r} -> r end)
 
-    %{compiled: compiled}
+    %{compiled: compiled, isolated: Task.await(isolated, :infinity)}
+  end
+
+  # one short summary, so the fragments stay visible: a line per reason
+  defp announce_skips do
+    lines =
+      for {why, skips} <-
+            Enum.group_by(@examples, fn {_, ex} -> ex.check end, fn {path, ex} ->
+              "#{path}:#{ex.line}"
+            end),
+          match?({:skip, _}, why),
+          do: "  #{elem(why, 1)}\n    #{Enum.join(skips, " ")}"
+
+    IO.puts([
+      "defk-example skips (",
+      to_string(length(lines)),
+      " reasons):\n" | Enum.intersperse(lines, "\n")
+    ])
   end
 
   defp compiled?(%{check: check}),
@@ -42,8 +65,12 @@ defmodule Defk.LanguageDocExamplesTest do
   for {path, %{check: check} = ex} <- @examples, not match?({:skip, _}, check) do
     @path path
     @ex ex
-    test "#{path}:#{ex.line} #{LanguageDoc.label(ex)}", %{compiled: compiled} do
-      LanguageDoc.verify!(@ex, Map.get(compiled, {@path, @ex.line}))
+    test "#{path}:#{ex.line} #{LanguageDoc.label(ex)}", %{compiled: compiled, isolated: isolated} do
+      case Map.fetch(isolated, {@path, @ex.line}) do
+        {:ok, :ok} -> :ok
+        {:ok, {:error, why}} -> flunk("line #{@ex.line}: #{why}")
+        :error -> LanguageDoc.verify!(@ex, Map.get(compiled, {@path, @ex.line}))
+      end
     end
   end
 
@@ -80,7 +107,7 @@ defmodule Defk.LanguageDocExamplesTest do
             "<!-- defk-example compiles -->",
             fence(@kernel),
             "<!-- defk-example skip: no kernel here -->",
-            fence("x = 1")
+            fence("x = 1", "text")
           ],
           "\n"
         )
@@ -92,6 +119,103 @@ defmodule Defk.LanguageDocExamplesTest do
                {16, {:invalid, "unknown annotation" <> _}},
                {22, {:invalid, "an annotation on a block with no kernel"}}
              ] = checks(doc)
+    end
+
+    test "plain Elixir blocks: sketches, test files and scripts" do
+      doc =
+        Enum.join(
+          [
+            fence("x = 1"),
+            "<!-- defk-example run: a = 1 | defs: defp f, do: 1 -->",
+            fence("a"),
+            "<!-- defk-example skip: a fragment -->",
+            fence("foo(...)"),
+            fence("use ExUnit.Case"),
+            "<!-- defk-example exunit: Stats from README.md -->",
+            fence("use ExUnit.Case"),
+            "<!-- defk-example script: the note -->",
+            fence(@kernel),
+            fence("not elixir", "text")
+          ],
+          "\n"
+        )
+
+      assert [
+               {:sketch, %{setup: "", defs: ""}},
+               {:sketch, %{setup: "a = 1", defs: "defp f, do: 1"}},
+               {:skip, "a fragment"},
+               {:exunit, nil},
+               {:exunit, "Stats from README.md"},
+               {:script, "the note"}
+             ] = Enum.map(checks(doc), &elem(&1, 1))
+    end
+
+    test "a skip needs a reason" do
+      for marker <- ["skip", "skip:", "skip:   ", "compiles", "script"],
+          block <- [@kernel, "x = 1"] do
+        doc = "<!-- defk-example #{marker} -->\n" <> fence(block)
+        assert [{2, {:invalid, _}}] = checks(doc), "#{marker} on #{block}"
+      end
+    end
+
+    test "sketches, test files and scripts run in a BEAM of their own, and fail there" do
+      ok = %{
+        id: :ok,
+        kind: :sketch,
+        source: "y = x + 1\ny # => 2",
+        setup: "x = 1",
+        defs: ""
+      }
+
+      module_level = %{
+        id: :module_level,
+        kind: :sketch,
+        source: "def twice(x), do: 2 * x",
+        setup: "twice(2) # => 4",
+        defs: ""
+      }
+
+      wrong = %{ok | id: :wrong, source: "y = x + 1\ny # => 3"}
+      broken = %{ok | id: :broken, source: "undefined_function()"}
+
+      test_file = fn id, assertion ->
+        %{
+          id: id,
+          kind: :exunit,
+          needs: nil,
+          deps: [],
+          source:
+            "defmodule T#{id} do\n  use ExUnit.Case\n  test \"t\", do: assert(#{assertion})\nend"
+        }
+      end
+
+      script = fn id, last ->
+        %{id: id, kind: :script, source: "Mix.install([])\n#{last}"}
+      end
+
+      jobs = [
+        ok,
+        module_level,
+        wrong,
+        broken,
+        test_file.(:test_ok, "1 + 1 == 2"),
+        test_file.(:test_bad, "1 + 1 == 3"),
+        script.(:script_ok, "%{correct: true}"),
+        script.(:script_bad, "%{correct: false}")
+      ]
+
+      results = Defk.LanguageDoc.Isolated.run(jobs, @dir)
+
+      for id <- [:ok, :module_level, :test_ok, :script_ok], do: assert(results[id] == :ok)
+
+      assert {:error, wrong_why} = results[:wrong]
+      assert wrong_why =~ "documented # => 3, got 2"
+      assert {:error, broken_why} = results[:broken]
+      assert broken_why =~ "undefined"
+      assert {:error, test_why} = results[:test_bad]
+      assert test_why =~ "1 of 1 tests failed"
+      assert {:error, script_why} = results[:script_bad]
+      assert script_why =~ "the script's last value"
     end
 
     test "steps: continuations, raises, bindings without output" do

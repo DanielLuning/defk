@@ -43,6 +43,13 @@ no sense), `<!-- defk-example error: <code> -->` (must fail with that code),
 `<!-- defk-example skip: <reason> -->` (a fragment, not checked), or
 `<!-- defk-example known-failure: <ticket> -->` (checked, and must still fail
 until the ticket is fixed). A kernel block with none of these fails the tests.
+Every skip needs a reason, and the test run lists the skips.
+
+The other `elixir` blocks of the docs run too, in a separate BEAM
+(`test/support/language_doc.ex` has the details): a plain block is run as a sketch, and
+a trailing `# => value` on a line is checked; a block with `use ExUnit.Case`
+runs as a test file; and `<!-- defk-example run: <bindings> | defs: <code> -->`
+gives a sketch what it needs. A fragment gets a `skip:` comment.
 
 ## 1. What a kernel is, and the one rule
 
@@ -1077,6 +1084,7 @@ length). That changes speed, never results.
 and the big-endian `u64_be`, `u32_be`, `u16_be` read the unsigned 8-, 4- or
 2-byte integer at byte offset `i` of a `[u8]`, as Elixir's
 
+<!-- defk-example skip: a pattern shown for comparison, with free variables (bytes, i) -->
 ```elixir
 <<_::binary-size(i), x::little-unsigned-size(64), _::binary>> = bytes
 ```

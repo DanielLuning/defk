@@ -74,6 +74,7 @@ Spellings that look equivalent are not: `Enum.sum/1` is not just
 - **Source:** [`poor_list_data.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_list_data.exs), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs) (commit 9116a42).
 - **Status:** measured.
 
+<!-- defk-example run: totals = [1.5, 2.5, 4.0]; readings = [-20.0, 5.0, 95.0] | defs: defp clamp_by_guards(x) when x < -10.0, do: -10.0; defp clamp_by_guards(x) when x > 90.0, do: 90.0; defp clamp_by_guards(x), do: x -->
 ```elixir
 # fast
 Enum.sum(totals)
@@ -97,6 +98,7 @@ that cost lands on whichever side triggers the GC.
 - **Source:** [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md#measuring-correctly) rule 4, [`geo_nearest.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geo_nearest.exs) (baf7d5f), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs) (a28db62), [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs) (6b894ed).
 - **Status:** measured (geo_nearest); provisional (gorilla_encode, pcm_mix).
 
+<!-- defk-example run: records = [1, 2]; points = [3, 4] | defs: defp build_index(points), do: points -->
 ```elixir
 # fast: built once, read by every request
 :persistent_term.put(:geo_idx, records)
@@ -214,6 +216,7 @@ and packing it afterwards is the slowest option.
 - **Source:** [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs) (7bfbe4c), `defk-9p6.6`.
 - **Status:** provisional.
 
+<!-- defk-example skip: a fragment, a function head with its arguments elided -->
 ```elixir
 # fast: sliding sums over two cursors into one binary, results appended
 walk(<<v::float-64-native, rest::binary>>, <<old::float-64-native, trail::binary>>, w, s, q, means, stds)
@@ -234,6 +237,7 @@ One bigger match and several appends per step beat one item per step.
 - **Source:** [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs) (070a179), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs) (a28db62), [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs).
 - **Status:** provisional.
 
+<!-- defk-example skip: a fragment, one clause of pack/2 beside the comprehensions it replaces -->
 ```elixir
 # fast
 defp pack([a, b, c, d | t], acc),
@@ -257,6 +261,7 @@ hashes |> Enum.map(&<<&1::unsigned-little-64>>) |> IO.iodata_to_binary()
 - **Source:** [`image_blur.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_blur.exs) (4355011), [`image_ops.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_ops.exs) (7f0904d).
 - **Status:** provisional (image_blur); measured (image_ops).
 
+<!-- defk-example run: rgb = <<1, 2, 3, 4, 5, 6>>; px = :binary.copy(<<7>>, 64); y0 = 1; stride = 8; gray = :binary.copy(<<9>>, 64); yy = 1; xx = 1; w = 8 -->
 ```elixir
 # fast
 for <<r, g, b <- rgb>>, into: <<>>, do: <<div(77 * r + 150 * g + 29 * b, 256)>>
@@ -285,6 +290,7 @@ halves keep every value a small integer.
 - **Source:** [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs) (f81c2cd), [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs) (ad7b46b), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs) (a28db62), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs) (0bc56d4).
 - **Status:** measured; gorilla provisional.
 
+<!-- defk-example run: crc64_halves("abc", 0, 0); crc64_whole("abc", 0) | defs: @t64_hi List.to_tuple(List.duplicate(0, 256)); @t64_lo List.to_tuple(List.duplicate(0, 256)); @t64_whole List.to_tuple(List.duplicate(0, 256)); defp crc64_halves(<<>>, hi, lo), do: {hi, lo}; defp crc64_whole(<<>>, crc), do: crc -->
 ```elixir
 # fast: CRC-64 state in two small halves
 defp crc64_halves(<<b, rest::binary>>, hi, lo) do
@@ -322,6 +328,7 @@ the word-wide integers cost more than the halved iteration count.
 - **Source:** [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs) (2ae646a), `defk-9p6.12`.
 - **Status:** provisional.
 
+<!-- defk-example skip: a fragment, one clause of b32/3 beside the comprehension it replaces -->
 ```elixir
 # fast (about 1 GB/s)
 defp b32(<<h::32, r::binary>>, m, acc), do: b32(r, m, <<acc::binary, bxor(h, m)::32>>)
@@ -347,6 +354,7 @@ Elixir is about 10x the row DP.
 - **Source:** [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), `defk-l2g`.
 - **Status:** provisional.
 
+<!-- defk-example skip: a fragment, the loop body is elided (...) -->
 ```elixir
 # fast: walk a charlist; branch-free score
 defp mc([c | rest], peq, mask, hi, pv, mv, score) do
@@ -374,6 +382,7 @@ ms for Myers; no difference for the DP, 157 vs 158 ms).
 - **Source:** [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) (4b8d17d), [`per_pair_distance.exs`](https://github.com/DanielLuning/defk/blob/main/examples/per_pair_distance.exs) (83c1a12).
 - **Status:** provisional.
 
+<!-- defk-example skip: a fragment, the loop body is elided (...) -->
 ```elixir
 # fast
 defp cells([bc | bt], [diag, up | prest], left, c, acc) do
@@ -396,6 +405,7 @@ end            # then :lists.reverse(acc) once per row
 - **Source:** [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs) (9235cd4), `defk-9p6.13`.
 - **Status:** provisional.
 
+<!-- defk-example skip: a fragment, the unrolled arguments are elided (...) -->
 ```elixir
 # fast
 dot8(<<x0::float-32-native, x1::float-32-native, ..., x7::float-32-native, rest::binary>>,
@@ -416,6 +426,7 @@ dot1(<<x::float-32-native, rest::binary>>, [q | qs], a), do: dot1(rest, qs, a + 
 - **Source:** [`geo_nearest.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geo_nearest.exs) (baf7d5f), `defk-9p6.7`.
 - **Status:** measured.
 
+<!-- defk-example skip: a fragment, the arguments and the body are elided (...) -->
 ```elixir
 # fast
 walk(<<lat::float-64-native, lon::float-64-native, coslat::float-64-native, rest::binary>>, ...)
@@ -437,6 +448,7 @@ walk(<<lat::float-64-native, lon::float-64-native, coslat::float-64-native, rest
 - **Source:** [`one_brc/elixir.exs`](https://github.com/DanielLuning/defk/blob/main/examples/one_brc/elixir.exs) (0323114), `defk-n4r.1`; [`docs/research/string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md) (d78d854).
 - **Status:** measured (one_brc); provisional (research).
 
+<!-- defk-example run: acc = %{}; name = "x"; t = 5; temp_sub_binary = "1.5" -->
 ```elixir
 # fast: parse the temperature as an integer x10 by pattern, one :atomics slot per statistic
 # slow
@@ -456,6 +468,7 @@ Map.update(acc, name, {t, t, t, 1}, fn {mn, mx, s, c} -> {min(mn, t), max(mx, t)
 - **Source:** [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs) (070a179), `defk-9p6.15`.
 - **Status:** provisional.
 
+<!-- defk-example skip: a fragment, the per-hash code is only described in comments -->
 ```elixir
 # fast (from ~5k hashes)
 a = :atomics.new(m, signed: false)
@@ -506,6 +519,7 @@ they are reduction-counted, so they already keep the scheduler responsive.
 - **Source:** [`poor_substring_search.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_substring_search.exs) (a00f961), `defk-9p6.23`; [`string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md).
 - **Status:** measured; research provisional.
 
+<!-- defk-example run: needle = "ab"; hay = "xxabxx"; needles = ["ab", "xx"] -->
 ```elixir
 compiled = :binary.compile_pattern(needle)   # once, e.g. in :persistent_term
 :binary.match(hay, compiled)                 # {pos, len}, no copy
@@ -532,6 +546,7 @@ compiled = :binary.compile_pattern(needle)   # once, e.g. in :persistent_term
 - **Source:** [`utf8_valid.exs`](https://github.com/DanielLuning/defk/blob/main/examples/utf8_valid.exs) (eddafd8), `defk-9p6.22`; [`string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md).
 - **Status:** measured; research provisional.
 
+<!-- defk-example run: bin = "hello" -->
 ```elixir
 is_binary(:unicode.characters_to_binary(bin))   # fast on large inputs
 String.valid?(bin)                              # fine for a WebSocket frame (what Bandit uses)
@@ -564,6 +579,7 @@ For GB/s validation wrap simdutf8; a scalar kernel cannot beat the BIF by much.
 - **Source:** [`hash_chain.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hash_chain.exs) (df9258e), `defk-9p6.18`; [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs) (f81c2cd), `defk-52v.1`.
 - **Status:** provisional (hash_chain); measured (keccak).
 
+<!-- defk-example run: op = :binary.copy(<<1>>, 64); ip = :binary.copy(<<2>>, 64); key = :binary.copy(<<3>>, 32); client = "c1"; nonce = 7 -->
 ```elixir
 # fast: HMAC by hand with precomputed pads
 :crypto.hash(:sha256, [op | :crypto.hash(:sha256, [ip, client, ?:, Integer.to_string(nonce)])])
@@ -584,6 +600,7 @@ The only Elixir that beats Bandit's 32-bit masking loop, from about 600 B.
 - **Source:** [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs) (2ae646a).
 - **Status:** provisional.
 
+<!-- defk-example run: exor2("abc", 7) -->
 ```elixir
 def exor2(p, m), do: :crypto.exor(p, key(<<m::32>>, byte_size(p)))
 defp key(k, n) when byte_size(k) >= n, do: binary_part(k, 0, n)
@@ -628,6 +645,7 @@ defp key(k, n), do: key(<<k::binary, k::binary>>, n)
 - **Source:** `defk-8qs` comments 2026-10-10, `defk-6lr`, [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs).
 - **Status:** provisional.
 
+<!-- defk-example run: chunks = [1, 2, 3] | defs: defmodule Kernels do def work(chunk), do: chunk end -->
 ```elixir
 # spreads: start every chunk at once
 chunks |> Enum.map(&Task.async(fn -> Kernels.work(&1) end)) |> Task.await_many(:infinity)
@@ -680,6 +698,7 @@ slice; Elixir uses that many in about 5 us.
 - **Source:** [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs), [`image_blur.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_blur.exs), [`one_brc/elixir.exs`](https://github.com/DanielLuning/defk/blob/main/examples/one_brc/elixir.exs).
 - **Status:** provisional; one_brc measured.
 
+<!-- defk-example run: bin = :binary.copy(<<0>>, 64); chunks = [{0, 2}, {1, 2}]; w = 1 | defs: defp run(bin, _w), do: byte_size(bin) -->
 ```elixir
 Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + w - 1) * 8), w) end,
   max_concurrency: System.schedulers_online(), timeout: :infinity)
@@ -738,6 +757,7 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
 - **Source:** [README Results](../README.md), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs).
 - **Status:** measured; ws_masking provisional.
 
+<!-- defk-example run: packed = <<1.0::float-64-native>>; readings = [1.0, 2.0] | defs: defmodule Clamp.Kernels do def clamp_all(packed), do: packed; def clamp(x, lo, hi), do: x |> max(lo) |> min(hi) end -->
 ```elixir
 # fast: one call per batch
 Clamp.Kernels.clamp_all(packed)
@@ -769,10 +789,11 @@ is often most of it.
 - **Source:** [`poor_list_data.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_list_data.exs), [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs), [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs).
 - **Status:** measured; hll and gorilla provisional.
 
+<!-- defk-example run: totals = [1.0, 2.0] | defs: defmodule Sum.Kernels do def sum(packed), do: byte_size(packed) end -->
 ```elixir
 # loses for one pass over a list
 packed = for x <- totals, into: <<>>, do: <<x::float-64-native>>
-Kernel.sum(packed)
+Sum.Kernels.sum(packed)
 # wins: data already packed (a binary from a file, a socket, :persistent_term), or packed once and reused
 ```
 
@@ -806,6 +827,7 @@ If you must pack, see 2.2.
 - **Source:** [`sort_u64_keys.exs`](https://github.com/DanielLuning/defk/blob/main/examples/sort_u64_keys.exs) (ad7b46b), [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs).
 - **Status:** measured; batched_levenshtein provisional.
 
+<!-- defk-example run: packed = <<3::signed-64-native, 1::signed-64-native>>; q = "a"; blob = "b"; offs = <<>>; n = 1 | defs: defmodule Keys.Kernels do def sort_i64(packed), do: packed end; defmodule K do def lev_myers(_q, _blob, _offs, _start, _n), do: <<1, 2>> end -->
 ```elixir
 packed |> Keys.Kernels.sort_i64()                     # stays packed
 :binary.bin_to_list(K.lev_myers(q, blob, offs, 0, n)) # [u8] result, list only if needed
@@ -838,6 +860,7 @@ per call.
 - **Source:** `defk-ktw` comment 2026-10-10, `defk-i5r` (open), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs). Other whole-buffer copies still have no safepoint (`defk-oed`, open).
 - **Status:** provisional; the `codecs` 4.6-4.8 ms numbers are superseded by `defk-ktw`.
 
+<!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
 # not zeroed: the first statement mentioning x writes every element
 x = alloc(f64, 2 * n)
@@ -877,6 +900,7 @@ names each kept bounds check and the fact that would drop it. See
 - **Source:** [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), `defk-n7k`; `defk-upc` comment 2026-10-10; [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs), `defk-siy`.
 - **Status:** provisional. Still open: `defk-siy`, `defk-n7k`, `defk-pic`, `defk-fun`, `defk-9za`.
 
+<!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
 # proven: no bounds checks
 n = min(len(a), len(b))
@@ -964,6 +988,7 @@ with raising checks if it is set.
 - **Early-exit loops with writes** ("Cannot vectorize early exit loop with
   writes to memory" in the report). (`defk-agp`.)
 
+<!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
 # vectorises: eight partial sums
 {a0, a1, a2, a3, a4, a5, a6, a7} = for j <- 0..(div(@dim, 8) - 1)//1, reduce: {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0} do ... end
@@ -986,6 +1011,7 @@ select, and clang then threaded the branch into the inner loop.
 - **Source:** `defk-jp3`, `defk-7q5` comments 2026-10-05, `defk-id9` comment 2026-10-10, [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs).
 - **Status:** measured; `defk-id9` provisional.
 
+<!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
 if prime?(i), do: count + 1, else: count     # pure arithmetic arms: a select
 i = if pow2, do: band(v, n - 1), else: rem(v, n)   # an arm with division: keep the branch
@@ -1027,6 +1053,7 @@ changed speed by 1.5x.
 - **Source:** [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs) (2ae646a).
 - **Status:** provisional.
 
+<!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
 for i <- 0..(div(n, 4) - 1)//1 do
   j = 4 * i
@@ -1052,6 +1079,7 @@ compiles to one `ror`. A shift by a variable count is a checked operation.
 - **Source:** [`hash_chain.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hash_chain.exs), [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs); builtin rotates are `defk-52v.6`.
 - **Status:** provisional.
 
+<!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
 band(bsr(x, 7) + bsl(x, 25), 0xFFFFFFFF)   # literal n: wrapped, no checks
 rotr32(x, n)                                # n as a parameter: a checked bsl
@@ -1069,6 +1097,7 @@ and no copy per call, and `@b64[band(x, 63)]` needs no bounds check.
 - **Source:** [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs), [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs), `defk-ivt`, `defk-qx3` comment 2026-10-10.
 - **Status:** measured; the per-call table build in `geohash_crc` and `utf8_valid` is superseded by `defk-ivt`.
 
+<!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
 @b64 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 out[o] = @b64[band(bsr(x, 18), 63)]

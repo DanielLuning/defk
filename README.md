@@ -58,7 +58,6 @@ The full reference for kernel authors (every construct, its exact semantics, the
 
 When to use defk and when Elixir or a wrapper NIF is the better choice, what is planned (with its ticket) and what stays out by design is on the scope page, [`docs/scope.md`](docs/scope.md).
 
-<!-- defk-example skip: the call after the module needs caller data (bin_a, bin_b); the kernel itself is checked in docs/language.md -->
 ```elixir
 defmodule Stats do
   use Defk
@@ -69,9 +68,16 @@ defmodule Stats do
     end
   end
 end
-
-Stats.dot(bin_a, bin_b)   # [f64] = a binary of packed native-endian floats
 ```
+
+```elixir
+iex> bin_a = for x <- [1.0, 2.0], into: <<>>, do: <<x::float-64-native>>
+iex> bin_b = for x <- [3.0, 4.0], into: <<>>, do: <<x::float-64-native>>
+iex> Stats.dot(bin_a, bin_b)
+11.0
+```
+
+A `[f64]` argument is a binary of packed native-endian floats.
 
 A construct outside the kernel subset is a compile error in Elixir's
 diagnostic format, with why it's rejected, a rewrite where one exists, and a
