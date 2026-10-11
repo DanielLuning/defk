@@ -14,9 +14,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-djy",
+  "comments": [
+    {
+      "text": "From defk-djy.5: the scope page is docs/scope.md (a Guides extra in mix.exs). Getting started should link it, e.g. 'When to use defk and when Elixir or a wrapper NIF is the better choice: [scope page](scope.md)' (from another extra, ex_doc resolves scope.md to scope.html).",
+      "timestamp": "2026-10-11T11:28:59Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Guides: getting started through deployment",
   "type": "task",
-  "updated_at": "2026-10-10T14:58:42Z"
+  "updated_at": "2026-10-11T11:28:59Z"
 }
