@@ -5,7 +5,7 @@ what its arguments and memory mean, how it raises, how it loads and survives a
 hot code upgrade, and when a job should not be a NIF at all.
 
 The facts below are grounded in the OTP documentation, in this repo's generated
-code and runtime header, and in README design decisions; file and line are
+code and runtime header, and in the design decisions in docs/project.md; file and line are
 given where practical. Where something is defk's reasoning rather than an OTP
 requirement, it says so. Where a fact is not settled, it says that too.
 
@@ -124,7 +124,7 @@ The kernel body builds no terms: it computes on off-heap memory in
 first yield.
 
 **Process death frees the frame.** A kernel starts on a C stack frame and is
-copied into a resource only on its first yield (README design decision 4;
+copied into a resource only on its first yield (docs/project.md design decision 4;
 around `defk_promote` in priv/defk_runtime.h). If the process dies while
 suspended, the resource destructor runs: `defk_frame_dtor` calls
 `defk_finish`, releasing every owned buffer, and decrements `frames_live`
@@ -144,7 +144,7 @@ after making the term, so only the term keeps the frame alive
 | Construct | Ownership | Good for | Bad for | defk's stance |
 |---|---|---|---|---|
 | `enif_alloc` / `enif_free` | Caller owns the raw block; nothing frees it if you forget | Scratch memory with one obvious owner and one free site | Anything that must be cleaned up when a process dies or a raise happens | Used only for the `ctx->owned` table itself (`enif_realloc` in `defk_own`, `enif_free` in `defk_release_owned`); never for kernel data |
-| `enif_alloc_binary` + `enif_make_binary` | Owned until `enif_make_binary` transfers it to a term (or `enif_release_binary`) | Output buffers whose size is known before the term exists; can be kept between NIF calls | Small one-shot outputs (heap allocation is cheaper); leaks if neither release nor transfer happens | The output path for every array: `defk_own` allocates and `defk_make_arr` transfers (both in priv/defk_runtime.h). README design decision 1 |
+| `enif_alloc_binary` + `enif_make_binary` | Owned until `enif_make_binary` transfers it to a term (or `enif_release_binary`) | Output buffers whose size is known before the term exists; can be kept between NIF calls | Small one-shot outputs (heap allocation is cheaper); leaks if neither release nor transfer happens | The output path for every array: `defk_own` allocates and `defk_make_arr` transfers (both in priv/defk_runtime.h). docs/project.md design decision 1 |
 | `enif_make_new_binary` | Creates the owning term in one step; the data is mutable only until the NIF returns | Small outputs and error messages, when you do not need to reallocate or outlive the call | Cannot be kept between NIF calls, cannot be reallocated — so no growable buffers | The message binary in `defk_raise` and the empty-array edge case in `defk_make_arr` |
 | `enif_alloc_resource` | Refcounted object with a destructor; a term handle via `enif_make_resource` | Long-lived native state that must be cleaned up by the GC on any exit path | Per-call values: refcounting, destructor rules, and hot-upgrade complexity | Used only for the suspended frame (around `defk_promote` in priv/defk_runtime.h), with a resource type per loaded library (§6). Not for kernel state — see ADR-0001 |
 
@@ -160,13 +160,12 @@ recorded as a breadcrumb comment on `defk-dtw` dated **2026-10-08**
    candidates that grow trees or graphs.
 2. **`enif_resource` for long-lived state** — *decided against* for kernel
    state (ADR-0001, `defk-dtw.9`); *adopted* only for yield frames, with a
-   resource type per `.so` (README design decision 8, §6).
+   resource type per `.so` (docs/project.md design decision 8, §6).
 3. **Yield-state context struct** — *adopted*: the frame resource, resume
    through loop headers, hot upgrade. The pattern's usual reliance on
    `enif_consume_timeslice` alone is deliberately rejected — it reports at
    return only and cannot preempt a mid-loop kernel (§1).
-4. **Zero-copy `enif_alloc_binary` output** — *adopted* as README design
-   decision 1; defk allocates at the `alloc/2` site, which also handles
+4. **Zero-copy `enif_alloc_binary` output** — *adopted* as docs/project.md design decision 1; defk allocates at the `alloc/2` site, which also handles
    early-exit sizes.
 
 Forward hook from the same breadcrumb: the bitstring accumulator
@@ -185,8 +184,7 @@ Elixir exception struct as a map and returns it
 **`sigsetjmp` discipline.** An error inside a kernel does not unwind through
 the generated frames; it `siglongjmp`s to a `setjmp` taken at the NIF
 boundary.
-`defk_ctx.jb` is the jump buffer (the `defk_ctx` typedef in priv/defk_runtime.h), and README design
-decision 6 records why `sigsetjmp(jb, 0)` and not `setjmp`: plain `setjmp`
+`defk_ctx.jb` is the jump buffer (the `defk_ctx` typedef in priv/defk_runtime.h), and docs/project.md design decision 6 records why `sigsetjmp(jb, 0)` and not `setjmp`: plain `setjmp`
 saves the signal mask on macOS, a syscall costing 160 ns per call. The jump
 target lives in a separate `noinline` function so the `setjmp` frame does not
 pessimise the kernel body (in `guard_fn/2`):
@@ -266,8 +264,7 @@ Known limitation: a `mix release` does not copy `_build/<env>/defk`, so a
 release is not relocatable until the `.so` ships in `priv/` — see
 `examples/release_debian/README.md` and ticket `defk-n8f`.
 
-**ERTS keeps a library mapped while a suspended kernel runs.** README design
-decision 8: recompiling a module builds a new `.so`; a yielded kernel
+**ERTS keeps a library mapped while a suspended kernel runs.** docs/project.md design decision 8: recompiling a module builds a new `.so`; a yielded kernel
 reschedules *its own* library's step function, and ERTS keeps that library
 mapped until the continuation returns. The comment above `defk_open_rt`
 (around `defk_open_rt` in priv/defk_runtime.h) spells out the mechanism:
@@ -287,7 +284,7 @@ mapped until the continuation returns. The comment above `defk_open_rt`
 module (`:code.purge/1`, or loading a third version while the kernel is still
 running) kills processes still running that code, and the old library frees
 their frames. A kernel survives one reload of its module; a second reload
-before it finishes purges its code and kills it (README, *Known limitations*).
+before it finishes purges its code and kills it (`docs/language.md` section 12).
 `__defk_stats__/0` counts the current library's frames only.
 `test/upgrade_test.exs` covers all of this.
 
@@ -343,7 +340,7 @@ part of the record (`AGENTS.md`, *Purpose and measurement*).
 - OTP PR #7174, *jit: Refactor sigaltstack(2) handling* (merged for OTP-27):
   <https://github.com/erlang/otp/pull/7174> — the contract for NIF-local
   signal use and `SA_ONSTACK` (§5).
-- README design decisions, *Design decisions the benchmarks validated*:
+- docs/project.md, *Design decisions the benchmarks validated*:
   1 arrays as views over binaries (§3), 4 pay for yielding only when you
   yield (§2), 5 adaptive safepoint budget (§1), 6 `sigsetjmp(jb, 0)` (§4),
   8 hot code upgrade (§6).
@@ -359,7 +356,7 @@ part of the record (`AGENTS.md`, *Purpose and measurement*).
   evidence), `defk-o1w` (Cranelift exploration), `defk-n8f` (ship `.so` in
   releases), `defk-7w2` (this document).
 - In-repo evidence: `priv/defk_runtime.h`, `lib/defk/build.ex`,
-  `lib/defk/compiler.ex`, `lib/defk.ex`, `README.md`, `CONTEXT.md`,
+  `lib/defk/compiler.ex`, `lib/defk.ex`, `docs/project.md`, `CONTEXT.md`,
   `examples/README.md`, `examples/release_debian/README.md`,
   `test/heap_binary_yield_test.exs`, `test/raise_cleanup_test.exs`,
   `test/upgrade_test.exs`, `bench/tick_gap.exs`, `bench/yield_cost.exs`.
