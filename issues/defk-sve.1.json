@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-sve",
+  "comments": [
+    {
+      "text": "Measured (bench/state_copy_cost.exs, docs/research/state-copy-cost.md; best of 7 interleaved, two runs, load 28-37, provisional; shares are back-to-back ratios). Copy = enif_alloc_binary + memcpy, same cost as :binary.copy (+~0.1 us): 0.35-0.39 us at 16 KiB, 14-15 us at 1 MiB, 260-300 us at 16 MiB, 2.2-2.5 ms at 128 MiB (55-75 GB/s). Share of call: HLL 16 KiB 75-83% / 30-33% / 4-5% at 100/1k/10k hashes (value semantics enough at 10k; in practice everywhere, 0.47 us vs Elixir 19 us at 100). Bloom 1 MiB ~100% / 95-100% / 20-25% at 1/100/10k inserts; 16 MiB ~100% / 94-100% / 87-89% (copy evicts the state: writes after it 4x slower than a warm no-copy twin). Window 128 MiB 100%, holds the scheduler 2.2-2.5 ms (no safepoint, defk-oed). Elixir :atomics Bloom beats today's kernel 170x (1 MiB) / 2700x (16 MiB) at 1 insert, 1.8x / 25x at 100; an in-place kernel would be 13-20x faster than :atomics from 100 inserts. GC: one GC per call, binary memory 1-2 states per process, nothing left after exit; 10k calls/s of 16 MiB unreachable (one process 3.7-3.8k/s, 12 procs 5-6.4k/s at 85-107 GB/s, 128-320 MiB live); a process holding 256 MiB of other binaries GCs every 4-5 calls and copies 1.6-2.2x slower. Recommendation: keep ADR-0001 for HLL-sized state; proceed to defk-sve.2 scoped to fixed-size single-owner buffers of ~1 MiB+ updated in small batches; weigh batching / block-split filters, and :atomics as a candidate Elixir meaning. Commit bf500ef on defk-sve.1/work.",
+      "timestamp": "2026-10-11T13:19:55Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Measure the per-call state copy cost at catalog sizes (value semantics vs in-place)",
   "type": "task",
-  "updated_at": "2026-10-11T13:05:32Z"
+  "updated_at": "2026-10-11T13:19:55Z"
 }
