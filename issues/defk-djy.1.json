@@ -8,6 +8,7 @@
     "defk-djy.7",
     "defk-djy.8"
   ],
+  "closed_at": "2026-10-11T11:20:10Z",
   "created": "2026-10-10T14:58:32Z",
   "description": "Add ex_doc (dev only) and a docs: config to mix.exs: name, source_url, source_ref per version, main page, extras with groups_for_extras (Guides, Reference, Evidence?), groups_for_modules (Kernels, Testing, Benchmarking, Bits helpers), before_closing_body_tag only if needed. Decide which repo docs are extras: guides and the language reference yes; ADRs, research, cold tests and verdict as an 'Evidence' group or left out (record the choice). Keep internals out: @moduledoc false modules stay hidden; move lib/examples.ex out of lib/ or hide it. Add mix docs --warnings-as-errors to the ci alias (and check its run time). Done when mix docs builds with no warnings and the sidebar shows the intended structure.",
   "id": "defk-djy.1",
@@ -22,8 +23,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Set up ex_doc and mix docs (config, groups, CI)",
   "type": "task",
-  "updated_at": "2026-10-11T11:20:09Z"
+  "updated_at": "2026-10-11T11:20:10Z"
 }
