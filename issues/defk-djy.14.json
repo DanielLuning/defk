@@ -5,9 +5,7 @@
   "created": "2026-10-11T12:47:54Z",
   "description": "Found by the HexDocs cold test (defk-djy.9, docs/cold-tests/hexdocs-entropy.md, point 15). README.md is the HexDocs main page (mix.exs docs main: \"readme\", the choice made in defk-djy.4: what defk is and why, as on GitHub). On HexDocs it reads as a repo readme: a file table pointing at lib/..., a roadmap with ticket ids and bw show, ~29 KB, so the tester mis-skimmed the middle and had to guess which parts were for users.\n\nOptions:\n(a) Keep README as main and trim it: move the file table, roadmap and tracker instructions to a repo-only page (e.g. docs/project.md, not an extra) and keep README to what defk is, the example verdicts, and links into the guides. One page for GitHub and HexDocs, but GitHub loses the roadmap at a glance.\n(b) A dedicated HexDocs overview page (docs/guides/overview.md, main: \"overview\") built from README's user-facing sections, README unchanged and left out of the extras or listed later. Needs one source of truth: either README includes nothing the overview says, or the shared part lives in one file and the other links it (the epic's 'one source of truth' principle; ex_doc has no include).\n(c) Make Getting started the main page and keep README as an extra further down. Cheapest; the landing page then has no 'what defk is and when not to use it' framing, which the scope page has.\n\nRecommendation: (a). README already is the GitHub landing page and the HexDocs one; trimming the repo-internal sections serves both, keeps one source, and the roadmap/file table move to a page linked from README for people inside the project. (c) is the fallback if the README must stay as it is.\n\nDone when a human picks an option (comment here), the chosen change is made, mix docs --warnings-as-errors and the docs checks pass, and the mix.exs docs comment records the choice.",
   "id": "defk-djy.14",
-  "labels": [
-    "ready-for-human"
-  ],
+  "labels": [],
   "parent": "defk-djy",
   "comments": [
     {
