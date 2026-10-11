@@ -15,7 +15,7 @@
 #   MIX_ENV=test mix run examples/hashes.exs      # native vs Elixir mode only
 #
 # Four reports, four DEFK_RESULT lines, in this order: hashes_xxh64 (good),
-# hashes_murmur3 (good), hashes_siphash24 (good), hashes_crc32c (marginal).
+# hashes_murmur3 (good), hashes_siphash24 (good), hashes_crc32c (good).
 # run_all.exs reads only the first (xxh64); the script checks the other three
 # itself and exits 1 when one is incorrect or measures another verdict.
 #
@@ -28,8 +28,14 @@
 # 16-byte key is passed as its two little-endian words
 # (`<<k0::little-signed-64, k1::little-signed-64>> = key`). Masked
 # arithmetic: every multiply and add is under wrap64/1, word loads are
-# u64_le/u32_le, the constants are module attributes, and the CRC32C
-# slicing-by-8 tables are an 8 KB binary attribute computed at compile time.
+# u64_le/u32_le, and the constants are module attributes. CRC32C uses the
+# crc32c/3 hardware builtin (defk-ulk.4): the CPU's CRC32C instruction where
+# it has one, a slicing-by-8 table otherwise, picked at run time; three
+# streams run side by side and are joined with a 4 KB shift table computed
+# at compile time. Hashes.CRC32CPortable is the same kernels in a library
+# whose first call is made with DEFK_PORTABLE_BUILTINS=1, so it measures the
+# table fallback, and crc32c_s8/1 is the slicing-by-8 kernel from before
+# the builtin (an 8 KB table attribute).
 # Rotates are not builtins yet: 14 helper kernels rotl1..rotl33 write
 # bor(wrap64(bsl(x, n)), band(bsr(x, 64 - n), 2^n - 1)), one per count,
 # because a bsl by a variable count is checked (defk-52v.6 would make them a
@@ -46,7 +52,8 @@
 # file's Elixir versions; the batch kernels against the single ones; and the
 # 4 MB message per report. Elixir mode cannot be compiled in a Mix.install
 # script, so `MIX_ENV=test mix run examples/hashes.exs` checks native ===
-# Elixir mode for all eight kernels on 76 random inputs and the vectors.
+# Elixir mode for the kernels on 76 random inputs and the vectors, and the
+# table fallback against Elixir mode.
 #
 # The xxhash package is off-spec in two ways: xxh64/2 and xxh32/2 pass
 # String.length/1 (graphemes) as the length, so they give wrong hashes or
@@ -70,7 +77,11 @@
 #             slicing-by-8 (eight lookups per 8 bytes from one 2048-tuple).
 #             CRC32C values are 32-bit, so they stay small integers, and the
 #             JIT runs slicing-by-8 at 1.6 GB/s, 5x byte-at-a-time; it is
-#             the baseline, and the kernel uses the same algorithm.
+#             the baseline. The kernel's three streams were tried in Elixir
+#             too (the same slicing-by-8 step on three 2 KB sub-binaries,
+#             joined with the shift table): 5.6-6.4 ms against 2.57-2.59
+#             for one chain, so the JIT gains nothing from independent
+#             chains and the baseline stays one chain (defk-ulk.4).
 # Not tried: 64-bit arithmetic in 16-bit limbs to stay in small integers
 # (four times the operations; unlikely to close a 90x gap); parallel
 # hashing of the batch across processes (the kernel is single-threaded).
@@ -86,20 +97,26 @@
 #     as expected; at 4 MB the kernel is 1.36x faster (1.33 vs 1.82 ms).
 #     One kernel call per key is 0.085 ms: a kernel call costs ~35 ns more
 #     than siphash's NIF call.
-#   CRC32C 4 MB: Elixir slicing-by-8 2.54-3.05 ms, kernel 1.78-1.89 ms
-#     (2.3 GB/s): 1.39-1.65x, marginal. On the 1k-key batch Elixir wins
-#     (0.03 vs 0.06 ms, packing included). crc32cer (hardware CRC32C
-#     instructions) 0.12-0.14 ms: the kernel is 0.07-0.08x of it, poor, as
-#     expected. An in-kernel alloc'd table instead of the binary attribute
-#     measured 1.6 ms (still marginal), byte-at-a-time 7.7 ms.
+#   CRC32C 4 MB, with the crc32c/3 builtin (defk-ulk.4; three runs, load
+#     25-40, provisional): Elixir slicing-by-8 2.59-2.65 ms, kernel on the
+#     CRC32C instruction in three streams 0.147-0.165 ms (25-28 GB/s):
+#     17-18x, good. crc32cer 0.134-0.140 ms: the kernel is 0.84-0.91x of
+#     it. The table fallback (DEFK_PORTABLE_BUILTINS=1) 0.68-0.70 ms; the
+#     slicing-by-8 kernel without the builtin 1.83-1.88 ms (it was
+#     1.39-1.65x, marginal, and crc32cer 14x faster). One chain on the
+#     instruction (no streams) 0.39 ms. On the 1k-key batch Elixir 0.031-
+#     0.033 ms, the kernel 0.033-0.036 ms with the packing (0.89-0.94x).
+#     Earlier: an in-kernel alloc'd table instead of the binary attribute
+#     1.6 ms, byte-at-a-time 7.7 ms. arm64 timed; x86-64 (SSE4.2 crc32)
+#     compiled and checked, not timed.
 #   BIF ceiling, 4 MB: :erlang.phash2 1.64-1.79 ms (2.4-2.6 GB/s),
 #     :erlang.crc32 0.10-0.11 ms (~40 GB/s); on 1k keys 0.02 and 0.03 ms.
 #
 # Recommendation: for xxHash64, Murmur3 and SipHash a kernel is the right
 # tool (77-145x over the best pure Elixir, level with or ahead of siphash's
-# hand-written C, and no C to ship). For CRC32C use crc32cer: it is 14x
-# faster than the kernel, and without it Elixir slicing-by-8 is within 1.7x
-# of the kernel; the kernel cannot use the CRC32C instructions.
+# hand-written C, and no C to ship). For CRC32C of long messages a kernel on
+# the crc32c/3 builtin is now within 10-16% of crc32cer and 17x Elixir;
+# for short keys Elixir slicing-by-8 is as fast once the list is packed.
 
 anchors = [
   {:murmur, "2.0.2"},
@@ -135,6 +152,100 @@ defmodule Hashes.CRC32CTables do
       end)
 
     t0 ++ List.flatten(rows)
+  end
+
+  # Advancing a CRC register over s zero bytes is linear in its 32 bits, so
+  # it is four byte tables: entry v of table k is the register (v << 8k)
+  # after s zero bytes. 4 x 256 u32 little endian, table k at byte 1024 * k.
+  # The 3-stream kernel combines its streams with it.
+  def shift(s) do
+    basis =
+      List.to_tuple(
+        for i <- 0..31,
+            do: Enum.reduce(1..div(s, 8), 1 <<< i, fn _, c -> Defk.Bits.crc32c(c, 0, 64) end)
+      )
+
+    for k <- 0..3, v <- 0..255, into: <<>> do
+      x =
+        Enum.reduce(0..7, 0, fn b, acc ->
+          if band(v, 1 <<< b) != 0, do: bxor(acc, elem(basis, 8 * k + b)), else: acc
+        end)
+
+      <<x::little-32>>
+    end
+  end
+end
+
+# The CRC32C kernels on the crc32c/3 builtin, shared by Hashes.Kernels and
+# Hashes.CRC32CPortable (a second library, so it can be made to pick the
+# table fallback: the choice is made once per library, at its first call).
+# Three streams of @crc_s bytes run side by side, as Google's crc32c does,
+# because one CRC32CX waits for the previous one (3 cycles) but three
+# independent ones issue together; the streams are joined by advancing the
+# register over @crc_s zero bytes, a linear map done with four table
+# lookups (Hashes.CRC32CTables.shift/1). The rest goes one word at a time,
+# then one byte.
+defmodule Hashes.CRC32CKernels do
+  defmacro __using__(_) do
+    quote do
+      @crc_s 2048
+      @crc_shift Hashes.CRC32CTables.shift(2048)
+
+      defk(crc_byte(c :: i64, k :: i64) :: i64, do: u32_le(@crc_shift, 1024 * k + bsl(band(bsr(c, 8 * k), 255), 2)))
+
+      defk crc_shift(c :: i64) :: i64 do
+        bxor(bxor(crc_byte(c, 0), crc_byte(c, 1)), bxor(crc_byte(c, 2), crc_byte(c, 3)))
+      end
+
+      # the u64 word at i (crc32c takes x as a 64-bit value, not its i64 pattern)
+      defk(crc_word(b :: [u8], i :: i64) :: u64, do: band(u64_le(b, i), 0xFFFFFFFFFFFFFFFF))
+
+      defk crc32c_at(b :: [u8], off :: i64, n :: i64) :: i64 do
+        blocks = div(n, 3 * @crc_s)
+
+        crc =
+          for k <- 0..(blocks - 1)//1, reduce: 0xFFFFFFFF do
+            crc ->
+              i = off + k * 3 * @crc_s
+
+              {c0, c1, c2} =
+                for j <- i..(i + @crc_s - 8)//8, reduce: {crc, 0, 0} do
+                  {c0, c1, c2} ->
+                    {crc32c(c0, crc_word(b, j), 64), crc32c(c1, crc_word(b, j + @crc_s), 64),
+                     crc32c(c2, crc_word(b, j + 2 * @crc_s), 64)}
+                end
+
+              bxor(crc_shift(bxor(crc_shift(c0), c1)), c2)
+          end
+
+        words = off + n - rem(n, 8)
+
+        crc =
+          for i <- (off + blocks * 3 * @crc_s)..(words - 8)//8, reduce: crc do
+            crc -> crc32c(crc, crc_word(b, i), 64)
+          end
+
+        crc =
+          for i <- words..(off + n - 1)//1, reduce: crc do
+            crc -> crc32c(crc, b[i], 8)
+          end
+
+        bxor(crc, 0xFFFFFFFF)
+      end
+
+      defk(crc32c(bytes :: [u8]) :: i64, do: crc32c_at(bytes, 0, len(bytes)))
+
+      defk crc32c_batch(blob :: [u8], offsets :: [i64]) :: [i64] do
+        n = len(offsets) - 1
+        out = alloc(i64, n)
+
+        for k <- 0..(n - 1)//1 do
+          out[k] = crc32c_at(blob, offsets[k], offsets[k + 1] - offsets[k])
+        end
+
+        out
+      end
+    end
   end
 end
 
@@ -377,18 +488,23 @@ defmodule Hashes.Kernels do
 
   # ---------------------------------------------------------------- CRC32C --
 
-  # slicing-by-8 tables for the reflected Castagnoli polynomial 0x82F63B78:
-  # 8 x 256 u32 little endian, table k at byte 1024 * k, computed when the
-  # module compiles (Hashes.Elixir.CRC32C uses the same tables as a tuple)
+  # crc32c/1, crc32c_at/3 and crc32c_batch/2 on the crc32c/3 builtin
+  use Hashes.CRC32CKernels
+
+  # Without the builtin, as before defk-ulk.4: slicing-by-8 tables for the
+  # reflected Castagnoli polynomial 0x82F63B78, 8 x 256 u32 little endian,
+  # table k at byte 1024 * k, computed when the module compiles
+  # (Hashes.Elixir.CRC32C uses the same tables as a tuple)
   @crc_tables for v <- Hashes.CRC32CTables.flat(), into: <<>>, do: <<v::little-32>>
 
   defk(crc_t(k :: i64, x :: i64) :: i64, do: u32_le(@crc_tables, bsl(256 * k + band(x, 255), 2)))
 
-  defk crc32c_at(b :: [u8], off :: i64, n :: i64) :: i64 do
-    words = off + n - rem(n, 8)
+  defk crc32c_s8(b :: [u8]) :: i64 do
+    n = len(b)
+    words = n - rem(n, 8)
 
     crc =
-      for i <- off..(words - 8)//8, reduce: 0xFFFFFFFF do
+      for i <- 0..(words - 8)//8, reduce: 0xFFFFFFFF do
         crc ->
           lo = bxor(crc, u32_le(b, i))
           hi = u32_le(b, i + 4)
@@ -406,25 +522,20 @@ defmodule Hashes.Kernels do
       end
 
     crc =
-      for i <- words..(off + n - 1)//1, reduce: crc do
+      for i <- words..(n - 1)//1, reduce: crc do
         crc -> bxor(crc_t(0, bxor(crc, b[i])), bsr(crc, 8))
       end
 
     bxor(crc, 0xFFFFFFFF)
   end
+end
 
-  defk(crc32c(bytes :: [u8]) :: i64, do: crc32c_at(bytes, 0, len(bytes)))
-
-  defk crc32c_batch(blob :: [u8], offsets :: [i64]) :: [i64] do
-    n = len(offsets) - 1
-    out = alloc(i64, n)
-
-    for k <- 0..(n - 1)//1 do
-      out[k] = crc32c_at(blob, offsets[k], offsets[k + 1] - offsets[k])
-    end
-
-    out
-  end
+# the same CRC32C kernels in a library of their own, first called with
+# DEFK_PORTABLE_BUILTINS=1 below, so they run the table fallback: what a CPU
+# without the CRC32C instruction runs
+defmodule Hashes.CRC32CPortable do
+  use Defk
+  use Hashes.CRC32CKernels
 end
 
 defmodule Hashes.Data do
@@ -540,7 +651,8 @@ if elixir_mode? do
           {:xxh64, [bin, seed]},
           {:murmur3_128, [bin, seed]},
           {:siphash24, [bin, k0, k1]},
-          {:crc32c, [bin]}
+          {:crc32c, [bin]},
+          {:crc32c_s8, [bin]}
         ],
         apply(K, name, args) !== ex.(name).(args),
         do: {name, byte_size(bin)}
@@ -563,8 +675,21 @@ if elixir_mode? do
       Hashes.Vectors.failures(&K.xxh64/2, &K.murmur3_128/2, &K.siphash24/3, &K.crc32c/1)
     end)
 
+  # the table fallback against Elixir mode too
+  System.put_env("DEFK_PORTABLE_BUILTINS", "1")
+  Hashes.CRC32CPortable.crc32c("123456789")
+  System.delete_env("DEFK_PORTABLE_BUILTINS")
+  :table = Hashes.CRC32CPortable.__defk_stats__().crc32c
+
+  bad =
+    bad ++
+      for bin <- inputs ++ [:rand.bytes(20_000)],
+          Hashes.CRC32CPortable.crc32c(bin) !==
+            Hashes.CRC32CPortable.__defk_elixir__(:crc32c, [bin]),
+          do: {:crc32c_portable, byte_size(bin)}
+
   IO.puts(
-    "Elixir mode: #{length(inputs) * 4 + 4} calls compared, mismatches #{inspect(bad)}; vectors in Elixir mode: #{inspect(vec)}"
+    "Elixir mode: #{length(inputs) * 5 + 4 + length(inputs) + 1} calls compared, mismatches #{inspect(bad)}; vectors in Elixir mode: #{inspect(vec)}"
   )
 
   System.halt(if bad == [] and vec == [], do: 0, else: 1)
@@ -759,8 +884,24 @@ impl = %{
   end,
   crc_nif: &:crc32cer.nif/1,
   crc_ex: &Hashes.Elixir.CRC32C.hash/1,
-  crc_k: &K.crc32c/1
+  crc_k: &K.crc32c/1,
+  crc_p: &Hashes.CRC32CPortable.crc32c/1,
+  crc_s8: &K.crc32c_s8/1
 }
+
+# The portable library's first call is made with DEFK_PORTABLE_BUILTINS=1,
+# so it picks the slicing-by-8 table (the choice is made at the first
+# crc32c/3 step, so an empty input would not make it); Hashes.Kernels picks
+# the instruction where the CPU has it (every arm64 Mac).
+System.put_env("DEFK_PORTABLE_BUILTINS", "1")
+Hashes.CRC32CPortable.crc32c("123456789")
+System.delete_env("DEFK_PORTABLE_BUILTINS")
+K.crc32c("123456789")
+crc_impl = {K.__defk_stats__().crc32c, Hashes.CRC32CPortable.__defk_stats__().crc32c}
+
+IO.puts(
+  "crc32c builtin on #{:erlang.system_info(:system_architecture)}: Hashes.Kernels #{elem(crc_impl, 0)}, Hashes.CRC32CPortable #{elem(crc_impl, 1)}"
+)
 
 vector_failures =
   Hashes.Vectors.failures(&K.xxh64/2, &K.murmur3_128/2, &K.siphash24/3, &K.crc32c/1) ++
@@ -796,7 +937,9 @@ mismatches =
         {:sip_ex, impl.sip_k.(key, bin), impl.sip_ex.(key, bin)},
         {:crc_nif, impl.crc_k.(bin), impl.crc_nif.(bin)},
         {:crc_ex, impl.crc_k.(bin), impl.crc_ex.(bin)},
-        {:crc_ex1, impl.crc_k.(bin), Hashes.Elixir.CRC32C.bytewise(bin)}
+        {:crc_ex1, impl.crc_k.(bin), Hashes.Elixir.CRC32C.bytewise(bin)},
+        {:crc_portable, impl.crc_p.(bin), impl.crc_nif.(bin)},
+        {:crc_s8, impl.crc_s8.(bin), impl.crc_nif.(bin)}
       ],
       bin != <<>> or label != :xxh64_pkg,
       got != want,
@@ -811,7 +954,9 @@ batch_ok =
       Enum.flat_map(random_inputs, &Tuple.to_list(K.murmur3_128(&1, 99))) and
     D.unpack(K.siphash24_batch(blob, offsets, sk0, sk1)) ==
       Enum.map(random_inputs, &K.siphash24(&1, sk0, sk1)) and
-    D.unpack(K.crc32c_batch(blob, offsets)) == Enum.map(random_inputs, &K.crc32c/1)
+    D.unpack(K.crc32c_batch(blob, offsets)) == Enum.map(random_inputs, &K.crc32c/1) and
+    D.unpack(Hashes.CRC32CPortable.crc32c_batch(blob, offsets)) ==
+      Enum.map(random_inputs, &K.crc32c/1)
 
 # the xxhash package's two documented entry points diverge from the spec:
 # xxh64/2 hashes String.length/1 (graphemes) as the length, and the empty
@@ -831,7 +976,7 @@ xxh_pkg_empty_bug = XXHash.xxh64(<<>>, 0, 5) != impl.xxh_ex.(<<>>, 5)
 agree = vector_failures == [] and mismatches == [] and batch_ok
 
 IO.puts(
-  "agreement: reference vectors #{inspect(vector_failures)}, #{length(random_inputs)} random inputs x 9 comparisons mismatches #{inspect(Enum.take(mismatches, 5))}, batch kernels #{batch_ok}"
+  "agreement: reference vectors #{inspect(vector_failures)}, #{length(random_inputs)} random inputs x 11 comparisons mismatches #{inspect(Enum.take(mismatches, 5))}, batch kernels #{batch_ok}"
 )
 
 IO.puts(
@@ -891,6 +1036,8 @@ rows = [
   {"CRC32C", "Elixir slicing-by-8", impl.crc_ex},
   {"CRC32C", "defk", &K.crc32c/1},
   {"CRC32C", "defk, a call per key", &K.crc32c/1},
+  {"CRC32C", "defk, table fallback", impl.crc_p},
+  {"CRC32C", "defk slicing-by-8, no builtin", impl.crc_s8},
   {"CRC32C", "crc32cer 1.1.4 NIF", impl.crc_nif},
   {"BIF", ":erlang.phash2", &:erlang.phash2/1},
   {"BIF", ":erlang.crc32", &:erlang.crc32/1}
@@ -1000,7 +1147,7 @@ crc_d = &K.crc32c/1
 r_crc =
   Defk.Bench.report(
     name: "hashes_crc32c",
-    expected: :marginal,
+    expected: :good,
     baseline: :optimized,
     realistic_size: "one 4 MB message",
     elixir: fn -> crc_e.(msg) end,
@@ -1010,8 +1157,9 @@ r_crc =
     check: fn -> agree and crc_e.(msg) == crc_d.(msg) and crc_d.(msg) == :crc32cer.nif(msg) end,
     sweep: sweep.(crc_e, fn -> Enum.map(keys, crc_e) end, crc_d, crc_batch_k),
     reason:
-      "CRC32C stays in small integers, so Elixir slicing-by-8 is within 1.7x; crc32cer's hardware CRC is 14x faster than the kernel"
+      "the crc32c/3 builtin runs the CRC32C instruction in three streams, level with crc32cer; Elixir slicing-by-8 stays in small integers but does eight lookups per word"
   )
+
 
 # run_all.exs reads only the first DEFK_RESULT line (xxh64); the other three
 # claims are checked here

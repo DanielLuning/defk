@@ -10,7 +10,9 @@ defmodule Defk.Bits do
   32-bit hash rotates as 32 bits; `clz/1`, `ctz/1`, `popcount/1`, `rotl64/2`
   and `rotr64/2` work on the 64-bit pattern of any integer. The names are
   the kernel builtins' names too, so renaming one would change the kernel
-  subset.
+  subset. `crc32c/3` is a hardware builtin: a kernel runs it as the CPU's
+  CRC32C instruction where there is one and as a table step elsewhere, with
+  the same value.
 
       iex> Defk.Bits.rotl(0x80000001, 1, 32)
       3
@@ -18,7 +20,8 @@ defmodule Defk.Bits do
       8
 
   How a kernel uses them, and the errors their arguments can raise:
-  [Bit builtins](language.md#bit-builtins) and
+  [Bit builtins](language.md#bit-builtins),
+  [Hardware builtins](language.md#hardware-builtins) and
   [Masked arithmetic](language.md#masked-arithmetic) (for `wrap64/1`).
   """
 
@@ -233,6 +236,64 @@ defmodule Defk.Bits do
   def f64_to_u64(x) when is_number(x) do
     <<b::64>> = <<x::float-64>>
     b
+  end
+
+  # the byte table of the reflected CRC32C polynomial: entry n is n's CRC
+  # register after eight one-bit steps
+  @crc32c_table List.to_tuple(
+                  for n <- 0..255 do
+                    Enum.reduce(1..8, n, fn _, c ->
+                      Bitwise.bxor(
+                        Bitwise.bsr(c, 1),
+                        Bitwise.band(0x82F63B78, -Bitwise.band(c, 1))
+                      )
+                    end)
+                  end
+                )
+
+  @doc """
+  One CRC32C (Castagnoli) step: the CRC register `crc` after the `width`
+  bits of `x`, as `width / 8` bytes, least significant byte first. The
+  polynomial is the reflected 0x82F63B78, and there is no inversion before
+  or after, so this is exactly what the ARMv8 `CRC32CX` and SSE4.2
+  `crc32q` instructions compute (`CRC32CB`/`H`/`W` for the narrower
+  widths).
+
+  `width` is 8, 16, 32 or 64, `crc` is in `0..2^32 - 1` and `x` in
+  `0..2^width - 1`; anything else raises `ArgumentError`. The result is in
+  `0..2^32 - 1`. The standard CRC-32C of a message starts from
+  `0xFFFFFFFF` and inverts the end result:
+
+      iex> crc = Enum.reduce(~c"123456789", 0xFFFFFFFF, &Defk.Bits.crc32c(&2, &1, 8))
+      iex> Bitwise.bxor(crc, 0xFFFFFFFF)
+      0xE3069283
+      iex> Defk.Bits.crc32c(0, 0, 64)
+      0
+      iex> Defk.Bits.crc32c(0xFFFFFFFF, 0x34333231, 32) == Enum.reduce(~c"1234", 0xFFFFFFFF, &Defk.Bits.crc32c(&2, &1, 8))
+      true
+
+  A kernel's `crc32c(crc, x, 64)` is one instruction where the CPU has it
+  (every arm64 Mac, arm64 with the CRC extension, x86-64 with SSE4.2),
+  chosen at run time, and a slicing-by-8 table step otherwise: the same
+  value either way.
+  """
+  @spec crc32c(non_neg_integer(), non_neg_integer(), 8 | 16 | 32 | 64) :: non_neg_integer()
+  def crc32c(crc, x, width) when width in [8, 16, 32, 64] do
+    field!("crc32c/3", crc, 32)
+    field!("crc32c/3", x, width)
+    crc32c_bytes(crc, x, div(width, 8))
+  end
+
+  def crc32c(_crc, _x, width),
+    do: raise(ArgumentError, "Defk.Bits.crc32c/3: width #{inspect(width)} is not 8, 16, 32 or 64")
+
+  defp crc32c_bytes(c, _x, 0), do: c
+
+  defp crc32c_bytes(c, x, n) do
+    c =
+      Bitwise.bxor(Bitwise.bsr(c, 8), elem(@crc32c_table, Bitwise.band(Bitwise.bxor(c, x), 255)))
+
+    crc32c_bytes(c, Bitwise.bsr(x, 8), n - 1)
   end
 
   # x is a width-bit value, 1 <= width <= 64
