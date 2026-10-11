@@ -12,7 +12,9 @@ defmodule Defk.Report do
     * `{:kernel, :yield | :no_yield, "dot/2"}` at the `defk` line
     * `{:bounds, :dropped | :kept, text}` for each array access and word
       load; a kept check names the fact that would drop it
-      (`"a[i + 1]: bounds check kept; nothing proves i + 1 < len(a)"`)
+      (`"a[i + 1]: bounds check kept; nothing proves i + 1 < len(a)"`).
+      A range copy (`copy/5`, `copy_back/4`) keeps one check for its whole
+      range
     * `{:branch, :select | :branch, text}` for each `if`, `cond` and `case`,
       with why it is not a select
     * `{:loop, :per_iteration | :strips | :none, text}` for each loop: a

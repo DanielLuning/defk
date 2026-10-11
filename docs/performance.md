@@ -550,9 +550,13 @@ data) is a sub-binary of the input in Elixir, with no copy at all.
   / 70-77 us. Incompressible 64 KB: Elixir 0.6-1 us, kernel 15 us (it copies
   every byte); 4 MB: 0.08-0.7 ms against 0.95 ms. The `binary_part` times
   were bimodal (230 or 450 us for the same LZ4 call in one run, a GC before
-  every sample).
-- **Conditions:** best of interleaved rounds, three runs, load averages 24-85.
-- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs), `defk-52v.3`.
+  every sample). With the range-copy builtins (`defk-52v.16`, see 6.23)
+  the kernels are 39-46 us / 42-49 us (Elixir 175-235 us / 240-420 us in the
+  same runs, load 150-195), and the incompressible block is one memmove:
+  1.2-1.6 us at 64 KB, 85-93 us at 4 MB, level with Elixir's sub-binary.
+- **Conditions:** best of interleaved rounds, three runs, load averages 24-85
+  (the copy-builtin numbers: load 150-195).
+- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs), `defk-52v.3`, `defk-52v.16`.
 - **Status:** provisional.
 
 <!-- defk-example skip: a fragment, the match copy of the Elixir decoders without its offset checks -->
@@ -1339,6 +1343,9 @@ d = band(bsr(t, 16) + bsl(t, 16), 0xFFFFFFFF)              # lsl + bfxil
 
 ### 6.15 Byte copies: eight bytes per `u64_le`, and the helper-in-a-branch trap (fixed in `defk-33b`)
 
+**Superseded** for copies by 6.23: `copy` and `copy_back` replace the word-store helpers below. The
+helper-in-a-branch part still describes `defk-33b`.
+
 A kernel can only store one element at a time, so a byte-copy loop (an LZ
 decoder's literals and matches) pays a bounds check and an overflow check
 per byte; clang does not merge eight checked byte stores into one 64-bit
@@ -1366,7 +1373,7 @@ hoisted calls, which still cost nothing.
   machine: 1k 87 us, 10k 10 ms, 40k 135 ms; load average 25).
 - **Conditions:** under load (load averages 13-85).
 - **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (header), `defk-52v.3`, `defk-33b`, `defk-52v.16`.
-- **Status:** provisional.
+- **Status:** provisional; superseded for copies by 6.23.
 
 <!-- defk-example skip: kernel-subset code (u64_le, array writes, helper kernels), not plain Elixir -->
 ```elixir
@@ -1598,6 +1605,60 @@ inline a `target("+crc")` function into code built without it.
 - **Source:** `defk-ulk.4` comment, scratch benchmark of the runtime code.
 - **Status:** provisional (loaded machine); x86-64 not timed.
 
+### 6.23 Range copies: `copy` and `copy_back`, one check per copy, not per byte
+
+A decoder's copies are now builtins: `out = copy(out, at, src, from, n)`
+for a literal (memmove semantics) and `out = copy_back(out, at, off, n)` for
+an LZ match (`out[at + j] = out[at + j - off]` in order, so an offset below
+the length repeats). Each checks its whole range once and then copies with
+a few loads and stores (up to 32 bytes), `memmove`, or 8-byte words from at
+least 8 bytes back for an overlapping match (a pattern fill of under 8 bytes
+first when the offset is under 8). In the LZ4 and Snappy decoders that
+removes every per-byte bounds and overflow check: the LZ4 kernel's
+disassembly went from 36 byte stores (`strb`) and 74 overflow branches
+(`b.vs`) to 0 and 19, and the fast-path report shows one note per copy,
+"one range check for the whole copy". Branch on the element kind and call
+the one copy it needs: calling both on every element with one length 0 (the
+old `defk-33b` workaround) is slower for Snappy.
+
+- **Numbers:** 64 KB JSON-like block, Snappy / LZ4, the old byte-store
+  kernels and the new ones in the same interleaved rounds: 64-65 / 74-75 us
+  before, 38.6-39.8 / 42.2-43.8 us after (1.6-1.7x); 4 MB: 4.54-4.55 /
+  4.24-4.29 ms before, 3.17-3.18 / 2.69-2.72 ms after. Text 64 KB: 126-133
+  / 132-134 us before, 84-88 / 86-88 us after. Both copies on every element
+  instead of a branch: Snappy 64 us (no gain), LZ4 44-46 us (the same).
+  Against optimised builds of the reference libraries in the same rounds:
+  snappyer -O2 27-29 us / 1.6 ms, liblz4 -O3 9.1-9.6 us / 0.91 ms,
+  nimble_lz4 35-57 us / 1.23-1.33 ms. Long copies are at memmove speed: the
+  repetitive 4 MB block 175-180 us against liblz4 -O3 at 190 us, the
+  incompressible one 85-93 us against 0.95 ms before.
+- **Conditions:** load averages 140-195 (other agents' builds and
+  benchmarks), best of 15-25 interleaved rounds, three runs; Apple M4 Pro.
+- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (header), `defk-52v.16`; the same-round comparison was a scratch script with the old kernels beside the new.
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code (copy builtins in a reduce_while fn), not plain Elixir -->
+```elixir
+# fast: one range copy per element, in the arm that needs it
+if t == 0 do
+  out = copy(out, op, src, s, ln)
+  if s + ln >= n, do: {:halt, {out, s + ln, op + ln}}, else: {:cont, {out, s + ln, op + ln}}
+else
+  out = copy_back(out, op, off, ln)
+  if s >= n, do: {:halt, {out, s, op + ln}}, else: {:cont, {out, s, op + ln}}
+end
+# slow: u64_le loads and eight checked byte stores per word, in helper kernels
+out[o] = band(w, 255)
+out[o + 1] = band(bsr(w, 8), 255)
+```
+
+What is left is per element: about 8 ns per LZ4 sequence (from 13; liblz4
+takes 2). The reduce_while step has a safepoint, positions are checked i64
+arithmetic, and the format's checks are branches, where liblz4 copies 16
+bytes unconditionally into slack the next sequence overwrites. A word store
+(`put_u64_le`, option (a) of `defk-52v.16`) was not added: the copies were
+the per-byte cost, and a word store would still be a check per word.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -1706,11 +1767,14 @@ for, and much faster than a from-scratch kernel.
   5.2-5.5 ms, rebuilt 8-9 us / 0.9 ms; nimble_lz4 (lz4_flex, a precompiled
   Rust release build) 20-24 us / 1.1-2.3 ms. The kernels 63-77 us / 4.1-4.9
   ms: 1.3-1.6x faster than the as-installed NIFs, 3x (Snappy) and 9x (LZ4)
-  slower than the optimised builds. lz4_erl runs on a normal scheduler: a
+  slower than the optimised builds. With the range-copy builtins
+  (`defk-52v.16`, load 140-195): the kernels 39-46 / 42-49 us at 64 KB and
+  3.2 / 2.7 ms at 4 MB, 0.5-0.7x of snappyer -O2 (27-29 us / 1.6 ms) and
+  0.2-0.35x of liblz4 -O3 (9-10 us / 0.91 ms). lz4_erl runs on a normal scheduler: a
   4 MB decode gaps a 1 ms ticker by 5.1-11.3 ms as installed, 0.9 ms
   rebuilt; the kernels stay at the ~2 ms floor.
 - **Conditions:** under load (load averages 24-85).
-- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (`LZ_NIF_OPT=1`), `defk-52v.3`.
+- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (`LZ_NIF_OPT=1`), `defk-52v.3`, `defk-52v.16`.
 - **Status:** provisional.
 
 ### 7.7 Argon2 with several lanes: the wrapper's threads win; a sequential kernel is 0.25x
