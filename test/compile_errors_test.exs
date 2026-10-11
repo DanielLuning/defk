@@ -411,6 +411,24 @@ defmodule Defk.CompileErrorsTest do
       assert rewrite(msg) =~ "out[i] = a[i] + 1"
     end
 
+    test "a for that is the returned [u8] allocs the declared element type" do
+      msg = rejection("for x <- a, do: x", "a :: [u8]", "[u8]")
+      assert rewrite(msg) =~ "out = alloc(u8, len(a))"
+      assert compile("defk f(a :: [u8]) :: [u8] do\n#{indent(rewrite(msg))}\nend", "Rw") == :ok
+
+      # bound to a name that is returned
+      msg = rejection("out = for x <- a, do: x\nout", "a :: [u8]", "[u8]")
+      assert rewrite(msg) =~ "alloc(u8, len(a))"
+    end
+
+    test "a returned for whose body does not fit the declared element keeps its own type" do
+      msg = rejection("for x <- a, do: x * 0.5", "a :: [f64]", "[i64]")
+      assert rewrite(msg) =~ "out = alloc(f64, len(a))"
+      # not the returned value: the body's own type
+      msg = rejection("y = for x <- a, do: x\n1", "a :: [u8]", "i64")
+      assert rewrite(msg) =~ "out = alloc(i64, len(a))"
+    end
+
     test "a for-collect without a rewrite keeps the generic hint" do
       # a step other than 1, a body of several statements, a nested generator
       for body <- [

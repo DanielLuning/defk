@@ -521,7 +521,18 @@ defmodule Defk.Compiler do
         {p, Map.merge(%{c: c, t: t, owned: false, var: c}, array_ids(t))}
       end)
 
-    env = Map.merge(%{vars: vars, sigs: sigs, inlining: [{k.name, k.arity}]}, scope(MapSet.new()))
+    env =
+      Map.merge(
+        %{
+          vars: vars,
+          sigs: sigs,
+          inlining: [{k.name, k.arity}],
+          ret: k.ret,
+          ret_fors: returned_fors(k.body)
+        },
+        scope(MapSet.new())
+      )
+
     {stmts, val} = lower_block(k.body, env)
     {ret_stmts, ret_vals} = coerce_return(val, k)
 
@@ -533,6 +544,23 @@ defmodule Defk.Compiler do
       sp_count: Process.get(:defk_sp),
       sps: Process.get(:defk_sps)
     })
+  end
+
+  # The collecting fors that are the kernel's value: its last expression, or
+  # the one a variable bound to a for, returned last, was assigned.
+  defp returned_fors(body) do
+    es = exprs(body)
+
+    case List.last(es) do
+      {:for, _, _} = f ->
+        [f]
+
+      {v, _, ctx} when is_atom(v) and is_atom(ctx) ->
+        for {:=, _, [{^v, _, c}, {:for, _, _} = f]} <- es, is_atom(c), do: f
+
+      _ ->
+        []
+    end
   end
 
   # The kernel's value `v` as its declared return type; reported at the body's
@@ -5628,7 +5656,7 @@ defmodule Defk.Compiler do
     rewrite =
       case quals do
         [{:<-, _, [x, src]}] when body != nil ->
-          Defk.Errors.collect_rewrites(src, x, body, into, &type_in(&1, env))
+          Defk.Errors.collect_rewrites(src, x, body, into, returned_type(node, env))
 
         _ ->
           nil
@@ -5636,6 +5664,27 @@ defmodule Defk.Compiler do
 
     err!(node, "for-collect", what, checked_rewrite([rewrite: rewrite], env))
   end
+
+  # The body's type function for a for's rewrite: the element type of the
+  # declared return type when the for is the kernel's value and the body's
+  # type fits it (the rewrite is still compiled), else the body's own type.
+  defp returned_type(node, env) do
+    elem =
+      case env[:ret] do
+        {:arr, e} -> if node in Map.get(env, :ret_fors, []), do: e
+        _ -> nil
+      end
+
+    fn probe ->
+      t = type_in(probe, env)
+      if elem != nil and fits_elem?(t, elem), do: elem, else: t
+    end
+  end
+
+  defp fits_elem?(t, elem) when t in [:i64, :u64], do: elem in [:i64, :u64, :u8, :i16, :i32]
+  defp fits_elem?(:f64, elem), do: elem in [:f64, :f32]
+  defp fits_elem?(t, t), do: true
+  defp fits_elem?(_, _), do: false
 
   @spec generator_pattern!(term()) :: no_return()
   defp generator_pattern!({:<-, _, [pat, src]} = gen) do
