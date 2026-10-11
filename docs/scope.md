@@ -63,7 +63,12 @@ Elixir.
 already packed in a binary (or is packed once and reused), and each call does
 enough work to pay for the call: rolling statistics, nearest-neighbour
 search, image filters, FFT and convolution, non-cryptographic hashes, codecs
-such as base64, and similar numeric or byte-level jobs.
+such as base64, and similar numeric or byte-level jobs. Most of the numbers
+behind this list were measured on a loaded machine and are provisional until
+a quiet-machine run (defk-sgw.4);
+[Performance on the BEAM](performance.md) gives each figure with its status.
+A provisional win is a reason to measure your own job
+([Measuring](guides/measuring.md)), not a promise.
 
 **Elixir is the right choice** when:
 
@@ -118,10 +123,6 @@ yet" in the compile error.
 - A Hex release, which waits for the project's verdict (defk-sgw.5,
   defk-djy.8).
 
-Under exploration, with no promise either way: kernel-owned state that lives
-between calls and is changed in place (defk-sve). Today state travels as
-values, binaries in and new binaries out.
-
 Every compile error the compiler marks as planned:
 
 - [`return-input-array`](compile-errors.md#return-input-array): A returned array is one the kernel created with alloc/2 or wrote; returning an unwritten input array is planned.
@@ -130,6 +131,15 @@ Every compile error the compiler marks as planned:
 - [`enum-find`](compile-errors.md#enum-find): Enum.find/2 and Enum.find_index/2 are planned; stop early with Enum.reduce_while/3.
 - [`bitstring-segment`](compile-errors.md#bitstring-segment): An append to a bitstring accumulator takes big-endian integer segments, unsigned or `signed`: `v::size(n)`, `v::k` or `v`.
 - [`bitstring-use`](compile-errors.md#bitstring-use): A bitstring accumulator starts from `<<>>`, is appended to (also in a kernel it is passed to), measured with `bit_size/1` and returned; nothing else.
+
+## Under exploration: no promise either way
+
+These are being looked at, with no commitment to build them:
+
+- Kernel-owned state that lives between calls and is changed in place
+  (defk-sve). Today state travels as values: pass it in as a binary and
+  return the updated one (see
+  [Array accumulators](language.md#array-accumulators)).
 
 ## Won't be: by design
 
@@ -150,7 +160,9 @@ good say "not in the kernel subset" in the compile error.
   ([`unsupported-string`](compile-errors.md#unsupported-string)). A kernel sees
   bytes, not text: a string literal is a read-only `[u8]`, and there are no
   UTF-8 or grapheme operations and no building a string at run time. Do text
-  work in Elixir before or after the call.
+  work in Elixir before or after the call. A kernel can still produce bytes
+  that are text: return a `[u8]` (or a bitstring), and it reaches Elixir as a
+  binary, a string if the bytes are valid UTF-8.
 - **Anonymous functions as values, and recursion**
   ([`unsupported-fn`](compile-errors.md#unsupported-fn),
   [`recursion`](compile-errors.md#recursion)). Calls between kernels are inlined,

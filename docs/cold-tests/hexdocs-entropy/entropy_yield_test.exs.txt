@@ -1,0 +1,16 @@
+defmodule App.EntropyYieldTest do
+  use ExUnit.Case, async: false
+
+  test "forced yields give the same result" do
+    xs = :crypto.strong_rand_bytes(4096 * 200)
+    expected = App.Entropy.entropy(xs)
+    App.Entropy.__defk_force_yields__(true)
+    try do
+      y = App.Entropy.__defk_stats__().yields
+      assert App.Entropy.entropy(xs) === expected
+      assert App.Entropy.__defk_stats__().yields > y
+    after
+      App.Entropy.__defk_force_yields__(false)
+    end
+  end
+end

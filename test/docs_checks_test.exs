@@ -2,7 +2,8 @@ defmodule Defk.DocsChecksTest do
   # Checks that keep the docs true (defk-djy.7), beside the example runner
   # (test/language_doc_examples_test.exs) and `mix docs --warnings-as-errors`:
   #
-  #   - every link between extras, and to repo files, resolves, anchors included
+  #   - every link between extras, and to repo files, resolves, anchors included,
+  #     and every relative link names a page that exists in the built docs
   #   - every module with `iex>` in its docs has a `doctest` call in the suite
   #   - every error code has an example and a rewrite
   #   - every public function of a documented module has a @doc
@@ -32,6 +33,35 @@ defmodule Defk.DocsChecksTest do
             do: "#{page}: (#{target}) #{reason}"
 
       assert broken == [], Enum.join(["broken links:" | broken], "\n  ")
+    end
+
+    # HexDocs is flat: every page is doc/<name>.html (and .md), and a relative
+    # link resolves there only when it names another extra (mix.exs rewrites
+    # the Markdown copies by file name; `mix docs` then fails on any relative
+    # link in doc/ that leads nowhere). A repo file that is not an extra needs
+    # its GitHub URL.
+    test "every relative link in an extra names a page of the built docs" do
+      unresolved =
+        for page <- LanguageDoc.extras(),
+            target <- page |> File.read!() |> LanguageDoc.links(),
+            not String.match?(target, ~r/^([a-z]+:|#)/),
+            Defk.MixProject.hexdocs_link(target) == :error,
+            do: "#{page}: (#{target})"
+
+      assert unresolved == [],
+             Enum.join(
+               ["not a page in HexDocs (link a GitHub URL instead):" | unresolved],
+               "\n  "
+             )
+    end
+
+    test "links to extras become their page in the built docs" do
+      assert Defk.MixProject.hexdocs_link("../language.md#3-types") ==
+               {:ok, "language.md#3-types"}
+
+      assert Defk.MixProject.hexdocs_link("cheatsheet.cheatmd") == {:ok, "cheatsheet.md"}
+      assert Defk.MixProject.hexdocs_link("../README.md") == {:ok, "readme.md"}
+      assert Defk.MixProject.hexdocs_link("../../examples/_template.exs") == :error
     end
 
     test "the link checker catches a missing file, a missing anchor and a stale repo link" do

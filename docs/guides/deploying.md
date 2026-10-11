@@ -62,13 +62,48 @@ copies each application's `ebin/` and `priv/`, not that directory. So:
   open shared object file`, and the kernel module is undefined.
 
 Until the libraries ship in the release (ticket `defk-n8f`: write them under
-the app's `priv/` and load them from there), the workaround for a container
-is to copy `_build/<env>/defk` from the build stage to **the same absolute
-path** in the runtime image. The multi-stage Debian example in
+the app's `priv/` and load them from there), the workaround is to put
+`_build/<env>/defk` at **the same absolute path** on the machine that runs
+the release:
+
+1. Build in a fixed directory (in a container, a fixed `WORKDIR`).
+2. Copy the release as usual, and copy `_build/<env>/defk` beside it to the
+   same absolute path it had on the build machine.
+3. Check it: `bin/my_app eval 'IO.puts(MyApp.Kernels.__defk_lib__())'`
+   prints the path a module loads from, and that file must exist.
+
+In a multi-stage Dockerfile that is one extra `COPY`, with the same
+`WORKDIR` in both stages:
+
+```dockerfile
+FROM hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713-slim AS build
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+ENV MIX_ENV=prod
+WORKDIR /app
+COPY . .
+RUN mix deps.get --only prod && mix release
+
+FROM debian:trixie-20260713-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libstdc++6 libncurses6 openssl locales ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build /app/_build/prod/rel/my_app ./
+# workaround for defk-n8f: the kernels load from their build path
+COPY --from=build /app/_build/prod/defk /app/_build/prod/defk
+CMD ["bin/my_app", "start"]
+```
+
+This Dockerfile is a sketch of the steps, not built by the tests. The version
+the project built and ran, a multi-stage Debian build of a small app with a
+kernel, is
 [`examples/release_debian`](https://github.com/DanielLuning/defk/blob/main/examples/release_debian/README.md)
-does this, and records what it needed and cost (a 178 MB final image, of
-which the kernel libraries are 212 KB). This is a workaround, not a
-contract: the release is not relocatable.
+in the repository; it records what the build needed and cost (a 178 MB
+final image, of which the kernel libraries are 212 KB). This is a
+workaround, not a contract: the release is not relocatable, and a release
+built in one directory and run from a copy of `_build` anywhere else fails
+as above.
 
 `Mod.__defk_lib__/0` returns the path a module loads its library from,
 which helps when checking an image.

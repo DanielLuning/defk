@@ -91,8 +91,79 @@ defmodule Defk.MixProject do
     ]
   end
 
+  # ex_doc rewrites the links between pages in the HTML and the EPUB, but
+  # writes each page's Markdown copy (doc/*.md, which llms.txt lists) as the
+  # source has it, where `../language.md` or `cheatsheet.cheatmd` lead nowhere
+  # in the flat doc/ directory (found by the HexDocs cold test, defk-djy.9).
+  # After `mix docs`, point those links at the pages, then fail on any
+  # relative link in doc/ that still leads nowhere.
+  @md_link ~r/\]\(([^)\s]+)\)/
+  @href ~r/href="([^"]+)"/
+
+  defp docs_links(_args) do
+    out = "doc"
+
+    for md <- Path.wildcard(Path.join(out, "*.md")) do
+      text = Regex.replace(@md_link, File.read!(md), fn _, t -> "](#{doc_link(t, out)})" end)
+      File.write!(md, text)
+    end
+
+    broken =
+      for file <- Path.wildcard(Path.join(out, "*.{md,html}")),
+          re = if(Path.extname(file) == ".md", do: @md_link, else: @href),
+          [_, target] <- Regex.scan(re, File.read!(file)),
+          relative?(target),
+          path = target |> String.split("#") |> hd(),
+          path != "" and not File.exists?(Path.join(out, path)),
+          uniq: true,
+          do: "#{file}: #{target}"
+
+    if broken != [] do
+      Mix.raise("links that lead nowhere in #{out}/:\n  " <> Enum.join(broken, "\n  "))
+    end
+  end
+
+  defp relative?(target),
+    do: not String.match?(target, ~r/^([a-z]+:|#|`)/)
+
+  # a Markdown link target as it should read in doc/: an extra's page by
+  # its name there, a module (`Defk.Report`) by its page, else unchanged
+  defp doc_link("`" <> _ = target, out) do
+    page = String.trim(target, "`") <> ".md"
+    if File.exists?(Path.join(out, page)), do: page, else: target
+  end
+
+  defp doc_link(target, _out) do
+    with true <- relative?(target), {:ok, link} <- hexdocs_link(target) do
+      link
+    else
+      _ -> target
+    end
+  end
+
+  @doc false
+  # Where a relative link in an extra leads in the built docs: `{:ok, link}`,
+  # the page of the extra it names (by file name, as ex_doc resolves it in
+  # the HTML), or `:error` when it names no extra. test/docs_checks_test.exs
+  # runs every extra's links through it.
+  def hexdocs_link(target) do
+    [path | fragment] = String.split(target, "#", parts: 2)
+
+    pages =
+      Map.new(@guides ++ @reference, fn src ->
+        name = Path.basename(src)
+        {name, String.downcase(Path.rootname(name)) <> ".md"}
+      end)
+
+    case Map.fetch(pages, Path.basename(path)) do
+      {:ok, page} -> {:ok, Enum.join([page | fragment], "#")}
+      :error -> :error
+    end
+  end
+
   defp aliases() do
     [
+      docs: ["docs", &docs_links/1],
       ci: [
         "compile --warnings-as-errors",
         "format --check-formatted",

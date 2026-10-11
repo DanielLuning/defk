@@ -70,6 +70,33 @@ mention any limit. Full log:
   of 2^63 and up raised natively, not in Elixir mode); a docs note that a
   mask drops high bits silently; README instructions for depending on defk.
 
+### Third cold test, from the built HexDocs (defk-djy.9)
+
+A fresh session that could read only the built HexDocs (no repo source)
+installed defk as a dependency of a new project and wrote a kernel for the
+Shannon entropy of each 4096-byte window of a binary, then tested, measured
+and deployed it, and answered scope and "defk or Elixir?" questions from the
+docs. Full log, with the resolution of each point:
+[docs/cold-tests/hexdocs-entropy.md](cold-tests/hexdocs-entropy.md).
+
+- Result: the second attempt compiled and passed unit tests, an agreement
+  property and a forced-yield test on the first run; ~25 minutes of reading.
+  Measured by the tester on a loaded machine (provisional): ~16x an
+  optimised Elixir baseline, one process against one call.
+- Compile errors: 2 hit (unknown-function helped, for-collect partly), and 7
+  deliberate probes (2 helped, 5 partly). The weak spots were generic hints
+  for data-shape errors and a footer that pointed at a local path.
+- 15 confusing points, all fixed in the docs or the messages or ticketed:
+  footers are URLs outside the repo; the Markdown copies of the pages had
+  dead links, now rewritten and checked by `mix docs`; new hints and
+  rewrites for `:math.log2`, lists, `String.t()` and counter maps; guides now
+  cover alloc in loops, errors in rounds, comparing over all schedulers,
+  `[u8]` properties and the release workaround. Ticketed: log2 builtins
+  (defk-ngj), errors inside rejected constructs (defk-uw9), a for-collect
+  rewrite (defk-djy.13), a byte-histogram catalog entry (defk-9p6.28), the
+  HexDocs main page (defk-djy.14, for a human), and a report note for alloc
+  in a loop (defk-djy.15).
+
 ## Limitations
 
 <!-- TODO(defk-sgw.5): limitations and what would change the verdict. -->

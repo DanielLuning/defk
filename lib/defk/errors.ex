@@ -29,22 +29,24 @@ defmodule Defk.Errors do
       hint: pass the values as separate arguments, ...
       (defk unsupported-map: https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#unsupported-map)
 
-  The footer is a link that works outside the repository. When the catalogue
-  page is on disk next to `lib/` (running from the repository, or from a path
-  or git dependency) it is that file's path, relative to the working directory
-  when it lies below it (`docs/compile-errors.md#unsupported-map`). Otherwise
-  (a Hex package, which does not ship `docs/`) it is a URL. The URL points at
-  the `main` branch on GitHub until defk is released on Hex; the release
-  switches it to HexDocs for the installed version (see `@url_base`).
+  The footer is a link that opens wherever you read the error. In a project
+  that depends on defk (from a path, git or Hex) it is a URL; the same entry
+  is on the [compile errors](compile-errors.md) page of these docs, under the
+  code's heading. The URL points at the `main` branch on GitHub until defk is
+  released on Hex; the release switches it to HexDocs for the installed
+  version (see `@url_base`). Only when you compile inside the defk repository
+  itself is the footer the page's path (`docs/compile-errors.md#unsupported-map`).
   The page is generated from this registry, so the two never differ.
   """
 
-  # Where an error footer points (defk-djy.6). The page exists in the source
-  # tree only; a dependency checked out from a path or git has it, a Hex
-  # package does not, so then the footer is a URL. defk is not on Hex yet, so
-  # the URL is the GitHub blob on main, which resolves today and keeps every
-  # code's anchor (codes are never renamed). At the Hex release (defk-djy.8)
-  # change the one line below to
+  # Where an error footer points (defk-djy.6, defk-djy.9). Inside the defk
+  # repository the page's relative path opens in an editor. In a project that
+  # depends on defk the path would lead into deps/ or another checkout (a
+  # path dependency's absolute path), which a reader of HexDocs cannot open,
+  # so the footer is a URL there, whether or not the file is on disk. defk is
+  # not on Hex yet, so the URL is the GitHub blob on main, which resolves
+  # today and keeps every code's anchor (codes are never renamed). At the Hex
+  # release (defk-djy.8) change the one line below to
   #   "https://hexdocs.pm/defk/#{Mix.Project.config()[:version]}/compile-errors.html#"
   # (the version of the install, for an anchor that matches that version).
   @url_base "https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#"
@@ -265,7 +267,8 @@ defmodule Defk.Errors do
       summary:
         "An if, cond or case used as a value gives no array, alone or in a tuple; arrays through branches are planned.",
       why: "an if/cond/case may give numbers, booleans or tuples of them, not arrays yet",
-      hint: "do the array work inside each branch",
+      hint:
+        "do the array work inside each branch, so that each branch gives a number: read the element there (if p, do: a[i], else: b[i]), or write the output array in each branch",
       example:
         "defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do\n  c = if p, do: a, else: b\n  c[0]\nend",
       rewrite:
@@ -680,7 +683,8 @@ defmodule Defk.Errors do
       summary: "Maps and structs are not in the kernel subset.",
       why:
         "a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read",
-      hint: "pass the values as separate arguments, or pack them into an array before the call",
+      hint:
+        "pass the values as separate arguments, or pack them into an array before the call; for a count per key, index an array by the key (counts = alloc(i64, 256), then counts[b] = counts[b] + 1)",
       example: "defk f(x :: i64) :: i64 do\n  m = %{a: x}\n  x\nend",
       rewrite: "defk f(a :: i64) :: i64 do\n  a\nend"
     },
@@ -940,13 +944,17 @@ defmodule Defk.Errors do
   def fetch!(code), do: Map.fetch!(@by_code, code)
 
   @doc false
-  # The link for `code` in the error footer: the catalogue's path when that
-  # file is on disk (`on_disk?`), else its URL.
-  def docs(code, on_disk? \\ File.exists?(@catalogue)) do
-    if on_disk?,
+  # The link for `code` in the error footer: the catalogue's path when
+  # compiling inside the defk repository (`in_repo?`), else its URL.
+  def docs(code, in_repo? \\ in_repo?()) do
+    if in_repo?,
       do: Path.relative_to_cwd(@catalogue) <> "#" <> code,
       else: @url_base <> code
   end
+
+  # the working directory is the root of the defk checkout this module is from
+  defp in_repo?,
+    do: File.exists?(@catalogue) and Path.relative_to_cwd(@catalogue) == "docs/compile-errors.md"
 
   @doc """
   Prints the registry entry for `code`: summary, why, hint, example and rewrite.
@@ -1501,14 +1509,14 @@ defmodule Defk.Errors do
 
   # Elixir functions a developer reaches for that have a builtin form
   defp local_hint(name, [a]) when name in [:length, :byte_size, :tuple_size] do
-    {"unknown-function", "#{name}/1 is not in the kernel subset",
+    {"unknown-function", "#{name}/1 is not a kernel builtin",
      why: "the length of a kernel array is len/1",
      hint: "use len/1",
      rewrite: Macro.to_string({:len, [], [a]})}
   end
 
   defp local_hint(:elem, [_t, i]) do
-    {"unknown-function", "elem/2 is not in the kernel subset",
+    {"unknown-function", "elem/2 is not a kernel builtin",
      why: "a kernel takes a tuple apart where it is bound",
      hint:
        "destructure the tuple where it is bound, e.g. {a, b} = ..., and use element #{Macro.to_string(i)} by name"}
@@ -1641,6 +1649,16 @@ defmodule Defk.Errors do
      why:
        "Enum functions take and build lists, and a kernel has none; Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2 are the ones that compile, to loops",
      hint: "write it as a for loop over the array or range"}
+  end
+
+  defp call_rejection(":math", fun, [x], _node) when fun in [:log2, :log10] do
+    base = if fun == :log2, do: "2.0", else: "10.0"
+
+    {"unsupported-call", ":math.#{fun}/1 is not in the kernel subset",
+     why: "a kernel's math builtins are #{@math} (also as :math.sqrt/1 and so on)",
+     hint:
+       "divide by the log of the base (the result can differ from :math.#{fun}/1 in the last bit, so compare with a tolerance or use the same expression in Elixir)",
+     rewrite: "log(#{Macro.to_string(x)}) / log(#{base})"}
   end
 
   defp call_rejection(":math", fun, args, _node) do
