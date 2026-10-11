@@ -1182,6 +1182,59 @@ d = rotr(bxor(d, a), 16, 32)                               # one ror
 d = band(bsr(t, 16) + bsl(t, 16), 0xFFFFFFFF)              # lsl + bfxil
 ```
 
+### 6.15 A kernel shaped like the reference C runs level with it: Argon2id at 0.88-1.02x of ref.c
+
+Argon2's compression G is BLAKE2b's round with multiplications, over 1 KiB
+blocks of a large `[i64]`. Written as the reference's `fill_block` (XOR the
+two input blocks into a 128-word scratch, 8 row and 8 column rounds of P on
+it, XOR it back), with GB's `a + b + 2 * lo32(a) * lo32(b)` as one
+`wrap64` expression and the indexing's 32x32-bit products as `mulhi`, the
+kernel ties phc-winner-argon2's portable `ref.c` one lane against one lane.
+
+- **Numbers:** best of 5 interleaved, argon2id, one lane: t=1, 1 MiB
+  0.34-0.37 ms against argon2_elixir's 0.31-0.33 ms (0.88-0.92x: the H'
+  setup and the zeroing of the alloc'd array weigh most here); t=2, 16 MiB
+  10.2-13.3 vs 9.7-13.5 ms (0.91-1.02x); t=3, 64 MiB 76-93 vs 71-88 ms
+  (0.93-0.98x), about 2.5 GB/s of blocks computed. The scratch's indices
+  (`r[base + s * c + d]` with literal c, d) need no bounds check; the three
+  per word on the big array stay (their block offsets come from data).
+  Masking the scratch's indices with `band(..., 127)` changed nothing.
+- **Conditions:** under load (load averages 14-38); argon2_elixir 4.1.3
+  builds `ref.c` (no SSE) with `cc -O3`.
+- **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (header), `defk-52v.9`.
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code (wrap64 and mulhi builtins), lines of one kernel -->
+```elixir
+a = wrap64(a + b + 2 * band(a, 0xFFFFFFFF) * band(b, 0xFFFFFFFF))  # GB's add, masked
+x = mulhi(wrap64(bsl(j1, 32)), j1)                                 # j1 * j1 >>> 32, j1 < 2^32
+```
+
+### 6.16 Give each helper kernel one call site: inlining multiplies code per site
+
+Every kernel call is inlined (`defk-6ag`), so a helper called from two
+sites of a helper called from three sites is compiled six times. In
+argon2.exs, BLAKE2b's compression called at 2 sites per BLAKE2b, BLAKE2b at
+3 sites per H', and H' at 2 sites per entry kernel gave 26.6 MB of C that
+clang -O3 had not compiled after 10 minutes. One call site per helper (copy
+each BLAKE2b block into a padded 128-byte buffer and compress it in one
+loop; H' as one loop over V_1 .. V_(r+1)) gave 3.6 MB of C and a 1.1 MB
+`.so` in about 2.5 minutes, with no measurable run-time cost (H' hashes at
+most 1 KiB at a time). Each entry kernel is its own copy: the second entry
+(`argon2id` calling `argon2`) is half of the C.
+
+- **Conditions:** under load; Apple clang 21.
+- **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (header), `defk-52v.9`, `defk-6ag`.
+- **Status:** provisional (compile times under load).
+
+<!-- defk-example skip: kernel-subset code, the shape of a helper loop with one call site -->
+```elixir
+# one compression call site: the last, partial block takes the same path
+for b <- 0..(nb - 1)//1, reduce: {h0, h1, h2, h3, h4, h5, h6, h7} do
+  {h0, h1, h2, h3, h4, h5, h6, h7} -> b2b_compress(h0, h1, h2, h3, h4, h5, h6, h7, padded_block(b), ...)
+end
+```
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -1266,6 +1319,57 @@ normal schedulers instead ([`beam-nifs.md`](https://github.com/DanielLuning/defk
 - **Conditions:** under load (load averages 13-135).
 - **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs), `defk-52v.2`.
 - **Status:** provisional.
+
+### 7.6 Argon2 with several lanes: the wrapper's threads win; a sequential kernel is 0.25x
+
+argon2_elixir runs `parallelism` lanes on as many pthreads inside its dirty
+NIF. A kernel call is one thread, and splitting lanes across kernel calls
+would copy the whole block array at each of the 4 x t sync points under
+value semantics (`defk-52v.17`), so the kernel computes the lanes in
+sequence.
+
+- **Numbers:** argon2id at argon2_elixir's defaults (t=3, 64 MiB, 4 lanes):
+  argon2_elixir 19.5-24.4 ms, kernel 75-90 ms (0.25-0.28x); 256 MiB, 4
+  lanes: 87-120 vs 340-523 ms (0.23-0.28x). 24 hashes at the defaults
+  started at once (12 dirty schedulers x 4 threads against kernels on 12
+  normal schedulers): 235-285 vs 275-589 ms, so with every core busy the
+  threads buy less. One lane: level (6.15).
+- **Conditions:** under load (load averages 14-38).
+- **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs), `defk-52v.9`, `defk-52v.17`.
+- **Status:** provisional.
+
+### 7.7 A killed process does not stop a dirty NIF; a yielding kernel's memory goes at the kill
+
+The tick gap cannot tell a dirty NIF from a yielding kernel: a dirty NIF
+never holds a normal scheduler. What tells them apart is the kill. Killing
+a process inside a dirty NIF removes the process at once, but the C runs on
+to its end on the dirty scheduler, holding that scheduler and its memory.
+A probe shows it: with one dirty CPU scheduler online
+(`:erlang.system_flag(:dirty_cpu_schedulers_online, 1)`), time a tiny dirty
+call started right after the kill.
+
+- **Numbers:** argon2id, t=4, 256 MiB, 1 lane, killed 60 ms in.
+  argon2_elixir: process down in 0.0 ms, RSS +135-150 MiB at the kill, the
+  probe hash waited 411-498 ms (the rest of the killed hash). Kernel:
+  process down in 0.1-0.3 ms, `frames_live` 1 -> 0 and
+  `:erlang.memory(:binary)` from +256 MiB to +0 at once, probe 0.0-0.1 ms.
+  Tick gaps (1 ms ticker, one normal scheduler, a hash at the defaults, 5
+  runs): idle VM 2.0 ms, argon2_elixir 2.0-2.1 ms, kernel 2.2-2.4 ms; one
+  ~9 ms outlier on each side across runs, under load. RSS does not fall
+  back within seconds on either side (erts' binary allocator and macOS
+  malloc keep the pages): measure release with `frames_live` and
+  `:erlang.memory(:binary)`, not RSS.
+- **Conditions:** under load (load averages 25-38).
+- **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (kill section), `defk-52v.9`.
+- **Status:** provisional.
+
+<!-- defk-example skip: needs argon2_elixir and a running hash (pid); the probe's shape -->
+```elixir
+:erlang.system_flag(:dirty_cpu_schedulers_online, 1)
+Process.exit(pid, :kill)                       # pid is inside a long dirty NIF
+{us, _} = :timer.tc(fn -> Argon2.Base.hash_password("x", "saltsalt", t_cost: 1, m_cost: 3) end)
+# us is the rest of the killed hash, not the probe's own ~0.1 ms
+```
 
 ---
 
