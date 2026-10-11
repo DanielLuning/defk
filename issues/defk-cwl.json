@@ -12,11 +12,15 @@
     {
       "text": "From the defk-fr7 stress runs (2026-10-11, load 35-180): the same frames_live-read-before-destructor pattern also hits BitstringHelperTest 'the accumulator survives yields inside the inlined helper' (frames_live 2, twice), RaiseCleanupTest 'a raise after alloc frees every owned buffer' (twice), and probably BitstringTest 'a process killed mid-build frees the buffer' (3 failures, message not read). MultiClauseTest (this ticket) failed in 2 of 11 runs.",
       "timestamp": "2026-10-11T14:29:59Z"
+    },
+    {
+      "text": "FIXLANDED (branch defk-cwl/frames-live-race). CAUSE: test race only. frames_live is decremented in defk_frame_dtor (priv/defk_runtime.h:175), the resource destructor, which runs when the frame term is GC'd or its process dies, possibly on another scheduler after control is back in the test. The owned buffers are freed synchronously (defk_finish emitted at the raise/end paths, compiler.ex:5473/5489), so no runtime leak: only the counter lags. FIX: test/support/frames.ex Defk.Test.Frames.assert_frames_live/3 polls (GC + 1ms sleep, 30s bound); all 'assert %{frames_live: 0} = K.__defk_stats__()' in 9 test files use it. Also found a second race in BitstringTest 'a process killed mid-build frees the buffer' ('kernel finished before it could be killed' when the test is starved): kill_mid_build/3 retries up to 20 times. VERIFY: 50 looped runs of the 9 affected files under 12 busy loops (load ~150): 0 failures (before the retry fix 2 of the first ~6 failed on the kill test). mix test 1444 passed; format, compile --warnings-as-errors, credo --strict, dialyzer, ex_dna all clean.",
+      "timestamp": "2026-10-11T15:44:41Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Flaky under load: multi_clause_test 'no clause matching after yields raises, and the bits built so far are freed' saw frames_live: 1",
   "type": "bug",
-  "updated_at": "2026-10-11T14:48:21Z"
+  "updated_at": "2026-10-11T15:44:41Z"
 }
