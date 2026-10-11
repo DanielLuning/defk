@@ -107,6 +107,16 @@ kernel is suspended, nothing leaks: `Mod.__defk_stats__().frames_live` goes
 back down. `alloc/2` raises `ArgumentError` for a length over 2^48 bytes or
 one the allocator cannot provide, instead of failing later.
 
+A kernel's arrays live until it returns, so an `alloc` or a copy in a loop
+body keeps one per iteration. On an operating system that overcommits
+memory, the node would be killed long before the allocator failed, so each
+call has a budget: an allocation that would take the bytes it holds past
+`use Defk, max_owned: bytes` (by default half of physical memory) raises
+`ArgumentError` "out of memory" in the caller, and frees what the call held
+([the owned-buffer budget](../language.md#the-owned-buffer-budget)). It
+bounds one call, not the node: many concurrent calls near their budgets can
+still exhaust memory, as many Elixir processes can.
+
 ## 4. Hot code upgrade: a suspended kernel finishes in its own code
 
 Recompiling a module builds a new native library next to the old one. A
