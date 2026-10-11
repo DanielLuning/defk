@@ -18,6 +18,7 @@ Elixir today pushes people towards a hand-written NIF.
 - **Mark baselines honestly** (`baseline: :first_pass` / `:optimized` in `Defk.Bench.report/1`). A defk win over a first-pass baseline is provisional.
 - **Keep comparisons fair.** Give both sides the same algorithmic tricks. Measure end to end from the data a real caller has, kept where a real app keeps it (shared indexes in `:persistent_term`/ETS, not on the benchmark process's heap, where GC skews the timing).
 - **Treat Elixir wins as results, not failures.** Poor fits stay in the catalog.
+- **Record what you learned about speed.** When a workload, example or ticket teaches you something about performance, add or update the entries in `docs/performance.md`, including what didn't help: numbers, conditions (mark loaded runs provisional) and the source.
 
 Details: `examples/README.md`.
 
