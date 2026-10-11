@@ -582,22 +582,23 @@ chunk and sum them; a shared `:counters` with `write_concurrency` is slower.
 No OTP BIF counts bytes.
 
 - **Numbers:** histogram of 16 MB, one process, ms: pairs into `:atomics`
-  43.0 (390 MB/s); `:atomics` 8 bytes per step 76-77, 1 byte 91-92;
-  `:counters` 8 bytes per step 103 (163 MB/s), 1 byte 114-115,
-  comprehension 123; at 1 MB (x16 for 16 MB) `Enum.frequencies` of
-  `bin_to_list` 136-169, `Map.update` 202, a 256-tuple with `setelement`
-  62-80, `:binary.matches/2` per value 24.7. In 12 chunks: pairs 8.7-9.0,
-  `:atomics` 8-byte 13.0-13.3, `:counters` 8-byte 15.9-17.7, one shared
-  `:counters` 25-26. Pairs against bytes, one process: 4 KB 0.38 / 0.024,
-  64 KB 0.98 / 0.30, 512 KB 2.34 / 2.32, 1 MB 3.8 / 4.7. Entropy of 4,096
-  windows of 4 KiB: `:counters` get + put 127-148, `:atomics` exchange
-  91-114, plus a tuple of per-count terms (no log per bin) 87-98; in 12
-  chunks 14.2-17. The kernel: 3.6-3.7 ms one call (4.6 GB/s), 1.40-1.62 ms
-  in 12 chunks (5.7-6.6x parallel vs parallel, 11.7-12.1x one process vs
-  one call, 22-26x at 4-64 KB); entropy 4.8 ms one call, 1.86-2.0 ms in 12
-  chunks (7.3-8.6x, 17.1-17.7x).
+  43.0-43.9 (390 MB/s); `:atomics` 8 bytes per step 75-77, 1 byte 91-92;
+  `:counters` 8 bytes per step 101-103 (163 MB/s), 1 byte 112-115,
+  comprehension 116-123; at 1 MB (x16 for 16 MB) `Enum.frequencies` of
+  `bin_to_list` 136-169, `Map.update` 202-209, a 256-tuple with `setelement`
+  62-80, `:binary.matches/2` per value 24.7-26.4. In 12 chunks: pairs
+  8.7-9.9, `:atomics` 8-byte 12.1-13.3, `:counters` 8-byte 15.9-17.7, one
+  shared `:counters` 23-26. Pairs against bytes, one process: 4 KB 0.38 /
+  0.023, 64 KB 0.95-0.98 / 0.30, 512 KB 2.24-2.34 / 2.31, 1 MB 3.6-3.8 /
+  4.7. Entropy of 4,096 windows of 4 KiB: `:counters` get + put 121-123,
+  `:atomics` exchange 90-91, plus a tuple of per-count terms (no log per
+  bin) 83.5-84.3; in 12 chunks 13.4-14.4. The kernel: 3.6-3.8 ms one call
+  (4.6 GB/s), 1.40-1.71 ms in 12 chunks (5.5-6.6x parallel vs parallel,
+  11.4-12.7x one process vs one call, 19-28x at 4-64 KB); entropy 4.7-5.2
+  ms one call, 1.83-2.0 ms in 12 chunks (6.7-10.2x, 17.0-17.9x).
 - **Conditions:** 16 MB, half random bytes and half text; best of 5 in two
-  interleaved rounds; under load (load average 12-23 on 12 cores).
+  interleaved rounds (variants), best of 9 (`Defk.Bench`, seven runs);
+  under load (load average 12-31 on 12 cores).
 - **Source:** [`byte_histogram.exs`](https://github.com/DanielLuning/defk/blob/main/examples/byte_histogram.exs), `defk-9p6.28`; the cold test that asked for it, `docs/cold-tests/hexdocs-entropy.md` (`defk-djy.9`).
 - **Status:** provisional.
 
@@ -1364,11 +1365,12 @@ tables and summing them at the end breaks that chain. For a loop over one
 window of a buffer, write the bounds as `lo = max(k * w, 0)` and
 `hi = min(lo + w, len(data))` so the reads are proven in range.
 
-- **Numbers:** 16 MB histogram, one call: one table 5.8 ms, four tables
-  3.7 ms (1.6x). Entropy of 4 KiB windows: one table and a log per bin 7.8
-  ms, four tables 6.1, four tables and a table of per-count terms 4.7-4.8;
-  with the window range written `(k * w)..(k * w + w - 1)` every byte read
-  kept its bounds check (four tables 8.5 ms, with the term table 7.0).
+- **Numbers:** 16 MB histogram, one call: one table 5.8-6.0 ms, four
+  tables 3.6-3.7 ms (1.6x). Entropy of 4 KiB windows: one table and a
+  `log2` per bin 7.6 ms, four tables 5.8-5.9, four tables and a table of
+  per-count terms 4.7-4.8; with the window range written
+  `(k * w)..(k * w + w - 1)` every byte read kept its bounds check (four
+  tables 8.5 ms, with the term table 7.0).
 - **Conditions:** under load (load average 12-23).
 - **Source:** [`byte_histogram.exs`](https://github.com/DanielLuning/defk/blob/main/examples/byte_histogram.exs) (header), `defk-9p6.28`.
 - **Status:** provisional.

@@ -27,61 +27,60 @@
 #
 # Both sides return the same bytes: the histogram as 256 native-endian i64
 # counts (exact), the entropies as one f64 per whole window, bit for bit.
-# There is no log2 builtin in a kernel yet (defk-ngj), so both sides compute
-# -p * log(p) / log(2.0) with the natural log, in the same order (bins 0 to
-# 255, empty bins skipped); :math.log and the kernel's log are the same libm
-# call and kernels never fuse or reassociate floats, so the floats agree
-# exactly (no tolerance).
+# Both sides compute -p * log2(p) (the kernel's log2/1 builtin, defk-ngj,
+# calls the same libm function as :math.log2/1), in the same order (bins 0 to
+# 255, empty bins skipped), and kernels never fuse or reassociate floats, so
+# the floats agree exactly (no tolerance). The cold test, before log2 landed,
+# wrote log(p) / log(2.0) in the kernel and was ~1 ulp from :math.log2.
 #
 # ALL NUMBERS BELOW ARE PROVISIONAL, MEASURED UNDER LOAD (other agents'
-# builds and benchmarks on the machine, load average 12-23 on 12 cores;
+# builds and benchmarks on the machine, load average 12-31 on 12 cores;
 # M4 Pro, 12 schedulers, OTP 29, Elixir 1.20). Every variant returns the
 # kernel's bytes exactly; the script checks each one before timing it.
 #
-# Elixir baseline: optimised. Histogram variants (HIST_VARIANTS=1), ms;
-# E1-E4 best of 3 at 1 MB (x16 for 16 MB), the rest best of 5 at 16 MB in two
-# interleaved rounds (the second in reverse order):
+# Elixir baseline: optimised. Histogram variants (HIST_VARIANTS=1, two runs
+# of the script), ms; E1-E4 best of 3 at 1 MB (x16 for 16 MB), the rest best
+# of 5 at 16 MB in two interleaved rounds (the second in reverse order):
 #
 #   E1 :binary.bin_to_list |> Enum.frequencies (cold-test first pass) 136-169
-#   E2 for <<b <- bin>>, reduce: %{} with Map.update                     202
+#   E2 for <<b <- bin>>, reduce: %{} with Map.update                 202-209
 #   E3 a 256-tuple of counts, setelement per byte                      62-80
-#   E4 :binary.matches(bin, <<b>>) for each of the 256 values          24.7
+#   E4 :binary.matches(bin, <<b>>) for each of the 256 values      24.7-26.4
 #      (C scans, but a list of 16M match tuples at 16 MB: ~400 ms)
-#   E5 :counters, 1 byte per binary-pattern step                     114-115
-#   E6 :counters, 8 bytes per step (the cold test's optimised one)       103
-#   E7 :counters from a binary comprehension                         123
-#   E8 :atomics, 1 byte per step                                      91-92
-#   E9 :atomics, 8 bytes per step                                     76-77
+#   E5 :counters, 1 byte per binary-pattern step                     112-115
+#   E6 :counters, 8 bytes per step (the cold test's optimised one)   101-103
+#   E7 :counters from a binary comprehension                         116-123
+#   E8 :atomics, 1 byte per step                                       91-92
+#   E9 :atomics, 8 bytes per step                                      75-77
 #   E10 16-bit pairs into a 65,536-slot :atomics, 8 pairs per step,
-#       folded to 256 bins once (half the BIF calls)                    43.0
+#       folded to 256 bins once (half the BIF calls)               43.0-43.9
 #   E11 E6 in 12 chunks (one per scheduler), histograms summed     15.9-17.7
-#   E12 E6 in 12 chunks into one shared :counters (write_concurrency) 25-26
-#   E13 E9 in 12 chunks                                            13.0-13.3
-#   E14 one/1 in 12 chunks                          <- baseline     8.7-9.0
+#   E12 E6 in 12 chunks into one shared :counters (write_concurrency) 23-26
+#   E13 E9 in 12 chunks                                            12.1-13.3
+#   E14 one/1 in 12 chunks                          <- baseline     8.7-9.9
 #
 # E10's fold of 65,536 slots costs ~0.35 ms, so below ~512 KB E9 wins
-# (E9 / E10 ms: 4 KB 0.024 / 0.38, 64 KB 0.30 / 0.98, 256 KB 1.21 / 1.62,
-# 512 KB 2.32 / 2.34, 1 MB 4.7 / 3.8). Hist.Elixir.one/1 is E10 from 512 KB
-# and E9 below: the one-process baseline, and what each chunk of E14 runs
-# (16 MB / 12 = 1.4 MB per chunk). :atomics beats :counters by 1.3x, eight
-# bytes per step beat one by 1.1-1.2x, and a shared write_concurrency
-# :counters loses to per-chunk tables summed at the end.
+# (E9 / E10 ms: 4 KB 0.023 / 0.38, 64 KB 0.30 / 0.95-0.98, 256 KB 1.16-1.21
+# / 1.57-1.62, 512 KB 2.31 / 2.24-2.34, 1 MB 4.7 / 3.6-3.8). Hist.Elixir.one/1
+# is E10 from 512 KB and E9 below: the one-process baseline, and what each
+# chunk of E14 runs (16 MB / 12 = 1.4 MB per chunk). :atomics beats
+# :counters by 1.3x, eight bytes per step beat one by 1.1-1.2x, and a shared
+# write_concurrency :counters loses to per-chunk tables summed at the end.
 #
 # Windowed entropy variants, w = 4096 (one window's counts must be read and
-# reset every 4 KiB, so E10's 65,536-slot fold does not pay); N1-N2 at 1 MB:
+# reset every 4 KiB, so E10's 65,536-slot fold does not pay); N1-N2 at 1 MB;
+# one run with log2 (an earlier run with log(p) / log(2.0) was within load
+# noise of it):
 #
-#   N1 Enum.frequencies per window, sorted (first pass)                  120
-#   N2 a 256-tuple per window, setelement per byte                        66
-#   N3 :counters, 8 bytes per step, get + put 0 per bin             127-148
-#   N4 :atomics, 8 bytes per step, :atomics.exchange(a, i, 0) per bin 91-114
+#   N1 Enum.frequencies per window, sorted (first pass)                  121
+#   N2 a 256-tuple per window, setelement per byte                        65
+#   N3 :counters, 8 bytes per step, get + put 0 per bin              121-123
+#   N4 :atomics, 8 bytes per step, :atomics.exchange(a, i, 0) per bin  90-91
 #   N5 N4 with a tuple of the per-count terms (-p log2 p for count c,
-#      built once per call: the same floats, no log per bin)          87-98
-#   N6 N3 in 12 chunks of whole windows                            19.6-40
-#   N7 N4 in 12 chunks                                             15.7-33
-#   N8 N5 in 12 chunks                               <- baseline   14.2-17
-#
-# (The spread in N3-N7 is load: those rounds ran while the load average
-# rose; N5 and N8 are the fastest in both rounds.)
+#      built once per call: the same floats, no log per bin)       83.5-84.3
+#   N6 N3 in 12 chunks of whole windows                            17.6-19.0
+#   N7 N4 in 12 chunks                                             14.9-15.3
+#   N8 N5 in 12 chunks                               <- baseline   13.4-14.4
 #
 # defk: Hist.Kernels.histogram counts into four interleaved 256-bin tables
 # (bytes i, i+1, i+2, i+3 go to different tables, so consecutive increments
@@ -93,28 +92,29 @@
 # starts one Task.async per chunk (examples/README.md, measuring rule 7).
 # Kernel variants (HIST_VARIANTS=1), ms at 16 MB:
 #
-#   D1 histogram, one table, one call                                  5.8
-#   D2 histogram, four tables, one call            <- the kernel     3.7
-#   D1 / D2 in 12 chunks                                     2.1-2.3 / 1.5
-#   D3 entropy, one table, a log per bin, one call                     7.8
-#   D4 entropy, four tables, a log per bin                             6.1
+#   D1 histogram, one table, one call                              5.8-6.0
+#   D2 histogram, four tables, one call            <- the kernel   3.6-3.7
+#   D1 / D2 in 12 chunks                             2.0-2.35 / 1.47-1.56
+#   D3 entropy, one table, a log2 per bin, one call                    7.6
+#   D4 entropy, four tables, a log2 per bin                        5.8-5.9
 #   D5 entropy, four tables, term table            <- the kernel   4.7-4.8
-#   D3 / D5 in 12 chunks                                 2.3-2.4 / 1.6
+#   D3 / D5 in 12 chunks                             2.27-2.36 / 1.66-1.68
 #
 # (Before the window bounds were written as max/min the window loop kept a
-# bounds check per byte: D5 was 7.0 ms and D4 8.5.)
+# bounds check per byte: D5 was 7.0 ms and D4 8.5, with log(p) / log(2.0).)
 #
-# Result (three runs of the script, load 12-23, provisional):
+# Result (seven runs of the script, load 12-31, provisional):
 #
-#   byte_histogram, parallel vs parallel (the verdict): Elixir 9.0-9.2 ms vs
-#   defk 1.40-1.62 ms = 5.7-6.6x, good. One process vs one call: 42.7-43.3
-#   vs 3.58-3.69 ms = 11.7-12.1x (0.39 vs 4.6 GB/s). Sweep, one process vs
-#   one call: 4 KB 24-26x (0.024 vs 0.001 ms), 64 KB 22-23x, 1 MB 17.7x,
-#   16 MB 12x; the kernel is at least 2x from the smallest size measured.
+#   byte_histogram, parallel vs parallel (the verdict): Elixir 8.7-10.9 ms vs
+#   defk 1.40-1.71 ms = 5.5-6.6x, good. One process vs one call: 42.6-46.9
+#   vs 3.58-3.77 ms = 11.4-12.7x (0.39 vs 4.6 GB/s). Sweep, one process vs
+#   one call: 4 KB 24-28x (0.025 vs 0.001 ms), 64 KB 19-23x, 1 MB 17.7-19.4x,
+#   16 MB 11.4-12.5x; the kernel is at least 2x from the smallest size
+#   measured.
 #
-#   windowed_entropy, parallel vs parallel (the verdict): Elixir 13.7-17.2
-#   ms vs defk 1.86-2.0 ms = 7.3-8.6x, good. One process vs one call:
-#   83.8-85.1 vs 4.79-4.91 ms = 17.1-17.7x.
+#   windowed_entropy, parallel vs parallel (the verdict): Elixir 12.5-18.6
+#   ms vs defk 1.83-2.0 ms = 6.7-10.2x, good. One process vs one call:
+#   82-89 vs 4.73-5.21 ms = 17.0-17.9x.
 #
 # The cold test (docs/cold-tests/hexdocs-entropy.md, a loaded machine, not
 # this script) had :counters with 8-byte steps at 138 MB/s against a kernel
@@ -174,17 +174,16 @@ defmodule Hist.Kernels do
 
   # Entropy in bits per byte of each whole window of w bytes (a trailing
   # partial window is ignored). t[c] is the term for a bin with count c,
-  # 0.0 - p * log(p) / log(2.0) with p = c / w, built once per call.
+  # 0.0 - p * log2(p) with p = c / w, built once per call.
   defk entropy(data :: [u8], w :: i64) :: [f64] do
     n = div(len(data), w)
     out = alloc(f64, n)
     h = alloc(i64, 1024)
-    ln2 = log(2.0)
     t = alloc(f64, w + 1)
 
     for c <- 1..w//1 do
       p = c / w
-      t[c] = 0.0 - p * log(p) / ln2
+      t[c] = 0.0 - p * log2(p)
     end
 
     for k <- 0..(n - 1)//1 do
@@ -227,7 +226,6 @@ defmodule Hist.Kernels do
     n = div(len(data), w)
     out = alloc(f64, n)
     h = alloc(i64, 256)
-    ln2 = log(2.0)
 
     for k <- 0..(n - 1)//1 do
       for i <- 0..255//1 do
@@ -246,7 +244,7 @@ defmodule Hist.Kernels do
         for c <- h, c > 0, reduce: 0.0 do
           acc ->
             p = c / w
-            acc - p * log(p) / ln2
+            acc - p * log2(p)
         end
     end
 
@@ -258,7 +256,6 @@ defmodule Hist.Kernels do
     n = div(len(data), w)
     out = alloc(f64, n)
     h = alloc(i64, 1024)
-    ln2 = log(2.0)
 
     for k <- 0..(n - 1)//1 do
       for i <- 0..1023//1 do
@@ -291,7 +288,7 @@ defmodule Hist.Kernels do
 
             if c > 0 do
               p = c / w
-              acc - p * log(p) / ln2
+              acc - p * log2(p)
             else
               acc
             end
@@ -434,8 +431,6 @@ defmodule Hist.Elixir do
   end
 
   def terms(w) do
-    ln2 = :math.log(2.0)
-
     List.to_tuple([
       0.0
       | for(
@@ -443,7 +438,7 @@ defmodule Hist.Elixir do
           do:
             (
               p = c / w
-              0.0 - p * :math.log(p) / ln2
+              0.0 - p * :math.log2(p)
             )
         )
     ])
@@ -588,7 +583,7 @@ defmodule Hist.Variants do
         |> Enum.sort()
         |> Enum.reduce(0.0, fn {_, c}, h ->
           p = c / w
-          h - p * :math.log(p) / :math.log(2.0)
+          h - p * :math.log2(p)
         end)
 
       <<h::float-64-native>>
@@ -596,8 +591,6 @@ defmodule Hist.Variants do
   end
 
   def ent_tuple(bin, w) do
-    ln2 = :math.log(2.0)
-
     for <<win::binary-size(^w) <- bin>>, into: <<>> do
       h =
         win
@@ -609,7 +602,7 @@ defmodule Hist.Variants do
 
           c, h ->
             p = c / w
-            h - p * :math.log(p) / ln2
+            h - p * :math.log2(p)
         end)
 
       <<h::float-64-native>>
@@ -618,60 +611,60 @@ defmodule Hist.Variants do
 
   def ent_counters(bin, w) do
     c = :counters.new(256, [])
-    ec(bin, w, c, :math.log(2.0), <<>>)
+    ec(bin, w, c, <<>>)
   end
 
-  defp ec(bin, w, c, ln2, acc) do
+  defp ec(bin, w, c, acc) do
     case bin do
       <<win::binary-size(^w), rest::binary>> ->
         c8(win, c)
-        ec(rest, w, c, ln2, <<acc::binary, csum(c, 1, w, ln2, 0.0)::float-64-native>>)
+        ec(rest, w, c, <<acc::binary, csum(c, 1, w, 0.0)::float-64-native>>)
 
       _ ->
         acc
     end
   end
 
-  defp csum(_c, 257, _w, _ln2, h), do: h
+  defp csum(_c, 257, _w, h), do: h
 
-  defp csum(c, i, w, ln2, h) do
+  defp csum(c, i, w, h) do
     case :counters.get(c, i) do
       0 ->
-        csum(c, i + 1, w, ln2, h)
+        csum(c, i + 1, w, h)
 
       v ->
         :counters.put(c, i, 0)
         p = v / w
-        csum(c, i + 1, w, ln2, h - p * :math.log(p) / ln2)
+        csum(c, i + 1, w, h - p * :math.log2(p))
     end
   end
 
   def ent_atomics(bin, w) do
     a = :atomics.new(256, signed: false)
-    ea(bin, w, a, :math.log(2.0), <<>>)
+    ea(bin, w, a, <<>>)
   end
 
-  defp ea(bin, w, a, ln2, acc) do
+  defp ea(bin, w, a, acc) do
     case bin do
       <<win::binary-size(^w), rest::binary>> ->
         E.a8(win, a)
-        ea(rest, w, a, ln2, <<acc::binary, asum(a, 1, w, ln2, 0.0)::float-64-native>>)
+        ea(rest, w, a, <<acc::binary, asum(a, 1, w, 0.0)::float-64-native>>)
 
       _ ->
         acc
     end
   end
 
-  defp asum(_a, 257, _w, _ln2, h), do: h
+  defp asum(_a, 257, _w, h), do: h
 
-  defp asum(a, i, w, ln2, h) do
+  defp asum(a, i, w, h) do
     case :atomics.exchange(a, i, 0) do
       0 ->
-        asum(a, i + 1, w, ln2, h)
+        asum(a, i + 1, w, h)
 
       v ->
         p = v / w
-        asum(a, i + 1, w, ln2, h - p * :math.log(p) / ln2)
+        asum(a, i + 1, w, h - p * :math.log2(p))
     end
   end
 
