@@ -533,6 +533,13 @@ Builtins are called like local functions. `sqrt`, `exp`, `log`, `log2`, `log10`,
 function is [`unsupported-call`](compile-errors.md#unsupported-call). A builtin called with the
 wrong types is [`builtin-arguments`](compile-errors.md#builtin-arguments).
 
+A kernel cannot take the name and arity of a builtin (`copy_back/4`, `clz/1`, `clz/2`):
+calls to it would reach the builtin, so the definition is
+[`builtin-name`](compile-errors.md#builtin-name), and a builtin added in a later version
+breaks a kernel module that already used its name and arity, at compile time. Rename
+the kernel (`my_copy_back/4`). The same name at an arity the builtin does not take
+(`log/2`, `clz/3`) is an ordinary kernel: calls are looked up by name and arity.
+
 | Builtin | Takes | Gives | Raises |
 |---|---|---|---|
 | `len(a)` | an array | its number of elements, `i64` | |

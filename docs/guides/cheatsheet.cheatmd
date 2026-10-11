@@ -113,6 +113,7 @@ or NaN raises too. [Expressions](../language.md#4-expressions-and-operators)
   instruction where it has one (arm64, x86-64 with SSE4.2), a table
   elsewhere, picked at run time: same value, different speed
 - `bit_size(acc)`
+- A kernel cannot reuse a builtin's name and arity (`builtin-name`); rename it
 
 [Builtins](../language.md#builtins),
 [Range copies](../language.md#range-copies),
