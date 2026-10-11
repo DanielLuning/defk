@@ -20,7 +20,7 @@
 # README row says batch it".
 #
 # MEASURED (M4 Pro, OTP 29, Elixir 1.20.2; load 3-7 from other agents'
-# builds, three runs, provisional; baseline :optimized): the premise is wrong
+# builds, four runs, the last after merging main, provisional; baseline :optimized): the premise is wrong
 # at Ash size and right below it. defk-52v.15 had measured one solve per
 # call at 26-28 variables as good (2.3-5.3x) and this confirms it inside
 # Crux, the way a drop-in is used. The research's 31 us for packing does not
@@ -45,14 +45,14 @@
 #
 # So the verdicts, reported with their lines (what run_all reads is the first):
 #   1. cdcl_sat_per_call: the Ash-sized per-call drop-in, P = 4 (26-28 vars),
-#      two formulas, pre-registered marginal-or-poor, MEASURED GOOD, 2.5-2.7x
-#      (best Elixir 16.5-17.1 ms vs defk 6.5 ms per 20 enumerations of each),
+#      two formulas, pre-registered marginal-or-poor, MEASURED GOOD, 2.5-2.8x
+#      (best Elixir 16.5-17.4 ms vs defk 6.3-6.5 ms per 20 enumerations of each),
 #      1.63-1.70x faster than Crux on picosat. `expected:` is :good, the
 #      measurement, as in cdcl_sat_s1 and per_pair_distance, so that run_all
 #      does not fail on a claim that was wrong; the pre-registered text is
 #      above. Sweep over formula size attached, crossover reported.
 #   2. cdcl_sat_per_call_tiny: tiny formulas (P = 1-3, 5-11 vars), where the
-#      pre-registered "poor" does hold: 0.67-0.74x (the DPLL sketch solves 5
+#      pre-registered "poor" does hold: 0.67-0.82x (the DPLL sketch solves 5
 #      variables in 1.2 us, under the kernel's pack + call + unpack, 1.8 us).
 #      The script checks this line itself.
 #
