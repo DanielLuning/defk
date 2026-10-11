@@ -24,11 +24,15 @@
     {
       "text": "The 1BRC kernel (defk-n4r.6) inlines parse, hash, probe and compare helpers from several sites; it is the first workload likely to show code-size growth. Record generated C lines and .so size there.",
       "timestamp": "2026-10-09T18:40:55Z"
+    },
+    {
+      "text": "Data point from defk-52v.9 (examples/argon2.exs): argon2's first draft called BLAKE2b's compression at 2 sites per BLAKE2b, BLAKE2b at 3 sites per H', and H' at 2 sites per entry kernel, with two entry kernels (argon2id inlines argon2): 26.6 MB of generated C (224k lines per entry kernel), and clang -O3 had not finished after 10 minutes under load. Rewritten with one call site per helper (each BLAKE2b block copied into a padded buffer; H' as one loop): 3.6 MB of C (29k lines per entry), 1.1 MB .so, ~2.5 min of clang under load, no measurable run-time cost. Recorded as docs/performance.md 6.20. A warning naming the call chain past some inlined-node count would have saved the first 10 minutes.",
+      "timestamp": "2026-10-11T13:18:39Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Guard against code-size blowup from inlined kernel calls",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:43Z"
+  "updated_at": "2026-10-11T13:18:39Z"
 }
