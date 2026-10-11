@@ -512,6 +512,7 @@ defmodule Defk.Compiler do
     Process.put(:defk_nhalts, 0)
     Process.put(:defk_halts_emitted, 0)
     Process.put(:defk_writes, [])
+    Process.put(:defk_from, %{})
     Process.put(:defk_report_kernel, {{k.name, k.arity}, k.yield})
     note(:kernel, k.head, if(k.yield, do: :yield, else: :no_yield), "#{k.name}/#{k.arity}")
 
@@ -805,7 +806,7 @@ defmodule Defk.Compiler do
     # value semantics: the array is copied first if another binding may still
     # see its buffer (see "array values")
     {sc, a, env} = before_write(arr, a, env)
-    a[:id] && Process.put(:defk_writes, [{a.id, target} | Process.get(:defk_writes)])
+    a[:id] && Process.put(:defk_writes, [{a.id, a[:buf], target} | Process.get(:defk_writes)])
 
     store =
       if in_bounds?(a, i),
@@ -1321,8 +1322,10 @@ defmodule Defk.Compiler do
   defp copied(a, base) do
     {:arr, e} = a.t
 
+    buf = carried(make_ref(), a[:buf])
+
     if a.owned and a[:var] != nil do
-      {"#{a.c} = defk_copy_#{e}(ctx, #{a.c});\n", Map.put(a, :buf, make_ref())}
+      {"#{a.c} = defk_copy_#{e}(ctx, #{a.c});\n", Map.put(a, :buf, buf)}
     else
       c = fresh(base, a.t)
       len = if a[:var], do: %{len_lb: Map.put(len_lb(a), a.c, 0)}, else: %{}
@@ -1330,7 +1333,7 @@ defmodule Defk.Compiler do
       b =
         a
         |> Map.drop([:pure_read])
-        |> Map.merge(%{c: c, var: c, owned: true, buf: make_ref()})
+        |> Map.merge(%{c: c, var: c, owned: true, buf: buf})
         |> Map.merge(len)
 
       {"#{c} = defk_copy_#{e}(ctx, #{a.c});\n", b}
@@ -1432,31 +1435,76 @@ defmodule Defk.Compiler do
 
   defp snapshot_writes(_a, env), do: {[], env}
 
+  # Buffer `new` holds what buffer `old` held (a copy of it, or a loop
+  # accumulator started from it): a write to `old` is carried into `new`.
+  # Recorded in :defk_from (new => [old]) for unreturned_writes!/3; `new` is
+  # returned.
+  defp carried(new, nil), do: new
+
+  defp carried(new, old) do
+    Process.put(:defk_from, Map.update(Process.get(:defk_from), new, [old], &[old | &1]))
+    new
+  end
+
+  # buffer `buf` is `old`, or holds what `old` held
+  defp carries?(buf, old), do: carries?([buf], old, %{})
+
+  defp carries?([], _old, _seen), do: false
+  defp carries?([old | _], old, _seen), do: true
+
+  defp carries?([b | rest], old, seen) do
+    if b == nil or Map.has_key?(seen, b),
+      do: carries?(rest, old, seen),
+      else: carries?(Map.get(Process.get(:defk_from), b, []) ++ rest, old, Map.put(seen, b, true))
+  end
+
+  # A loop accumulator that may take a new value not carrying its buffer
+  # before (an alloc/2 array, say) no longer carries its initial value.
+  defp cut_carry(buf), do: Process.put(:defk_from, Map.delete(Process.get(:defk_from), buf))
+
   # dtw.18: a callee that writes an array parameter must return it, or the
-  # write is lost to the caller (valid Elixir that does nothing)
+  # write is lost to the caller (valid Elixir that does nothing). The array
+  # returned may be the parameter bound again (defk-3z5), as long as it
+  # carries the written buffer: a helper's result that is its argument, a
+  # reduce accumulator started from it, a copy of it.
   defp unreturned_writes!(k, params, returned) do
     ids = for v <- returned, v[:id], do: v.id
+    bufs = for v <- returned, v[:buf], do: v.buf
     writes = Enum.reverse(Process.get(:defk_writes))
 
     for {p, id} <- params,
         id not in ids,
-        {^id, at} <- Enum.take(Enum.filter(writes, &(elem(&1, 0) == id)), 1) do
+        {^id, _, at} <- Enum.take(Enum.filter(writes, &lost?(&1, id, bufs)), 1) do
       last = k.body |> exprs() |> List.last()
       items = tuple_items(last) || [last]
       name = "#{k.name}"
+
+      opts =
+        if Enum.any?(items, &match?({^p, _, ctx} when is_atom(ctx), &1)),
+          do: [
+            hint:
+              "#{p} is bound again after this write to an array that does not hold it; write the array #{p} is bound to, or give the new array another name and return #{p} as well"
+          ],
+          else: [
+            hint:
+              "return the array, and bind it again where #{name} is called: {#{p}, ...} = #{name}(#{p}, ...)",
+            rewrite: Macro.to_string({:{}, [], [{p, [], nil} | items]})
+          ]
 
       err!(
         at,
         "write-not-returned",
         "#{k.name}/#{k.arity} writes to its array parameter #{p} but doesn't return it, so the caller never sees the write",
-        hint:
-          "return the array, and bind it again where #{name} is called: {#{p}, ...} = #{name}(#{p}, ...)",
-        rewrite: Macro.to_string({:{}, [], [{p, [], nil} | items]})
+        opts
       )
     end
 
     :ok
   end
+
+  # a write to binding `id` that no returned array carries
+  defp lost?({wid, buf, _at}, id, bufs),
+    do: wid == id and (buf == nil or not Enum.any?(bufs, &carries?(&1, buf)))
 
   @spec array_rebind_in_loop!(term(), term()) :: no_return()
   defp array_rebind_in_loop!({name, _, _} = var, match) do
@@ -4295,7 +4343,14 @@ defmodule Defk.Compiler do
               "the initial value of #{name} is copied: the accumulator's buffer is the loop's alone"
             )
 
-            acc = %{t: v.t, owned: true, fin: v[:fin] || false, len_lo: v[:len_lo]}
+            acc = %{
+              t: v.t,
+              owned: true,
+              fin: v[:fin] || false,
+              len_lo: v[:len_lo],
+              buf: carried(make_ref(), v[:buf])
+            }
+
             {{{name, c, acc}, ic}, seen}
 
           t ->
@@ -4385,7 +4440,8 @@ defmodule Defk.Compiler do
         # and a name the body may bind again (array-rebind-in-loop is about
         # the outer variable it shadows)
         match?({:arr, _}, a.t) ->
-          b = Map.merge(a, %{c: c, id: make_ref(), buf: make_ref(), depth: e.depth + 1})
+          buf = carried(make_ref(), a[:buf])
+          b = Map.merge(a, %{c: c, id: make_ref(), buf: buf, depth: e.depth + 1})
           %{put_var(e, name, b) | guard: MapSet.delete(e.guard, name)}
 
         # an accumulator that may become a u64 is marked (u64_mix!/2)
@@ -4427,6 +4483,7 @@ defmodule Defk.Compiler do
       |> Enum.map_reduce(MapSet.new(live, &elem(&1, 1)), fn
         {{name, c, %{t: {:arr, _}} = a}, r}, seen ->
           lost_facts?(a, r) && Process.put(fix, MapSet.put(Process.get(fix), c))
+          a[:buf] && not carries?(r[:buf], a.buf) && cut_carry(a.buf)
           {rc, seen} = loop_owned(r, seen)
 
           note_copy(
@@ -4462,7 +4519,9 @@ defmodule Defk.Compiler do
   defp acc_result(accs),
     do: %{t: {:tuple, Enum.map(accs, &elem(&1, 2).t)}, elems: Enum.map(accs, &acc_value/1)}
 
-  defp acc_value({_, c, %{t: {:arr, _}} = a}), do: Map.merge(a, %{c: c, var: c, buf: make_ref()})
+  defp acc_value({_, c, %{t: {:arr, _}} = a}),
+    do: Map.merge(a, %{c: c, var: c, buf: carried(make_ref(), a[:buf])})
+
   defp acc_value({_, c, a}), do: val(c, a.t, c)
 
   # The body of a reduce_while fn: statements, then a tail that is a literal

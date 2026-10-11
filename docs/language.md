@@ -1823,8 +1823,14 @@ iex> M.count_primes(100)
   binds the result: `{out, n} = fill(out, v)`. A write to a parameter the
   callee does not return would be lost to the caller (valid Elixir that does
   nothing), so it is a compile error
-  ([`write-not-returned`](compile-errors.md#write-not-returned)). See [Copies](#copies) for
-  when the callee's write copies.
+  ([`write-not-returned`](compile-errors.md#write-not-returned)). The array
+  returned may be the parameter bound again after the write, as long as it
+  holds the written array: `a = step(a)` with a helper that returns its
+  parameter, or `a = for ..., reduce: a do a -> ... end` with an accumulator
+  that starts from it. Binding the name to a new array (`a = alloc(i64, n)`,
+  a helper's new array, a reduce body that gives a new array) loses the write,
+  and is still the error. See [Copies](#copies) for when the callee's write
+  copies.
 - A [bitstring accumulator](#the-bitstring-accumulator) argument is passed to
   a `bitstring` parameter, which the callee may append to and return, alone
   or in a result tuple. A kernel with a `bitstring` parameter is only

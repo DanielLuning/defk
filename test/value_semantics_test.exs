@@ -415,6 +415,85 @@ defmodule Defk.ValueSemanticsTest.K do
 
     s
   end
+
+  # A helper that writes its array parameter, then binds the name again from
+  # a call or a reduce loop and returns the new binding (defk-3z5): the array
+  # returned carries the write, so nothing is lost and nothing is copied.
+  defk step(a :: [i64]) :: [i64] do
+    a[0] = a[0] + 1
+    a
+  end
+
+  defk bump(a :: [i64]) :: [i64] do
+    a[1] = 7
+    a = step(a)
+    a
+  end
+
+  # the ticket's reproduction
+  defk rebind_call(n :: i64) :: [i64] do
+    bump(alloc(i64, n))
+  end
+
+  defk swap2(r :: [i64], base :: i64) :: [i64] do
+    x = r[base]
+    r[base] = r[base + 1] * 3
+    r[base + 1] = x
+    r
+  end
+
+  # argon2's fill/6: r written in a for, then `r = for ..., reduce: r`
+  defk fill_shape(mem :: [i64], r :: [i64], cb :: i64) :: {[i64], [i64]} do
+    for k <- 0..7//1 do
+      r[k] = band(mem[k], 0xFFFF) + k
+    end
+
+    r =
+      for i <- 0..3//1, reduce: r do
+        r -> swap2(r, 2 * i)
+      end
+
+    for k <- 0..7//1 do
+      mem[cb + k] = band(mem[cb + k] + r[k], 0xFFFFFF)
+    end
+
+    {mem, r}
+  end
+
+  defk rebind_reduce(a :: [i64]) :: {[i64], [i64]} do
+    mem = alloc(i64, 16)
+
+    for k <- 0..(min(len(a), 16) - 1)//1 do
+      mem[k] = a[k]
+    end
+
+    fill_shape(mem, alloc(i64, 8), 8)
+  end
+
+  # argon2's segment/12: mem written directly, then
+  # `{mem, r} = for ..., reduce: {mem, r}`
+  defk seg_shape(mem :: [i64], r :: [i64], n :: i64) :: {[i64], [i64]} do
+    mem[0] = n
+    mem[1] = n + 1
+
+    {mem, r} =
+      for k <- 0..(n - 1)//1, reduce: {mem, r} do
+        {mem, r} ->
+          r[rem(k, 8)] = mem[rem(k, 16)] + k
+          fill_shape(mem, r, 8)
+      end
+
+    {mem, r}
+  end
+
+  defk rebind_tuple(n :: i64) :: {[i64], [i64]} do
+    seg_shape(alloc(i64, 16), alloc(i64, 8), n)
+  end
+
+  # the same helpers on the caller's arrays: copied once, on entry
+  defk rebind_input(mem :: [i64], r :: [i64], n :: i64) :: {[i64], [i64]} do
+    seg_shape(mem, r, n)
+  end
 end
 
 defmodule Defk.ValueSemanticsTest do
@@ -605,6 +684,44 @@ defmodule Defk.ValueSemanticsTest do
     end
   end
 
+  describe "a written parameter bound again and returned (defk-3z5)" do
+    @rebound [:rebind_call, :rebind_reduce, :rebind_tuple]
+
+    test "is returned, and nothing is copied" do
+      assert agree(:rebind_call, [2]) == {:ok, i64s([1, 7])}
+      assert {:ok, _} = agree(:rebind_reduce, [i64s(Enum.to_list(1..16))])
+      assert {:ok, _} = agree(:rebind_tuple, [5])
+
+      for k <- @rebound do
+        assert copy_notes(k) == [], "#{k}: #{inspect(copy_notes(k))}"
+        assert copies(kernel_c(K, k)) == 0, "#{k}"
+      end
+    end
+
+    test "the caller's arrays are copied, and stay unchanged" do
+      mem = i64s(Enum.to_list(1..16))
+      r = i64s(List.duplicate(0, 8))
+      assert {:ok, _} = agree(:rebind_input, [mem, r, 3])
+      assert mem == i64s(Enum.to_list(1..16))
+      assert r == i64s(List.duplicate(0, 8))
+    end
+
+    test "under forced yields" do
+      K.__defk_force_yields__(true)
+
+      try do
+        assert agree(:rebind_call, [2]) == {:ok, i64s([1, 7])}
+        assert {:ok, _} = agree(:rebind_reduce, [i64s(Enum.to_list(1..16))])
+        assert {:ok, _} = agree(:rebind_tuple, [50])
+
+        assert {:ok, _} =
+                 agree(:rebind_input, [i64s(Enum.to_list(1..16)), i64s(List.duplicate(0, 8)), 50])
+      after
+        K.__defk_force_yields__(false)
+      end
+    end
+  end
+
   describe "under forced yields" do
     # every safepoint yields and resumes; the copy made before the loop is
     # in an owned binary, which the resumed kernel keeps writing
@@ -670,6 +787,97 @@ defmodule Defk.ValueSemanticsTest do
       assert msg =~ "(defk write-not-returned"
     end
 
+    test "a written parameter bound again to a new array (defk-3z5)" do
+      msg =
+        compile("""
+          defk g(a :: [i64]) :: [i64] do
+            a[0] = 1
+            a = alloc(i64, 4)
+            a
+          end
+
+          defk f(n :: i64) :: [i64] do
+            g(alloc(i64, n))
+          end
+        """)
+
+      assert msg =~ "g/1 writes to its array parameter a but doesn't return it"
+      assert msg =~ "a is bound again after this write"
+      refute msg =~ "{a, a}"
+      assert msg =~ "(defk write-not-returned"
+    end
+
+    test "a written parameter bound again from a helper's new array" do
+      msg =
+        compile("""
+          defk fresh(a :: [i64]) :: [i64] do
+            b = alloc(i64, len(a))
+            b[0] = a[0]
+            b
+          end
+
+          defk g(a :: [i64]) :: {[i64], i64} do
+            a[0] = 1
+            a = fresh(a)
+            {a, 2}
+          end
+
+          defk f(n :: i64) :: [i64] do
+            {a, _} = g(alloc(i64, n))
+            a
+          end
+        """)
+
+      assert msg =~ "g/1 writes to its array parameter a but doesn't return it"
+      assert msg =~ "a is bound again after this write"
+      refute msg =~ "{a, a"
+    end
+
+    test "a written parameter bound again from a reduce loop that replaces it" do
+      msg =
+        compile("""
+          defk g(a :: [i64]) :: [i64] do
+            a[0] = 1
+
+            a =
+              for i <- 0..3//1, reduce: a do
+                a ->
+                  b = alloc(i64, 4)
+                  b[0] = a[0] + i
+                  b
+              end
+
+            a
+          end
+
+          defk f(n :: i64) :: [i64] do
+            g(alloc(i64, n))
+          end
+        """)
+
+      assert msg =~ "g/1 writes to its array parameter a but doesn't return it"
+    end
+
+    test "a written parameter returned under another name is fine" do
+      assert :ok ==
+               compile("""
+                 defk step(a :: [i64]) :: [i64] do
+                   a[0] = a[0] + 1
+                   a
+                 end
+
+                 defk g(a :: [i64]) :: [i64] do
+                   a[1] = 7
+                   b = step(a)
+                   b
+                 end
+
+                 defk f(n :: i64) :: [i64] do
+                   g(alloc(i64, n))
+                 end
+               """)
+    end
+
     test "an array bound again in a loop body and read after the loop" do
       msg =
         compile("""
@@ -716,6 +924,10 @@ defmodule Defk.ValueSemanticsTest do
     :write_in_branch,
     :fill,
     :fill_input,
+    :step,
+    :bump,
+    :swap2,
+    :fill_shape,
     snapshot_alloc: [args: StreamData.fixed_list([StreamData.integer(0..100)])],
     swap_rows: [args: StreamData.fixed_list([StreamData.integer(0..100)])],
     same_twice: [args: StreamData.fixed_list([StreamData.integer(0..100)])],
@@ -745,6 +957,25 @@ defmodule Defk.ValueSemanticsTest do
     ],
     read_after_in_stmt: [
       args: StreamData.fixed_list([StreamData.integer(0..4), StreamData.boolean()])
+    ],
+    rebind_call: [args: StreamData.fixed_list([StreamData.integer(0..20)])],
+    rebind_reduce: [args: StreamData.fixed_list([G.array(:i64)])],
+    rebind_tuple: [args: StreamData.fixed_list([StreamData.integer(0..40)])],
+    seg_shape: [
+      args:
+        StreamData.fixed_list([
+          G.array(:i64, of: StreamData.integer(-1000..1000)),
+          G.array(:i64, of: StreamData.integer(-1000..1000)),
+          StreamData.integer(-1..20)
+        ])
+    ],
+    rebind_input: [
+      args:
+        StreamData.fixed_list([
+          G.array(:i64, of: StreamData.integer(-1000..1000)),
+          G.array(:i64, of: StreamData.integer(-1000..1000)),
+          StreamData.integer(0..20)
+        ])
     ],
     hll_update: [
       args:

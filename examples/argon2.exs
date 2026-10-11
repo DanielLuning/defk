@@ -77,11 +77,12 @@
 # V_{r+1}) gives 3.6 MB of C, a 1.1 MB .so and about 2.5 minutes of clang
 # under load, half of it the second entry kernel (argon2id inlines argon2).
 #
-# Language notes: write-not-returned (defk-3z5) rejects a helper that writes
-# its array parameter and then rebinds and returns it (fill wrote r[k], then
-# `r = for ..., reduce: r`). The workaround, at no run-time cost (no copy in
-# the C): the first writes go through a reduce loop over the arrays or a
-# helper that returns them (address_input). The arrays are never copied on
+# Language notes: when this was written, write-not-returned rejected a helper
+# that writes its array parameter and then rebinds and returns it (fill
+# wrote r[k], then `r = for ..., reduce: r`); defk-3z5 lifted that. The
+# kernels keep the workaround, at no run-time cost (no copy in the C): the
+# first writes go through a reduce loop over the arrays or a helper that
+# returns them (address_input). The arrays are never copied on
 # the hot path (the fast-path report lists copies only of the 72-byte H'
 # input and in the helpers' own entry points); r's indices need no bounds
 # check, mem's three per word in fill stay (their offsets come from data).
