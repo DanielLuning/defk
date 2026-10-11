@@ -5,7 +5,9 @@
   "created": "2026-10-10T12:10:45Z",
   "description": "Seen once in mix ci on a loaded machine (defk-9p6.13 worktree, three benchmark agents running, load ~7 on 12 cores), seed 429407:\n\n  1) test the runtime contract no clause matching after yields raises, and the bits built so far are freed (Defk.MultiClauseTest)\n     test/multi_clause_test.exs:394\n     assert %{frames_live: 0} = K.__defk_stats__()\n     right: %{yields: 49, frames_live: 1, promotions: 2}\n\nThe next three runs of the file and the next full mix ci passed. Probably the frame is freed by a resource destructor that has not run yet when the assertion reads the stats (a race, like defk-vvy); the test may need to wait/poll for frames_live to reach 0 rather than assert at once.",
   "id": "defk-cwl",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "comments": [
     {
       "text": "From the defk-fr7 stress runs (2026-10-11, load 35-180): the same frames_live-read-before-destructor pattern also hits BitstringHelperTest 'the accumulator survives yields inside the inlined helper' (frames_live 2, twice), RaiseCleanupTest 'a raise after alloc frees every owned buffer' (twice), and probably BitstringTest 'a process killed mid-build frees the buffer' (3 failures, message not read). MultiClauseTest (this ticket) failed in 2 of 11 runs.",
@@ -16,5 +18,5 @@
   "status": "open",
   "title": "Flaky under load: multi_clause_test 'no clause matching after yields raises, and the bits built so far are freed' saw frames_live: 1",
   "type": "bug",
-  "updated_at": "2026-10-11T14:48:19Z"
+  "updated_at": "2026-10-11T14:48:20Z"
 }
