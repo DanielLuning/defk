@@ -143,7 +143,7 @@ From deploying.md:
 
 3. There is no `log2`, and `:math.log2` is rejected with a hint that does not give the `log(x) / log(2.0)` rewrite; results then differ from `:math.log2` by about 1 ulp, which the "bit for bit Elixir" promise does not cover. Where: compile error unsupported-call (and its entry); language.md Builtins (lists log, says other :math is rejected). Would help: a "math functions you may expect" row in the Cheatsheet/Builtins table listing log2, log10, tan, floor, ceil... as missing with rewrites.
 
-    Resolution: fixed in the docs and the message: `:math.log2/1` and `:math.log10/1` now get the rewrite `log(x) / log(2.0)` with the last-bit caveat (`lib/defk/errors.ex`), and docs/language.md Builtins, the cheatsheet and getting-started say so; a bit-exact builtin is ticket defk-ngj.
+    Resolution: fixed in the docs and the message: `:math.log2/1` and `:math.log10/1` now get the rewrite `log(x) / log(2.0)` with the last-bit caveat (`lib/defk/errors.ex`), and docs/language.md Builtins, the cheatsheet and getting-started say so; a bit-exact builtin is ticket defk-ngj. (Note: builtin added in defk-ngj: `log2/1`, `log10/1` and `:math.log2/1`, `:math.log10/1` now compile and match `:math` bit for bit; the rewrite above is gone.)
 
 4. First error "not in the kernel subset" for `byte_size` contradicts the doc's definition ("not in the kernel subset" = stays out by design) while the code is a "mistake to fix". Where: getting-started "Reading a compile error"; compile-errors.md `unknown-function`. Would help: distinct wording ("unknown function") for names that have a builtin spelling.
 

@@ -30,6 +30,14 @@ defmodule Defk.NonFiniteTest.K do
     log(x)
   end
 
+  defk log2_of(x :: f64) :: f64 do
+    log2(x)
+  end
+
+  defk log10_of(x :: f64) :: f64 do
+    :math.log10(x)
+  end
+
   defk exp_of(x :: f64) :: f64 do
     exp(x)
   end
@@ -277,6 +285,12 @@ defmodule Defk.NonFiniteTest do
     non_finite(:log_of, [0.0])
     non_finite(:log_of, [-1.0])
     assert {:ok, -0.0} = agrees(:sqrt_of, [-0.0])
+  end
+
+  test "log2 and log10 outside their domain raise" do
+    for f <- [:log2_of, :log10_of], x <- [0.0, -0.0, -1.0, -1.0e308, -5.0e-324] do
+      non_finite(f, [x])
+    end
   end
 
   test "exp and pow overflowing raise" do
@@ -625,6 +639,8 @@ defmodule Defk.NonFiniteTest do
     fdiv: [],
     sqrt_of: [],
     log_of: [],
+    log2_of: [],
+    log10_of: [],
     exp_of: [],
     pow_of: [],
     compare: [],

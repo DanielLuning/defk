@@ -392,15 +392,6 @@ defmodule Defk.CompileErrorsTest do
       assert msg =~ "computed at compile time"
     end
 
-    # found by the HexDocs cold test (defk-djy.9)
-    test ":math.log2 and :math.log10 get the log quotient and the last-bit caveat" do
-      msg = rejection(":math.log2(a[0])")
-      assert whats(msg) == [":math.log2/1 is not in the kernel subset"]
-      assert msg =~ "differ from :math.log2/1 in the last bit"
-      assert rewrite(msg) == "log(a[0]) / log(2.0)"
-      assert rewrite(rejection(":math.log10(a[0])")) == "log(a[0]) / log(10.0)"
-    end
-
     test "byte_size names the builtin, without the by-design wording" do
       msg = rejection("byte_size(a)", "a :: [u8]", "i64")
       assert codes(msg) == ["unknown-function"]

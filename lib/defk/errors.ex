@@ -1651,16 +1651,6 @@ defmodule Defk.Errors do
      hint: "write it as a for loop over the array or range"}
   end
 
-  defp call_rejection(":math", fun, [x], _node) when fun in [:log2, :log10] do
-    base = if fun == :log2, do: "2.0", else: "10.0"
-
-    {"unsupported-call", ":math.#{fun}/1 is not in the kernel subset",
-     why: "a kernel's math builtins are #{@math} (also as :math.sqrt/1 and so on)",
-     hint:
-       "divide by the log of the base (the result can differ from :math.#{fun}/1 in the last bit, so compare with a tolerance or use the same expression in Elixir)",
-     rewrite: "log(#{Macro.to_string(x)}) / log(#{base})"}
-  end
-
   defp call_rejection(":math", fun, args, _node) do
     {"unsupported-call", ":math.#{fun}/#{length(args)} is not in the kernel subset",
      why: "a kernel's math builtins are #{@math} (also as :math.sqrt/1 and so on)",

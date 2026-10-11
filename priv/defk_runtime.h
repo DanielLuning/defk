@@ -716,6 +716,14 @@ static inline double defk_log(defk_ctx *ctx, double a) {
   if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, "log of non-positive number %g", a);
   return log(a);
 }
+static inline double defk_log2(defk_ctx *ctx, double a) {
+  if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, "log2 of non-positive number %g", a);
+  return log2(a);
+}
+static inline double defk_log10(defk_ctx *ctx, double a) {
+  if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, "log10 of non-positive number %g", a);
+  return log10(a);
+}
 static inline int64_t defk_trunc(defk_ctx *ctx, double a) {
   if (DEFK_UNLIKELY(!(a >= -0x1p63 && a < 0x1p63)))
     defk_fail(ctx, DEFK_E_ARITH, "trunc/1: %g does not fit in i64", a);
@@ -969,10 +977,12 @@ static inline double defk_nf_r(int *nf, double r) {
 /* a read whose inf or NaN a later check of the strip is sure to see
    (seen_later/1 in the compiler): no check of its own */
 #define defk_in_f64_later(C, X, I) (X)
-/* sqrt and log of a finite argument are inf or NaN exactly where the checked
+/* sqrt, log, log2 and log10 of a finite argument are inf or NaN exactly where the checked
    forms raise (a < 0.0, a <= 0.0) */
 #define DEFK_NF_sqrt(C, A) defk_nf_r(&defk_nf, __builtin_sqrt(A))
 #define DEFK_NF_log(C, A) defk_nf_r(&defk_nf, log(A))
+#define DEFK_NF_log2(C, A) defk_nf_r(&defk_nf, log2(A))
+#define DEFK_NF_log10(C, A) defk_nf_r(&defk_nf, log10(A))
 #define DEFK_NF_exp(C, A) defk_nf_r(&defk_nf, exp(A))
 #define DEFK_NF_pow(C, A, B) defk_nf_r(&defk_nf, pow((A), (B)))
 /* a float expression's single check (float_tree in the compiler): raise

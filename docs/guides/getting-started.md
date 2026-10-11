@@ -277,10 +277,9 @@ From people writing their first kernels:
   ```
 
 - **Not every `:math` function is a builtin.** The math builtins are `sqrt`,
-  `exp`, `log`, `sin`, `cos` and `pow`. Write `log(x) / log(2.0)` for
-  `:math.log2(x)`; it can differ from `:math.log2/1` in the last bit, so an
-  Elixir reference that calls `:math.log2/1` agrees only within a tolerance
-  (the kernel still agrees exactly with its own Elixir mode).
+  `exp`, `log`, `log2`, `log10`, `sin`, `cos` and `pow`, each also as
+  `:math.log2/1` and so on, and each giving the same bits as `:math`. Others
+  (`:math.tan/1`, say) are written from these or computed in Elixir.
 - **Arrays can't come out of an `if`.** Write to the array inside each
   branch instead of returning it from the branch (planned:
   [`array-in-branch`](../compile-errors.md#array-in-branch)).

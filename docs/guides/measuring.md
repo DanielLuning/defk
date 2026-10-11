@@ -85,8 +85,8 @@ unreliable; it is fine for checking your own kernel.
 Its `check:` option is a function of no arguments that returns `true` when
 the two sides give the same answer. Compare with `===` where the two compute
 the same thing the same way (as below). Where the Elixir side is a different
-but equivalent formula, for example `:math.log2(p)` against the kernel's
-`log(p) / log(2.0)`, results can differ in the last bit: compare those
+but equivalent formula, for example `log(p) / log(2.0)` against
+`:math.log2(p)`, results can differ in the last bit: compare those
 within a tolerance, and keep the exact check between the kernel and its own
 Elixir mode (`Mod.__defk_elixir__/2`).
 
