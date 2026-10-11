@@ -521,7 +521,18 @@ defmodule Defk.Compiler do
         {p, Map.merge(%{c: c, t: t, owned: false, var: c}, array_ids(t))}
       end)
 
-    env = Map.merge(%{vars: vars, sigs: sigs, inlining: [{k.name, k.arity}]}, scope(MapSet.new()))
+    env =
+      Map.merge(
+        %{
+          vars: vars,
+          sigs: sigs,
+          inlining: [{k.name, k.arity}],
+          ret: k.ret,
+          ret_fors: returned_fors(k.body)
+        },
+        scope(MapSet.new())
+      )
+
     {stmts, val} = lower_block(k.body, env)
     {ret_stmts, ret_vals} = coerce_return(val, k)
 
@@ -533,6 +544,23 @@ defmodule Defk.Compiler do
       sp_count: Process.get(:defk_sp),
       sps: Process.get(:defk_sps)
     })
+  end
+
+  # The collecting fors that are the kernel's value: its last expression, or
+  # the one a variable bound to a for, returned last, was assigned.
+  defp returned_fors(body) do
+    es = exprs(body)
+
+    case List.last(es) do
+      {:for, _, _} = f ->
+        [f]
+
+      {v, _, ctx} when is_atom(v) and is_atom(ctx) ->
+        for {:=, _, [{^v, _, c}, {:for, _, _} = f]} <- es, is_atom(c), do: f
+
+      _ ->
+        []
+    end
   end
 
   # The kernel's value `v` as its declared return type; reported at the body's
@@ -667,7 +695,7 @@ defmodule Defk.Compiler do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
     lives = live_after(es)
-    {s1, env} = stmt_list(init, lives, nested(env))
+    {s1, env} = stmt_list(init, lives, nested(env, ast))
 
     {s2, v, env} =
       in_ctx(last, fn ->
@@ -725,7 +753,7 @@ defmodule Defk.Compiler do
   # A block evaluated only for effect, nested like lower_block's.
   defp lower_stmts(ast, env) do
     es = exprs(ast)
-    stmt_list(es, live_after(es), nested(env))
+    stmt_list(es, live_after(es), nested(env, ast))
   end
 
   # statements `es` of one block; `lives` has the names read after each
@@ -1039,8 +1067,10 @@ defmodule Defk.Compiler do
   # construct's bindings that are read anywhere in its statement are live for
   # its nested blocks (env.nest), which covers later iterations of a loop and
   # the rest of the statement; this is conservative, so it may copy where
-  # Elixir would not need to. Inside a callee, what the caller reads after the
-  # call is live.
+  # Elixir would not need to. An arm of an if, cond or case leaves out what
+  # its other arms read (nested/2): they run instead of it, so a helper call
+  # in one arm that rebinds the array the other arm reads writes in place
+  # (defk-33b). Inside a callee, what the caller reads after the call is live.
   #
   # Where copies go:
   #   * at a write `a[i] = v`: when a is an input array, or a binding that
@@ -1075,8 +1105,70 @@ defmodule Defk.Compiler do
     }
   end
 
-  # the env of a block nested in the statement `env` is at
-  defp nested(env), do: %{env | out: env.nest, depth: env.depth + 1}
+  # the env of block `ast` nested in the statement `env` is at. An arm of an
+  # if, cond or case runs instead of its other arms, so what they read is not
+  # read after it (defk-33b): its live set is what is read after the
+  # statement, and what the statement reads outside the branch's arms. Any
+  # other nested block (a loop or fn body, run again) keeps env.nest.
+  defp nested(env, ast) do
+    out =
+      if arm?(env.stmt, ast),
+        do: MapSet.union(env.live, pairs(env, reads_outside(taken(env.stmt, ast), ast))),
+        else: env.nest
+
+    %{env | out: out, depth: env.depth + 1}
+  end
+
+  # `ast` is one arm of an if, cond or case in `stmt`, and nowhere else in it
+  defp arm?(nil, _ast), do: false
+
+  defp arm?(stmt, ast) do
+    occurrences(stmt, ast) == 1 and
+      elem(Macro.prewalk(stmt, false, &{&1, &2 or ast in arms(&1)}), 1)
+  end
+
+  defp occurrences(ast, node) do
+    {_, n} = Macro.prewalk(ast, 0, fn x, n -> {x, if(x == node, do: n + 1, else: n)} end)
+    n
+  end
+
+  # Statement `stmt` as it runs when `node` does: every if, cond and case arm
+  # that is an alternative to the arm holding `node` is left out. `stmt`
+  # whole when `node` is not exactly once in it.
+  defp taken(stmt, node) do
+    if occurrences(stmt, node) == 1,
+      do: Macro.prewalk(stmt, &if(holds_arm?(&1, node), do: other_arms_out(&1, node), else: &1)),
+      else: stmt
+  end
+
+  # `x` is an if, cond or case with `node` in one of its arms
+  defp holds_arm?(x, node), do: Enum.any?(arms(x), &(occurrences(&1, node) > 0))
+
+  # the arm bodies of an if, cond or case node
+  defp arms({:if, _, [_c, kw]}) when is_list(kw), do: for({k, b} <- kw, k in [:do, :else], do: b)
+
+  defp arms({:cond, _, [[do: clauses]]}) when is_list(clauses),
+    do: for({:->, _, [_, body]} <- clauses, do: body)
+
+  defp arms({:case, _, [_subject, [do: clauses]]}) when is_list(clauses),
+    do: for({:->, _, [_, body]} <- clauses, do: body)
+
+  defp arms(_ast), do: []
+
+  defp other_arms_out({:if, m, [c, kw]}, node),
+    do: {:if, m, [c, for({k, b} <- kw, do: {k, arm_or_nil(b, node)})]}
+
+  defp other_arms_out({:cond, m, [[do: clauses]]}, node),
+    do: {:cond, m, [[do: clauses_out(clauses, node)]]}
+
+  defp other_arms_out({:case, m, [subject, [do: clauses]]}, node),
+    do: {:case, m, [subject, [do: clauses_out(clauses, node)]]}
+
+  defp clauses_out(clauses, node) do
+    for {:->, cm, [head, body]} <- clauses, do: {:->, cm, [head, arm_or_nil(body, node)]}
+  end
+
+  defp arm_or_nil(body, node), do: if(occurrences(body, node) == 0, do: nil, else: body)
 
   # a parameter is bound in the kernel's body block (depth 1)
   defp array_ids({:arr, _}), do: %{id: make_ref(), buf: make_ref(), fin: false, depth: 1}
@@ -4380,7 +4472,7 @@ defmodule Defk.Compiler do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
     lives = live_after(es)
-    {s, env} = stmt_list(init, lives, nested(env))
+    {s, env} = stmt_list(init, lives, nested(env, ast))
 
     [
       s,
@@ -5578,12 +5670,36 @@ defmodule Defk.Compiler do
   defp for_collect!(node, quals, body, into, env, what) do
     rewrite =
       case quals do
-        [{:<-, _, [x, src]}] when body != nil -> Defk.Errors.collect_rewrites(src, x, body, into)
-        _ -> nil
+        [{:<-, _, [x, src]}] when body != nil ->
+          Defk.Errors.collect_rewrites(src, x, body, into, returned_type(node, env))
+
+        _ ->
+          nil
       end
 
     err!(node, "for-collect", what, checked_rewrite([rewrite: rewrite], env))
   end
+
+  # The body's type function for a for's rewrite: the element type of the
+  # declared return type when the for is the kernel's value and the body's
+  # type fits it (the rewrite is still compiled), else the body's own type.
+  defp returned_type(node, env) do
+    elem =
+      case env[:ret] do
+        {:arr, e} -> if node in Map.get(env, :ret_fors, []), do: e
+        _ -> nil
+      end
+
+    fn probe ->
+      t = type_in(probe, env)
+      if elem != nil and fits_elem?(t, elem), do: elem, else: t
+    end
+  end
+
+  defp fits_elem?(t, elem) when t in [:i64, :u64], do: elem in [:i64, :u64, :u8, :i16, :i32]
+  defp fits_elem?(:f64, elem), do: elem in [:f64, :f32]
+  defp fits_elem?(t, t), do: true
+  defp fits_elem?(_, _), do: false
 
   @spec generator_pattern!(term()) :: no_return()
   defp generator_pattern!({:<-, _, [pat, src]} = gen) do

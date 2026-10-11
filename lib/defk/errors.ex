@@ -1736,17 +1736,66 @@ defmodule Defk.Errors do
 
   @doc false
   # Filling a new array with `body` for each element `x` of the array variable
-  # `src`: the loop Enum.map/2 or a collecting for stands for. One candidate
-  # per element type, or nil when `src` is not an array variable.
-  def fill_rewrites(src, x, body, elems \\ [:i64, :f64]) do
-    if var?(src) do
-      [i, out] = fresh_names(~w(i out), [src, body])
-      v = s(subst(body, x, index(src, i)))
-      n = "len(#{s(src)})"
+  # `src` or of a range `lo..hi` (step 1): the loop Enum.map/2 or a collecting
+  # for stands for. One candidate per element type (`type_of` gives the body's
+  # type when the compiler knows it, else `elems` are tried), or nil when `src`
+  # is neither, or `body` is more than one expression.
+  def fill_rewrites(src, x, body, elems \\ [:i64, :f64], type_of \\ fn _ -> nil end) do
+    cond do
+      not var?(x) or match?({:__block__, _, _}, body) -> nil
+      var?(src) -> array_fill(src, x, body, elems, type_of)
+      true -> range_fill(range_parts(src), x, body, elems, type_of)
+    end
+  end
 
-      for e <- elems,
-          do:
-            "#{out} = alloc(#{e}, #{n})\n\nfor #{i} <- 0..(#{n} - 1)//1 do\n  #{out}[#{i}] = #{v}\nend\n\n#{out}"
+  defp array_fill(src, x, body, elems, type_of) do
+    [i, out] = fresh_names(~w(i out), [src, body])
+    v = s(subst(body, x, index(src, i)))
+    n = "len(#{s(src)})"
+
+    for e <- element_types(subst(body, x, index(src, 0)), elems, type_of),
+        do:
+          "#{out} = alloc(#{e}, #{n})\n\nfor #{i} <- 0..(#{n} - 1)//1 do\n  #{out}[#{i}] = #{v}\nend\n\n#{out}"
+  end
+
+  # the loop over the range with the author's variable and body, writing at
+  # the position of the variable in the range
+  defp range_fill({lo, hi}, x, body, elems, type_of) do
+    [out] = fresh_names(~w(out), [lo, hi, body, x])
+    {n, at} = range_length(lo, hi, x)
+
+    for e <- element_types(subst(body, x, 0), elems, type_of),
+        do:
+          "#{out} = alloc(#{e}, #{n})\n\nfor #{s(x)} <- #{range_text(lo, hi)} do\n  #{out}[#{at}] = #{s(body)}\nend\n\n#{out}"
+  end
+
+  defp range_fill(nil, _x, _body, _elems, _type_of), do: nil
+
+  # lo..hi//1; hi is parenthesised unless it is a variable or a number
+  defp range_text(lo, hi) do
+    hi = if var?(hi) or is_integer(hi), do: s(hi), else: "(#{s(hi)})"
+    "#{s(lo)}..#{hi}//1"
+  end
+
+  # {lo, hi} of `lo..hi` and `lo..hi//1` when lo is a number or a variable
+  defp range_parts({:.., _, [lo, hi]}), do: range_parts(lo, hi)
+  defp range_parts({:..//, _, [lo, hi, 1]}), do: range_parts(lo, hi)
+  defp range_parts(_), do: nil
+
+  defp range_parts(lo, hi), do: if(is_integer(lo) or var?(lo), do: {lo, hi})
+
+  # {length, index of x} of the range
+  defp range_length(0, {:-, _, [n, 1]}, x), do: {s(n), s(x)}
+  defp range_length(0, hi, x), do: {s({:+, [], [hi, 1]}), s(x)}
+  defp range_length(1, hi, x), do: {s(hi), s({:-, [], [x, 1]})}
+  defp range_length(lo, hi, x), do: {s({:+, [], [{:-, [], [hi, lo]}, 1]}), s({:-, [], [x, lo]})}
+
+  # the body's own type when the compiler knows it (`probe` is the body at the
+  # first element), else the candidates
+  defp element_types(probe, elems, type_of) do
+    case type_of.(probe) do
+      t when is_atom(t) and t != nil -> [t]
+      _ -> elems
     end
   end
 
@@ -1754,16 +1803,19 @@ defmodule Defk.Errors do
   # The rewrites of a collecting `for x <- src, into: into, do: body` (into is
   # nil without into:). `into: <<>>` with one native-endian segment per
   # element is an array of that element type; other into: have none.
-  def collect_rewrites(src, x, body, nil), do: fill_rewrites(src, x, body)
+  def collect_rewrites(src, x, body, into, type_of \\ fn _ -> nil end)
 
-  def collect_rewrites(src, x, {:<<>>, _, [seg]}, {:<<>>, _, []}) do
+  def collect_rewrites(src, x, body, nil, type_of),
+    do: fill_rewrites(src, x, body, [:i64, :f64], type_of)
+
+  def collect_rewrites(src, x, {:<<>>, _, [seg]}, {:<<>>, _, []}, _type_of) do
     case segment(seg) do
       {v, e} -> fill_rewrites(src, x, v, [e])
       nil -> nil
     end
   end
 
-  def collect_rewrites(_src, _x, _body, _into), do: nil
+  def collect_rewrites(_src, _x, _body, _into, _type_of), do: nil
 
   # {value, element type} of a binary segment with an array's layout
   defp segment({:"::", _, [v, spec]}) do
