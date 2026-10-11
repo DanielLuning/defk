@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-11T13:18:15Z",
+  "description": "Found by defk-djy.13. The for-collect rewrite types the body with a probe; a read from a [u8] array types as i64 in the subset, so 'for x \u003c- a, do: x' over a [u8] array suggests 'out = alloc(i64, len(a))'. When the kernel's declared return type is [u8], the shown rewrite then mismatches at the return. Done when the rewrite uses the declared return type's element type when the for is the returned value (and the body fits it), with a test in compile_errors_test 'targeted hints'.",
+  "id": "defk-low",
+  "labels": [],
+  "priority": 4,
+  "status": "open",
+  "title": "for-collect rewrite over a [u8] array suggests alloc(i64, ...) when the kernel returns [u8]",
+  "type": "bug",
+  "updated_at": "2026-10-11T13:18:15Z"
+}
