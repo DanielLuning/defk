@@ -106,12 +106,16 @@ or NaN raises too. [Expressions](../language.md#4-expressions-and-operators)
 - `alloc(type, n)`: a new zero-filled array
 - `wrap64`, `mulhi`, `clz`, `ctz`, `popcount`, `rotl`, `rotr`, `rotl64`, `rotr64`
 - `u64_le(bytes, i)`, `u32_le`, `u16_le` and `_be`: word loads
+- `out = copy(out, at, src, from, n)`: a range from `src` (memmove);
+  `out = copy_back(out, at, off, n)`: `out[at + j] = out[at + j - off]` in
+  order, an LZ match (repeats when `off < n`); one check per copy
 - `crc32c(crc, x, 64)` (also 8, 16, 32): one CRC32C step; the CPU's
   instruction where it has one (arm64, x86-64 with SSE4.2), a table
   elsewhere, picked at run time: same value, different speed
 - `bit_size(acc)`
 
 [Builtins](../language.md#builtins),
+[Range copies](../language.md#range-copies),
 [Hardware builtins](../language.md#hardware-builtins)
 
 ### Wrapping arithmetic
