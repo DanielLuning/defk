@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-11T13:04:36Z",
   "created": "2026-10-09T22:02:27Z",
   "description": "Seen once during defk-9p6.3's run_all.exs run (machine under heavy load, 8 agents running): examples/sort_u64_keys.exs reported \"crashed\" because run_all found no DEFK_RESULT line; run alone it prints a normal result. Candidates: the script's own secondary check (`sort_to_list` must be good or it exits 1 before printing? check the order: the first DEFK_RESULT is printed by the first report call, so an exit after it would still leave a line; so the crash happened before or during the first report: an out-of-memory on a 1M-element decode under load, a timeout in a Task, or the heapsort kernel hitting the 2^48 cap?), or run_all's regex missing a line when stderr and stdout interleave (stderr_to_stdout: true in System.cmd; a DEFK_RESULT line split by a concurrent stderr write would not match `^DEFK_RESULT (.*)$`). Make run_all robust: print DEFK_RESULT to stdout only after flushing, and have run_all keep the script's full output on failure (it already prints it: capture that next time). Reproduce under load (run two examples in parallel) and fix the cause.\n\nDone when: the cause is identified and fixed or ruled out with a stress run of 10 consecutive run_all passes.",
   "id": "defk-9p6.26",
@@ -16,7 +17,7 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "sort_u64_keys.exs printed no DEFK_RESULT line in one run_all.exs run",
   "type": "bug",
   "updated_at": "2026-10-11T13:04:36Z"
