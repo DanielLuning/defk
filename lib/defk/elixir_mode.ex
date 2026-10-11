@@ -144,7 +144,7 @@ defmodule Defk.ElixirMode do
 
     entries =
       for sig <- sigs, not Defk.Bitstring.helper?(sig) do
-        vs = Defk.arg_vars(sig.params)
+        vs = Defk.Args.vars(sig.params)
 
         quote generated: true do
           def __defk_elixir__(unquote(sig.name), [unquote_splicing(vs)] = args) do

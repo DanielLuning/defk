@@ -648,7 +648,7 @@ static inline int64_t defk_to_i64_elem(defk_ctx *ctx, uint64_t v) {
  * _s forms do): only the taken arm's flag replays the raising form.
  *
  * DEFK_NO_FLOAT_CHECKS compiles the checks out; it exists only to measure
- * their cost (README "Known limitations") and is not a user option.
+ * their cost (docs/performance.md 6.5) and is not a user option.
  */
 #ifdef DEFK_NO_FLOAT_CHECKS
 #define DEFK_FINITE(x) 1

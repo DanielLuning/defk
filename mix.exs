@@ -60,6 +60,13 @@ defmodule Defk.MixProject do
   # the reference and the project history in docs/. README stays the main
   # page (what defk is and why, as on GitHub) and Getting started comes
   # right after it; the cheatsheet is a lookup page beside the reference.
+  #
+  # Choice (defk-djy.14): README stays the main page and the GitHub landing
+  # page, trimmed to what a user needs (what defk is, when not to use it,
+  # a first kernel, links into the guides). The repo-internal parts (file
+  # table, design decisions, results snapshot, roadmap with ticket ids,
+  # tracker notes) moved to docs/project.md, which is not an extra; README
+  # links it by its GitHub URL.
   @guides [
     "README.md",
     "docs/guides/getting-started.md",
