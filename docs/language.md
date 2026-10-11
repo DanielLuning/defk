@@ -1468,7 +1468,11 @@ where it cannot prove that:
   halts with `{:halt, {out, s + out[0]}}` and otherwise continues with
   `out = put(out, i)`: the other branch runs instead of the call, so its read
   is not a read after it, and the call writes in place on every iteration,
-  as a write `out[i] = v` in that branch would. The callee still copies when
+  as a write `out[i] = v` in that branch would. The same holds when the
+  condition, `case` subject or clause head that chose the branch reads the
+  array (`if out[0] == 5, do: {:halt, out}, else: (out = put(out, i); {:cont, out})`):
+  it ran before the call, and the next iteration reads the call's result.
+  The callee still copies when
   the array from before the call is read after the `if`, later in the same
   statement, through another variable (`old = out`), or, for an array bound
   outside a loop and rebound in a branch of its body, in the next iteration
@@ -1504,7 +1508,8 @@ Here `a` is copied at the write, because `b` is read after it; without the
 `b[0]`, there is no copy. The test of "read after" is by variable name
 through the rest of the block, and for a loop, everything its whole
 statement reads; a branch of an `if`, `cond` or `case` leaves out what the
-other branches read, since only one of them runs. It is conservative, so a
+other branches read, since only one of them runs, and the condition, subject
+or clause head that chose it, which ran before it. It is conservative, so a
 kernel may copy where Elixir would not have to (for example when `b` is read
 earlier in the loop body than the write, which is not a read after it). Copies are not reported; `Mod.__defk_c_source__/0` shows them as
 `defk_copy_*` calls. Like `alloc`, every copy lives until the kernel returns.
