@@ -14,11 +14,15 @@
     {
       "text": "Not reproduced: 13 solo/parallel runs of sort_u64_keys.exs (3 parallel streams, load avg ~40) and 4 full run_all passes (every sort_u64_keys run gave 2 DEFK_RESULT lines, exit 0). Interleaving hypothesis: Bench.print writes the line as one IO.puts (~235 bytes, below the 512-byte pipe atomic limit, and prefixed with a newline), so a mid-line split is very unlikely, but run_all merged stderr into stdout, so a split could not be ruled out or diagnosed. Peak RSS of the script is 880 MB (24 GB machine): an OOM/kill under heavy load is the more plausible cause of the one-off, undiagnosable now. Fix: run_all now captures stdout and stderr separately (sh -c exec elixir 2\u003efile), requires the result line to parse as JSON, and on failure prints exit status, 'no DEFK_RESULT line' vs 'result line found', and full stdout and stderr. Note: failing examples with exit 1 and a result line (self-check verdict under load, e.g. gorilla_encode marginal, batched_levenshtein) were previously also labelled crashed. Stress: 4 consecutive passes ran (15 min loaded first pass, then ~10-11 min each); 10 would take ~2h, stopped after ~46 min. sort_u64_keys never failed; other examples flipped verdicts under load (unrelated).",
       "timestamp": "2026-10-11T13:04:36Z"
+    },
+    {
+      "text": "Coordinator note: the Done-when asked for the cause or 10 clean run_all passes; 4 passes ran (about 46 min, load ~40) with no missing line, then the agent stopped because 10 would take about 2 h. run_all now captures stdout and stderr separately and prints both on failure, so a recurrence can be diagnosed.",
+      "timestamp": "2026-10-11T13:05:31Z"
     }
   ],
   "priority": 3,
   "status": "closed",
   "title": "sort_u64_keys.exs printed no DEFK_RESULT line in one run_all.exs run",
   "type": "bug",
-  "updated_at": "2026-10-11T13:04:36Z"
+  "updated_at": "2026-10-11T13:05:31Z"
 }
