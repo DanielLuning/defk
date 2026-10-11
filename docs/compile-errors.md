@@ -191,6 +191,30 @@ defk f(x :: i64) :: i64 do
 end
 ```
 
+### builtin-name
+
+A kernel cannot take the name and arity of a builtin: the builtin would answer its calls.
+
+- kind: a mistake to fix (in the kernel or the build)
+- why: `copy_back/4` is a builtin, so calls to it would reach the builtin, not this kernel; a builtin added later would change what a module computes without a warning
+- hint: rename the kernel and its calls (my_copy_back/4, say); the same name at another arity is fine
+
+Rejected:
+
+```elixir
+defk abs(x :: i64) :: i64 do
+  if x < 0, do: -x, else: x
+end
+```
+
+Write instead:
+
+```elixir
+defk my_abs(x :: i64) :: i64 do
+  if x < 0, do: -x, else: x
+end
+```
+
 ### clause-head
 
 A multi-clause kernel starts with a bodiless typed head, before its clauses.

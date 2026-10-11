@@ -57,6 +57,27 @@ defmodule Defk.Builtins do
   @doc "Whether `name` is a builtin."
   def builtin?(name), do: name in @all
 
+  @doc """
+  Whether a call of `name` with `arity` arguments is a builtin. A kernel may
+  reuse a builtin's name at an arity the builtin does not take: calls are
+  looked up by name and arity.
+  """
+  def builtin?(name, arity), do: arity in arities(name)
+
+  @doc "The arities builtin `name` takes (none for a name that is not a builtin)."
+  def arities(name) when name in [:len, :bit_size, :abs, :float, :trunc, :round, :wrap64], do: [1]
+  def arities(name) when name in [:min, :max, :div, :rem, :pow, :alloc], do: [2]
+  def arities(name) when name in @math1, do: [1]
+  def arities(name) when name in @bitwise, do: [bitwise_arity(name)]
+  def arities(name) when name in @loads, do: [2]
+  def arities(:copy), do: [5]
+  def arities(:copy_back), do: [4]
+  def arities(name) when name in [:clz, :ctz], do: [1, 2]
+  def arities(name) when name in [:mulhi, :rotl64, :rotr64], do: [2]
+  def arities(name) when name in [:rotl, :rotr, :crc32c], do: [3]
+  def arities(name) when name in [:popcount, :f64_to_u64], do: [1]
+  def arities(_name), do: []
+
   # Enum.all?/any? with a predicate are the same fold with a different bool
   # accumulator: {init, if kw} for `reduce_while` over the predicate.
   @doc "The {init, if kw} that lowers Enum.all?/any? to a bool-accumulator reduce."
