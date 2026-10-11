@@ -244,6 +244,177 @@ defmodule Defk.ValueSemanticsTest.K do
     t[i] = 9
     {t, @table[i]}
   end
+
+  # A helper call in one branch whose other branch reads the array
+  # (defk-33b): the caller rebinds the array to the result, so the old buffer
+  # is not read again and the helper writes in place. Reading it in the other
+  # branch, which runs instead, is not a read after the call.
+  defk put1(out :: [u8], i :: i64) :: [u8] do
+    out[i] = 1
+    out
+  end
+
+  # the ticket's reproduction: quadratic time and memory before the fix
+  defk halt_reads(n :: i64) :: i64 do
+    out = alloc(u8, n)
+
+    {out, s} =
+      Enum.reduce_while(0..(n - 1)//1, {out, 0}, fn i, {out, s} ->
+        if i == n - 1 do
+          {:halt, {out, s + out[0]}}
+        else
+          out = put1(out, i)
+          {:cont, {out, s}}
+        end
+      end)
+
+    s + out[1]
+  end
+
+  # the same with the call hoisted out of the branch (never copied)
+  defk halt_reads_hoisted(n :: i64) :: i64 do
+    out = alloc(u8, n)
+
+    {out, s} =
+      Enum.reduce_while(0..(n - 1)//1, {out, 0}, fn i, {out, s} ->
+        out = put1(out, rem(i, n))
+
+        if i == n - 1 do
+          {:halt, {out, s + out[0]}}
+        else
+          {:cont, {out, s}}
+        end
+      end)
+
+    s + out[1]
+  end
+
+  # the call in the halt arm's tuple, the read in a case arm
+  defk case_cont(n :: i64) :: i64 do
+    out = alloc(u8, n)
+
+    {out, s} =
+      Enum.reduce_while(0..(n - 1)//1, {out, 0}, fn i, {out, s} ->
+        case rem(i, 3) do
+          0 -> {:cont, {out, s + out[i]}}
+          _ -> {:cont, {put1(out, i), s}}
+        end
+      end)
+
+    s + out[n - 1]
+  end
+
+  defk if_cont(n :: i64) :: i64 do
+    out = alloc(u8, n)
+
+    {out, s} =
+      Enum.reduce_while(0..(n - 1)//1, {out, 0}, fn i, {out, s} ->
+        if rem(i, 2) == 0 do
+          {:cont, {out, s + out[i] + out[0]}}
+        else
+          out = put1(out, i)
+          out[0] = 1
+          {:cont, {out, s}}
+        end
+      end)
+
+    s + out[n - 1]
+  end
+
+  defk cond_cont(n :: i64) :: i64 do
+    out = alloc(u8, n)
+
+    {out, s} =
+      Enum.reduce_while(0..(n - 1)//1, {out, 0}, fn i, {out, s} ->
+        cond do
+          rem(i, 3) == 0 -> {:cont, {put1(out, i), s}}
+          rem(i, 3) == 1 -> {:cont, {out, s + out[i - 1]}}
+          true -> {:cont, {out, s + 2 * out[0]}}
+        end
+      end)
+
+    s + out[0]
+  end
+
+  # for ..., reduce: cannot give an array from a branch (array-in-branch), so
+  # its helper call is in the body; the read is in a branch after it
+  defk for_reduce(n :: i64) :: i64 do
+    out = alloc(u8, n)
+
+    {out, s} =
+      for i <- 0..(n - 1)//1, reduce: {out, 0} do
+        {out, s} ->
+          out = put1(out, i)
+          {out, if(rem(i, 2) == 0, do: s + out[i - div(i, 2)], else: s)}
+      end
+
+    s + out[0]
+  end
+
+  # Negative cases: the pre-call buffer is read later, so the helper copies.
+  # An array bound outside the loop and rebound in a branch of its body is
+  # the old array again in the next iteration.
+  defk outer_in_branch(n :: i64) :: i64 do
+    out = alloc(u8, n)
+
+    for i <- 0..(n - 1)//1, reduce: 0 do
+      acc ->
+        if i > 2 do
+          out = put1(out, i)
+          acc + out[i] + out[0] + out[i - 1]
+        else
+          acc + out[0]
+        end
+    end
+  end
+
+  # rebound in a branch and read after the if, where the rebinding is not seen
+  defk read_after_if(n :: i64, c :: bool) :: i64 do
+    out = alloc(u8, n)
+
+    x =
+      if c do
+        out = put1(out, 0)
+        out[0]
+      else
+        out[1]
+      end
+
+    x + 10 * out[0]
+  end
+
+  # read in the same statement, after the if
+  defk read_after_in_stmt(n :: i64, c :: bool) :: i64 do
+    out = alloc(u8, n)
+
+    x =
+      if c do
+        out = put1(out, 0)
+        out[0]
+      else
+        0
+      end + 10 * out[0]
+
+    x
+  end
+
+  # an alias of the accumulator read after the call in the same branch
+  defk alias_in_branch(n :: i64) :: i64 do
+    out = alloc(u8, n)
+
+    {_, s} =
+      Enum.reduce_while(0..(n - 1)//1, {out, 0}, fn i, {out, s} ->
+        if rem(i, 2) == 0 do
+          {:cont, {out, s + out[0]}}
+        else
+          old = out
+          out = put1(out, 0)
+          {:cont, {out, s + old[0] + out[0]}}
+        end
+      end)
+
+    s
+  end
 end
 
 defmodule Defk.ValueSemanticsTest do
@@ -395,6 +566,45 @@ defmodule Defk.ValueSemanticsTest do
     end
   end
 
+  describe "a helper call in one branch (defk-33b)" do
+    @in_branch [:halt_reads, :halt_reads_hoisted, :case_cont, :if_cont, :cond_cont, :for_reduce]
+    @still_copied [:outer_in_branch, :read_after_if, :read_after_in_stmt, :alias_in_branch]
+
+    defp copy_notes(kernel) do
+      for {{^kernel, _}, _, {:copy, :copied, why}} <- K.__defk_report__(), do: why
+    end
+
+    test "writes in place when the other branch reads the array" do
+      for k <- @in_branch do
+        assert copy_notes(k) == [], "#{k}: #{inspect(copy_notes(k))}"
+        assert copies(kernel_c(K, k)) == 0, "#{k}"
+      end
+    end
+
+    test "still copies when the buffer before the call is read later" do
+      for k <- @still_copied do
+        assert [_ | _] = copy_notes(k), "#{k}"
+        assert copies(kernel_c(K, k)) > 0, "#{k}"
+      end
+    end
+
+    test "the reproduction is linear: one buffer, however long the loop" do
+      assert agree(:halt_reads, [100_000]) == {:ok, 2}
+      # in place, out[3] would be 1 again at i = 4, giving 3
+      assert agree(:outer_in_branch, [5]) == {:ok, 2}
+      assert agree(:read_after_if, [2, true]) == {:ok, 1}
+      assert agree(:read_after_in_stmt, [2, true]) == {:ok, 1}
+
+      K.__defk_force_yields__(true)
+
+      try do
+        for k <- @in_branch, do: agree(k, [2_000])
+      after
+        K.__defk_force_yields__(false)
+      end
+    end
+  end
+
   describe "under forced yields" do
     # every safepoint yields and resumes; the copy made before the loop is
     # in an owned binary, which the resumed kernel keeps writing
@@ -521,6 +731,21 @@ defmodule Defk.ValueSemanticsTest do
     write_then_read: [args: StreamData.fixed_list([G.array(:i64), G.array(:i64)])],
     two_args: [args: StreamData.fixed_list([StreamData.integer(0..20)])],
     helper_in_loop: [args: StreamData.fixed_list([StreamData.integer(0..60)])],
+    put1: [args: StreamData.fixed_list([G.array(:u8), G.i64(-2..8)])],
+    halt_reads: [args: StreamData.fixed_list([StreamData.integer(0..300)])],
+    halt_reads_hoisted: [args: StreamData.fixed_list([StreamData.integer(0..300)])],
+    case_cont: [args: StreamData.fixed_list([StreamData.integer(0..300)])],
+    if_cont: [args: StreamData.fixed_list([StreamData.integer(0..300)])],
+    cond_cont: [args: StreamData.fixed_list([StreamData.integer(0..300)])],
+    for_reduce: [args: StreamData.fixed_list([StreamData.integer(0..300)])],
+    outer_in_branch: [args: StreamData.fixed_list([StreamData.integer(0..100)])],
+    alias_in_branch: [args: StreamData.fixed_list([StreamData.integer(0..100)])],
+    read_after_if: [
+      args: StreamData.fixed_list([StreamData.integer(0..4), StreamData.boolean()])
+    ],
+    read_after_in_stmt: [
+      args: StreamData.fixed_list([StreamData.integer(0..4), StreamData.boolean()])
+    ],
     hll_update: [
       args:
         StreamData.bind(StreamData.integer(1..64), fn m ->

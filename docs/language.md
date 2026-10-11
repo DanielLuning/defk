@@ -1299,6 +1299,16 @@ where it cannot prove that:
   the array it passed (after the call, or in a later iteration): the callee
   copies. When the caller rebinds the result instead
   (`{out, n} = fill(out, v)`), the callee writes the caller's array in place.
+  That holds for a call in one branch of an `if`, `cond` or `case` whose
+  other branch reads the array, as in an `Enum.reduce_while/3` fn that
+  halts with `{:halt, {out, s + out[0]}}` and otherwise continues with
+  `out = put(out, i)`: the other branch runs instead of the call, so its read
+  is not a read after it, and the call writes in place on every iteration,
+  as a write `out[i] = v` in that branch would. The callee still copies when
+  the array from before the call is read after the `if`, later in the same
+  statement, through another variable (`old = out`), or, for an array bound
+  outside a loop and rebound in a branch of its body, in the next iteration
+  (where the name means the array from outside again).
 - **An array accumulator** (see [Array accumulators](#array-accumulators))
   starts as a copy of its initial array when that is an input array, or
   when another variable with the same buffer is read in the loop or after
@@ -1328,10 +1338,11 @@ iex> M.snapshot(1)
 
 Here `a` is copied at the write, because `b` is read after it; without the
 `b[0]`, there is no copy. The test of "read after" is by variable name
-through the rest of the block, and for a loop or branch, everything its whole
-statement reads: it is conservative, so a kernel may copy where Elixir would
-not have to (for example when `b` is read only in the other branch of an
-`if`). Copies are not reported; `Mod.__defk_c_source__/0` shows them as
+through the rest of the block, and for a loop, everything its whole
+statement reads; a branch of an `if`, `cond` or `case` leaves out what the
+other branches read, since only one of them runs. It is conservative, so a
+kernel may copy where Elixir would not have to (for example when `b` is read
+earlier in the loop body than the write, which is not a read after it). Copies are not reported; `Mod.__defk_c_source__/0` shows them as
 `defk_copy_*` calls. Like `alloc`, every copy lives until the kernel returns.
 
 ### Returning

@@ -75,8 +75,11 @@
 # copy_back(out, ...); ...)`), copies the whole output buffer on every
 # element and keeps every copy until the kernel returns: 47 ms instead of
 # 0.1 ms at 64 KB, and the BEAM was SIGKILLed (exit 137, out of memory) at 4
-# MB. The kernels below call both helpers unconditionally at the top of the
-# loop body (a zero length when an element has no literal or no match).
+# MB. Fixed in defk-33b: a read in another branch is no longer taken for a
+# read after the call, so the helper in a branch writes in place too. The
+# kernels below still call both helpers unconditionally at the top of the
+# loop body (a zero length when an element has no literal or no match), the
+# workaround from before the fix, which costs nothing.
 #
 # Elixir baseline: optimised. There is no pure-Elixir LZ4 or Snappy decoder
 # on Hex worth using; three versions per format were written and measured.
@@ -242,8 +245,8 @@ defmodule LzSnappy.Kernels do
         if t != 0 and (off == 0 or off > op),
           do: raise(ArgumentError, "snappy: copy offset out of range")
 
-        # both helpers on every element (one of the lengths is 0), never in a
-        # branch: see defk-33b in the header
+        # both helpers on every element (one of the lengths is 0): the
+        # workaround for defk-33b (fixed), see the header
         out = copy_lit(out, op, src, s, lit)
         out = copy_back(out, op + lit, off, ln - lit)
         nip = s + lit
