@@ -72,8 +72,8 @@
 # or a 1 ms sleep before the call did not spread them.
 #
 # Result at 234k words: the best Elixir (Myers in 12 chunks) 3.9-4.2 ms,
-# the best defk (Myers in 12 chunks) 4.3-4.6 ms: 0.86-0.99x, poor (a 1.0x
-# run reads as marginal, defk-9p6.24; either way: use Elixir). This
+# the best defk (Myers in 12 chunks) 4.3-4.6 ms: 0.86-0.99x, poor (from
+# 0.95x it reads marginal, the tie band of defk-9p6.24; either way: use Elixir). This
 # follows geo_nearest's rule (the verdict is the fastest each side can
 # answer one query). In one process, the CPU cost of a query, the kernel is
 # 2.4-2.8x (16-18 vs 6.6 ms), at every size from 1k to 234k; the script prints

@@ -82,8 +82,9 @@
 #   hex, 1 MB       Elixir 2.55-2.59 ms  defk 1.25-1.28 ms  2.02-2.04x  good
 #                   (encode 1.5x over :binary.encode_hex, decode 2.5x over
 #                   :binary.decode_hex); sweep 1.74-2.05x. At the 2x line:
-#                   a slower run would read marginal, and for encoding alone
-#                   the BIF is the recommendation.
+#                   the 5% tie band (good from 1.9x) keeps a slower
+#                   run good, and for encoding alone the BIF is the
+#                   recommendation.
 #   base58, 10k     Elixir 12.7-13.2 ms  defk 4.8-5.1 ms    2.59-2.68x  good
 #   keys per call   (kernel encode 1.9 ms, decode 2.3 ms). One key per call:
 #                   Elixir 0.94 us, defk 1.04 us per round trip, so a
@@ -931,11 +932,7 @@ r58 =
       "bignum base58 in Elixir against limb arithmetic in a kernel, batched; one key per call is no faster than Elixir"
   )
 
-# hex sits on the 2x line (2.0-2.05x measured), so a marginal run is not a failure;
-# the recommendation for hex is the BIF either way (see the header)
-for r <- [r16, r58],
-    not r.correct or
-      (r.verdict != r.expected and not (r.example == "codecs_hex" and r.verdict == :marginal)) do
+for r <- [r16, r58], not r.correct or r.verdict != r.expected do
   IO.puts("#{r.example}: verdict #{r.verdict}, expected #{r.expected}, correct #{r.correct}")
   System.halt(1)
 end
