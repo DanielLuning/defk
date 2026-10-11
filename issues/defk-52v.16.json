@@ -5,7 +5,9 @@
   "created": "2026-10-11T12:43:04Z",
   "description": "Found by defk-52v.3 (examples/lz4_snappy_decode.exs). An LZ4/Snappy decoder is copies: literals from the input and matches from earlier output. In the kernel subset the only way to write is out[i] = v per byte, so the copy helpers load 8 bytes with u64_le and store them with 8 byte writes; each store keeps a bounds check and an overflow check on o + i (disassembly: adds/b.vs, cmp/b.hs, strb per byte; clang does not merge the stores). liblz4 and snappy copy 8-16 bytes per instruction pair (wildcopy). Measured under load: the kernels are 2-7x slower than -O2/-O3 builds of the reference libraries and than lz4_flex; per element the kernel spends ~13 ns where liblz4 spends ~2 ns.\n\nOptions (pick one or both):\n(a) word stores mirroring defk-n4r.2: out = put_u64_le(out, i, w) (and 32/16, _be), one check for i..i+7, Elixir mode as binary_part + \u003c\u003cw::little-64\u003e\u003e splice.\n(b) a bounded copy builtin with the LZ meaning: out = copy(out, at, src, from, n) for distinct arrays (memcpy, one check of both ranges), and out = copy_back(out, at, off, n) with the forward byte-by-byte meaning when off \u003c n (memmove is NOT that meaning; do 8-byte steps when off \u003e= 8, a pattern fill when off \u003c 8). Elixir mode: binary_part/:binary.copy as the example's Elixir decoder does.\n\nDone when: lz4_snappy_decode.exs uses the new form, its copy loops have no per-byte checks in the fast-path report, the result agrees with Elixir mode on the corpus and fuzz, and the speed against the optimised NIF builds is re-measured.",
   "id": "defk-52v.16",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-52v",
   "priority": 3,
   "status": "open",
