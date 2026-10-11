@@ -74,7 +74,8 @@ defmodule Defk.Clauses do
   defp head?(k), do: Map.get(k, :head?, false)
 
   # {name, arity} of a head or clause, or nil
-  defp key(head) do
+  @doc false
+  def key(head) do
     case call(head) do
       {name, _, args} when is_atom(name) and is_list(args) -> {name, length(args)}
       {name, _, ctx} when is_atom(name) and is_atom(ctx) -> {name, 0}

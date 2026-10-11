@@ -131,12 +131,6 @@
 # which is byte-at-a-time and blocks its scheduler. Whether that is worth
 # native code depends on how much of an app's WebSocket traffic is in large
 # frames.
-#
-# Limitation found: `@impl true` written before a `defk` attaches to the
-# first function defk generates (`__defk_load__/0`), not to the kernel, so
-# Elixir warns "got @impl true for __defk_load__/0 but no behaviour specifies
-# such callback". The kernel does satisfy the behaviour; the script leaves
-# the annotation out.
 
 Mix.install([
   {:defk, path: Path.expand("..", __DIR__)},
@@ -161,6 +155,7 @@ defmodule Ws.Defk do
   # arithmetic, so clang turns the loop into vector loads, XORs and stores;
   # the 0..3 trailing bytes take their key byte by position. The mask range
   # check mirrors Bandit's guard (`mask >= 0 and mask <= 0xFFFFFFFF`).
+  @impl true
   defk ws_mask(payload :: [u8], mask :: i64) :: [u8] do
     if mask < 0 or mask > 0xFFFFFFFF do
       raise ArgumentError, "mask must be a 32-bit unsigned integer"
