@@ -488,6 +488,34 @@ Each is from one example; numbers as in the source.
 In `gorilla_encode` a word buffer and two passes were within 5% of the
 appended-bitstring baseline: no gain.
 
+### 2.14 BLAKE2b in Elixir: halves give 10x; BLAKE3's 32-bit words need no trick
+
+The 2.4 rule again, on a 64-bit hash with 12 unrolled rounds: two 32-bit
+halves per word, with the carry of each add taken by hand, beat 64-bit
+words by 10x. BLAKE3 is all 32-bit, so a plain unrolled Elixir version is
+already in small integers, and the kernel's lead is 3x smaller.
+
+- **Numbers:** BLAKE2b-512 of 64 KB: Hex `blake2` 1.0.4 (lists,
+  `Tuple.insert_at`) 31-67 ms; 64-bit words, unrolled 14.4-14.6 ms; 32-bit
+  halves, unrolled 1.37-1.43 ms (46 MB/s). BLAKE3 of 64 KB: Hex `b3` 0.2.1
+  0.60-0.63 ms; one pass without structs, CV stack as a list 0.56-0.58 ms
+  (5-10%, the only gain over b3). Kernel over the best Elixir: BLAKE2b
+  31.8-32.7x at 64 KB (21-22x at 1 KB, 32.5-33.3x at 64 MB), BLAKE3
+  10.6-10.9x (8-9x at 1 KB, 10.1x at 64 MB).
+- **Conditions:** best of 5-9 interleaved rounds, under load (load averages 13-135).
+- **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs), `defk-52v.2`.
+- **Status:** provisional.
+
+```elixir
+# fast: a 64-bit add on halves, then rotr 24 across the halves
+t = al + bl + xl
+ah = band(ah + bh + xh + bsr(t, 32), 0xFFFFFFFF)
+al = band(t, 0xFFFFFFFF)
+bh = band(bsr(th, 24) + bsl(tl, 8), 0xFFFFFFFF)   # th, tl: b ^ c
+# slow: one word, a bignum above 2^59
+a = band(a + b + x, 0xFFFFFFFFFFFFFFFF)
+```
+
 ---
 
 ## 3. BIFs and OTP libraries that are already native
@@ -609,6 +637,20 @@ defp key(k, n), do: key(<<k::binary, k::binary>>, n)
 - **Conditions:** matmul and fft load not recorded; cosine under load.
 - **Source:** [`matmul.exs`](https://github.com/DanielLuning/defk/blob/main/examples/matmul.exs), [`fft.exs`](https://github.com/DanielLuning/defk/blob/main/examples/fft.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), `defk-9p6.3`, `defk-9p6.13`, [`nx-boundary.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nx-boundary.md).
 - **Status:** measured (matmul, fft); provisional (cosine). EXLA matmul not measured yet (`defk-7tk`).
+
+### 3.9 `:crypto` has BLAKE2b; a from-scratch kernel only ties it
+
+`:crypto.hash(:blake2b, m)` (BLAKE2b-512) and `:blake2s` are in OTP's
+`:crypto` when OpenSSL has them (`:crypto.supports(:hashs)`). It is the
+Elixir answer for BLAKE2b; BLAKE3 is not in OpenSSL.
+
+- **Numbers:** BLAKE2b-512, 64 KB: `:crypto` 0.050-0.064 ms, kernel
+  0.042-0.049 ms, blake2_elixir (reference C) 0.043-0.046 ms. 64 MB:
+  `:crypto` 50.1-56.2 ms, kernel 43.2-48.3 ms. The kernel is 1.16-1.19x
+  (marginal; 1.0x at 1 KB).
+- **Conditions:** under load (load averages 13-135).
+- **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs), `defk-52v.2`.
+- **Status:** provisional.
 
 ---
 
@@ -1085,6 +1127,30 @@ out[o] = @b64[band(bsr(x, 18), 63)]
 - **Source:** `defk-j5n` comment 2026-10-08, `defk-6g6` comment 2026-10-09.
 - **Status:** measured.
 
+### 6.14 32-bit rotates: write `rotr(x, n, 32)`; unroll rounds with literal word names
+
+Since `defk-52v.2` the runtime rotates a 32-bit field as a `uint32_t`, so
+`rotr(x, n, 32)` with a literal `n` compiles to one `ror w`. The masked
+spelling `band(bsr(x, n) + bsl(x, 32 - n), 0xFFFFFFFF)` is checked-free but
+clang gives it a shift and a bit-field insert on a 64-bit register. For
+64-bit words `rotr64/2` is already one `ror`.
+
+- **Numbers:** BLAKE3 of 64 KB: masked spelling 79-80 us; `rotr(x, n, 32)`
+  before the runtime change 95-98 us; after it 54-55 us, level with the
+  portable C (52 us at 64 KB, 54.9-55.1 ms at 64 MB, against the kernel's
+  54.9-59.7 ms). BLAKE2b: rounds unrolled with the message words as 16
+  locals 43 us at 64 KB; a round loop reading SIGMA from a binary attribute
+  into an `[i64]` of words 48-49 us (12% slower).
+- **Conditions:** under load; Apple clang; portable C built from the blake3
+  crate 1.3.3's `c/` directory with `-O3 -DBLAKE3_USE_NEON=0`.
+- **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs) (header), `defk-52v.2`.
+- **Status:** provisional. The other 32-bit hashes (`hash_chain.exs` SHA-256 uses the masked spelling) were not re-measured.
+
+```elixir
+d = rotr(bxor(d, a), 16, 32)                               # one ror
+d = band(bsr(t, 16) + bsl(t, 16), 0xFFFFFFFF)              # lsl + bfxil
+```
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -1155,6 +1221,19 @@ normal schedulers instead ([`beam-nifs.md`](https://github.com/DanielLuning/defk
   kernel at 100-point blocks.
 - **Conditions:** 1BRC under load (load average ~21), best of 3; Rust 1.94.1, rustler 0.37.4.
 - **Source:** [`one_brc/rustler.exs`](https://github.com/DanielLuning/defk/blob/main/examples/one_brc/rustler.exs), `defk-n4r.8`, [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs).
+- **Status:** provisional.
+
+### 7.5 BLAKE3's NEON build beats a portable kernel; reference-C BLAKE2b ties it
+
+- **Numbers:** BLAKE3, 64 KB / 64 MB: blake3 1.0.2 (Rust blake3 1.3.3,
+  NEON on aarch64 by default) 0.033-0.036 ms / 33.7-34.3 ms, kernel
+  0.054-0.059 ms / 54.9-59.7 ms (0.6x). BLAKE2b: blake2_elixir 0.9.0 (the
+  BLAKE2 reference C, -O3) 0.043-0.046 ms / 44.4-47.8 ms, kernel 1.0x. Both
+  NIFs run on a normal scheduler and block it for the whole call: tick gaps
+  of 45-49 ms (BLAKE2b) and 34-37 ms (BLAKE3) on a 64 MB hash, against
+  2.1-2.7 ms for the kernels.
+- **Conditions:** under load (load averages 13-135).
+- **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs), `defk-52v.2`.
 - **Status:** provisional.
 
 ---

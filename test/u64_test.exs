@@ -630,6 +630,14 @@ defmodule Defk.U64Test do
       for n <- ns, do: same_as_bits(:rotr3, :rotr, [x, n, w])
     end
 
+    # 32-bit fields rotate as a uint32_t in the runtime (one ror): patterns
+    # whose rotation moves bits across both ends
+    for x <- [0x80000001, 0x12345678, 0xDEADBEEF], n <- ns do
+      same_as_bits(:rotl3, :rotl, [x, n, 32])
+      same_as_bits(:rotr3, :rotr, [x, n, 32])
+      agrees(:rotr3_i, [x, n, 32])
+    end
+
     # an i64 x: negative raises ArgumentError; rotl/rotr of an i64 give an
     # i64, checked, so a 64-bit rotation past 2^63 - 1 raises
     for x <- @i64s, w <- ws do
