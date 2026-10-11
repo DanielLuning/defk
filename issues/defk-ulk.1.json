@@ -4,7 +4,6 @@
   "blocks": [
     "defk-ulk.2",
     "defk-ulk.3",
-    "defk-ulk.4",
     "defk-ulk.5"
   ],
   "created": "2026-10-10T14:54:35Z",
@@ -24,5 +23,5 @@
   "status": "in_progress",
   "title": "Research: vectorisation headroom and what target levels buy",
   "type": "task",
-  "updated_at": "2026-10-11T13:01:35Z"
+  "updated_at": "2026-10-11T13:09:08Z"
 }

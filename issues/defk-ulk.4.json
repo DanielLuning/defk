@@ -1,8 +1,6 @@
 {
   "assignee": "",
-  "blocked_by": [
-    "defk-ulk.1"
-  ],
+  "blocked_by": [],
   "blocks": [
     "defk-ulk.7"
   ],
@@ -17,5 +15,5 @@
   "status": "open",
   "title": "Prototype: hardware-instruction builtins with exact meanings (crc32c first)",
   "type": "task",
-  "updated_at": "2026-10-10T14:54:44Z"
+  "updated_at": "2026-10-11T13:09:08Z"
 }
