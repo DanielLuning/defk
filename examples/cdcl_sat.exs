@@ -157,9 +157,10 @@
 #     call); the kernels keep the workaround they were measured with: every
 #     helper is called on every step with an "active" flag (empty loop
 #     ranges and guarded writes when inactive).
-#     An array passed as a loop's initial value must not also be read in the
-#     loop's range or init (st[@h_n] in 0..st[@h_n]): that copies it too, so
-#     those reads go to a local first.
+#     An array passed as a loop's initial value and also read in the loop's
+#     range (st[@h_n] in 0..st[@h_n]) was copied too, so the kernels read
+#     those bounds into a local first; fixed in defk-8tw (the range and init
+#     are evaluated before the first iteration), the locals are kept.
 #   - An array cannot be the value of an if, also inside a for reduce
 #     body's tuple: a branch gives numbers ({dp, dk}) and the tuple with
 #     the array is built after it.
