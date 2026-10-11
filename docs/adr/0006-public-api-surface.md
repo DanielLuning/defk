@@ -94,7 +94,7 @@ above.
 | `config :defk, mode: :native \| :elixir` | documented (README, `language.md`, `ElixirMode`) | 12 examples' docs, tests | **public** | `:dev`/`:test` only, read at compile time |
 | `CC` environment variable | documented (README, `language.md`, compile error hint) | builds | **public** | the elixir_make convention |
 | `ERTS_INCLUDE_DIR` environment variable | documented (README, `language.md`) | cross builds | **public** | the elixir_make convention |
-| Build output `_build/<env>/defk/<Module>-<key>.{c,so}` | documented (`language.md`, README) | `release_debian` workaround | **unstable** | moves with `defk-n8f` (ship `.so` in releases) |
+| Build output `_build/<env>/defk/<Module>-<key>.{c,so}`, and an app module's copy in `ebin/<Module>-<key>.so` (added by `defk-n8f`, after this ADR) | documented (`language.md`, `deploying.md`) | `release_debian` | **unstable** | an app module loads its library from its app's `ebin/` (ships in `mix release`); the paths may move |
 | `DEFK_SLICE_US`, `DEFK_STRIP` (C macros) | named in `language.md`, `Defk.Report` | runtime header | **hidden** | names for explanation, not settings a user can change |
 | Module attributes `@defk_kernels`, `@defk_mode`, `@defk_elixir_mode`, `@defk_report` | undocumented | `use Defk` | **hidden** (reserved prefix) | a user `@defk_*` attribute can clash; document the prefix as reserved |
 

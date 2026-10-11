@@ -4,8 +4,9 @@
 #   podman build -f examples/release_debian/Dockerfile -t defk-release-debian .
 #   podman run --rm defk-release-debian
 #
-# See README.md for what had to be added, what it costs, and why the runtime
-# stage copies a path out of _build.
+# See README.md for what had to be added and what it costs. The kernel
+# libraries ship inside the release (each app's ebin/, defk-n8f), so the
+# runtime stage copies the release and nothing else.
 ARG BUILDER_IMAGE=hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713-slim
 ARG RUNNER_IMAGE=debian:trixie-20260713-slim
 
@@ -20,6 +21,8 @@ RUN if [ -n "$BUILD_PKGS" ]; then \
     fi
 
 ENV MIX_ENV=prod
+# defk's mix.exs lists Hex dev/test deps; Mix needs Hex to read it.
+RUN mix local.hex --force
 # The app uses defk as a path dep ("../.."), so keep the repo layout.
 WORKDIR /src/defk
 COPY mix.exs ./
@@ -42,15 +45,5 @@ ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 
 WORKDIR /app
 COPY --from=build /src/defk/examples/release_debian/_build/prod/rel/release_debian ./
-
-# Workaround: the kernel's .so is not in the release. Defk.Build writes it to
-# _build/<env>/defk/ and the module loads it from that absolute build path, so
-# it must exist at the same path at runtime. Set COPY_SO=0 to see the failure.
-ARG COPY_SO=1
-COPY --from=build /src/defk/examples/release_debian/_build/prod/defk /tmp/defk-so
-RUN if [ "$COPY_SO" = 1 ]; then \
-      mkdir -p /src/defk/examples/release_debian/_build/prod \
-      && mv /tmp/defk-so /src/defk/examples/release_debian/_build/prod/defk; \
-    else rm -rf /tmp/defk-so; fi
 
 CMD ["bin/release_debian", "eval", "IO.inspect(ReleaseDebian.check())"]

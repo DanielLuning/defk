@@ -9,8 +9,11 @@ image, and the kernel is called from the release.
 # from the defk repo root (podman or docker)
 podman build -f examples/release_debian/Dockerfile -t defk-release-debian .
 podman run --rm defk-release-debian
-# %{kernel: 333833500.0, elixir: 333833500.0, agree: true, lib: "/src/defk/.../Elixir.ReleaseDebian-3f0d203f78.so"}
+# %{kernel: 333833500.0, elixir: 333833500.0, lib: "/app/lib/release_debian-0.1.0/ebin/Elixir.ReleaseDebian-7e87eb8f86.so", agree: true}
 ```
+
+The kernel's library ships inside the release, in the app's `ebin/` (see
+finding 1), so the runtime stage copies the release and nothing else.
 
 Recorded 2026-10-07 on an Apple-silicon Mac, podman 5 (applehv VM, linux/arm64).
 Builder: `hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713-slim`
@@ -56,23 +59,26 @@ first build).
 
 ## Findings for the verdict
 
-1. **The kernel `.so` is not part of the release.** `Defk.Build` writes it to
-   `_build/<env>/defk/` and the generated `__defk_load__` loads that absolute
-   build path. `mix release` copies `ebin/` and `priv/`, not `_build/<env>/defk`.
-   - A same-stage release works only because the build path still exists.
-   - In a multi-stage image without it (`--build-arg COPY_SO=0`),
-     `bin/release_debian start` crashes at boot: `Kernel pid terminated
-     (application_controller) ... on_load_function_failed,'Elixir.ReleaseDebian',
-     ... Failed to load NIF library: '/src/defk/examples/release_debian/_build/prod/defk/Elixir.ReleaseDebian-3f0d203f78.so: cannot open shared object file'`.
-     `eval` logs the same error and then `ReleaseDebian.check/0 is undefined`.
-   - The Dockerfile works around this by copying `_build/prod/defk` to the same
-     absolute path in the runtime image. This is a workaround, not a contract.
-     A release is not relocatable until defk puts the `.so` under the app's
-     `priv/` and loads it via `:code.priv_dir/1`, as elixir_make packages do.
-     This belongs under Limitations, or as a fix before the verdict.
+1. **The kernel `.so` was not part of the release (fixed by defk-n8f).**
+   `Defk.Build` wrote it to `_build/<env>/defk/` and the generated
+   `__defk_load__` loaded that absolute build path, which `mix release` does
+   not copy. In a multi-stage image without it, `bin/release_debian start`
+   crashed at boot (`on_load_function_failed ... cannot open shared object
+   file`), and the Dockerfile copied `_build/prod/defk` to the same absolute
+   path in the runtime image as a workaround.
+   - Now a module of a Mix app gets a copy of its library in the app's
+     `ebin/`, beside its `.beam`, and loads it from
+     `:code.lib_dir(app)/ebin` when it loads. `mix release` copies `ebin/`,
+     so the library is in the release (`lib/release_debian-0.1.0/ebin/`),
+     and a release copied to another path still loads it.
+   - Verified 2026-10-11 with podman 5 (linux/arm64): the image built without
+     the copy runs `eval` and `start` (`daemon` + `rpc`), also from a copy of
+     the release at another path, with no `_build` or `/src` in the image.
 2. **Every app depending on defk compiles defk's example kernels.**
    `lib/examples.ex` (`Examples.Kernels`) is in the library's `lib/`, so the
    app builds and ships it too: 0.36 s of `cc` and about 75 KB of `.so`.
+   (No longer so: the example kernels now compile only in `:dev` and
+   `:test`, from `test/support/`; the 2026-10-11 build ships one `.so`.)
 3. **gcc warnings are hidden.** gcc 14 warns about unused variables and helpers
    in the generated C. defk discards compiler output on success, so the build
    log stays clean. This isn't a problem, but `-Wall` output on Linux differs
@@ -80,3 +86,7 @@ first build).
 4. Cross-compiling (for example, building on macOS for a Linux runner) wasn't
    tried. The `.so` is built for the builder's architecture (here
    linux/arm64), so builder and runner must match, as with any NIF.
+5. **The builder needs Hex.** defk's `mix.exs` lists Hex dev/test deps, and
+   Mix needs Hex to read it even when they are skipped, so the build stage
+   runs `mix local.hex --force` (without it: `Could not find an SCM for
+   dependency :ex_slop`).

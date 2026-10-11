@@ -119,7 +119,6 @@ yet" in the compile error.
 - Turning a crash inside a kernel's native code (which would be a defk bug)
   into an exception in the calling process instead of a node crash; today
   such a crash takes the node down, as any NIF crash does (defk-7dm).
-- Kernel `.so` files shipped inside `mix release` (defk-n8f).
 - A Hex release, which waits for the project's verdict (defk-sgw.5,
   defk-djy.8).
 
