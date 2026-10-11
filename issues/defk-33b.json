@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-11T12:43:04Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "[BUG] A helper kernel that writes and returns an array, called in one branch of a loop body whose other branch reads the array, copies the whole array every iteration and keeps every copy",
   "type": "bug",
-  "updated_at": "2026-10-11T13:09:08Z"
+  "updated_at": "2026-10-11T13:09:16Z"
 }
