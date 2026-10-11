@@ -335,12 +335,7 @@ defmodule Defk do
     # a helper (a kernel taking a bitstring) is only inlined: no function
     sigs = Enum.reject(all_sigs, &Defk.Bitstring.helper?/1)
 
-    {wrapped, plain} = Enum.split_with(sigs, &(&1.name in bits or &1.yields))
-
-    stubs =
-      if elixir?,
-        do: native_stubs(sigs) ++ dispatch_defs(sigs, mode),
-        else: render_stubs(plain) ++ native_stubs(wrapped) ++ wrappers(wrapped)
+    stubs = kernel_defs(sigs, elixir?, mode, bits)
 
     elixir_mode =
       if elixir?, do: Defk.ElixirMode.definitions(kernels, all_sigs, env.file), else: []
@@ -369,6 +364,16 @@ defmodule Defk do
       unquote_splicing(stubs)
       unquote_splicing(elixir_mode)
     end
+  end
+
+  # Each kernel's function: the NIF itself (a stub it replaces), or an Elixir
+  # function calling the renamed NIF (Elixir mode, a bitstring result, the
+  # run-queue hint)
+  defp kernel_defs(sigs, true, mode, _bits), do: native_stubs(sigs) ++ dispatch_defs(sigs, mode)
+
+  defp kernel_defs(sigs, false, _mode, bits) do
+    {wrapped, plain} = Enum.split_with(sigs, &(&1.name in bits or &1.yields))
+    render_stubs(plain) ++ native_stubs(wrapped) ++ wrappers(wrapped)
   end
 
   # `__defk_corrupt_tags__/1` deliberately breaks the frame-tag check, so it
