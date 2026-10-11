@@ -105,9 +105,13 @@ defmodule Defk.Build do
     tag = @remark_flags |> :erlang.md5() |> Base.encode16(case: :lower) |> binary_part(0, 6)
     cached = "#{base}-#{tag}.remarks"
 
-    with {:error, _} <- File.read(cached),
+    # A cached file with no remark line in it is a torn or empty write, never
+    # a real result (the runtime header alone always gives loop remarks): it
+    # is a miss. A fresh pass is written atomically (temp file, then rename),
+    # so a reader in another VM, or a killed writer, never leaves one behind.
+    with {:error, _} <- cached_remarks(cached),
          {:ok, out} <- remark_pass(src, base) do
-      File.write!(cached, out)
+      if String.contains?(out, ": remark: "), do: write_atomic!(cached, out)
       {:ok, parse_remarks(out)}
     else
       {:ok, out} -> {:ok, parse_remarks(out)}
@@ -115,10 +119,23 @@ defmodule Defk.Build do
     end
   end
 
+  defp cached_remarks(path) do
+    case File.read(path) do
+      {:ok, out} -> if String.contains?(out, ": remark: "), do: {:ok, out}, else: {:error, ""}
+      error -> error
+    end
+  end
+
+  defp write_atomic!(path, data) do
+    tmp = "#{path}.#{System.pid()}.#{System.unique_integer([:positive])}.tmp"
+    File.write!(tmp, data)
+    File.rename!(tmp, path)
+  end
+
   defp remark_pass(src, base) do
     c = base <> ".c"
     File.exists?(c) || File.write!(c, src)
-    obj = "#{base}-remarks-#{System.unique_integer([:positive])}.o"
+    obj = "#{base}-remarks-#{System.pid()}-#{System.unique_integer([:positive])}.o"
 
     args =
       (@cflags -- ["-shared"]) ++
