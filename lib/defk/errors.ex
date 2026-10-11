@@ -178,7 +178,7 @@ defmodule Defk.Errors do
       summary:
         "A clause parameter is an integer literal (i64), true/false (bool), a variable or _, each variable once, with an optional guard.",
       why:
-        "the clauses compile to a case over the parameters, which matches single i64 and bool values; a function head has no variables to pin",
+        "the clauses compile to a case over the parameters, which matches single i64 and bool values: a kernel has no binaries, lists or maps to take apart in a head, and a function head has no variables to pin",
       hint: "match a literal, a variable or _, and test the rest in the guard",
       example: "defk f(x :: i64, y :: i64) :: i64\ndefk f(x, x), do: 0\ndefk f(x, y), do: x - y",
       rewrite:
