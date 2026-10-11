@@ -519,6 +519,7 @@ already in small integers, and the kernel's lead is 3x smaller.
 - **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs), `defk-52v.2`.
 - **Status:** provisional.
 
+<!-- defk-example skip: a fragment, one step of the BLAKE2b G function on 32-bit halves -->
 ```elixir
 # fast: a 64-bit add on halves, then rotr 24 across the halves
 t = al + bl + xl
@@ -1175,6 +1176,7 @@ clang gives it a shift and a bit-field insert on a 64-bit register. For
 - **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs) (header), `defk-52v.2`.
 - **Status:** provisional. The other 32-bit hashes (`hash_chain.exs` SHA-256 uses the masked spelling) were not re-measured.
 
+<!-- defk-example skip: kernel-subset code (rotr/3 builtin), two spellings of one kernel line -->
 ```elixir
 d = rotr(bxor(d, a), 16, 32)                               # one ror
 d = band(bsr(t, 16) + bsl(t, 16), 0xFFFFFFFF)              # lsl + bfxil
