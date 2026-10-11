@@ -11,5 +11,5 @@
   "status": "open",
   "title": "Word stores and a bounded array copy builtin, so a byte decoder does not pay a bounds and overflow check per byte",
   "type": "task",
-  "updated_at": "2026-10-11T12:43:04Z"
+  "updated_at": "2026-10-11T14:48:20Z"
 }
