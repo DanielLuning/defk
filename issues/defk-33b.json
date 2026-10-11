@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Memory bound for copies split out to defk-4b2 (not done here): every copy/alloc is an owned slot kept until return, so a per-iteration copy that remains legitimate still grows without bound; options and reasoning in the ticket.",
+      "timestamp": "2026-10-11T13:22:37Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "[BUG] A helper kernel that writes and returns an array, called in one branch of a loop body whose other branch reads the array, copies the whole array every iteration and keeps every copy",
   "type": "bug",
-  "updated_at": "2026-10-11T13:09:16Z"
+  "updated_at": "2026-10-11T13:22:37Z"
 }
