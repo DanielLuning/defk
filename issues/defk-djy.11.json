@@ -4,6 +4,7 @@
   "blocks": [
     "defk-djy.3"
   ],
+  "closed_at": "2026-10-11T12:01:25Z",
   "created": "2026-10-11T11:54:08Z",
   "description": "Code changes from the accepted ADR-0006 (docs/adr/0006-public-api-surface.md, 'Questions decided'), done before the API docs (defk-djy.3):\n- Generated __defk_*__ functions get @doc false in the user's module (Q1); they are documented once in the Defk moduledoc by defk-djy.3.\n- Generate __defk_corrupt_tags__/1 only under MIX_ENV=test; __defk_force_yields__/1 stays everywhere (Q2).\n- Defk.Case stays hidden and is dropped from the mix.exs Testing group; fix mix.exs groups_for_modules to match the ADR tiers (Defk.ElixirMode is public, not Internals) (Q4).\n- Hide Defk.Errors.reference/0 and scope/1 (@doc false) and move the regeneration instructions from docs/scope.md (a HexDocs page) to a contributor note (Q5).\n- Rename __defk_source__/0 to __defk_c_source__/0 (Q7) and Defk.Test.reason/1 to Defk.Test.agreement_reason/1 (Q8), updating every caller, test, example and doc.\nDone when mix ci passes (except the known ReportTest vectorisation failure if it is still there), no old name remains outside the ADR, and mix docs shows the ADR's module groups.",
   "id": "defk-djy.11",
@@ -12,8 +13,8 @@
   ],
   "parent": "defk-djy",
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Apply ADR-0006: visibility, test-only fault hook, renames",
   "type": "task",
-  "updated_at": "2026-10-11T11:54:18Z"
+  "updated_at": "2026-10-11T12:01:25Z"
 }
