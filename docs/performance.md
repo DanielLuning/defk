@@ -1440,7 +1440,8 @@ whose other branch reads the array, it copied the whole buffer on every
 iteration and kept every copy until the kernel returned (`defk-33b`).
 **Fixed in `defk-33b`:** the copy analysis no longer counts a read in
 another branch of an `if`, `cond` or `case` as a read after the call, so the
-helper in a branch writes in place, like the hoisted call. The numbers below
+helper in a branch writes in place, like the hoisted call; since `defk-tif`
+also when the branch's condition reads the array (6.24). The numbers below
 for the helper in a branch are from before the fix; the decoders keep the
 hoisted calls, which still cost nothing.
 
@@ -1747,15 +1748,20 @@ Under the rule that a helper returns every array it writes (`defk-n4r.4`),
 a CDCL solver keeps all of its tables in one `[i64]`, with the offsets in a
 header whose slots are module attributes (`st[st[@o_lval] + l]`), so each
 helper is `st = helper(st, ...)`. Two copy traps cost the whole state per
-step until they were removed: a helper called in one branch of an
-`Enum.reduce_while` fn whose other tail returns the accumulator copies it
-on every iteration (`defk-tif`; the first kernel took 1.9 s instead of
-1 ms at n = 100), and so does a nested loop whose initial accumulator is the
-array when the loop sits in such a branch, or when its range or init also
-reads the array (`0..st[@h_n]`). The fix: call restart, propagate, analyze,
-backjump, learn and decide on every step with an active flag (empty ranges
-and guarded writes when inactive), branch only on the tail, and read range
-bounds into locals first. `Mod.__defk_c_source__/0` shows the copies as
+step: a helper called in one branch of an `Enum.reduce_while` fn whose
+condition reads the accumulator (`if st[...] ..., do: {:halt, st}, else:
+(st = helper(st); {:cont, st})`) copied it on every iteration (the first
+kernel took 1.9 s instead of 1 ms at n = 100), and so did a nested loop
+whose initial accumulator is the array when the loop sat in such a branch.
+**Fixed in `defk-tif`:** the condition, `case` subject and clause heads that
+chose a branch ran before it, so they no longer count as reads after the
+call (the ticket first blamed the other branch's `{:halt, st}` tail, which
+was never counted). Still a trap: a nested loop whose range or init also
+reads the array (`0..st[@h_n]`) copies it; read range bounds into locals
+first. The example keeps its workaround: restart, propagate, analyze,
+backjump, learn and decide are called on every step with an active flag
+(empty ranges and guarded writes when inactive), and only the tail
+branches. `Mod.__defk_c_source__/0` shows the copies as
 `defk_copy_i64`. Code size: every defk is also an entry point that inlines
 its callees, so the 14-kernel module is 2.35 MB of C and a 683 KB `.so`,
 about 3 minutes of clang at load 4 (6.20).

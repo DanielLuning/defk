@@ -148,13 +148,15 @@
 #     budget or arena gives status 2.
 #
 # Language notes (defk at the time of writing):
-#   - A helper called in one branch of an Enum.reduce_while fn copies the
-#     accumulator array every iteration when another branch's tail returns
-#     it (defk-tif, beyond defk-33b's fix). The first kernel did that and
-#     copied the whole solver state per step: 1.9 s instead of 1 ms at
-#     n = 100. Every helper is now called on every step with an "active"
-#     flag (empty loop ranges and guarded writes when inactive), and a
-#     nested loop whose init holds the accumulator is not put in a branch.
+#   - A helper called in one branch of an Enum.reduce_while fn whose
+#     condition read the accumulator array copied it every iteration (and
+#     so did a nested loop whose init holds it, in such a branch). The
+#     first kernel did that and copied the whole solver state per step:
+#     1.9 s instead of 1 ms at n = 100. Fixed in defk-tif (the condition
+#     that chose a branch ran before it, so it is not a read after the
+#     call); the kernels keep the workaround they were measured with: every
+#     helper is called on every step with an "active" flag (empty loop
+#     ranges and guarded writes when inactive).
 #     An array passed as a loop's initial value must not also be read in the
 #     loop's range or init (st[@h_n] in 0..st[@h_n]): that copies it too, so
 #     those reads go to a local first.
