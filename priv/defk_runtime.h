@@ -782,6 +782,9 @@ static inline uint64_t defk_rot_w(defk_ctx *ctx, const char *f, uint64_t x, int 
   int64_t m = ((n % w) + w) % w;
   uint64_t k = (uint64_t)(right && m ? w - m : m);
   if (k == 0) return x;
+  /* a 32-bit field rotates as a uint32_t, so clang emits one ror (the 64-bit
+     spelling below compiles to a shift and a bit-field insert) */
+  if (w == 32) return (uint32_t)(((uint32_t)x << k) | ((uint32_t)x >> (32 - k)));
   uint64_t mask = w == 64 ? ~UINT64_C(0) : (UINT64_C(1) << w) - 1;
   return ((x << k) | (x >> (w - k))) & mask;
 }
