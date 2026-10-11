@@ -458,6 +458,8 @@ Map.update(acc, name, {t, t, t, 1}, fn {mn, mx, s, c} -> {min(mn, t), max(mx, t)
 
 ### 2.12 Dense counters: `:atomics` plus one rebuild for big batches, sorted keys for small ones
 
+For counting bytes (a 256-bin histogram, per window or over a whole binary) see 2.16, "Counting bytes".
+
 - **Numbers:** fold hashes into a 16k-register HyperLogLog, ms at 100 / 1k /
   10k / 100k: anchor (bit-by-bit rank) 0.044 / 0.17 / 3.1 / 17-24; top-down
   rank 0.036 / 0.10 / 2.5 / 10.3; sorted integer keys + splice 0.019 / 0.058
@@ -563,6 +565,54 @@ else
 end
 # slow: a byte at a time
 bytes(<<out::binary, :binary.at(out, from)>>, from + 1, l - 1)
+```
+
+### 2.16 Counting bytes: 16-bit pairs into `:atomics`, eight per step; a kernel is still 6-12x faster
+
+A byte histogram (256 counts) or a histogram per window (entropy) is an
+indexed increment per byte, and Elixir's cheapest one is a BIF call:
+`:atomics.add/3`. Fewer calls is what helps: count 16-bit pairs into a
+65,536-slot `:atomics` (one call per two bytes) and fold the pairs into the
+256 bins once. The fold costs ~0.35 ms, so below ~512 KB count single bytes,
+eight per binary-pattern step. `:atomics` beats `:counters`, and anything
+that copies (a map, a tuple) or scans per value (`:binary.matches/2` 256
+times) loses. For windows, read and reset each bin with one
+`:atomics.exchange(a, i, 0)`. Split over the schedulers with a table per
+chunk and sum them; a shared `:counters` with `write_concurrency` is slower.
+No OTP BIF counts bytes.
+
+- **Numbers:** histogram of 16 MB, one process, ms: pairs into `:atomics`
+  43.0 (390 MB/s); `:atomics` 8 bytes per step 76-77, 1 byte 91-92;
+  `:counters` 8 bytes per step 103 (163 MB/s), 1 byte 114-115,
+  comprehension 123; at 1 MB (x16 for 16 MB) `Enum.frequencies` of
+  `bin_to_list` 136-169, `Map.update` 202, a 256-tuple with `setelement`
+  62-80, `:binary.matches/2` per value 24.7. In 12 chunks: pairs 8.7-9.0,
+  `:atomics` 8-byte 13.0-13.3, `:counters` 8-byte 15.9-17.7, one shared
+  `:counters` 25-26. Pairs against bytes, one process: 4 KB 0.38 / 0.024,
+  64 KB 0.98 / 0.30, 512 KB 2.34 / 2.32, 1 MB 3.8 / 4.7. Entropy of 4,096
+  windows of 4 KiB: `:counters` get + put 127-148, `:atomics` exchange
+  91-114, plus a tuple of per-count terms (no log per bin) 87-98; in 12
+  chunks 14.2-17. The kernel: 3.6-3.7 ms one call (4.6 GB/s), 1.40-1.62 ms
+  in 12 chunks (5.7-6.6x parallel vs parallel, 11.7-12.1x one process vs
+  one call, 22-26x at 4-64 KB); entropy 4.8 ms one call, 1.86-2.0 ms in 12
+  chunks (7.3-8.6x, 17.1-17.7x).
+- **Conditions:** 16 MB, half random bytes and half text; best of 5 in two
+  interleaved rounds; under load (load average 12-23 on 12 cores).
+- **Source:** [`byte_histogram.exs`](https://github.com/DanielLuning/defk/blob/main/examples/byte_histogram.exs), `defk-9p6.28`; the cold test that asked for it, `docs/cold-tests/hexdocs-entropy.md` (`defk-djy.9`).
+- **Status:** provisional.
+
+<!-- defk-example run: bin = :binary.copy(<<1, 2, 3>>, 6) -->
+```elixir
+# fast (from ~512 KB): 16-bit pairs, one :atomics.add per two bytes (unrolled 8 per step in the source)
+a = :atomics.new(65_536, signed: false)
+for <<pair::16 <- bin>>, do: :atomics.add(a, pair + 1, 1)
+# then fold slot i into bins (i >>> 8) + 1 and (i &&& 255) + 1 once
+# fast below ~512 KB: bytes, 8 per step
+c = :atomics.new(256, signed: false)
+for <<b <- bin>>, do: :atomics.add(c, b + 1, 1)
+# slow
+bin |> :binary.bin_to_list() |> Enum.frequencies()
+for <<b <- bin>>, reduce: %{}, do: (m -> Map.update(m, b, 1, &(&1 + 1)))
 ```
 
 ---
@@ -1247,6 +1297,36 @@ out = copy_lit(out, op, src, s, lit)
 out = copy_back(out, op + lit, off, ln - lit)
 # slow: the helper in one branch, the array read in the other
 if last, do: {:halt, {out, op}}, else: (out = copy_back(out, op, off, ml); {:cont, {out, op + ml}})
+```
+
+### 6.16 Counting into a table: four interleaved tables, and window bounds as `max`/`min`
+
+`h[b] = h[b] + 1` on consecutive equal bytes waits on its own previous
+store. Counting bytes `i`, `i + 1`, `i + 2`, `i + 3` into four 256-entry
+tables and summing them at the end breaks that chain. For a loop over one
+window of a buffer, write the bounds as `lo = max(k * w, 0)` and
+`hi = min(lo + w, len(data))` so the reads are proven in range.
+
+- **Numbers:** 16 MB histogram, one call: one table 5.8 ms, four tables
+  3.7 ms (1.6x). Entropy of 4 KiB windows: one table and a log per bin 7.8
+  ms, four tables 6.1, four tables and a table of per-count terms 4.7-4.8;
+  with the window range written `(k * w)..(k * w + w - 1)` every byte read
+  kept its bounds check (four tables 8.5 ms, with the term table 7.0).
+- **Conditions:** under load (load average 12-23).
+- **Source:** [`byte_histogram.exs`](https://github.com/DanielLuning/defk/blob/main/examples/byte_histogram.exs) (header), `defk-9p6.28`.
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code (alloc, array writes), not plain Elixir; the kernels are checked in the example -->
+```elixir
+# fast: four tables, proven window bounds
+lo = max(k * w, 0)
+hi = min(lo + w, len(data))
+for i <- lo..(hi - 4)//4 do
+  a = data[i]; b = data[i + 1]; c = data[i + 2]; d = data[i + 3]
+  h[a] = h[a] + 1; h[256 + b] = h[256 + b] + 1; h[512 + c] = h[512 + c] + 1; h[768 + d] = h[768 + d] + 1
+end
+# slow: one table, and a range the compiler cannot prove inside data
+for i <- (k * w)..(k * w + w - 1)//1, do: (b = data[i]; h[b] = h[b] + 1)
 ```
 
 ---
