@@ -1118,7 +1118,38 @@ formula and Crux's negation-encoding query in one CSR array; the blocking
 clauses are the output.
 
 - **Conditions:** load 3.5-7.7, four runs; Crux 0.1.4, picosat_elixir 0.2.3.
-- **Source:** [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs), `defk-52v.15`; the per-call guidance entry is `defk-9p6.25`.
+- **Source:** [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs), `defk-52v.15`; the per-call guidance is 5.11 (`defk-9p6.25`).
+- **Status:** provisional.
+
+### 5.11 A per-call SAT kernel: poor under ~12 variables, good from ~26, and batching still gains 2-4x
+
+The pre-registered guess for `defk-9p6.25` was that a kernel called once per
+solve, as a drop-in for simple_sat or picosat_elixir, would be marginal or
+poor because the call and the packing cost as much as an Ash-sized solve
+(the research's 31 us for packing). Measured, that held only for tiny
+formulas. Inside Crux's `satisfying_scenarios` with the kernel as the solver
+(`SatEx.solve/1`), against Crux on the faster of the DPLL sketch and the
+Elixir CDCL: 0.6-0.9x at 5-11 variables (the DPLL solves 5 variables in
+1.2 us, the kernel's pack + call + unpack is 1.8 us; a 1-clause formula
+0.5 us), 1.1-1.6x at 16, 2.4-2.8x at 26-28 (the Ash-sized case, 2.5-2.8x on
+two formulas, 20 enumerations each), 3.8-5.1x at 37-50, 4.3-5.0x at 109-166.
+The crossover to the 2x bar is between 16 and 26 variables. Against the NIF
+the kernel per call is 1.3-1.75x faster on one solve at 5-26 variables,
+2.5-3.9x at 50-166 (Crux + picosat 1.1-1.8x slower than Crux + the kernel
+above 11 variables), and 1.4x at n = 100-200 random 3-SAT on the seeds timed
+(picosat is stronger on others: 5.10, 7.9). The floor of a call is not the
+boundary (a kernel call on packed arguments is 0.4-0.7 us) but the Elixir
+side: building each query's clause list and packing it (0.05 us for one
+clause, 0.75 us at 10). The same enumeration in one kernel call is faster
+again: 1.9-3.8x over the kernel per call from 16 to 166 variables (1.4-3.4 us
+per solve against 2.5-9.4 at 5-37 variables; 11.7-19.8 against 29-45 at
+109-166), and 0.7-0.8x on a formula that needs only one solve (7-9 us of
+encoding and a larger state). So: per call is a fine drop-in from about 20
+variables up and no trap; below ~12 variables stay in Elixir; where one
+question makes several solves, batch it.
+
+- **Conditions:** load 3-7, three runs on an Apple M4 Pro; Crux 0.1.4, picosat_elixir 0.2.3; formulas are Ash-shaped, P = 1 to 20 policies (5 to 166 variables), best of 3-5 interleaved rounds.
+- **Source:** [`cdcl_sat_per_call.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat_per_call.exs) (tables 1-3 in its output), [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs), `defk-9p6.25`.
 - **Status:** provisional.
 
 ---
@@ -1955,6 +1986,7 @@ blocked scheduler) are what it adds.
 | Bit syntax beats shifts for splitting a bignum | 4.0 vs 3.3 ms | 2.5 |
 | Batching always beats one call per item | batching from a list of pairs was slower (18 vs 13 ms) | 5.4 |
 | Per-pair NIF calls are always too expensive | a quadratic DP per pair outweighs the call: 3.2-3.4x at 8-16 bytes | 5.4 |
+| A kernel per solve is marginal for SAT (the pre-registered guess) | 2.4-2.8x at 26-28 variables, 4-5x from 50; poor only under ~12 variables (0.6-0.9x) | 5.11 |
 | A hand-written NIF beats Elixir | ex_strsim 2.2x slower than Elixir Myers; bandit_native slower than the Elixir hybrid at 1 MiB | 7.2 |
 | Nx makes numerics fast | only with EXLA; `BinaryBackend` is slower than plain Elixir | 3.8 |
 | Parallel chunks always help | HLL fan-out 4.4 vs 3.3 ms; short kernel chunks stay on 2-3 schedulers | 4.5, 4.1 |
