@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Landed on branch defk-9p6.25/sat-per-call-guidance. examples/cdcl_sat_per_call.exs (loads cdcl_sat.exs's kernel via DEFK_SAT_LIB=1, no second compile; cdcl_sat.exs wraps its checks/reports in unless DEFK_SAT_LIB), README row, docs/performance.md 5.11. PRE-REGISTERED marginal/poor per call; MEASURED (M4 Pro, load 3-8, four runs, provisional, baseline optimised): per call under Crux vs best Elixir solver: 5-11 vars 0.6-0.9x poor (tiny line 0.67-0.82x), 16 vars 1.1-1.6x marginal, 26-28 vars 2.4-2.8x GOOD (Ash-sized line 2.5-2.8x, Elixir 16.5-17.4 vs defk 6.3-6.5 ms), 37-50 3.8-5.1x, 109-166 4.3-5.0x. Crossover to 2x between 16 and 26 vars. vs picosat per call: 1.3-1.75x faster at 5-26 vars (single solve), 2.5-3.9x at 50-166; 1.1-1.8x inside Crux. Batched vs per-call kernel, same enumeration: 1.9-3.8x from 16 to 166 vars (1.4-3.4 us/solve vs 2.5-9.4; 11.7-19.8 vs 29-45 at 109-166); one-solve formulas batch loses 0.7-0.8x. Call boundary 0.4-0.7 us; per-call cost is Elixir-side list building + packing (the research's 31 us packing figure does not hold). Guidance: per call fine from ~20 vars, stay Elixir below ~12, batch whenever one question makes several solves. Deviation: README says 'batch it' conditionally, not 'per call is a trap', because the numbers say per call is good at Ash size; DEFK_RESULT expected is :good for the Ash line (precedent cdcl_sat_s1/per_pair_distance) so run_all does not fail, the pre-registered text is in the header; the tiny line registers :poor. run_all full run not executed (cdcl_sat.exs ~minutes); both scripts run standalone, format, docs tests, mix docs pass.",
+      "timestamp": "2026-10-11T17:32:38Z"
+    }
+  ],
   "priority": 4,
   "status": "in_progress",
   "title": "Guidance example: a per-call SAT drop-in for simple_sat repeats the tiny-calls trap",
   "type": "task",
-  "updated_at": "2026-10-11T17:06:59Z"
+  "updated_at": "2026-10-11T17:32:38Z"
 }
