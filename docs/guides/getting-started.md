@@ -20,8 +20,11 @@ wrapper NIF is the better choice, is on the [scope page](../scope.md).
     `gcc libc6-dev`)
   - Alpine: `apk add build-base`
 
-  The machine that only runs your code needs no compiler; see
-  [Deploying](deploying.md). Why defk compiles C at build time is recorded in
+  The machine that only runs your code needs no compiler. But a
+  `mix release` does not carry the kernels' native libraries yet (ticket
+  `defk-n8f`), so a release moved to another machine or path fails to start
+  unless you copy them yourself: read [Deploying](deploying.md) before you
+  ship one. Why defk compiles C at build time is recorded in
   [ADR 0002](https://github.com/DanielLuning/defk/blob/main/docs/adr/0002-c-compiler-at-build-time.md).
 
 ## Add defk to a project
@@ -193,7 +196,7 @@ hint: write the for ..., reduce: loop (start from 0.0 if the values are floats):
     for x <- xs, reduce: 0.0 do
       acc -> acc + x
     end
-(defk unsupported-call: docs/compile-errors.md#unsupported-call)
+(defk unsupported-call: https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#unsupported-call)
 ```
 
 Each error has the same parts:
@@ -202,16 +205,23 @@ Each error has the same parts:
 - **why** says why the construct is rejected.
 - **hint** says what to write instead, often with a rewrite of your own code
   that compiles.
-- **The code** in the last line (`unsupported-call`) is stable. Its entry in
-  [Compile errors](../compile-errors.md) has an example and the
-  rewrite; this one is [`unsupported-call`](../compile-errors.md#unsupported-call).
-  `mix run -e 'Defk.Errors.explain!("unsupported-call")'` prints the same
-  entry in a terminal.
+- **The code** in the last line (`unsupported-call`) is stable, and the link
+  after it opens its entry: the same entry as
+  [`unsupported-call`](../compile-errors.md#unsupported-call) on the
+  [Compile errors](../compile-errors.md) page of these docs, with an example
+  and the rewrite. `mix run -e 'Defk.Errors.explain!("unsupported-call")'`
+  prints it in a terminal. (Only inside the defk repository itself is the
+  link a file path, `docs/compile-errors.md#unsupported-call`.)
 
 "not in the kernel subset" means the construct stays out by design; "not
 supported yet" means it is planned. The [scope page](../scope.md) lists
-both, with the reason or the ticket. Every rejection in a module is reported
-at once (the first 10 are shown).
+both, with the reason or the ticket. Other wordings, such as "is not a
+kernel builtin" or "is not a kernel type", are mistakes to fix with the hint.
+
+Every rejection in a module is reported at once (the first 10 are shown),
+but the compiler does not look inside a construct it has rejected: errors in
+the body of a rejected `for`, say, show up on the next compile, once you have
+rewritten it. Expect a first kernel to take a few rounds.
 
 If the error instead says `defk: C compilation failed`, the C compiler ran
 and failed: that is a defk bug or a broken toolchain, not a mistake in your
@@ -227,6 +237,50 @@ From people writing their first kernels:
   [masked arithmetic](../language.md#masked-arithmetic)
   (`band(expr, 0xFFFFFFFFFFFFFFFF)`), which gives Elixir's exact result, and
   values up to 2^64 - 1 are [`u64`](../language.md#u64).
+- **An `alloc` inside a loop allocates on every pass, and nothing is freed
+  until the kernel returns.** A scratch array per window or row (a
+  histogram, say) belongs before the loop, cleared at the start of each pass:
+
+  ```elixir
+  defmodule Windows do
+    use Defk
+
+    # the largest byte count in each 4-byte window
+    defk max_count(data :: [u8]) :: [i64] do
+      n = div(len(data), 4)
+      out = alloc(i64, n)
+      counts = alloc(i64, 256)
+
+      for w <- 0..(n - 1)//1 do
+        for b <- 0..255//1 do
+          counts[b] = 0
+        end
+
+        for i <- 0..3//1 do
+          b = data[w * 4 + i]
+          counts[b] = counts[b] + 1
+        end
+
+        out[w] = for c <- counts, reduce: 0 do
+          m -> max(m, c)
+        end
+      end
+
+      out
+    end
+  end
+  ```
+
+  ```elixir
+  iex> Windows.max_count("aabcdddd")
+  <<2::signed-64-native, 4::signed-64-native>>
+  ```
+
+- **Not every `:math` function is a builtin.** The math builtins are `sqrt`,
+  `exp`, `log`, `sin`, `cos` and `pow`. Write `log(x) / log(2.0)` for
+  `:math.log2(x)`; it can differ from `:math.log2/1` in the last bit, so an
+  Elixir reference that calls `:math.log2/1` agrees only within a tolerance
+  (the kernel still agrees exactly with its own Elixir mode).
 - **Arrays can't come out of an `if`.** Write to the array inside each
   branch instead of returning it from the branch (planned:
   [`array-in-branch`](../compile-errors.md#array-in-branch)).

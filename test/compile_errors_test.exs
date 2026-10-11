@@ -124,7 +124,7 @@ defmodule Defk.CompileErrorsTest do
                └─ #{file}:5:9: #{mod}.f/1
 
              why: a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read
-             hint: pass the values as separate arguments, or pack them into an array before the call
+             hint: pass the values as separate arguments, or pack them into an array before the call; for a count per key, index an array by the key (counts = alloc(i64, 256), then counts[b] = counts[b] + 1)
              (defk unsupported-map: docs/compile-errors.md#unsupported-map)\
              """
     end
@@ -136,7 +136,7 @@ defmodule Defk.CompileErrorsTest do
       refute msg =~ "explain!"
     end
 
-    test "the link is the page's path when it is on disk and a URL when it is not" do
+    test "the link is the page's path inside the defk repository and a URL elsewhere" do
       assert Defk.Errors.docs("pipe") == "docs/compile-errors.md#pipe"
       assert Defk.Errors.docs("pipe", false) =~ ~r{^https://\S+/compile-errors\.(md|html)#pipe$}
       assert Defk.Errors.docs("pipe", false) =~ "compile-errors"
@@ -216,8 +216,9 @@ defmodule Defk.CompileErrorsTest do
       assert msg =~ "29 │    x + y\n   │    ^^^^^\n"
 
       # rewrites from the developer's own code
+      # no guessed rewrite for array-in-branch: it depends on how the array is used
       assert msg =~
-               "hint: do the array work inside each branch:\n\n    if p, do: a[0], else: b[0]\n"
+               "hint: do the array work inside each branch, so that each branch gives a number: read the element there (if p, do: a[i], else: b[i]), or write the output array in each branch\n"
 
       assert msg =~ "    for i <- 0..(len(a) - 1)//1 do\n      out[i] = a[i] * 2.0\n    end\n"
       assert msg =~ "    trunc(x + y)    # or declare :: f64\n"
@@ -389,6 +390,38 @@ defmodule Defk.CompileErrorsTest do
       assert codes(msg) == ["shift-overflow"]
       assert whats(msg) == ["1 <<< 65 does not fit in i64"]
       assert msg =~ "computed at compile time"
+    end
+
+    # found by the HexDocs cold test (defk-djy.9)
+    test ":math.log2 and :math.log10 get the log quotient and the last-bit caveat" do
+      msg = rejection(":math.log2(a[0])")
+      assert whats(msg) == [":math.log2/1 is not in the kernel subset"]
+      assert msg =~ "differ from :math.log2/1 in the last bit"
+      assert rewrite(msg) == "log(a[0]) / log(2.0)"
+      assert rewrite(rejection(":math.log10(a[0])")) == "log(a[0]) / log(10.0)"
+    end
+
+    test "byte_size names the builtin, without the by-design wording" do
+      msg = rejection("byte_size(a)", "a :: [u8]", "i64")
+      assert codes(msg) == ["unknown-function"]
+      assert whats(msg) == ["byte_size/1 is not a kernel builtin"]
+      assert rewrite(msg) == "len(a)"
+    end
+
+    test "a list or String.t type says how the data crosses" do
+      msg = compile("defk f(xs :: list(f64)) :: f64 do\n  0.0\nend", "Hint")
+      assert codes(msg) == ["unknown-type"]
+      assert msg =~ "a list is passed as a packed array"
+
+      msg = compile("defk f(d :: [u8]) :: String.t() do\n  d\nend", "Hint")
+      assert codes(msg) == ["unknown-type"]
+      assert msg =~ "text is a [u8]"
+    end
+
+    test "a map points at an array indexed by key" do
+      msg = rejection("m = %{}\nx", "x :: i64", "i64")
+      assert codes(msg) == ["unsupported-map"]
+      assert msg =~ "counts = alloc(i64, 256)"
     end
   end
 end

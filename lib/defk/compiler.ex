@@ -476,8 +476,17 @@ defmodule Defk.Compiler do
 
     hint =
       case t do
-        {n, _, ctx} when is_atom(n) and is_atom(ctx) and is_map_key(instead, n) ->
+        {n, _, ctx} when is_atom(n) and (is_atom(ctx) or ctx == []) and is_map_key(instead, n) ->
           [hint: "the kernel type for #{n} is #{instead[n]}"]
+
+        {:list, _, ctx} when is_atom(ctx) or is_list(ctx) ->
+          [
+            hint:
+              "a list is passed as a packed array, [f64] for floats or [i64] for integers, built in Elixir with for x <- xs, into: <<>>, do: <<x::float-64-native>>"
+          ]
+
+        {{:., _, [{:__aliases__, _, [:String]}, :t]}, _, []} ->
+          [hint: "text is a [u8]: a binary in Elixir, in and out of a kernel"]
 
         [{n, _, ctx}] when is_atom(n) and is_atom(ctx) ->
           [hint: "array element types are #{@elems_text}"]
@@ -1963,21 +1972,11 @@ defmodule Defk.Compiler do
 
     case Enum.uniq_by(vals, & &1.t) do
       [%{t: {:arr, _} = t} | _] ->
-        rewrite =
-          case node do
-            {:if, _, [c, [do: {a, _, x}, else: {b, _, y}]]}
-            when is_atom(a) and is_atom(x) and is_atom(b) and is_atom(y) ->
-              [rewrite: "if #{Macro.to_string(c)}, do: #{a}[0], else: #{b}[0]"]
-
-            _ ->
-              []
-          end
-
+        # no rewrite: what to do instead depends on how the array is used
         err!(
           node,
           "array-in-branch",
-          "this #{name} gives an array (#{fmt(t)})#{of}; arrays from #{name} branches are not supported yet",
-          rewrite
+          "this #{name} gives an array (#{fmt(t)})#{of}; arrays from #{name} branches are not supported yet"
         )
 
       [%{t: t}] ->

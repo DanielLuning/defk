@@ -480,7 +480,7 @@ An if, cond or case used as a value gives no array, alone or in a tuple; arrays 
 
 - kind: not supported yet (planned)
 - why: an if/cond/case may give numbers, booleans or tuples of them, not arrays yet
-- hint: do the array work inside each branch
+- hint: do the array work inside each branch, so that each branch gives a number: read the element there (if p, do: a[i], else: b[i]), or write the output array in each branch
 
 Rejected:
 
@@ -1483,7 +1483,7 @@ Maps and structs are not in the kernel subset.
 
 - kind: outside the kernel subset (permanent)
 - why: a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read
-- hint: pass the values as separate arguments, or pack them into an array before the call
+- hint: pass the values as separate arguments, or pack them into an array before the call; for a count per key, index an array by the key (counts = alloc(i64, 256), then counts[b] = counts[b] + 1)
 
 Rejected:
 
