@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-n4r.10",
     "defk-n4r.4"
@@ -15,8 +15,8 @@
   ],
   "parent": "defk-52v",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Bounded CDCL SAT kernel vs picosat_elixir and simple_sat, measured on Crux's scenario enumeration",
   "type": "task",
-  "updated_at": "2026-10-09T22:03:23Z"
+  "updated_at": "2026-10-11T14:48:22Z"
 }
