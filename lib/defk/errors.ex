@@ -951,6 +951,23 @@ defmodule Defk.Errors do
   @spec reference() :: String.t()
   def reference, do: Enum.map_join(@codes, "\n", &reference_entry/1)
 
+  @doc """
+  The generated lists of `docs/scope.md`: every code of `kind` (`:planned`
+  or `:subset`), one Markdown bullet per code linking its entry in
+  `docs/language.md`, with its summary, in registry order. Regenerate them with:
+
+      mix run -e 'IO.write(Defk.Errors.scope(:planned))'
+      mix run -e 'IO.write(Defk.Errors.scope(:subset))'
+
+  The test suite checks the page contains this text verbatim.
+  """
+  @spec scope(:planned | :subset) :: String.t()
+  def scope(kind) when kind in [:planned, :subset] do
+    for %{kind: ^kind} = e <- @codes, into: "" do
+      "- [`#{e.code}`](language.md##{e.code}): #{e.summary}\n"
+    end
+  end
+
   @kinds %{
     subset: "outside the kernel subset (permanent)",
     planned: "not supported yet (planned)",

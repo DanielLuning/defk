@@ -4,54 +4,12 @@ defmodule Defk.LanguageDocTest do
   # section is the registry's text, and every in-page link resolves.
   use ExUnit.Case, async: true
 
+  import Defk.LanguageDoc, only: [headings: 1, anchors: 1]
+
   @doc_path "docs/language.md"
 
   setup_all do
     %{doc: File.read!(@doc_path)}
-  end
-
-  # {level, text} of every Markdown heading outside fenced code blocks
-  defp headings(doc) do
-    {hs, _} =
-      doc
-      |> String.split("\n")
-      |> Enum.reduce({[], false}, fn line, {acc, fenced?} ->
-        cond do
-          String.starts_with?(line, "```") ->
-            {acc, not fenced?}
-
-          fenced? ->
-            {acc, fenced?}
-
-          m = Regex.run(~r/^(#+) (.*)$/, line) ->
-            {[{String.length(Enum.at(m, 1)), Enum.at(m, 2)} | acc], fenced?}
-
-          true ->
-            {acc, fenced?}
-        end
-      end)
-
-    Enum.reverse(hs)
-  end
-
-  # GitHub's anchor for a heading: lowercase, punctuation dropped, spaces to
-  # hyphens, and -1, -2, ... appended to repeats
-  defp anchors(doc) do
-    {as, _} =
-      doc
-      |> headings()
-      |> Enum.map_reduce(%{}, fn {_, text}, seen ->
-        slug =
-          text
-          |> String.downcase()
-          |> String.replace(~r/[^a-z0-9 _-]/u, "")
-          |> String.replace(" ", "-")
-
-        n = Map.get(seen, slug, 0)
-        {if(n == 0, do: slug, else: "#{slug}-#{n}"), Map.put(seen, slug, n + 1)}
-      end)
-
-    as
   end
 
   # the text of the "Compile errors" section

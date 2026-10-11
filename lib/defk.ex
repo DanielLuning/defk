@@ -20,6 +20,10 @@ defmodule Defk do
   Every module also gets `__defk_report__/0`, the fast-path report
   (`Defk.Report`); `use Defk, report: :full` adds clang's vectorisation of
   each loop to it.
+
+  When to use defk and when Elixir or a wrapper NIF is the better choice,
+  what is planned and what stays out by design: see the
+  [scope page](scope.md).
   """
 
   # compile-time attribute: the defk app is not loaded when this module is
