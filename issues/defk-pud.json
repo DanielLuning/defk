@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-11T15:30:14Z",
@@ -15,7 +15,7 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "A kernel named like a builtin is silently replaced by the builtin where the argument types match",
   "type": "bug",
   "updated_at": "2026-10-11T16:18:46Z"
