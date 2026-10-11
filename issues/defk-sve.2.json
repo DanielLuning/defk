@@ -4,6 +4,7 @@
     "defk-sve.1"
   ],
   "blocks": [
+    "defk-52v.17",
     "defk-sve.3"
   ],
   "created": "2026-10-09T19:47:34Z",
@@ -17,5 +18,5 @@
   "status": "open",
   "title": "Design review: an Elixir-mode meaning for a single-owner kernel buffer, or a recorded rejection",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:43Z"
+  "updated_at": "2026-10-11T21:24:17Z"
 }
