@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-11T13:12:50Z",
+  "description": "From defk-52v.9 (examples/argon2.exs). The argon2id kernel is level with phc-winner-argon2's ref.c lane for lane (0.88-1.02x), but argon2_elixir runs p lanes on p pthreads, so at its default of 4 lanes the kernel is 0.23-0.28x (t=3, 64 MiB: 75-90 ms against 19.5-24.4 ms, under load).\n\nArgon2 allows the p segments of one slice to be computed in parallel: each reads any block of the finished slices (all lanes) and writes only its own segment; the 4 slices per pass are the sync points. A kernel cannot express this today: a kernel call is single-threaded, and splitting lanes across processes needs p calls writing disjoint parts of one array. With value semantics each call that writes an input array copies it, and merging the p segments back copies the whole array per slice: 4 x t copies of m KiB (12 x 64 MiB at the defaults, roughly the hash's own run time), so lane tasks would not win.\n\nWhat would change it, either of: (a) a single-owner buffer (defk-sve's shape) that several kernel calls may write in disjoint, declared ranges between sync points (a data race unless the ranges are checked; the epic lists cross-process sharing as probably not); (b) intra-call parallelism (a kernel spawning native threads), outside the runtime contract today. Until then the recommendation stands: argon2_elixir. Record here if either epic decides; not worth building for argon2 alone.",
+  "id": "defk-52v.17",
+  "labels": [],
+  "parent": "defk-52v",
+  "priority": 4,
+  "status": "open",
+  "title": "Argon2 lanes in parallel: kernel calls that write disjoint parts of one array between sync points",
+  "type": "task",
+  "updated_at": "2026-10-11T13:12:50Z"
+}
