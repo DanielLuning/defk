@@ -475,6 +475,26 @@ defmodule Defk.MultiClauseTest do
       assert msg =~ "comes before the head of f/1", msg
     end
 
+    test "binary and list clause patterns are reported, and the head hint does not guess i64" do
+      msg =
+        rejected("""
+        defk decode(<<>>, 0, 0, acc), do: Enum.reverse(acc)
+        defk decode(<<b, rest::binary>>, val, shift, acc), do: decode(rest, val + b, shift + 7, acc)
+        """)
+
+      assert "clause-head" in codes(msg), msg
+      assert "clause-pattern" in codes(msg), msg
+      assert msg =~ "binary pattern", msg
+      assert msg =~ "`[u8]`", msg
+      assert msg =~ "defk decode(x1 :: [u8], val :: i64, shift :: i64, acc :: i64) :: type", msg
+      refute msg =~ "x1 :: i64", msg
+
+      msg = rejected("defk f([a | t]), do: a\ndefk f([]), do: 0")
+      assert "clause-pattern" in codes(msg), msg
+      assert msg =~ "list pattern", msg
+      assert msg =~ "defk f(x1 :: type) :: type", msg
+    end
+
     test "types in a clause" do
       msg = rejected("defk f(x :: i64) :: i64\ndefk f(x :: i64) :: i64, do: x")
       assert codes(msg) == ["clause-types"], msg

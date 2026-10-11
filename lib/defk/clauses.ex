@@ -61,7 +61,7 @@ defmodule Defk.Clauses do
             {[], done}
 
           clause?(k.head) ->
-            {[no_head(k, Enum.filter(kernels, &(key(&1.head) == key)))], MapSet.put(done, key)}
+            {no_head(k, Enum.filter(kernels, &(key(&1.head) == key))), MapSet.put(done, key)}
 
           true ->
             {[k], done}
@@ -130,14 +130,40 @@ defmodule Defk.Clauses do
             end
           end)
 
-        "#{v} :: i64"
+        "#{v} :: #{guess_type(clauses, i)}"
       end)
 
-    reject(k, k.head, "clause-head", "#{name}/#{arity} has clauses but no head",
-      hint:
-        "a multi-clause kernel starts with a bodiless head that types its parameters and result, such as `defk #{name}(#{params}) :: i64`, written before the clauses"
-    )
+    ret = if Enum.any?(clauses, &unsupported_pattern?/1), do: "type", else: "i64"
+
+    head =
+      reject(k, k.head, "clause-head", "#{name}/#{arity} has clauses but no head",
+        hint:
+          "a multi-clause kernel starts with a bodiless head that types its parameters and result, such as `defk #{name}(#{params}) :: #{ret}`, written before the clauses"
+      )
+
+    # the patterns outside the subset are blockers the head would not fix
+    [head | Enum.flat_map(clauses, &pattern_errors(&1, List.duplicate({nil, nil}, arity)))]
   end
+
+  # the type to suggest for the parameter at i: [u8] where a clause matches
+  # it with a binary pattern, `type` (for the user to fill in) where a clause
+  # matches it with a list or map, i64 otherwise
+  defp guess_type(clauses, i) do
+    pats = Enum.map(clauses, &Enum.at(args(&1.head), i))
+
+    cond do
+      Enum.any?(pats, &match?({:<<>>, _, _}, &1)) -> "[u8]"
+      Enum.any?(pats, &unsupported?/1) -> "type"
+      true -> "i64"
+    end
+  end
+
+  defp unsupported_pattern?(k), do: Enum.any?(args(k.head), &unsupported?/1)
+
+  defp unsupported?(pat),
+    do:
+      match?({:<<>>, _, _}, pat) or is_list(pat) or match?({:%{}, _, _}, pat) or
+        match?({:|, _, _}, pat)
 
   defp before_head(k, head) do
     {name, arity} = key(k.head)
@@ -288,6 +314,21 @@ defmodule Defk.Clauses do
 
       b when is_boolean(b) ->
         literal(b, :boolean, t)
+
+      {:<<>>, _, _} = bin ->
+        {:error,
+         "the clause pattern #{Macro.to_string(bin)} is a binary pattern, which is not in the kernel subset",
+         "take the bytes as a `[u8]` parameter and read them by index (`bytes[i]`) or with a `for` over the bytes; a clause matches only integer and bool literals, variables and _"}
+
+      l when is_list(l) ->
+        {:error,
+         "the clause pattern #{Macro.to_string(l)} is a list pattern, which is not in the kernel subset",
+         "take the values as a packed array parameter such as `[i64]` and read them by index, or loop over them with a `for`"}
+
+      {:%{}, _, _} = m ->
+        {:error,
+         "the clause pattern #{Macro.to_string(m)} is a map pattern, which is not in the kernel subset",
+         "a kernel has no maps; pass the values as separate parameters or a packed array"}
 
       {:^, _, [{v, _, _}]} ->
         {:error, "the clause pattern ^#{v} pins a variable, and a function head has none to pin",
