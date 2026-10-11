@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Cause: pure CPU, no clang. Each of the 4000 cases per property runs Defk.Compiler.compile (~0.44 ms) plus ~100-length arithmetic checks: bounds 2.1 s, overflow 4.3 s idle; under 12 busy 'yes' loops overflow took 61.7 s (bounds 26.9 s), reproducing the timeout. Fix: default suite 500 cases each (idle 0.27 s / 0.53 s; under 12 yes loops 7.9 s / 6.5 s), the original 4000 cases kept as '(deep)' twins (@tag :deep, timeout 600 s; idle 2.2 s / 4.4 s). BinaryLiteralsTest 'other segments are rejected' is 8 small Code.compile_file calls, 46 ms idle, 1.2 s under load; cannot be tuned further, the one 60 s hit was a stall under load \u003e 100 that I could not reproduce. Slowest tests left (not same shape, not fixed): ElixirModeTest Mix.install script 24-30 s, LanguageDocExamplesTest BEAM-of-their-own 5-17 s, DocsChecksTest links 5 s, NoConflictMarkersTest 3 s, AllocZeroTest K.in_loop 2.5 s.",
+      "timestamp": "2026-10-11T15:15:59Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Slow property tests hit ExUnit's 60 s timeout when the machine is loaded",
   "type": "bug",
-  "updated_at": "2026-10-11T14:48:21Z"
+  "updated_at": "2026-10-11T15:15:59Z"
 }
