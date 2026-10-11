@@ -17,10 +17,35 @@ defmodule Defk.LanguageDoc do
   #     is the generated C
   #   - `<!-- defk-example error: <code> -->`: must fail to compile with exactly
   #     that error code
-  #   - `<!-- defk-example skip: <reason> -->`: not checked (a fragment)
+  #   - `<!-- defk-example skip: <reason> -->`: not checked (a fragment); the
+  #     reason is required, and the tests list every skip
   #   - `<!-- defk-example known-failure: <ticket> -->`, above a runnable or
   #     compile-only block: checked as usual, and the check must fail; the
   #     ticket is the compiler bug, and the marker comes off when it is fixed
+  #
+  #
+  # Blocks with no kernel in them are checked too, in a separate BEAM (see
+  # `Defk.LanguageDoc.Isolated`), where they can define modules and global
+  # state freely:
+  #
+  #   - an `elixir` block is a sketch: it is compiled as the body of a function
+  #     and run, and a trailing `# => value` on a line is checked against that
+  #     line's value. What it needs is said by
+  #     `<!-- defk-example run: <bindings> | defs: <module-level code> -->`
+  #     (both parts optional): `bindings` is code run before the block (the
+  #     variables it reads), and `defs` sits at module level (helper
+  #     functions, attributes, stub modules). A block that starts with `def`,
+  #     `defp` or an attribute is module-level code instead, and `run:` is the
+  #     code that calls it. A sketch that cannot run (a fragment, kernel-only
+  #     syntax) says so with `skip:`. Timing claims are not checked.
+  #   - a block with `use ExUnit.Case` is a test file: it runs as real tests.
+  #     `<!-- defk-example exunit: Stats from docs/guides/getting-started.md -->`
+  #     adds the kernel module (the first `defmodule Stats` example of that
+  #     page) it tests
+  #   - `<!-- defk-example script: <note> -->`, above a kernel block that is a
+  #     whole script: run with `Mix.install` removed (the project is already
+  #     loaded), and its last value, a `Defk.Bench.report/1` result, must have
+  #     agreed
   #
   # Anything else is a failure: a kernel block with no iex block and no
   # annotation, an iex block that follows no kernel, an annotation on a block
@@ -35,11 +60,13 @@ defmodule Defk.LanguageDoc do
   import ExUnit.Assertions
 
   @kernel ~r/^\s*defk\s+[a-z_]/m
+  @elixir_langs ["elixir", "ex", "exs"]
   @annotation ~r/^\s*<!--\s*defk-example\s+(.*?)\s*-->\s*$/
 
   defmodule Example do
     @moduledoc false
     # check: :run | {:compiles, reason} | {:error, code} | {:skip, reason} | {:invalid, why}
+    #   | {:sketch, %{setup:, defs:}} | {:exunit, needs | nil} | {:script, note}
     defstruct [:line, :check, :known_failure, :source, :name, :module, steps: []]
   end
 
@@ -95,7 +122,15 @@ defmodule Defk.LanguageDoc do
       [_, indent, marker] ->
         # only blank lines since the last block closed (a prose line pushes :text)
         adjacent? = last_close != nil and match?([%{} | _], acc)
-        open = %{line: n, indent: String.length(indent), marker: marker, prev: prev}
+
+        lang =
+          line
+          |> String.trim()
+          |> String.trim_leading(String.first(marker))
+          |> String.split()
+          |> List.first("")
+
+        open = %{line: n, indent: String.length(indent), marker: marker, prev: prev, lang: lang}
         {acc, {:in, open, [], adjacent?}}
 
       nil ->
@@ -112,6 +147,7 @@ defmodule Defk.LanguageDoc do
         line: open.line,
         body: body |> Enum.reverse() |> Enum.join("\n"),
         annotation: annotation(open.prev),
+        lang: open.lang,
         adjacent?: adjacent?
       }
 
@@ -137,14 +173,23 @@ defmodule Defk.LanguageDoc do
 
   defp parse_annotation(spec) do
     case Regex.run(~r/^([a-z-]+)(?::\s*(.*))?$/, spec) do
-      [_, "compiles", reason] when reason != "" ->
+      [_, "compiles", reason] when is_binary(reason) and reason != "" ->
         {:compiles, reason}
 
       [_, "error", code] ->
         if code =~ ~r/^[a-z0-9-]+$/, do: {:error, code}, else: {:bad, spec}
 
-      [_, "skip", reason] when reason != "" ->
+      [_, "skip", reason] when is_binary(reason) and reason != "" ->
         {:skip, reason}
+
+      [_, "run", spec] ->
+        parse_run(spec || "")
+
+      [_, "exunit", needs] ->
+        {:exunit, needs}
+
+      [_, "script", note] when is_binary(note) and note != "" ->
+        {:script, note}
 
       [_, "known-failure", t] ->
         if t =~ ~r/^defk-\w+/, do: {:known_failure, t}, else: {:bad, spec}
@@ -152,6 +197,17 @@ defmodule Defk.LanguageDoc do
       _ ->
         {:bad, spec}
     end
+  end
+
+  # run: <bindings> | defs: <module-level code>
+  defp parse_run(spec) do
+    {setup, defs} =
+      case String.split(spec, ~r/(^|\s)\|\s*defs:\s*/, parts: 2) do
+        [setup, defs] -> {setup, defs}
+        [setup] -> {setup, ""}
+      end
+
+    {:sketch, %{setup: String.trim(setup), defs: defs}}
   end
 
   defp kernel?(%{body: body}), do: body =~ @kernel
@@ -174,6 +230,7 @@ defmodule Defk.LanguageDoc do
     cond do
       kernel?(b) -> [example(b, nil) | acc]
       iex?(b) and not match?({:skip, _}, b.annotation) -> [orphan(b) | acc]
+      b.lang in @elixir_langs -> [plain(b) | acc]
       b.annotation != nil -> [stray(b) | acc]
       true -> acc
     end
@@ -212,6 +269,22 @@ defmodule Defk.LanguageDoc do
       steps: if(iex && check == :run, do: steps(iex), else: [])
     }
   end
+
+  # an Elixir block with no kernel: a test file, a skipped fragment, or a sketch
+  defp plain(%{annotation: ann} = b) do
+    check =
+      case ann do
+        nil -> if b.body =~ "use ExUnit.Case", do: {:exunit, nil}, else: {:sketch, no_spec()}
+        {:bad, spec} -> {:invalid, "unknown annotation #{inspect(spec)}"}
+        {kind, _} = other when kind in [:skip, :exunit] -> other
+        {:sketch, _} = other -> other
+        _ -> {:invalid, "an annotation on a block with no kernel"}
+      end
+
+    %Example{line: b.line, source: b.body, check: check}
+  end
+
+  defp no_spec, do: %{setup: "", defs: ""}
 
   defp orphan(b),
     do: %Example{
@@ -288,17 +361,67 @@ defmodule Defk.LanguageDoc do
     kernel =
       case Regex.run(~r/^\s*defk\s+([a-z_][\w?!]*)/m, ex.source) do
         [_, k] -> k
-        nil -> "-"
+        nil -> first_line(ex.source)
       end
 
     check =
       case ex.check do
-        {kind, arg} -> "#{kind} #{arg}"
+        {kind, arg} when is_binary(arg) -> "#{kind} #{arg}"
+        {kind, _} -> to_string(kind)
         kind -> to_string(kind)
       end
 
     known = if ex.known_failure, do: " (known failure #{ex.known_failure})", else: ""
     "#{check}: #{kernel}#{known}"
+  end
+
+  defp first_line(source) do
+    source
+    |> String.split("\n")
+    |> Enum.find("-", &(String.trim(&1) != "" and not String.starts_with?(String.trim(&1), "#")))
+    |> String.trim()
+    |> String.slice(0, 40)
+  end
+
+  # ------------------------------------------------------ isolated checks --
+
+  @doc """
+  The jobs for `Defk.LanguageDoc.Isolated.run/2`: one per sketch, test file
+  and script among `examples` (`{path, example}`).
+  """
+  def isolated_jobs(examples) do
+    for {path, %{check: check} = ex} <- examples,
+        job = isolated_job(check, ex, examples),
+        do: Map.put(job, :id, {path, ex.line})
+  end
+
+  defp isolated_job({:sketch, spec}, ex, _),
+    do: %{kind: :sketch, source: ex.source, setup: spec.setup, defs: spec.defs}
+
+  defp isolated_job({:script, _}, ex, _), do: %{kind: :script, source: ex.source}
+
+  defp isolated_job({:exunit, needs}, ex, examples),
+    do: %{kind: :exunit, source: ex.source, needs: needs, deps: needed(needs, examples)}
+
+  defp isolated_job(_, _, _), do: nil
+
+  # "Stats from docs/guides/getting-started.md": the source of that page's
+  # first runnable example defining the module
+  defp needed(nil, _), do: []
+  defp needed("", _), do: []
+
+  defp needed(spec, examples) do
+    with [_, name, page] <- Regex.run(~r/^([\w.]+) from (\S+)$/, spec),
+         {_, ex} <-
+           Enum.find(examples, fn {path, ex} ->
+             path == page and ex.check == :run and ex.name == name
+           end) do
+      [ex.source]
+    else
+      _ ->
+        raise ArgumentError,
+              "exunit: #{inspect(spec)} names no `defmodule` example (NAME from PAGE)"
+    end
   end
 
   # ---------------------------------------------------------------- extras --

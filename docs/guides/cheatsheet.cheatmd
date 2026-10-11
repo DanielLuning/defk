@@ -228,6 +228,7 @@ The full table: [Unsupported, write this instead](../language.md#unsupported-wri
 
 ### Agreement
 
+<!-- defk-example skip: call shapes with placeholders (Mod, :fun, args) -->
 ```elixir
 Defk.Test.assert_agrees(Mod, :fun, args)
 Defk.ElixirMode.with_mode(:elixir, fn -> Mod.fun(x) end)
@@ -238,6 +239,7 @@ See [Testing kernels](testing.md).
 
 ### Explaining speed
 
+<!-- defk-example skip: a call shape with a placeholder module (Mod) -->
 ```elixir
 Defk.Report.print(Mod)
 ```

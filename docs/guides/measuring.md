@@ -74,7 +74,7 @@ garbage collection before each), and prints the speedup and the verdict.
 Copy [the example template](https://github.com/DanielLuning/defk/blob/main/examples/_template.exs)
 to start; its shape is:
 
-<!-- defk-example skip: a script run with elixir, not in a test -->
+<!-- defk-example script: run with its Mix.install line removed (the project is loaded); the report must say the two sides agree -->
 ```elixir
 Mix.install([{:defk, path: "../defk"}])
 
@@ -92,7 +92,7 @@ defmodule Sum.Elixir do
   def sum(bin), do: for(<<x::float-64-native <- bin>>, reduce: 0.0, do: (acc -> acc + x))
 end
 
-input = for i <- 1..1_000_000, into: <<>>, do: <<i / 1.0::float-64-native>>
+input = for i <- 1..100_000, into: <<>>, do: <<i / 1.0::float-64-native>>
 
 Defk.Bench.report(
   name: "sum",

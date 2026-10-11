@@ -45,6 +45,7 @@ agreement properties. Then run `mix deps.get`.
 In a script or a Livebook, use `Mix.install/1` instead. Livebook needs the C
 compiler too, on the machine the notebook runs on.
 
+<!-- defk-example skip: Mix.install cannot run inside the project's own tests; the measuring guide's script runs with it removed -->
 ```elixir
 Mix.install([{:defk, path: "../defk"}])
 ```
