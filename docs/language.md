@@ -557,6 +557,8 @@ wrong types is [`builtin-arguments`](compile-errors.md#builtin-arguments).
 | `f64_to_u64(x)` | a number | `u64`: the IEEE 754 bits of `x` as a float | |
 | `crc32c(crc, x, w)` | an `i64` or `u64` crc in 0..2^32 - 1, an `i64` or `u64` x in 0..2^w - 1, an `i64` width w of 8, 16, 32 or 64 | `i64` in 0..2^32 - 1: one CRC32C step over the w/8 bytes of x, as `Defk.Bits.crc32c/3`. A hardware builtin: the CPU's instruction where it has one, a table otherwise, the same value | `ArgumentError` for a width or value out of range; see [Hardware builtins](#hardware-builtins) |
 | `u64_le(b, i)`, `u32_le`, `u16_le`, `u64_be`, `u32_be`, `u16_be` | a `[u8]` and an `i64` byte offset | `i64`: the unsigned word at `i` (`u64` as its signed bit pattern) | see [Word loads](#word-loads) |
+| `copy(out, at, src, from, n)` | two arrays of one element type and three `i64`: index, source index, length | `out` with `out[at..at+n-1]` replaced by `src[from..from+n-1]` | see [Range copies](#range-copies) |
+| `copy_back(out, at, off, n)` | an array and three `i64`: index, offset, length | `out` with `out[at + j] = out[at + j - off]` for `j` in `0..n-1`, in order (an LZ match) | see [Range copies](#range-copies) |
 
 `length/1`, `byte_size/1` and `tuple_size/1` are
 [`unknown-function`](compile-errors.md#unknown-function) with the hint to use `len/1`.
@@ -1215,6 +1217,83 @@ iex> M.sum_words(<<-1::64-little, 1::64-little>>)
 ```
 
 (defk-n4r.2)
+
+### Range copies
+
+**Supported:** `out = copy(out, at, src, from, n)` and
+`out = copy_back(out, at, off, n)` replace a range of `out` with elements
+from `src`, or from `out` itself, at the cost of one check for the whole
+range. They are what a decoder copies with: a literal from its input, a
+match from earlier output. `copy` is Elixir's
+
+<!-- defk-example skip: a pattern shown for comparison, with free variables (out, src, at, from, n, w) -->
+```elixir
+<<pre::binary-size(at * w), _::binary-size(n * w), post::binary>> = out
+<<pre::binary, binary_part(src, from * w, n * w)::binary, post::binary>>
+```
+
+- `copy(out, at, src, from, n)` gives `out` with `out[at..at+n-1]`
+  replaced by `src[from..from+n-1]` (the Elixir above, `w` the element
+  size). `src` is read as it was before the call, so it may be `out`
+  itself: overlapping ranges move as `memmove` does.
+- `copy_back(out, at, off, n)` gives `out` after
+  `out[at + j] = out[at + j - off]` for `j = 0, 1, ..., n - 1`, **in that
+  order**. When `off < n` the range overlaps what it writes and the `off`
+  elements before `at` repeat (`copy_back(<<1, 2, 3, 0, 0, 0, 0>>, 3, 3, 4)`
+  gives `<<1, 2, 3, 1, 2, 3, 1>>`; offset 1 is a run of one element). This
+  is the LZ77 match of LZ4, Snappy and Deflate, and it is **not** `memmove`,
+  which would copy the old bytes. Elixir mode computes it with
+  `:binary.copy/2` of the `off`-element pattern.
+- Both work on any element type: `out` and `src` must have the same one, and
+  the positions and length are elements, not bytes
+  ([`builtin-arguments`](compile-errors.md#builtin-arguments) otherwise).
+- A negative `n` raises `ArgumentError` "copy/5: negative length -1". A
+  range outside an array raises `Enum.OutOfBoundsError` with `index` the
+  start of the range: "copy/5: 3 elements at index 8 out of bounds for
+  array of length 10", then "... from index 4 out of bounds for source array
+  of length 5". `copy_back` checks the destination range, then, when
+  `n > 0`, the offset: `off < 1` raises `ArgumentError` "copy_back/4: offset
+  0 is not positive", and `at - off < 0` raises `Enum.OutOfBoundsError` with
+  index `at - off`. An empty copy (`n == 0`) reads nothing, so its offset is
+  not checked (an LZ4 sequence with no match passes any). The checks never
+  depend on the elements, so a copy from an input `[f64]` holding NaN bits
+  copies them; reading one later raises as usual.
+- They are array writes, with the [Copies](#copies) rules of a kernel that
+  writes and returns its array parameter: the result is written into `out`'s
+  buffer in place when nothing reads the old `out` after the call (the usual
+  case, `out = copy(out, ...)` in a loop accumulator), and into a copy of it
+  otherwise (an input array, or `b = out` read later).
+- Natively a copy is a few loads and stores (up to 32 bytes) or `memmove`;
+  `copy_back` with `off < n` copies 8-byte words from at least 8 bytes back
+  (after at most 7 single bytes when `off < 8`). A copy of up to 1 MiB runs at
+  once and counts towards the next safepoint like a loop over its bytes; a
+  longer one runs in 1 MiB strips with a safepoint after each, so a 100 MB
+  copy yields like a loop (`yield: false` kernels copy at once).
+
+```elixir
+defk unpack(lits :: [u8], seqs :: [i64], size :: i64) :: [u8] do
+  out = alloc(u8, size)
+
+  {out, _, _} =
+    for s <- 0..(div(len(seqs), 3) - 1)//1, reduce: {out, 0, 0} do
+      {out, ip, op} ->
+        ln = seqs[3 * s]
+        out = copy(out, op, lits, ip, ln)
+        out = copy_back(out, op + ln, seqs[3 * s + 1], seqs[3 * s + 2])
+        {out, ip + ln, op + ln + seqs[3 * s + 2]}
+    end
+
+  out
+end
+```
+
+```elixir
+iex> seqs = for x <- [2, 0, 0, 1, 1, 4], into: <<>>, do: <<x::signed-64-native>>
+iex> M.unpack("abc", seqs, 7)
+"abccccc"
+```
+
+(defk-52v.16; `examples/lz4_snappy_decode.exs` decodes with them.)
 
 ### Allocating
 
