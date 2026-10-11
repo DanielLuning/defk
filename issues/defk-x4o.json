@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-10T14:16:10Z",
@@ -15,8 +15,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "clause-head error hides unsupported clause patterns and suggests i64 for a binary pattern",
   "type": "bug",
-  "updated_at": "2026-10-11T21:01:10Z"
+  "updated_at": "2026-10-11T21:25:15Z"
 }
