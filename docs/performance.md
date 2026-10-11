@@ -1386,6 +1386,7 @@ for i <- lo..(hi - 4)//4 do
 end
 # slow: one table, and a range the compiler cannot prove inside data
 for i <- (k * w)..(k * w + w - 1)//1, do: (b = data[i]; h[b] = h[b] + 1)
+```
 
 ### 6.19 A kernel shaped like the reference C runs level with it: Argon2id at 0.88-1.02x of ref.c
 
