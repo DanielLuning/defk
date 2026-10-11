@@ -5536,7 +5536,7 @@ defmodule Defk.Compiler do
   defp run_preamble(yields?) do
     if yields?,
       do:
-        "int defk_rs = F->resume;\nint64_t defk_ticks = 0;\nint64_t defk_budget = defk_rs ? F->budget : DEFK_BUDGET0;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk);\n",
+        "int defk_rs = F->resume;\nint64_t defk_ticks = 0;\nint64_t defk_budget = defk_rs ? F->budget : DEFK_BUDGET0;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk, ctx);\n",
       else: ""
   end
 
@@ -5660,6 +5660,9 @@ defmodule Defk.Compiler do
       "#{f} local;\nERL_NIF_TERM res;\n",
       "local.ctx.err = 0;\nlocal.ctx.owned = NULL;\nlocal.ctx.nowned = local.ctx.cap = 0;\nlocal.ctx.finished = local.ctx.is_resource = 0;\n",
       "local.resume = 0;\nmemset(local.copy, 0, sizeof local.copy);\n",
+      # defk-04y (experimental): the sliced NIF passes the call's slice last
+      "if (argc > #{k.arity}) defk_slice_arg(env, &local.ctx, argv[#{k.arity}], argv[#{k.arity + 1}]);\n",
+      "else defk_slice_default(&local.ctx);\n",
       "int r = guard_#{k.cid}(env, &local, argv, &res);\n",
       promote(yields?, k),
       "defk_finish(&local.ctx);\n",
@@ -5673,18 +5676,26 @@ defmodule Defk.Compiler do
         "if (r == DEFK_YIELD) {\n",
         "ERL_NIF_TERM args2[#{k.arity + 1}];\n",
         "defk_promote(env, &local, sizeof local, &args2[0]);\n",
-        "memcpy(args2 + 1, argv, sizeof(ERL_NIF_TERM) * argc);\n",
+        "memcpy(args2 + 1, argv, sizeof(ERL_NIF_TERM) * #{k.arity});\n",
         "atomic_fetch_add(&defk_stat_yields, 1);\n",
-        "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, argc + 1, args2);\n}\n"
+        "return enif_schedule_nif(env, \"#{k.name}\", 0, step_#{k.cid}, #{k.arity + 1}, args2);\n}\n"
       ]
     else
       ""
     end
   end
 
+  @doc false
+  # defk-04y (experimental): the NIF that takes the call's slice as two
+  # extra trailing arguments (slice_us, for_us), see defk_slice_arg
+  def sliced_name(name), do: :"__defk_sliced_#{name}__"
+
   defp emit_init(module, kernels, nif_name, fault_hooks?) do
     funcs =
-      Enum.map(kernels, fn k -> "  {\"#{nif_name.(k.name)}\", #{k.arity}, nif_#{k.cid}, 0},\n" end)
+      Enum.map(kernels, fn k ->
+        "  {\"#{nif_name.(k.name)}\", #{k.arity}, nif_#{k.cid}, 0},\n" <>
+          "  {\"#{sliced_name(nif_name.(k.name))}\", #{k.arity + 2}, nif_#{k.cid}, 0},\n"
+      end)
 
     [
       "static ErlNifFunc defk_funcs[] = {\n",

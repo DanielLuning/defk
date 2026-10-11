@@ -326,6 +326,8 @@ defmodule Defk do
         else:
           render_stubs(plain) ++ native_stubs(wrapped, nif_name) ++ wrappers(wrapped, nif_name)
 
+    stubs = stubs ++ sliced_stubs(sigs, nif_name)
+
     elixir_mode =
       if elixir?, do: Defk.ElixirMode.definitions(kernels, all_sigs, env.file), else: []
 
@@ -393,6 +395,20 @@ defmodule Defk do
       quote do
         @doc false
         def unquote(nif_name.(name))(unquote_splicing(args)),
+          do: :erlang.nif_error(:defk_not_loaded)
+      end
+    end
+  end
+
+  # defk-04y (experimental): each kernel's NIF also takes its slice
+  defp sliced_stubs(sigs, nif_name) do
+    for %{name: name, params: params} <- sigs do
+      args = for {p, _} <- params, do: Macro.var(:"_#{p}", nil)
+      sliced = Defk.Compiler.sliced_name(nif_name.(name))
+
+      quote do
+        @doc false
+        def unquote(sliced)(unquote_splicing(args), _slice_us, _for_us),
           do: :erlang.nif_error(:defk_not_loaded)
       end
     end

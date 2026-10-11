@@ -81,6 +81,15 @@ typedef struct {
   int nowned, cap;
   int finished;
   int is_resource;
+  /* the yield slice of this call (defk-04y, experimental): slice_us until
+     short_left us of kernel time have run, then DEFK_SLICE_US. auto_short > 0:
+     start at DEFK_SLICE_US and switch to auto_short after a resume that
+     waited more than DEFK_GAP_US behind other processes (yielded_at). */
+  int64_t slice_us;
+  int64_t short_left;
+  int64_t auto_short;
+  int64_t auto_for; /* short_left once auto mode switches */
+  ErlNifTime yielded_at;
 } defk_ctx;
 
 static ErlNifResourceType *defk_frame_rt;
@@ -1576,6 +1585,7 @@ typedef struct {
   ErlNifTime last;
   ErlNifTime unreported; /* microseconds x 100 not yet charged to the process */
   int64_t budget;        /* adapted back-edge budget, kept across a yield */
+  defk_ctx *ctx;         /* the call's slice state */
 } defk_clock;
 
 #define DEFK_BUDGET0 256
@@ -1604,9 +1614,46 @@ typedef struct {
 #define DEFK_STRIP 2048
 #endif
 
-static void defk_clock_init(defk_clock *c) {
+/* defk-04y (experimental): a resume that waited longer than this behind
+   other processes means the run queue is crowded (auto slice mode). */
+#ifndef DEFK_GAP_US
+#define DEFK_GAP_US 20
+#endif
+
+/* the default slice for a call that did not ask for another */
+__attribute__((unused)) static inline void defk_slice_default(defk_ctx *ctx) {
+  ctx->slice_us = DEFK_SLICE_US;
+  ctx->short_left = 0;
+  ctx->auto_short = 0;
+  ctx->auto_for = 0;
+  ctx->yielded_at = 0;
+}
+
+/* __defk_sliced_<name>__(args..., slice_us, for_us): slice_us > 0 runs the
+   call at that slice for its first for_us us of kernel time (0: all of it);
+   slice_us < 0 is auto: DEFK_SLICE_US until a resume waits, then -slice_us. */
+__attribute__((unused)) static void defk_slice_arg(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM s, ERL_NIF_TERM f) {
+  int64_t us, for_us;
+  defk_slice_default(ctx);
+  if (!enif_get_int64(env, s, &us) || !enif_get_int64(env, f, &for_us) || us == 0 || for_us < 0) return;
+  if (us > 0) {
+    ctx->slice_us = us;
+    ctx->short_left = for_us;
+  } else {
+    ctx->auto_short = -us;
+    ctx->auto_for = for_us;
+  }
+}
+
+static void defk_clock_init(defk_clock *c, defk_ctx *ctx) {
   c->last = enif_monotonic_time(ERL_NIF_USEC);
   c->unreported = 0;
+  c->ctx = ctx;
+  if (DEFK_UNLIKELY(ctx->auto_short) && ctx->yielded_at && c->last - ctx->yielded_at > DEFK_GAP_US) {
+    ctx->slice_us = ctx->auto_short;
+    ctx->short_left = ctx->auto_for;
+    ctx->auto_short = 0;
+  }
 }
 
 __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c, int64_t budget) {
@@ -1614,15 +1661,21 @@ __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c
   if (atomic_load_explicit(&defk_force_yields, memory_order_relaxed)) return 0;
   ErlNifTime now = enif_monotonic_time(ERL_NIF_USEC);
   ErlNifTime dt = now - c->last;
+  defk_ctx *ctx = c->ctx;
+  int64_t slice = ctx->slice_us;
   c->last = now;
-  if (dt < DEFK_SLICE_US / 10 && budget < (1 << 24)) budget *= 2;
-  else if (dt > DEFK_SLICE_US / 4 && budget > 16) budget /= 2;
+  if (dt < slice / 10 && budget < (1 << 24)) budget *= 2;
+  else if (dt > slice / 4 && budget > 16) budget /= 2;
   c->budget = budget;
   c->unreported += dt * 100;
-  long pct = (long)(c->unreported / DEFK_SLICE_US);
+  long pct = (long)(c->unreported / slice);
+  if (DEFK_UNLIKELY(ctx->short_left > 0) && (ctx->short_left -= dt) <= 0) ctx->slice_us = DEFK_SLICE_US;
   if (pct >= 1) {
-    c->unreported -= pct * DEFK_SLICE_US;
-    if (enif_consume_timeslice(env, pct > 100 ? 100 : (int)pct)) return 0;
+    c->unreported -= pct * slice;
+    if (enif_consume_timeslice(env, pct > 100 ? 100 : (int)pct)) {
+      ctx->yielded_at = now;
+      return 0;
+    }
   }
   return budget;
 }
