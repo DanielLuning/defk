@@ -18,11 +18,15 @@
     {
       "text": "From defk-djy.5: the scope page is docs/scope.md (a Guides extra in mix.exs). Getting started should link it, e.g. 'When to use defk and when Elixir or a wrapper NIF is the better choice: [scope page](scope.md)' (from another extra, ex_doc resolves scope.md to scope.html).",
       "timestamp": "2026-10-11T11:28:59Z"
+    },
+    {
+      "text": "Done on branch defk-djy.4/guides. Guides in docs/guides/ (how-to pages apart from the reference and project history in docs/): getting-started.md, testing.md, measuring.md, runtime-contract.md, deploying.md, plus cheatsheet.cheatmd in the Reference group. Main page: README stays main (what defk is and why, same as GitHub); Getting started comes right after it in Guides, and README now points to it. language.md split: kept as one page. Reasons: compile errors link docs/language.md#\u003ccode\u003e and defk-djy.6 builds on those anchors; the docs checks (defk-djy.7) and scope.md resolve links into it; the cheatsheet now gives the quick lookup a split would have bought. Revisit with defk-djy.6 if the error catalogue becomes its own page. Checking: guide kernels run in both modes via the djy.7 runner; Defk.LanguageDoc.extras/0 now includes .cheatmd so the cheatsheet's examples run too. Not covered by the runner and checked by hand once in a scratch app: the ExUnit test-file snippets in testing.md (no kernel in the block) and the Mix.install measuring script in measuring.md (annotated skip). Honesty notes: Deploying describes defk-n8f (releases don't ship the .so) as an open gap with the _build copy workaround; runtime-contract says a native crash is still a node crash (defk-7dm); testing.md flags Defk.Test/Defk.Case as hidden pending defk-djy.2.",
+      "timestamp": "2026-10-11T11:56:34Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Guides: getting started through deployment",
   "type": "task",
-  "updated_at": "2026-10-11T11:44:02Z"
+  "updated_at": "2026-10-11T11:56:34Z"
 }
