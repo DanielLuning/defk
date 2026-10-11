@@ -4,6 +4,7 @@
     "defk-52v.15"
   ],
   "blocks": [],
+  "closed_at": "2026-10-11T17:32:39Z",
   "created": "2026-10-09T21:16:26Z",
   "description": "From docs/research/sat-solver.md (defk-dtw.21): Ash-sized formulas (~27 variables, 63 clauses) solve in 4-82 us in picosat_elixir, about what packing the CNF into binaries costs (~31 us measured), so a kernel used as a per-call drop-in for simple_sat/picosat lands marginal at best. A short guidance entry once the CDCL kernel exists (sibling ticket under defk-52v): the same kernel called per formula vs batched over Crux's enumeration, with the crossover by formula size reported in the sweep. Expected: marginal or poor per call; the batch form is the catalog entry that helps.\n\nBlocked by the CDCL kernel ticket. Done when: the per-call example runs in run_all.exs with its pre-registered verdict and the README row says \"batch it\".",
   "id": "defk-9p6.25",
@@ -18,8 +19,8 @@
     }
   ],
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Guidance example: a per-call SAT drop-in for simple_sat repeats the tiny-calls trap",
   "type": "task",
-  "updated_at": "2026-10-11T17:32:38Z"
+  "updated_at": "2026-10-11T17:32:39Z"
 }
