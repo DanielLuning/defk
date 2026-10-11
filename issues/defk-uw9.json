@@ -6,7 +6,7 @@
   "description": "Found by the HexDocs cold test (defk-djy.9, docs/cold-tests/hexdocs-entropy.md, point 5). A first-draft kernel wrapped its body in a for used as a value (for-collect). The compiler reported that, plus byte_size/1, and stopped: the map, Map.update, |\u003e, Enum.reduce and :math.log2 inside the for's body were only reported after the for was rewritten, costing a round trip. A newcomer expects every error in one run.\n\nToday the compiler does not look inside a rejected construct (language.md section 11 and getting-started 'Reading a compile error' now say so, defk-djy.9). Option: when a for (or another construct) is rejected for its shape, still lower its body in a recovery mode that collects the body's own rejections while suppressing errors that only follow from the rejected construct (types of the for's value, etc.). Risk: cascades and misleading follow-ups; the existing 'without the errors an earlier one causes' rule must hold.\n\nDone when the attempt1 kernel in docs/cold-tests/hexdocs-entropy/attempt1.ex.txt reports for-collect, unknown-function (byte_size), unsupported-map, unsupported-call (Map.update/Map.values/Enum.reduce/:math.log2) and pipe in one compile, with no cascade errors, a compile_errors_test case covers it, and the sentence in language.md 11 and getting-started is updated.",
   "id": "defk-uw9",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "comments": [
     {
