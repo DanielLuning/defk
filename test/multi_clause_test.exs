@@ -203,6 +203,7 @@ end
 
 defmodule Defk.MultiClauseTest do
   use Defk.Case, async: false
+  import Defk.Test.Frames
   use Defk.Properties
 
   alias Defk.MultiClauseTest.{K, Ref}
@@ -417,7 +418,7 @@ defmodule Defk.MultiClauseTest do
                agrees(:flags, [i64s([1, 0, 1, -1])])
 
       :erlang.garbage_collect()
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     end
   end
 
