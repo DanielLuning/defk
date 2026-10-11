@@ -8,6 +8,7 @@
   "blocks": [
     "defk-djy.9"
   ],
+  "closed_at": "2026-10-11T12:17:27Z",
   "created": "2026-10-10T14:58:33Z",
   "description": "Following the API audit: a @moduledoc for every public module (what it is for, a short runnable example, links to the relevant guide sections), @doc for every public function with at least one example as a doctest where it can run (kernels compiled in doctests in both modes where it makes sense), @spec and @type for public functions, cross-references with backtick auto-links. The Defk moduledoc becomes the API entry point: the defk macro, use Defk options, types table, what use Defk generates (each generated function documented), with links into the language guide. Done when mix docs has no undocumented public function (check with a doc-coverage script or doctor-style check in CI) and doctests pass.",
   "id": "defk-djy.3",
@@ -16,8 +17,8 @@
   ],
   "parent": "defk-djy",
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Write the API docs: moduledocs, function docs, doctests, specs",
   "type": "task",
-  "updated_at": "2026-10-11T12:05:01Z"
+  "updated_at": "2026-10-11T12:17:27Z"
 }
