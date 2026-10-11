@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-11T14:05:04Z",
   "created": "2026-10-11T13:10:22Z",
   "description": "Found in defk-52v.9 (examples/argon2.exs). A called kernel that writes an array parameter directly and later rebinds the same name from a call or a reduce loop, then returns the new binding, is rejected with write-not-returned, although the returned array is the written one (valid Elixir, nothing is lost).\n\nReproduction (Mix.install script, main at b29f672):\n\n```elixir\ndefmodule Wnr do\n  use Defk\n\n  defk step(a :: [i64]) :: [i64] do\n    a[0] = a[0] + 1\n    a\n  end\n\n  # writes its parameter a, then rebinds a from a call and returns the new a\n  defk bump(a :: [i64]) :: [i64] do\n    a[1] = 7\n    a = step(a)\n    a\n  end\n\n  defk run(n :: i64) :: [i64] do\n    bump(alloc(i64, n))\n  end\nend\n```\n\nGives: error: bump/1 writes to its array parameter a but doesn't return it ... hint: {a, a}. Expected: compiles, Wnr.run(2) == \u003c\u003c1::64-native, 7::64-native\u003e\u003e. The same happens with `r[k] = x` in a for loop followed by `r = for i \u003c- 0..7//1, reduce: r do r -\u003e perm(r, ...) end` and `{mem, r}` returned (argon2's fill/6), and with direct writes to mem before `{mem, r, addrs} = for ..., reduce: {mem, r, addrs}` (segment/12). The check seems to compare the returned binding with the parameter binding by identity instead of following rebinds.\n\nWorkaround used in argon2.exs: never write the parameter directly before a rebind; do the first writes in a reduce loop over the array (`{mem, r} = for k \u003c- ..., reduce: {mem, r}`) or in a helper kernel that returns it (`mem = address_input(mem, ...)`). Costs nothing at run time (no copy in the generated C), but the hint ({a, a}) is misleading.",
   "id": "defk-3z5",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "write-not-returned fires when a kernel writes its array parameter and then rebinds and returns it",
   "type": "bug",
-  "updated_at": "2026-10-11T14:05:03Z"
+  "updated_at": "2026-10-11T14:05:04Z"
 }
