@@ -17,11 +17,15 @@
     {
       "text": "Decision (2026-10-11): the max_owned default stays at half of physical memory.",
       "timestamp": "2026-10-11T20:51:48Z"
+    },
+    {
+      "text": "Decision (2026-10-11): no max_owned: :infinity; the option takes a byte count only.",
+      "timestamp": "2026-10-11T20:52:46Z"
     }
   ],
   "priority": 3,
   "status": "closed",
   "title": "Bound the memory a kernel's owned buffers may hold, so copies or allocs in a loop raise instead of exhausting the node",
   "type": "task",
-  "updated_at": "2026-10-11T20:51:48Z"
+  "updated_at": "2026-10-11T20:52:46Z"
 }
