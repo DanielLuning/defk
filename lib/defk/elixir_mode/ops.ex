@@ -237,6 +237,74 @@ defmodule Defk.ElixirMode.Ops do
     <<pre::binary, bytes::binary, post::binary>>
   end
 
+  # copy/5 and copy_back/4 (defk-52v.16) on a packed array of esz-byte
+  # elements, checked in the kernel's order (defk_rcopy_T): the length, the
+  # destination range, then the source range (copy_back: the offset). copy_back is
+  # out[at + j] = out[at + j - off] for j = 0..n-1 in order, so when off < n
+  # the off elements before `at` repeat; the pattern copy below is that loop.
+  def copy(a, at, s, from, n, esz) do
+    if n < 0, do: raise(ArgumentError, "copy/5: negative length #{n}")
+    len = Kernel.div(byte_size(a), esz)
+    slen = Kernel.div(byte_size(s), esz)
+    if at < 0 or at > len - n, do: copy_oob("copy/5", n, "at", at, "array", len)
+    if from < 0 or from > slen - n, do: copy_oob("copy/5", n, "from", from, "source array", slen)
+    splice(a, at * esz, binary_part(s, from * esz, n * esz))
+  end
+
+  def copy_back(a, at, off, n, esz) do
+    if n < 0, do: raise(ArgumentError, "copy_back/4: negative length #{n}")
+    len = Kernel.div(byte_size(a), esz)
+    if at < 0 or at > len - n, do: copy_oob("copy_back/4", n, "at", at, "array", len)
+    copy_back_offset!(at, off, n)
+    copy_run(a, at, off, n, esz)
+  end
+
+  # the offset is checked only when something is copied: an empty copy reads
+  # nothing (an LZ element with no match)
+  defp copy_back_offset!(_at, _off, 0), do: :ok
+
+  defp copy_back_offset!(_at, off, _n) when off < 1,
+    do: raise(ArgumentError, "copy_back/4: offset #{off} is not positive")
+
+  defp copy_back_offset!(at, off, _n) do
+    if at < off do
+      raise %Enum.OutOfBoundsError{
+        message: "copy_back/4: offset #{off} from index #{at} is before the start of the array",
+        index: at - off
+      }
+    end
+  end
+
+  defp copy_run(a, _at, _off, 0, _esz), do: a
+
+  defp copy_run(a, at, off, n, esz) do
+    run =
+      if off >= n do
+        binary_part(a, (at - off) * esz, n * esz)
+      else
+        pattern = binary_part(a, (at - off) * esz, off * esz)
+
+        :binary.copy(pattern, Kernel.div(n, off)) <>
+          binary_part(pattern, 0, Kernel.rem(n, off) * esz)
+      end
+
+    splice(a, at * esz, run)
+  end
+
+  defp copy_oob(f, n, where, i, what, len) do
+    raise %Enum.OutOfBoundsError{
+      message:
+        "#{f}: #{n} elements #{where} index #{i} out of bounds for #{what} of length #{len}",
+      index: i
+    }
+  end
+
+  defp splice(a, pos, bytes) do
+    k = byte_size(bytes)
+    <<pre::binary-size(^pos), _::binary-size(^k), post::binary>> = a
+    <<pre::binary, bytes::binary, post::binary>>
+  end
+
   # word loads from a [u8]: the unsigned w-byte integer at byte offset i, as
   # <<_::binary-size(i), x::little-unsigned-size(w * 8), _::binary>> = a;
   # u64 is the i64 bit pattern (signed), as the kernel returns it
