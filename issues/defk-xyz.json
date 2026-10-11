@@ -6,7 +6,7 @@
   "description": "Found in defk-9p6.14. examples/pcm_mix.exs generates its s16le and s32le kernels from one quoted source (a defmacro returning `quote location: :keep do defk ... end end`, called as `PCM.Gen.mixer(:mix_s16, :flush_s16, i16, -32_768, 32_767)`). The kernels compile and run, but Defk.Report.print/1 lists all ~15 notes (bounds checks kept, vectorised or not, alloc zeroing) against the single call line, in one column, so you cannot tell which loop or access a note is about. `location: :keep` does not change it: the notes carry the caller line, not the :keep file/line. Workaround while tuning: write one kernel by hand (or in a scratch module), read its report, then generate. Options: use the :keep line/file from the quoted AST meta when present and print the macro module source; or print the note with the kernel-relative expression text (`bufs[base + i]: ...` is already there) grouped per loop. Done when: a kernel defined through a `location: :keep` macro gets its notes on the macro source lines (test in report_test).",
   "id": "defk-xyz",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "comments": [
     {
