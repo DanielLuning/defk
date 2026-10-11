@@ -46,13 +46,14 @@
 # with a message naming what was wrong ("lz4: match offset out of range"),
 # at the element where it is found. The message cannot carry the offset:
 # raise takes a literal message only (defk-sbp asks for an integer in it).
-# Copies go through two helper kernels, copy_lit/5 and copy_back/4: eight
-# bytes at a time (one u64_le load, eight byte stores) when the copy does not
-# overlap within a word and the buffers have 7 bytes of slack (the extra
-# bytes written past the copy are overwritten by the next element, because
-# the output is written strictly in order), byte by byte otherwise, which is
-# the format's overlapping-copy semantics (offset < length repeats the last
-# offset bytes). Snappy's preamble length is also bounded by 22 x the input
+# Copies are the range-copy builtins (defk-52v.16): a literal is
+# out = copy(out, op, src, ip, ln), a match out = copy_back(out, op, off, ml),
+# whose meaning is the format's: out[op + j] = out[op + j - off] for j in
+# order, so an offset below the length repeats the last offset bytes. Each
+# is one range check, then a few loads and stores (up to 32 bytes), memmove,
+# or 8-byte words from at least 8 bytes back for an overlapping match. A
+# literal element calls copy and a match element copy_back, in the two arms
+# of the reduce_while fn. Snappy's preamble length is also bounded by 22 x the input
 # (a copy-2 element turns 3 bytes into at most 64), so a 6-byte stream that
 # claims 4 GiB raises before alloc; snappyer allocates the claimed 4 GiB
 # first (6.7 ms) and then reports corrupted_data. LZ4 is lenient where the
@@ -60,26 +61,27 @@
 # within 12 bytes of the end (liblz4 rejects some of those; lz4_flex does
 # not). The fuzz section counts these disagreements with the NIFs.
 #
-# Bounds checks left in the hot loops (Defk.Report): every byte store
-# out[o + i] in the word copies keeps a bounds check and an overflow check on
-# o + i (clang does not merge the eight stores into one 64-bit store), and
-# the byte loops keep both checks on both sides; the tag/token reads keep
-# theirs. Nothing proves them, because the copy positions are data
-# (defk-siy, defk-9za: the guarding `if op + ln + 7 <= len(out)` is not used
-# as a fact). A word-store builtin or a bounded array-copy builtin
-# (defk-52v.16) would remove most of them.
+# Bounds checks left in the hot loops (Defk.Report): one range check per
+# copy ("copy(out, op, src, s, ln): one range check for the whole copy"),
+# and the tag/token and offset reads keep theirs; there is no per-byte check
+# and no copy loop in the kernels (the disassembly of either decoder has no
+# byte store, strb, outside the copy_back pattern fill). Before defk-52v.16
+# the copies were two helper kernels with a u64_le load and eight checked
+# byte stores per word (clang did not merge them), and a bounds and an
+# overflow check on every byte: the lz4 kernel had 36 strb and 74
+# overflow branches (b.vs), now 0 and 19.
 #
 # A copy trap found here (defk-33b): calling a helper kernel that writes and
 # returns `out` inside one branch of an `if` in the loop body, when another
 # branch reads `out` (`if done, do: {:halt, {out, ...}}, else: (out =
-# copy_back(out, ...); ...)`), copies the whole output buffer on every
-# element and keeps every copy until the kernel returns: 47 ms instead of
+# copy_back(out, ...); ...)`), copied the whole output buffer on every
+# element and kept every copy until the kernel returned: 47 ms instead of
 # 0.1 ms at 64 KB, and the BEAM was SIGKILLed (exit 137, out of memory) at 4
-# MB. Fixed in defk-33b: a read in another branch is no longer taken for a
-# read after the call, so the helper in a branch writes in place too. The
-# kernels below still call both helpers unconditionally at the top of the
-# loop body (a zero length when an element has no literal or no match), the
-# workaround from before the fix, which costs nothing.
+# MB. Fixed in defk-33b. The kernels then still called both copy helpers
+# unconditionally, one with length 0; with the builtins that spelling (copy
+# and copy_back on every element) costs more than branching: 64 us against
+# 39-40 us for Snappy at 64 KB, while LZ4 is the same either way (44-46 us).
+# The kernels branch.
 #
 # Elixir baseline: optimised. There is no pure-Elixir LZ4 or Snappy decoder
 # on Hex worth using; three versions per format were written and measured.
@@ -98,7 +100,9 @@
 #   positional: the optimised copies, the      310-325 us    295-320 us
 #     input read by index (binary_part,
 #     :binary.at) instead of matching the rest
-#   defk kernel                                63-72 us      70-77 us
+#   defk kernel, byte-store helpers            63-72 us      70-77 us
+#   defk kernel, copy/copy_back (defk-52v.16)  39-46 us      42-49 us
+#     (load average 150-195, so provisional)
 #
 # The optimised Elixir times are bimodal (the same lz4 call measured 230 us
 # in one part of a run and 450 us in another, with a GC before every
@@ -107,7 +111,9 @@
 # 64 KB back), so the output must stay one binary. Where Elixir wins:
 # incompressible data, which both formats store as one long literal: the
 # Elixir decoders return a sub-binary of the input (0.6-1 us at 64 KB,
-# 0.08-0.7 ms at 4 MB) where the kernel copies every byte (15 us, 0.95 ms).
+# 0.08-0.7 ms at 4 MB) where the kernel copies every byte (15 us, 0.95 ms
+# with the byte-store helpers; one memmove with copy: 1.2-1.6 us, 85-93 us,
+# level with the Elixir sub-binary at 4 MB).
 #
 # Native: as installed from Hex, both NIFs are built without optimisation:
 # rebar3's port compiler (pc) passes no -O, lz4_erl sets no CFLAGS, and
@@ -117,23 +123,36 @@
 # LZ_NIF_OPT=1 rebuilds them with CFLAGS=-O3 CXXFLAGS=-O2 in a separate
 # Mix.install directory. 64 KB JSON block / 4 MB JSON block:
 #
-#   defk snappy_decode               63-72 us / 4.5-4.9 ms
-#   snappyer as installed (-O0)      99-184 us / 5.9-6.8 ms
-#   snappyer rebuilt -O2             23-26 us / 1.6 ms
-#   defk lz4_block_decode            70-77 us / 4.1-4.8 ms
-#   lz4_erl as installed (-O0)       92-97 us / 5.2-5.5 ms
-#   lz4_erl rebuilt -O3              8-9 us / 0.9 ms
-#   nimble_lz4 (lz4_flex, Rust)      20-24 us / 1.1-2.3 ms
+#                                    byte stores (defk-52v.3)  copy builtins (defk-52v.16)
+#   defk snappy_decode               63-72 us / 4.5-4.9 ms     39-46 us / 3.2-3.3 ms
+#   snappyer as installed (-O0)      99-184 us / 5.9-6.8 ms    0.12-6.4 ms (dirty waits)
+#   snappyer rebuilt -O2             23-26 us / 1.6 ms         27-95 us / 1.6-1.7 ms
+#   defk lz4_block_decode            70-77 us / 4.1-4.8 ms     42-49 us / 2.7 ms
+#   lz4_erl as installed (-O0)       92-97 us / 5.2-5.5 ms     96-222 us (two runs)
+#   lz4_erl rebuilt -O3              8-9 us / 0.9 ms           8-12 us / 0.91-0.92 ms
+#   nimble_lz4 (lz4_flex, Rust)      20-24 us / 1.1-2.3 ms     35-98 us / 1.2-1.3 ms
 #
-# So the kernels are 1.3-1.6x faster than the NIFs people install, and 3x
-# (snappy) to 9x (lz4) slower than the same libraries built with
-# optimisation: not the parity the ticket expected. The cost is per element
-# (about 13 ns per LZ4 sequence against liblz4's 2 ns) and per byte (a
-# bounds and an overflow check on every byte store, see above; defk-52v.16).
+# (The copy-builtin column: load average 150-195, best of 15-25
+# interleaved rounds, the old kernels measured beside the new in the same
+# rounds at 65 / 74-75 us and 4.55 / 4.25 ms; snappyer runs on a dirty
+# scheduler, which the load slowed in some rounds.) So the kernels are
+# 1.2-2x faster than the NIFs people install, and against the same
+# libraries built with optimisation 0.5-0.7x (snappy) and 0.2-0.35x (lz4):
+# still not the parity the ticket expected. With the per-byte checks gone
+# the cost is per element (about 8 ns per LZ4 sequence, from 13, against
+# liblz4's 2 ns): the reduce_while step with a safepoint, the checked
+# position arithmetic and the format's own checks, where liblz4 copies 16
+# bytes unconditionally (wildcopy) into slack it then overwrites. Long
+# copies are at memmove speed: the repetitive 4 MB block (long matches)
+# decodes in 175-180 us against optimised liblz4's 190 us.
 # Responsiveness (4 MB block, 1 ms ticker on one scheduler): the kernels and
 # snappyer (dirty) stay at the loaded machine's ~2 ms floor; lz4_erl as
 # installed runs 5-7 ms on a normal scheduler without yielding and gaps the
-# ticker by 5.1-11.3 ms (0.9 ms when built -O3).
+# ticker by 5.1-11.3 ms (0.9 ms when built -O3). A copy over 1 MiB runs in
+# 1 MiB strips with a safepoint after each, so a long literal or match
+# yields like a loop. With the copy builtins at load 150-195 the kernels
+# gapped the ticker by 2.3-6.2 ms, the dirty snappyer and the -O3 lz4_erl by
+# 1.8-7.4 ms: the floor of the machine at that load.
 #
 # Agreement and safety, checked on every run:
 #   - corpus: five kinds of data (text: this repo's docs and lib sources;
@@ -152,8 +171,10 @@
 #     kernels' own checks (never Enum.OutOfBoundsError or ArithmeticError),
 #     and the optimised Elixir decoder must agree on accept/reject and value.
 #     The NIFs decode the same inputs; their disagreements are counted.
-#     Measured: 3,000 inputs per format, 973 (snappy) and 5,383 (lz4) forced
-#     yields, every input agreeing in all three checks; 557 and 592 accepted.
+#     Measured: 3,000 inputs per format, 685 (snappy) and 5,230 (lz4) forced
+#     yields (973 and 5,383 with the byte-store helpers, whose copy loops had
+#     safepoints of their own), every input agreeing in all three checks; 557
+#     and 592 accepted.
 #     Snappy vs snappyer: 2,994 the same, 6 where snappyer returns "" for an
 #     empty input (its NIF wrapper special-cases it; the format needs a
 #     preamble, the kernel raises). LZ4 vs liblz4: 2,986 the same, 14 the
@@ -245,12 +266,15 @@ defmodule LzSnappy.Kernels do
         if t != 0 and (off == 0 or off > op),
           do: raise(ArgumentError, "snappy: copy offset out of range")
 
-        # both helpers on every element (one of the lengths is 0): the
-        # workaround for defk-33b (fixed), see the header
-        out = copy_lit(out, op, src, s, lit)
-        out = copy_back(out, op + lit, off, ln - lit)
-        nip = s + lit
-        if nip >= n, do: {:halt, {out, nip, op + ln}}, else: {:cont, {out, nip, op + ln}}
+        # a literal or a copy: one range copy, checked once (defk-52v.16)
+        if t == 0 do
+          out = copy(out, op, src, s, ln)
+          nip = s + ln
+          if nip >= n, do: {:halt, {out, nip, op + ln}}, else: {:cont, {out, nip, op + ln}}
+        else
+          out = copy_back(out, op, off, ln)
+          if s >= n, do: {:halt, {out, s, op + ln}}, else: {:cont, {out, s, op + ln}}
+        end
       end)
 
     if op != ulen, do: raise(ArgumentError, "snappy: output shorter than the preamble says")
@@ -278,36 +302,27 @@ defmodule LzSnappy.Kernels do
 
         if ip1 + lit > n, do: raise(ArgumentError, "lz4: literals run past the input")
         if op + lit > max_out, do: raise(ArgumentError, "lz4: output longer than max_out")
-        out = copy_lit(out, op, src, ip1, lit)
+        out = copy(out, op, src, ip1, lit)
         ip2 = ip1 + lit
         op2 = op + lit
-        last = ip2 == n
 
-        {off, ml, ip3} =
-          if last do
-            {0, 0, ip2}
-          else
-            if ip2 + 2 > n, do: raise(ArgumentError, "lz4: truncated match offset")
-            o = u16_le(src, ip2)
-            if o == 0 or o > op2, do: raise(ArgumentError, "lz4: match offset out of range")
-
-            {m, ip4} =
-              if band(token, 15) == 15 do
-                ext_len(src, ip2 + 2, 19)
-              else
-                {band(token, 15) + 4, ip2 + 2}
-              end
-
-            if op2 + m > max_out, do: raise(ArgumentError, "lz4: output longer than max_out")
-            {o, m, ip4}
-          end
-
-        out = copy_back(out, op2, off, ml)
-
-        if last do
-          {:halt, {out, ip3, op2, true}}
+        if ip2 == n do
+          {:halt, {out, ip2, op2, true}}
         else
-          {:cont, {out, ip3, op2 + ml, false}}
+          if ip2 + 2 > n, do: raise(ArgumentError, "lz4: truncated match offset")
+          o = u16_le(src, ip2)
+          if o == 0 or o > op2, do: raise(ArgumentError, "lz4: match offset out of range")
+
+          {m, ip3} =
+            if band(token, 15) == 15 do
+              ext_len(src, ip2 + 2, 19)
+            else
+              {band(token, 15) + 4, ip2 + 2}
+            end
+
+          if op2 + m > max_out, do: raise(ArgumentError, "lz4: output longer than max_out")
+          out = copy_back(out, op2, o, m)
+          {:cont, {out, ip3, op2 + m, false}}
         end
       end)
 
@@ -325,63 +340,6 @@ defmodule LzSnappy.Kernels do
       b = src[i]
       if b == 255, do: {:cont, {acc + 255, i + 1}}, else: {:halt, {acc + b, i + 1}}
     end)
-  end
-
-  # src[s..s + ln - 1] to out[op..]: in 8-byte words, writing up to 7 bytes past
-  # the end when both arrays have that slack; else whole words and a byte tail
-  defk copy_lit(out :: [u8], op :: i64, src :: [u8], s :: i64, ln :: i64) :: [u8] do
-    slack = op + ln + 7 <= len(out) and s + ln + 7 <= len(src)
-    words = if slack, do: div(ln + 7, 8), else: div(ln, 8)
-
-    for c <- 0..(words - 1)//1 do
-      w = u64_le(src, s + 8 * c)
-      o = op + 8 * c
-      out[o] = band(w, 255)
-      out[o + 1] = band(bsr(w, 8), 255)
-      out[o + 2] = band(bsr(w, 16), 255)
-      out[o + 3] = band(bsr(w, 24), 255)
-      out[o + 4] = band(bsr(w, 32), 255)
-      out[o + 5] = band(bsr(w, 40), 255)
-      out[o + 6] = band(bsr(w, 48), 255)
-      out[o + 7] = band(bsr(w, 56), 255)
-    end
-
-    for k <- min(8 * words, ln)..(ln - 1)//1 do
-      out[op + k] = src[s + k]
-    end
-
-    out
-  end
-
-  # out[op - off..] to out[op..], ln bytes, with the format's overlap meaning:
-  # byte by byte when off < 8 (a word would read bytes not yet written), in
-  # 8-byte words otherwise (each word reads only bytes already final)
-  defk copy_back(out :: [u8], op :: i64, off :: i64, ln :: i64) :: [u8] do
-    words =
-      cond do
-        off < 8 -> 0
-        op + ln + 7 <= len(out) -> div(ln + 7, 8)
-        true -> div(ln, 8)
-      end
-
-    for c <- 0..(words - 1)//1 do
-      w = u64_le(out, op - off + 8 * c)
-      o = op + 8 * c
-      out[o] = band(w, 255)
-      out[o + 1] = band(bsr(w, 8), 255)
-      out[o + 2] = band(bsr(w, 16), 255)
-      out[o + 3] = band(bsr(w, 24), 255)
-      out[o + 4] = band(bsr(w, 32), 255)
-      out[o + 5] = band(bsr(w, 40), 255)
-      out[o + 6] = band(bsr(w, 48), 255)
-      out[o + 7] = band(bsr(w, 56), 255)
-    end
-
-    for k <- min(8 * words, ln)..(ln - 1)//1 do
-      out[op + k] = out[op - off + k]
-    end
-
-    out
   end
 end
 
