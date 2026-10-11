@@ -11,6 +11,12 @@
     "ready-for-agent"
   ],
   "parent": "defk-ulk",
+  "comments": [
+    {
+      "text": "Unblocked by the maintainer (2026-10-11): ulk.1's research (docs/research/simd.md) recommends this first and it doesn't depend on the outstanding x86 timings; a crc32c builtin can choose the instruction at run time, so it needs no architecture build.",
+      "timestamp": "2026-10-11T13:09:08Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Prototype: hardware-instruction builtins with exact meanings (crc32c first)",
