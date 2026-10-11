@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Fixed on branch defk-3z5/write-not-returned-rebind (9092004). Cause: lib/defk/compiler.ex unreturned_writes!/3 compared the binding ids of the returned values with the parameter's binding id, so a parameter written and then bound again (a = step(a), r = for ..., reduce: r, {mem, r} = for ..., reduce: {mem, r}) had a new id and was reported, although the returned array holds the write. Fix: writes are recorded with the buffer written ({id, buf, at}); a new process key :defk_from records which buffer carries which (carried/2: copied/2's new buffer from the old, a reduce accumulator's buffer from its initial value, the body's binding and the loop's result from the accumulator); a write is lost only if no returned array's buffer carries the written one (carries?/2). assign_accs cuts an accumulator's carry (cut_carry/1) when a new value from the body does not carry the accumulator, so a reduce body giving a fresh alloc still loses the write. Binding the parameter to alloc/2 or a helper's new array is still write-not-returned; when the returned name is the parameter (the near miss), the hint now says it is bound again after the write to an array that does not hold it, instead of the {a, a} rewrite. Tests (test/value_semantics_test.exs, 'a written parameter bound again and returned (defk-3z5)'): the reproduction (rebind_call), argon2 fill/6 shape (fill_shape via rebind_reduce), segment/12 shape (seg_shape via rebind_tuple), on the caller's inputs (rebind_input, inputs unchanged): agreement properties, forced yields, no copy note and no defk_copy_ in the C. Compile errors: rebind to alloc (new hint, no {a, a}), to a helper's new array, to a reduce whose body gives a new array; returning the result under another name compiles. Docs: language.md (calls: rebinding allowed when it holds the written array); errors registry text unchanged, so compile-errors.md not regenerated; argon2.exs language note says the restriction is lifted (kernels unchanged). CI: format, compile --warnings-as-errors, docs, credo, dialyzer, ex_dna pass; reach.check passes but times out intermittently under load ~100; full test suite: only load flakes (ReportTest dot vectorises, ScaledFacts property timeout, RaiseCleanup frames_live and Crc32c stats from the merged main, both pass alone).",
+      "timestamp": "2026-10-11T14:05:03Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "write-not-returned fires when a kernel writes its array parameter and then rebinds and returns it",
   "type": "bug",
-  "updated_at": "2026-10-11T13:35:24Z"
+  "updated_at": "2026-10-11T14:05:03Z"
 }
