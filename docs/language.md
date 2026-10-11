@@ -232,7 +232,7 @@ unstable (debugging output that may change in any version):
 | `__defk_report__/0` | the fast-path report as data, `[{kernel, line, fact}]` (see `Defk.Report`; `Defk.Report.print/1` prints it) |
 | `__defk_lib__/0` | the path of the compiled NIF library (`.so`) |
 | `__defk_kernels__/0` | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
-| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:}` |
+| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:, crc32c:}` (`crc32c` is `:instruction` or `:table`, the [crc32c](#hardware-builtins) implementation it picked at its first call, or `:not_called`) |
 | `__defk_force_yields__/1` | testing: `true` makes this module's kernels yield at every clock read, so every resume path runs; `false` turns it off |
 | `__defk_elixir__/2` | Elixir mode: `Mod.__defk_elixir__(:name, args)` runs one call as plain Elixir (only where Elixir mode is compiled, see [section 10](#10-elixir-mode)) |
 | `__defk_elixir_source__/0` | the generated Elixir mode code (same condition) |
@@ -555,6 +555,7 @@ wrong types is [`builtin-arguments`](compile-errors.md#builtin-arguments).
 | `rotl(x, n, w)`, `rotr(x, n, w)` | an `i64` or `u64` x in 0..2^w - 1, an `i64` count, an `i64` width w in 1..64 | x's type: the w-bit value x rotated by n mod w | as `clz(x, w)`; an `i64` x whose result is above 2^63 - 1 raises `ArithmeticError` |
 | `rotl64(x, n)`, `rotr64(x, n)` | two `i64` | `i64`: the 64-bit pattern of `x` rotated by `band(n, 63)` | see [Bit builtins](#bit-builtins) |
 | `f64_to_u64(x)` | a number | `u64`: the IEEE 754 bits of `x` as a float | |
+| `crc32c(crc, x, w)` | an `i64` or `u64` crc in 0..2^32 - 1, an `i64` or `u64` x in 0..2^w - 1, an `i64` width w of 8, 16, 32 or 64 | `i64` in 0..2^32 - 1: one CRC32C step over the w/8 bytes of x, as `Defk.Bits.crc32c/3`. A hardware builtin: the CPU's instruction where it has one, a table otherwise, the same value | `ArgumentError` for a width or value out of range; see [Hardware builtins](#hardware-builtins) |
 | `u64_le(b, i)`, `u32_le`, `u16_le`, `u64_be`, `u32_be`, `u16_be` | a `[u8]` and an `i64` byte offset | `i64`: the unsigned word at `i` (`u64` as its signed bit pattern) | see [Word loads](#word-loads) |
 
 `length/1`, `byte_size/1` and `tuple_size/1` are
@@ -620,6 +621,83 @@ with the top bit set is negative):
 Operands must be integers; `f64` and `bool` are rejected
 ([builtin-arguments](compile-errors.md#builtin-arguments)). None of these six can raise.
 (defk-52v.6)
+
+### Hardware builtins
+
+A hardware builtin is a bit builtin with an exact integer meaning in
+`Defk.Bits` (which Elixir mode calls) that some CPUs compute in one
+instruction. The kernel uses the instruction where the CPU running it has
+one, and a portable C version elsewhere: **the value is the same on every
+CPU, only the speed differs.** The choice is made at run time, once per
+kernel library (at its first call of the builtin), so a portable build
+never needs an architecture flag and never runs an instruction the CPU
+lacks. There is one so far, `crc32c/3`. (defk-ulk.4)
+
+`crc32c(crc, x, w)` is one CRC32C (Castagnoli) step: the CRC register
+`crc` after the `w` bits of `x`, as `w / 8` bytes, least significant byte
+first, with the reflected polynomial 0x82F63B78 and no inversion. That is
+exactly what the ARMv8 `CRC32CB/H/W/X` and the SSE4.2 `crc32` instructions
+compute. `w` is 8, 16, 32 or 64, `crc` is in 0..2^32 - 1 and `x` in
+0..2^w - 1 (an `i64` or a `u64`), and anything else raises `ArgumentError`
+("Defk.Bits.crc32c/3: width 12 is not 8, 16, 32 or 64", "... 256 does not
+fit in a 8-bit field"), as the Elixir function does. The result is an
+`i64` in 0..2^32 - 1. The standard CRC-32C of a message (iSCSI, ext4, Kafka
+record batches) starts from `0xFFFFFFFF` and inverts the end:
+
+```elixir
+defk crc32c_of(b :: [u8]) :: i64 do
+  n = len(b)
+  words = n - rem(n, 8)
+
+  crc =
+    for i <- 0..(words - 8)//8, reduce: 0xFFFFFFFF do
+      crc -> crc32c(crc, band(u64_le(b, i), 0xFFFFFFFFFFFFFFFF), 64)
+    end
+
+  crc =
+    for i <- words..(n - 1)//1, reduce: crc do
+      crc -> crc32c(crc, b[i], 8)
+    end
+
+  bxor(crc, 0xFFFFFFFF)
+end
+```
+
+```elixir
+iex> M.crc32c_of("123456789")
+0xE3069283
+iex> M.crc32c_of(<<>>)
+0
+```
+
+`u64_le/2` gives the word as its signed `i64` pattern, so a word with the
+top bit set is negative and does not fit in 64 bits; `band(..., 0xFFFFFFFFFFFFFFFF)`
+makes it the `u64` value, at no cost. One step waits for the previous one
+(3 cycles on an Apple M4), so this loop runs at about 10 GB/s; three
+independent streams joined at the end run at about 28 GB/s, level with the
+crc32cer NIF (`examples/hashes.exs` has that kernel, and
+[Performance notes](performance.md), 6.18 and 6.19, the numbers).
+
+Which implementation runs, and what it costs, depends on the CPU:
+
+| Target | `crc32c/3` runs | Measured, 4 MB, three streams |
+|---|---|---|
+| arm64 macOS (every Apple CPU) | the CRC32C instruction | 0.15 ms (27 GB/s), 0.9x crc32cer, 17x Elixir slicing-by-8 |
+| arm64 Linux with the CRC extension (all ARMv8.1 and later, most v8.0 servers; `getauxval(AT_HWCAP) & HWCAP_CRC32`) | the CRC32C instruction | 0.19 ms (GCC 14, Debian, in a Linux VM on the same M4; the table 0.72 ms); no Linux arm64 hardware timed |
+| x86-64 with SSE4.2 (every x86-64 CPU since 2008; checked with CPUID) | `crc32` | compiled and checked, not timed on x86 hardware |
+| anything else, or `DEFK_PORTABLE_BUILTINS=1` | a slicing-by-8 table step | 0.68-0.70 ms (6 GB/s), 3.8x Elixir |
+
+The check and the branch to the instruction cost nothing measurable (0.389
+vs 0.390 ms for 4 MB one word at a time, with and without them). On a CPU
+without the instruction the table is about 4.5x slower than the
+instruction, and still faster than the same table in Elixir.
+
+- `Mod.__defk_stats__().crc32c` tells which one a kernel library picked:
+  `:instruction`, `:table`, or `:not_called` before its first call.
+- Setting `DEFK_PORTABLE_BUILTINS` to anything but `""` or `"0"` (in the
+  shell, or with `System.put_env/2` before the library's first call) makes
+  the library use the table, to test or measure the fallback on a CPU that
+  has the instruction.
 
 ### Masked arithmetic
 

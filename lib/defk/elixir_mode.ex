@@ -638,6 +638,9 @@ defmodule Defk.ElixirMode do
     {coerce(q, :u64, tx), tx}
   end
 
+  defp builtin(:crc32c, [c, x, w], [_, _, tw], m),
+    do: {remote(Defk.Bits, :crc32c, [c, x, coerce(w, tw, :i64)], m), :i64}
+
   defp builtin(:f64_to_u64, [x], [tx], m),
     do: {remote(Defk.Bits, :f64_to_u64, [coerce(x, tx, :f64)], m), :u64}
 

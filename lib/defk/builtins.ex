@@ -12,7 +12,7 @@ defmodule Defk.Builtins do
   @loads [:u64_le, :u64_be, :u32_le, :u32_be, :u16_le, :u16_be]
   # bit builtins with a plain Elixir meaning in Defk.Bits (clz and ctz also
   # take a width: clz/2, ctz/2)
-  @bits [:mulhi, :clz, :ctz, :popcount, :rotl64, :rotr64, :rotl, :rotr, :f64_to_u64]
+  @bits [:mulhi, :clz, :ctz, :popcount, :rotl64, :rotr64, :rotl, :rotr, :f64_to_u64, :crc32c]
   @all [:len, :bit_size, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
          @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ [:alloc] ++ @bits
 
@@ -45,7 +45,7 @@ defmodule Defk.Builtins do
 
   @doc """
   The bit builtins (mulhi/2, clz/1,2, ctz/1,2, popcount/1, rotl64/2,
-  rotr64/2, rotl/3, rotr/3, f64_to_u64/1).
+  rotr64/2, rotl/3, rotr/3, f64_to_u64/1, crc32c/3).
   """
   def bits, do: @bits
 

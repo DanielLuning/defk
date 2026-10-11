@@ -2526,6 +2526,20 @@ defmodule Defk.Compiler do
     if t == :i64, do: u64_to_i64(c), else: c
   end
 
+  # crc32c(crc, x, w) (defk-ulk.4): one CRC32C step, checked as Defk.Bits
+  # checks it; the instruction or the table is picked at run time in
+  # defk_runtime.h. The result is a 32-bit value.
+  defp builtin(:crc32c, [%{t: tc} = c, %{t: tx} = x, w], node, _)
+       when tc in @ints and tx in @ints do
+    w = coerce!(w, :i64, arg(node, 2), "crc32c/3 width")
+    sfx = Enum.map_join([tc, tx], &if(&1 == :i64, do: "i", else: "u"))
+
+    Map.merge(val("defk_crc32c_#{sfx}(ctx, #{c.c}, #{x.c}, #{w.c})", :i64), %{
+      lo: 0,
+      hi: 0xFFFFFFFF
+    })
+  end
+
   defp builtin(:f64_to_u64, [x], node, _) do
     numeric!(x, arg(node, 0), "f64_to_u64/1")
     val("defk_f64_to_u64(#{to_f(x)})", :u64)
@@ -2662,7 +2676,8 @@ defmodule Defk.Compiler do
     rotr64: "two i64 values",
     rotl: "an integer, an i64 count and an i64 width",
     rotr: "an integer, an i64 count and an i64 width",
-    f64_to_u64: "a number"
+    f64_to_u64: "a number",
+    crc32c: "an integer crc, an integer word and an i64 width (8, 16, 32 or 64)"
   }
 
   @spec builtin_arguments!(term(), term(), term()) :: no_return()
@@ -2673,7 +2688,7 @@ defmodule Defk.Compiler do
     arity =
       cond do
         name in [:clz, :ctz] -> if match?([_, _], vals), do: 2, else: 1
-        name in [:rotl, :rotr] -> 3
+        name in [:rotl, :rotr, :crc32c] -> 3
         name in [:div, :rem, :min, :max, :pow, :mulhi, :rotl64, :rotr64] -> 2
         name in @loads or name in @bitwise -> if name == :bnot, do: 1, else: 2
         true -> 1
