@@ -47,13 +47,13 @@ defmodule Defk.MixProject do
 
   # Docs structure. Adding a page is a one-line change: append its path to
   # @guides (how-to pages) or @reference (lookup pages); the group is derived
-  # from the list. Planned: docs/performance.md (defk-djy.10).
+  # from the list.
   #
   # Choice (defk-djy.1): guides and docs/language.md are extras. ADRs,
   # research, cold tests, verdict.md, fast-path-report.md and beam-nifs.md are
   # project history for people inside the repo, so they are left out of
   # HexDocs (they stay in the repo and are linked from the README).
-  @guides ["README.md", "docs/scope.md"]
+  @guides ["README.md", "docs/scope.md", "docs/performance.md"]
   @reference ["docs/language.md"]
 
   defp docs do

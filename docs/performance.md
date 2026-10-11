@@ -58,7 +58,7 @@ the old entry, mark it superseded and say by what.
 
 ## 1. Measuring honestly
 
-The rules are in [examples/README.md, "Measuring correctly"](../examples/README.md#measuring-correctly).
+The rules are in [examples/README.md, "Measuring correctly"](https://github.com/DanielLuning/defk/blob/main/examples/README.md#measuring-correctly).
 These entries are the evidence behind them.
 
 ### 1.1 Measure the Elixir alternatives; don't assume which is fastest
@@ -71,7 +71,7 @@ Spellings that look equivalent are not: `Enum.sum/1` is not just
   floats: `Enum.map` with `min/max` 8.2 ms, body recursion 13.2 ms, a `for`
   comprehension 14.6 ms, guard clauses 14.7 ms.
 - **Conditions:** 1M floats; load not recorded.
-- **Source:** [`poor_list_data.exs`](../examples/poor_list_data.exs), [`poor_tiny_calls.exs`](../examples/poor_tiny_calls.exs) (commit 9116a42).
+- **Source:** [`poor_list_data.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_list_data.exs), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs) (commit 9116a42).
 - **Status:** measured.
 
 ```elixir
@@ -94,7 +94,7 @@ that cost lands on whichever side triggers the GC.
   ms from `:persistent_term`). `pcm_mix`: 1 s chunks measured 10 ms instead
   of 4 ms with the chunks on the heap.
 - **Conditions:** geo_nearest load not recorded; gorilla_encode and pcm_mix under load.
-- **Source:** [examples/README.md](../examples/README.md#measuring-correctly) rule 4, [`geo_nearest.exs`](../examples/geo_nearest.exs) (baf7d5f), [`gorilla_encode.exs`](../examples/gorilla_encode.exs) (a28db62), [`pcm_mix.exs`](../examples/pcm_mix.exs) (6b894ed).
+- **Source:** [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md#measuring-correctly) rule 4, [`geo_nearest.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geo_nearest.exs) (baf7d5f), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs) (a28db62), [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs) (6b894ed).
 - **Status:** measured (geo_nearest); provisional (gorilla_encode, pcm_mix).
 
 ```elixir
@@ -118,7 +118,7 @@ copies it. Low-allocating sides (a kernel) pay it only sometimes.
   best of 3 in the sweep (4 of 4 runs), which reads as 3.2x instead of
   9.2-9.4x. Packing 100k hashes: ~270-460 us with 0 GCs, ~850-1100 us with 1 GC.
 - **Conditions:** under load.
-- **Source:** `defk-9p6.27` (open), `defk-9p6.15` comment 2026-10-10, [`hll_update_many.exs`](../examples/hll_update_many.exs) (070a179).
+- **Source:** `defk-9p6.27` (open), `defk-9p6.15` comment 2026-10-10, [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs) (070a179).
 - **Status:** provisional; the fix (a second GC, or a fresh process per timed call) is not chosen yet.
 
 ### 1.4 Give a process that holds a chunk's lists a heap big enough for them
@@ -129,7 +129,7 @@ Without it the Elixir side regrows its heap after every forced GC.
   4-10 ms instead of 2.5 ms at 1 s chunks; the Membrane plugin 40-70 ms
   without it, ~20 ms with it.
 - **Conditions:** under load; `min_heap_size` 32 MB, applied to every side.
-- **Source:** [`pcm_mix.exs`](../examples/pcm_mix.exs) (6b894ed), `defk-9p6.14` comment 2026-10-10.
+- **Source:** [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs) (6b894ed), `defk-9p6.14` comment 2026-10-10.
 - **Status:** provisional.
 
 ```elixir
@@ -148,7 +148,7 @@ Elixir job can use every scheduler.
   `geo_nearest`: 14x over one Elixir process, 3.2-3.9x over Elixir on all
   schedulers.
 - **Conditions:** image_blur and rolling_stats under load.
-- **Source:** [`image_blur.exs`](../examples/image_blur.exs) (4355011), [`rolling_stats.exs`](../examples/rolling_stats.exs) (7bfbe4c), [`geo_nearest.exs`](../examples/geo_nearest.exs) (baf7d5f), `defk-9p6.6`, `defk-9p6.7`, `defk-9p6.8`.
+- **Source:** [`image_blur.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_blur.exs) (4355011), [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs) (7bfbe4c), [`geo_nearest.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geo_nearest.exs) (baf7d5f), `defk-9p6.6`, `defk-9p6.7`, `defk-9p6.8`.
 - **Status:** provisional (image_blur, rolling_stats); measured (geo_nearest).
 
 ### 1.6 Give both sides the same algorithm; a better Elixir algorithm can flip the verdict
@@ -161,7 +161,7 @@ Elixir job can use every scheduler.
   from 5.4x to 4.2x. `geo_nearest`'s coarse-grid prefilter: Elixir 0.14 ms,
   defk 0.017 ms (8x), against 3.2-3.9x for the full scan.
 - **Conditions:** batched_levenshtein and fuzzy_search under load (fuzzy_search load average 5-90).
-- **Source:** [`batched_levenshtein.exs`](../examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](../examples/fuzzy_search/README.md) (4b8d17d), `defk-8i4`; [examples/README.md](../examples/README.md) geo_nearest row.
+- **Source:** [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) (4b8d17d), `defk-8i4`; [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md) geo_nearest row.
 - **Status:** provisional (batched_levenshtein, fuzzy_search); measured (geo_nearest grid).
 
 ### 1.7 Load makes numbers provisional, and some differences are noise
@@ -179,7 +179,7 @@ Elixir job can use every scheduler.
 
 What to do: interleave the variants in one VM, alternate which goes first,
 take best of 5 per round over several rounds, and report the run medians and
-the range ([`bench/float_checks.exs`](../bench/float_checks.exs) is the
+the range ([`bench/float_checks.exs`](https://github.com/DanielLuning/defk/blob/main/bench/float_checks.exs) is the
 pattern). Don't assert wall-clock times in unit tests (`defk-m4b`), and run
 examples one at a time (`run_all.exs` does).
 
@@ -192,7 +192,7 @@ and p99 gap. A result at the ticker's floor says "not worse", not "yields":
 one tick. One run of a short job gives only 15-45 ticks, so p99 equals max
 (`gorilla_encode`).
 
-- **Source:** `lib/defk/bench/tick_gap.ex`, [`bench/tick_gap.exs`](../bench/tick_gap.exs), [`ws_masking.exs`](../examples/ws_masking.exs) (2ae646a), [`gorilla_encode.exs`](../examples/gorilla_encode.exs).
+- **Source:** `lib/defk/bench/tick_gap.ex`, [`bench/tick_gap.exs`](https://github.com/DanielLuning/defk/blob/main/bench/tick_gap.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs) (2ae646a), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs).
 - **Status:** measured (method).
 
 ---
@@ -211,7 +211,7 @@ and packing it afterwards is the slowest option.
   per step ~53-60 ms. (The first pass measured 308 ms inside `Defk.Bench`, GC
   and load dependent.)
 - **Conditions:** 1M samples, window 60, best of 7, under load.
-- **Source:** [`rolling_stats.exs`](../examples/rolling_stats.exs) (7bfbe4c), `defk-9p6.6`.
+- **Source:** [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs) (7bfbe4c), `defk-9p6.6`.
 - **Status:** provisional.
 
 ```elixir
@@ -231,7 +231,7 @@ One bigger match and several appends per step beat one item per step.
   iodata 2.3 ms. `gorilla_encode`: one point per append is ~3x slower to pack
   than four. `rolling_stats`: 4 windows per step ~53-60 ms against ~62-68 ms.
 - **Conditions:** under load.
-- **Source:** [`hll_update_many.exs`](../examples/hll_update_many.exs) (070a179), [`gorilla_encode.exs`](../examples/gorilla_encode.exs) (a28db62), [`rolling_stats.exs`](../examples/rolling_stats.exs).
+- **Source:** [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs) (070a179), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs) (a28db62), [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs).
 - **Status:** provisional.
 
 ```elixir
@@ -254,7 +254,7 @@ hashes |> Enum.map(&<<&1::unsigned-little-64>>) |> IO.iodata_to_binary()
   17.6-18.4 ms; YUV420: `:binary.at` chroma 103-107 ms, row pairs walked with
   binary patterns 55-70 ms.
 - **Conditions:** image_blur under load; image_ops load not recorded.
-- **Source:** [`image_blur.exs`](../examples/image_blur.exs) (4355011), [`image_ops.exs`](../examples/image_ops.exs) (7f0904d).
+- **Source:** [`image_blur.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_blur.exs) (4355011), [`image_ops.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_ops.exs) (7f0904d).
 - **Status:** provisional (image_blur); measured (image_ops).
 
 ```elixir
@@ -282,7 +282,7 @@ halves keep every value a small integer.
   halves with 256-entry zero-count tuples 4.8-4.9 ms. Pure-Elixir 64-bit
   hashes (xxHash64, Murmur3, SipHash) run at 0.01-0.12 GB/s.
 - **Conditions:** keccak, geohash_crc, hashes load not recorded; gorilla under load.
-- **Source:** [`keccak.exs`](../examples/keccak.exs) (f81c2cd), [`geohash_crc.exs`](../examples/geohash_crc.exs) (ad7b46b), [`gorilla_encode.exs`](../examples/gorilla_encode.exs) (a28db62), [`hashes.exs`](../examples/hashes.exs) (0bc56d4).
+- **Source:** [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs) (f81c2cd), [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs) (ad7b46b), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs) (a28db62), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs) (0bc56d4).
 - **Status:** measured; gorilla provisional.
 
 ```elixir
@@ -304,7 +304,7 @@ When 32-bit values suffice the JIT is fast: CRC32C by slicing-by-8 runs at
 
 - **Numbers:** HLL fold at 100k hashes: `<<b::size(^p), w::size(^bits)>> = <<h::64>>` 4.0 ms against `bsr`/`band` 3.3 ms (parity at 10k).
 - **Conditions:** under load.
-- **Source:** [`hll_update_many.exs`](../examples/hll_update_many.exs) (variant E4), `defk-9p6.15`.
+- **Source:** [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs) (variant E4), `defk-9p6.15`.
 - **Status:** provisional.
 
 ### 2.6 The JIT's 32-bit append loop beats 64-bit words
@@ -319,7 +319,7 @@ the word-wide integers cost more than the halved iteration count.
   one big integer (`:binary.decode_unsigned`): 299 ns at 125 B, 58,422 ns at
   64 KiB, and a 1 MiB frame did not finish in two minutes.
 - **Conditions:** best of 7 interleaved rounds, under load (load average ~15).
-- **Source:** [`ws_masking.exs`](../examples/ws_masking.exs) (2ae646a), `defk-9p6.12`.
+- **Source:** [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs) (2ae646a), `defk-9p6.12`.
 - **Status:** provisional.
 
 ```elixir
@@ -344,7 +344,7 @@ Elixir is about 10x the row DP.
   comprehension walk was 56.9 ms. In `fuzzy_search` Myers was 18-19 ms per
   query against 60-62 ms for the shipped DP with cut-off.
 - **Conditions:** under load.
-- **Source:** [`batched_levenshtein.exs`](../examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](../examples/fuzzy_search/README.md), `defk-l2g`.
+- **Source:** [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), `defk-l2g`.
 - **Status:** provisional.
 
 ```elixir
@@ -371,7 +371,7 @@ ms for Myers; no difference for the DP, 157 vs 158 ms).
   `per_pair_distance`: body recursion without the reverse measured the same
   as tail recursion (44.6 ms for 50k pairs of 12 bytes).
 - **Conditions:** noisy machine (load average 5-90), two runs within ~10%.
-- **Source:** [`fuzzy_search/README.md`](../examples/fuzzy_search/README.md) (4b8d17d), [`per_pair_distance.exs`](../examples/per_pair_distance.exs) (83c1a12).
+- **Source:** [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) (4b8d17d), [`per_pair_distance.exs`](https://github.com/DanielLuning/defk/blob/main/examples/per_pair_distance.exs) (83c1a12).
 - **Status:** provisional.
 
 ```elixir
@@ -393,7 +393,7 @@ end            # then :lists.reverse(acc) once per row
   area, and in shard processes they took 73 ms against 50-57 ms for the
   chunked binary.
 - **Conditions:** under load (load average ~6-7 on 12 cores).
-- **Source:** [`cosine_topk.exs`](../examples/cosine_topk.exs) (9235cd4), `defk-9p6.13`.
+- **Source:** [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs) (9235cd4), `defk-9p6.13`.
 - **Status:** provisional.
 
 ```elixir
@@ -413,7 +413,7 @@ dot1(<<x::float-32-native, rest::binary>>, [q | qs], a), do: dot1(rest, qs, a + 
   `:gb_trees` ~30 ms. A trig-free formula with wider records ~17.6 ms ("wider
   records cost more than the sin saved").
 - **Conditions:** best of 5; load not recorded.
-- **Source:** [`geo_nearest.exs`](../examples/geo_nearest.exs) (baf7d5f), `defk-9p6.7`.
+- **Source:** [`geo_nearest.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geo_nearest.exs) (baf7d5f), `defk-9p6.7`.
 - **Status:** measured.
 
 ```elixir
@@ -434,7 +434,7 @@ walk(<<lat::float-64-native, lon::float-64-native, coslat::float-64-native, rest
   lines 621 MB/s, split + parse + `Map.update` 45 MB/s (a 13x gap).
 - **Conditions:** page cache, best of 3 (parallel); one_brc load not
   recorded in `elixir.exs`; research numbers are single runs on a noisy machine.
-- **Source:** [`one_brc/elixir.exs`](../examples/one_brc/elixir.exs) (0323114), `defk-n4r.1`; [`docs/research/string-workloads.md`](research/string-workloads.md) (d78d854).
+- **Source:** [`one_brc/elixir.exs`](https://github.com/DanielLuning/defk/blob/main/examples/one_brc/elixir.exs) (0323114), `defk-n4r.1`; [`docs/research/string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md) (d78d854).
 - **Status:** measured (one_brc); provisional (research).
 
 ```elixir
@@ -453,7 +453,7 @@ Map.update(acc, name, {t, t, t, 1}, fn {mn, mx, s, c} -> {min(mn, t), max(mx, t)
   0.83 / 0.21 / 1.4 / 5.4; tuple `put_elem` 2.3 / 1.7 / 8.5 / not run;
   bit-syntax register update per hash 0.026 / 0.86 / 1.8 / 8.6.
 - **Conditions:** best of 7, under load.
-- **Source:** [`hll_update_many.exs`](../examples/hll_update_many.exs) (070a179), `defk-9p6.15`.
+- **Source:** [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs) (070a179), `defk-9p6.15`.
 - **Status:** provisional.
 
 ```elixir
@@ -473,17 +473,17 @@ Each is from one example; numbers as in the source.
 
 | Job | Fast | Slow | Source, status |
 |---|---|---|---|
-| Floyd-Steinberg error rows | rolling error lists 124-149 ms | `Map.update` rows 1650 ms | [`image_ops.exs`](../examples/image_ops.exs), measured |
-| Matrix multiply 64 / 256 | lists, transposed right matrix, tail-recursive dot 3.7 / 333 ms | i-k-j on lists 4.3 / 483 ms; binary-pattern dot 5.4 / 948 ms | [`matmul.exs`](../examples/matmul.exs) (e305956), measured |
-| FFT n = 4096 / 2^20 | recursive lists 2.8 / 4420 ms; per-stage tuple rebuild 3.5 / 2032-2326 ms | in-place `:array` 6.0 / 21637 ms | [`fft.exs`](../examples/fft.exs) (7f0904d), measured |
-| 64-tap FIR over 96k samples | shift-and-add over lists 74-101 ms | `elem/2` per output on tuples 90-204 ms | [`fft.exs`](../examples/fft.exs), measured |
-| Slot spin (per spin) | precomputed per-stop windows 111 ns | `rem/2` per line 139 ns; tables in `:array` 325 ns | [`monte_carlo_rtp.exs`](../examples/monte_carlo_rtp.exs) (ff2fcd6), measured |
-| SipHash state | four variables | a record updated field by field (1.1x at 4 MB, 1.1-2x on the batch) | [`hashes.exs`](../examples/hashes.exs), measured |
-| xxHash64 | little-endian matches, one mask per step, inlined helpers (1.4x over the package) | big-endian read + byte swap through a new binary per word | [`hashes.exs`](../examples/hashes.exs), measured |
-| base58 | divide the bignum by 58^9 per step: encode 3.8x over b58, 7x over erl_base58 | one digit per bignum division | [`codecs.exs`](../examples/codecs.exs) (e81ee3f), measured |
-| PCM mix, 4 streams, per 1 s of audio | fused scan from binaries, output appended 2.6-2.7 ms | plugin 19-20 ms; `Enum.zip_with` + `Enum.sum` 7.0 ms | [`pcm_mix.exs`](../examples/pcm_mix.exs), provisional |
-| Gorilla bit streams (1,000 x 100 / 1M points) | appended bitstrings 4.8-4.9 / 41.6-43.4 ms | iolist + `list_to_bitstring` 16.9-19.3 / ~930 ms; pre-packing the list 5.3-5.6 / 118-122 ms | [`gorilla_encode.exs`](../examples/gorilla_encode.exs), provisional |
-| Sort 1M packed i64 | decode + `:lists.sort` (sort 230+ ms, decode 40 ms) | (`Enum.sort` on a list is `:lists.sort`) | [`sort_u64_keys.exs`](../examples/sort_u64_keys.exs) (ad7b46b), measured |
+| Floyd-Steinberg error rows | rolling error lists 124-149 ms | `Map.update` rows 1650 ms | [`image_ops.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_ops.exs), measured |
+| Matrix multiply 64 / 256 | lists, transposed right matrix, tail-recursive dot 3.7 / 333 ms | i-k-j on lists 4.3 / 483 ms; binary-pattern dot 5.4 / 948 ms | [`matmul.exs`](https://github.com/DanielLuning/defk/blob/main/examples/matmul.exs) (e305956), measured |
+| FFT n = 4096 / 2^20 | recursive lists 2.8 / 4420 ms; per-stage tuple rebuild 3.5 / 2032-2326 ms | in-place `:array` 6.0 / 21637 ms | [`fft.exs`](https://github.com/DanielLuning/defk/blob/main/examples/fft.exs) (7f0904d), measured |
+| 64-tap FIR over 96k samples | shift-and-add over lists 74-101 ms | `elem/2` per output on tuples 90-204 ms | [`fft.exs`](https://github.com/DanielLuning/defk/blob/main/examples/fft.exs), measured |
+| Slot spin (per spin) | precomputed per-stop windows 111 ns | `rem/2` per line 139 ns; tables in `:array` 325 ns | [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs) (ff2fcd6), measured |
+| SipHash state | four variables | a record updated field by field (1.1x at 4 MB, 1.1-2x on the batch) | [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs), measured |
+| xxHash64 | little-endian matches, one mask per step, inlined helpers (1.4x over the package) | big-endian read + byte swap through a new binary per word | [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs), measured |
+| base58 | divide the bignum by 58^9 per step: encode 3.8x over b58, 7x over erl_base58 | one digit per bignum division | [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs) (e81ee3f), measured |
+| PCM mix, 4 streams, per 1 s of audio | fused scan from binaries, output appended 2.6-2.7 ms | plugin 19-20 ms; `Enum.zip_with` + `Enum.sum` 7.0 ms | [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs), provisional |
+| Gorilla bit streams (1,000 x 100 / 1M points) | appended bitstrings 4.8-4.9 / 41.6-43.4 ms | iolist + `list_to_bitstring` 16.9-19.3 / ~930 ms; pre-packing the list 5.3-5.6 / 118-122 ms | [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs), provisional |
+| Sort 1M packed i64 | decode + `:lists.sort` (sort 230+ ms, decode 40 ms) | (`Enum.sort` on a list is `:lists.sort`) | [`sort_u64_keys.exs`](https://github.com/DanielLuning/defk/blob/main/examples/sort_u64_keys.exs) (ad7b46b), measured |
 
 In `gorilla_encode` a word buffer and two passes were within 5% of the
 appended-bitstring baseline: no gain.
@@ -503,7 +503,7 @@ they are reduction-counted, so they already keep the scheduler responsive.
   880 MB/s for one pattern, 527 MB/s for five.
 - **Conditions:** best of 5 (report runs 15); load not recorded. Research
   numbers single runs, noisy machine.
-- **Source:** [`poor_substring_search.exs`](../examples/poor_substring_search.exs) (a00f961), `defk-9p6.23`; [`string-workloads.md`](research/string-workloads.md).
+- **Source:** [`poor_substring_search.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_substring_search.exs) (a00f961), `defk-9p6.23`; [`string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md).
 - **Status:** measured; research provisional.
 
 ```elixir
@@ -519,7 +519,7 @@ compiled = :binary.compile_pattern(needle)   # once, e.g. in :persistent_term
   `:erlang.phash2/1` 2.4-2.6 GB/s (not portable across OTP versions). It is
   zlib's polynomial: it does not replace CRC32C or CRC-64.
 - **Conditions:** load not recorded.
-- **Source:** [`geohash_crc.exs`](../examples/geohash_crc.exs) (ad7b46b), [`hashes.exs`](../examples/hashes.exs) (0bc56d4), `defk-9p6.2`, `defk-52v.4`.
+- **Source:** [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs) (ad7b46b), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs) (0bc56d4), `defk-9p6.2`, `defk-52v.4`.
 - **Status:** measured.
 
 ### 3.3 UTF-8 validation: `:unicode.characters_to_binary/1` is faster than `String.valid?/1`
@@ -529,7 +529,7 @@ compiled = :binary.compile_pattern(needle)   # once, e.g. in :persistent_term
   29.6 ms (1.05-1.09x). Research on a 15.9 MB mostly ASCII/Latin input:
   463 MB/s against 2,057 MB/s.
 - **Conditions:** best of 5, load not recorded; research a single run, noisy machine.
-- **Source:** [`utf8_valid.exs`](../examples/utf8_valid.exs) (eddafd8), `defk-9p6.22`; [`string-workloads.md`](research/string-workloads.md).
+- **Source:** [`utf8_valid.exs`](https://github.com/DanielLuning/defk/blob/main/examples/utf8_valid.exs) (eddafd8), `defk-9p6.22`; [`string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md).
 - **Status:** measured; research provisional.
 
 ```elixir
@@ -547,7 +547,7 @@ For GB/s validation wrap simdutf8; a scalar kernel cannot beat the BIF by much.
   encode kernel is only 1.5x the BIF (now ~2.6x after `defk-upc`, under
   load); `Base` encodes base64 faster than `:base64`, and `:base64` decodes
   about 4% faster.
-- **Source:** [`string-workloads.md`](research/string-workloads.md), [`codecs.exs`](../examples/codecs.exs) (e81ee3f), `defk-9p6.19`, `defk-upc` comment 2026-10-10.
+- **Source:** [`string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs) (e81ee3f), `defk-9p6.19`, `defk-upc` comment 2026-10-10.
 - **Status:** research provisional; codecs measured.
 
 ### 3.5 `:crypto` is OpenSSL on the CPU's SHA instructions
@@ -561,7 +561,7 @@ For GB/s validation wrap simdutf8; a scalar kernel cannot beat the BIF by much.
   portable-C SHA-256 kernel loses the chain (0.57-0.58x); a from-scratch
   SHA3-256 kernel is 0.71x of `:crypto.hash(:sha3_256, m)`.
 - **Conditions:** hash_chain under load (load 13-36); keccak load not recorded.
-- **Source:** [`hash_chain.exs`](../examples/hash_chain.exs) (df9258e), `defk-9p6.18`; [`keccak.exs`](../examples/keccak.exs) (f81c2cd), `defk-52v.1`.
+- **Source:** [`hash_chain.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hash_chain.exs) (df9258e), `defk-9p6.18`; [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs) (f81c2cd), `defk-52v.1`.
 - **Status:** provisional (hash_chain); measured (keccak).
 
 ```elixir
@@ -581,7 +581,7 @@ The only Elixir that beats Bandit's 32-bit masking loop, from about 600 B.
   baseline is a hybrid: the loop below 512 B, `exor` from there (1.4x at 1
   KiB, 1.7x from 8 KiB).
 - **Conditions:** best of 7 interleaved rounds, under load.
-- **Source:** [`ws_masking.exs`](../examples/ws_masking.exs) (2ae646a).
+- **Source:** [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs) (2ae646a).
 - **Status:** provisional.
 
 ```elixir
@@ -597,7 +597,7 @@ defp key(k, n), do: key(<<k::binary, k::binary>>, n)
   the plug-in dispatch, about 2-8% (within noise between runs). A kernel that
   reproduces exsss bit for bit ran the slot simulation at 34 ns per spin
   against 109 ns.
-- **Source:** `defk-9p6.17`, [`monte_carlo_rtp.exs`](../examples/monte_carlo_rtp.exs) (ff2fcd6).
+- **Source:** `defk-9p6.17`, [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs) (ff2fcd6).
 - **Status:** measured (single run for the per-draw numbers).
 
 ### 3.8 Nx needs a compiled backend; `BinaryBackend` is Elixir
@@ -607,7 +607,7 @@ defp key(k, n), do: key(<<k::binary, k::binary>>, n)
   (best Elixir 2032-2326 ms). Cosine top-k at 100k: `BinaryBackend` 14.3-15 s;
   Nx + EXLA 0.13.1 1.0-1.22 ms, 6-8x faster than defk's 7.2-9.6 ms.
 - **Conditions:** matmul and fft load not recorded; cosine under load.
-- **Source:** [`matmul.exs`](../examples/matmul.exs), [`fft.exs`](../examples/fft.exs), [`cosine_topk.exs`](../examples/cosine_topk.exs), `defk-9p6.3`, `defk-9p6.13`, [`nx-boundary.md`](research/nx-boundary.md).
+- **Source:** [`matmul.exs`](https://github.com/DanielLuning/defk/blob/main/examples/matmul.exs), [`fft.exs`](https://github.com/DanielLuning/defk/blob/main/examples/fft.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), `defk-9p6.3`, `defk-9p6.13`, [`nx-boundary.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nx-boundary.md).
 - **Status:** measured (matmul, fft); provisional (cosine). EXLA matmul not measured yet (`defk-7tk`).
 
 ---
@@ -625,7 +625,7 @@ defp key(k, n), do: key(<<k::binary, k::binary>>, n)
   `monte_carlo_rtp` at 1M spins: 48 kernel tasks of ~0.7 ms on 2-3
   schedulers, verdict ~1x, while at 10M (~5 ms chunks) they spread.
 - **Conditions:** under load (load average 5-7 on 12 cores), OTP 29.0.3.
-- **Source:** `defk-8qs` comments 2026-10-10, `defk-6lr`, [`batched_levenshtein.exs`](../examples/batched_levenshtein.exs), [`cosine_topk.exs`](../examples/cosine_topk.exs), [`monte_carlo_rtp.exs`](../examples/monte_carlo_rtp.exs).
+- **Source:** `defk-8qs` comments 2026-10-10, `defk-6lr`, [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs).
 - **Status:** provisional.
 
 ```elixir
@@ -666,7 +666,7 @@ slice; Elixir uses that many in about 5 us.
   (12 schedulers, 5.8-7.4 ms) but costs 11-18% on one scheduler, so it was
   not adopted.
 - **Conditions:** under load.
-- **Source:** `defk-8qs`, `defk-6lr` (open), [examples/README.md](../examples/README.md#measuring-correctly) rule 7, [`image_blur.exs`](../examples/image_blur.exs).
+- **Source:** `defk-8qs`, `defk-6lr` (open), [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md#measuring-correctly) rule 7, [`image_blur.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_blur.exs).
 - **Status:** provisional.
 
 ### 4.4 Elixir: one chunk per scheduler, and more chunks don't help
@@ -677,7 +677,7 @@ slice; Elixir uses that many in about 5 us.
   `image_blur`: 12 bands 9.1-11.5 ms against ~140 ms in one process. 1BRC:
   12-13x from 12 schedulers (`par_atomics` against `seq_atomics`).
 - **Conditions:** cosine, rolling_stats, image_blur under load; one_brc load not recorded.
-- **Source:** [`cosine_topk.exs`](../examples/cosine_topk.exs), [`rolling_stats.exs`](../examples/rolling_stats.exs), [`image_blur.exs`](../examples/image_blur.exs), [`one_brc/elixir.exs`](../examples/one_brc/elixir.exs).
+- **Source:** [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs), [`image_blur.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_blur.exs), [`one_brc/elixir.exs`](https://github.com/DanielLuning/defk/blob/main/examples/one_brc/elixir.exs).
 - **Status:** provisional; one_brc measured.
 
 ```elixir
@@ -691,7 +691,7 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
   over one task per scheduler 4.4 ms (and slower at every size). Batched
   Levenshtein: below ~10k words one process beats 12 chunks.
 - **Conditions:** under load.
-- **Source:** [`hll_update_many.exs`](../examples/hll_update_many.exs) (variant E8), [`batched_levenshtein.exs`](../examples/batched_levenshtein.exs).
+- **Source:** [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs) (variant E8), [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs).
 - **Status:** provisional.
 
 ### 4.6 Chunk sizes for a large file: tens of MB per `:file.pread`
@@ -699,7 +699,7 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
 - **Numbers:** 1BRC 100M rows, `par_atomics`, best of 3: 4 MB chunks 2116 ms,
   8 MB 1884, 16 MB 2120, 32 MB 1818, 64 MB 1807; the default (at most 32 MB,
   at least 4 chunks per scheduler) is 28 MB there.
-- **Source:** [`one_brc/elixir.exs`](../examples/one_brc/elixir.exs) (0323114).
+- **Source:** [`one_brc/elixir.exs`](https://github.com/DanielLuning/defk/blob/main/examples/one_brc/elixir.exs) (0323114).
 - **Status:** measured.
 
 ### 4.7 Scaling flattens past the performance cores
@@ -709,7 +709,7 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
   defk's lead 5.3x / 4.5x / 3.8x / 3.2x / 2.9x. Elixir on a one-scheduler VM
   is slower per spin than one process on a 12-scheduler VM (185 vs 109 ns),
   not investigated.
-- **Source:** [`monte_carlo_rtp.exs`](../examples/monte_carlo_rtp.exs) (ff2fcd6).
+- **Source:** [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs) (ff2fcd6).
 - **Status:** measured.
 
 ### 4.8 A fast kernel call may not need chunking at all
@@ -717,7 +717,7 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
 - **Numbers:** `geo_nearest`: one kernel call ~1.0-1.3 ms; K chunked kernel
   calls (K = 2..24) 0.9-1.3 ms, no gain. `rolling_stats`: defk in 12 chunks
   1.5-2.3 ms against ~1.9 ms for one call.
-- **Source:** [`geo_nearest.exs`](../examples/geo_nearest.exs), [`rolling_stats.exs`](../examples/rolling_stats.exs).
+- **Source:** [`geo_nearest.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geo_nearest.exs), [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs).
 - **Status:** measured (geo_nearest); provisional (rolling_stats).
 
 ---
@@ -735,7 +735,7 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
   per key 0.085 ms for 1k keys, the batch 0.048-0.055 ms). These figures
   disagree (see 8.2, open questions).
 - **Conditions:** README "noisy, single runs"; ws_masking under load.
-- **Source:** [README Results](../README.md), [`poor_tiny_calls.exs`](../examples/poor_tiny_calls.exs), [`ws_masking.exs`](../examples/ws_masking.exs), [`hashes.exs`](../examples/hashes.exs).
+- **Source:** [README Results](../README.md), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs).
 - **Status:** measured; ws_masking provisional.
 
 ```elixir
@@ -751,7 +751,7 @@ Enum.map(readings, &Clamp.Kernels.clamp(&1, -10.0, 90.0))
   same as a one-byte bitstring 0.12-0.17 us. ~5% of a 2.1 us Gorilla block
   encode. Suspect (not profiled): the owned buffer doubling from 64 bytes.
 - **Conditions:** best of 15 over 10k calls, under load.
-- **Source:** `defk-cao` (open), [`gorilla_encode.exs`](../examples/gorilla_encode.exs).
+- **Source:** `defk-cao` (open), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs).
 - **Status:** provisional.
 
 ### 5.3 Packing a list often costs more than the kernel
@@ -766,7 +766,7 @@ is often most of it.
   points: packing two lists costs another 5.5 ms on a 1.9-2.0 ms kernel; the
   decode's list output adds 2.4 ms.
 - **Conditions:** hll and gorilla under load; others load not recorded.
-- **Source:** [`poor_list_data.exs`](../examples/poor_list_data.exs), [`hll_update_many.exs`](../examples/hll_update_many.exs), [`gorilla_encode.exs`](../examples/gorilla_encode.exs), [`geohash_crc.exs`](../examples/geohash_crc.exs).
+- **Source:** [`poor_list_data.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_list_data.exs), [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs), [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs).
 - **Status:** measured; hll and gorilla provisional.
 
 ```elixir
@@ -794,7 +794,7 @@ If you must pack, see 2.2.
   - `utf8_valid`: at 1 KB the kernel's fixed cost (tables built per call)
     loses, 0.56-0.68x at 64 KB.
 - **Conditions:** hash_chain under load; others load not recorded.
-- **Source:** [`per_pair_distance.exs`](../examples/per_pair_distance.exs), [`geohash_crc.exs`](../examples/geohash_crc.exs), [`codecs.exs`](../examples/codecs.exs), [`hash_chain.exs`](../examples/hash_chain.exs), [`utf8_valid.exs`](../examples/utf8_valid.exs).
+- **Source:** [`per_pair_distance.exs`](https://github.com/DanielLuning/defk/blob/main/examples/per_pair_distance.exs), [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs), [`hash_chain.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hash_chain.exs), [`utf8_valid.exs`](https://github.com/DanielLuning/defk/blob/main/examples/utf8_valid.exs).
 - **Status:** measured; hash_chain provisional. The geohash break-even size is contradictory (see 8.2, open questions).
 
 ### 5.5 Keep results packed; decode to a list only when the caller needs one
@@ -803,7 +803,7 @@ If you must pack, see 2.2.
   ms against 300-380 ms); decoded to a list 2.3-2.7x (the decode is 40 ms).
   `batched_levenshtein`: converting the 234k distances to a list costs
   ~1.0 ms of 6.7 ms.
-- **Source:** [`sort_u64_keys.exs`](../examples/sort_u64_keys.exs) (ad7b46b), [`batched_levenshtein.exs`](../examples/batched_levenshtein.exs).
+- **Source:** [`sort_u64_keys.exs`](https://github.com/DanielLuning/defk/blob/main/examples/sort_u64_keys.exs) (ad7b46b), [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs).
 - **Status:** measured; batched_levenshtein provisional.
 
 ```elixir
@@ -821,7 +821,7 @@ because of term encoding. The kernel's error path uses `sigsetjmp(jb, 0)`:
 plain `setjmp` saves the signal mask on macOS, a syscall that cost 160 ns
 per call.
 
-- **Source:** [README design decisions](../README.md#design-decisions-the-benchmarks-validated), [`beam-nifs.md`](beam-nifs.md), [`nif-workloads.md`](research/nif-workloads.md) (external number).
+- **Source:** [README design decisions](../README.md#design-decisions-the-benchmarks-validated), [`beam-nifs.md`](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md), [`nif-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nif-workloads.md) (external number).
 - **Status:** measured (the 160 ns); external (the term-encoding numbers).
 
 ### 5.7 A large `alloc` used to block the scheduler; it is now zeroed in strips
@@ -835,7 +835,7 @@ per call.
   element is provably written: `scale` of 1M f64 170 -> 131 us (-23%),
   `encode16` 1 MB 338 -> 297 us (-12%), base64 unchanged.
 - **Conditions:** under load (load average 4-5).
-- **Source:** `defk-ktw` comment 2026-10-10, `defk-i5r` (open), [`codecs.exs`](../examples/codecs.exs). Other whole-buffer copies still have no safepoint (`defk-oed`, open).
+- **Source:** `defk-ktw` comment 2026-10-10, `defk-i5r` (open), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs). Other whole-buffer copies still have no safepoint (`defk-oed`, open).
 - **Status:** provisional; the `codecs` 4.6-4.8 ms numbers are superseded by `defk-ktw`.
 
 ```elixir
@@ -854,7 +854,7 @@ end
 Start with the fast-path report: `Defk.Report.print(Mod)`, or
 `use Defk, report: :full` for clang's vectorisation verdict per loop. It
 names each kept bounds check and the fact that would drop it. See
-[`fast-path-report.md`](fast-path-report.md).
+[`fast-path-report.md`](https://github.com/DanielLuning/defk/blob/main/docs/fast-path-report.md).
 
 ### 6.1 At its best a kernel loop runs at plain-C speed
 
@@ -874,7 +874,7 @@ names each kept bounds check and the fact that would drop it. See
   which then runs scalar and takes ~70% of the kernel (0.2-0.29 of 0.3-0.37
   ms); the check-free clamp loop beside it vectorises at width 8.
 - **Conditions:** under load.
-- **Source:** [`cosine_topk.exs`](../examples/cosine_topk.exs), `defk-n7k`; `defk-upc` comment 2026-10-10; [`pcm_mix.exs`](../examples/pcm_mix.exs), `defk-siy`.
+- **Source:** [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), `defk-n7k`; `defk-upc` comment 2026-10-10; [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs), `defk-siy`.
 - **Status:** provisional. Still open: `defk-siy`, `defk-n7k`, `defk-pic`, `defk-fun`, `defk-9za`.
 
 ```elixir
@@ -917,7 +917,7 @@ for LLVM. Resuming through each loop's header fixed it.
   ms to 1.1 ms. Each yield costs ~6-9 us of scheduler work, mostly the I/O
   poll (macOS): 2-3% on `count_primes`, which yields ~3,300 times a second.
 - **Conditions:** load not recorded; Linux not measured.
-- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, [`fuzzy_search/README.md`](../examples/fuzzy_search/README.md), [README](../README.md).
+- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [README](../README.md).
 - **Status:** measured; a later loaded run disagrees (see 8.2, open questions).
 
 ### 6.5 Float checks: flag the strip, replay on failure
@@ -942,7 +942,7 @@ with raising checks if it is set.
   as one instruction.
 - **Conditions:** 3 runs of 11 interleaved rounds, best of 5 per round;
   shared machine; `defk-hki` under load (load average 5-7.5).
-- **Source:** [README Known limitations](../README.md#known-limitations), [`bench/float_checks.exs`](../bench/float_checks.exs) (3737d1a), `defk-6tt`, `defk-hki` comment 2026-10-10 (897e9c4, 042c2f4).
+- **Source:** [README Known limitations](../README.md#known-limitations), [`bench/float_checks.exs`](https://github.com/DanielLuning/defk/blob/main/bench/float_checks.exs) (3737d1a), `defk-6tt`, `defk-hki` comment 2026-10-10 (897e9c4, 042c2f4).
 - **Status:** per-expression numbers superseded by `defk-6tt` and `defk-hki`; `defk-hki` provisional.
 
 ### 6.6 What still blocks vectorisation
@@ -953,7 +953,7 @@ with raising checks if it is set.
   itself costs nothing measurable (`dot` ~0.56, `sum` 0.50-0.53, `mean_var`
   3.8-4.3 ns/elem either way). Write independent partial sums when the order
   is yours to choose: `cosine_topk`'s eight partial sums run as 2 x f64 NEON
-  lanes. (`defk-jlk`, `defk-t11.5`, [`cosine_topk.exs`](../examples/cosine_topk.exs); measured.)
+  lanes. (`defk-jlk`, `defk-t11.5`, [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs); measured.)
 - **In-place accumulate.** `out[r] = out[r] + x[i] * c` keeps per-operation
   float checks, because a strip that writes memory cannot be replayed: a
   dimension-major cosine scan ran ~26 ms against 20 ms for the row-major dot
@@ -983,7 +983,7 @@ select, and clang then threaded the branch into the inner loop.
   division are no longer speculated. A branch-free run count was slower (45
   ns per spin) than a `cond` that stops at the first mismatch (27 ns).
 - **Conditions:** `defk-id9` under load.
-- **Source:** `defk-jp3`, `defk-7q5` comments 2026-10-05, `defk-id9` comment 2026-10-10, [`monte_carlo_rtp.exs`](../examples/monte_carlo_rtp.exs).
+- **Source:** `defk-jp3`, `defk-7q5` comments 2026-10-05, `defk-id9` comment 2026-10-10, [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs).
 - **Status:** measured; `defk-id9` provisional.
 
 ```elixir
@@ -1004,7 +1004,7 @@ changed speed by 1.5x.
   keys 0.054-0.057 -> 0.043-0.044 ms. The remaining ~10% against `yield:
   false` is yield bookkeeping held in registers (`defk-w8l`, open).
 - **Conditions:** under load (spill counts do not depend on load).
-- **Source:** `defk-zep` comment 2026-10-10 (f81c2cd, merge 522e7f2), [`keccak.exs`](../examples/keccak.exs).
+- **Source:** `defk-zep` comment 2026-10-10 (f81c2cd, merge 522e7f2), [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs).
 - **Status:** provisional (timings); the older "28 ms" and "0.55x of ex_keccak" figures are superseded.
 
 ### 6.9 The algorithm still matters inside a kernel
@@ -1016,7 +1016,7 @@ changed speed by 1.5x.
   64x64 tiling is no faster (0.27 vs 0.20 ms at 64, 13.9 vs 13.4 at 256, 983
   vs 827 ms at 1024). Sorting with no recursion: an in-place heapsort kernel
   still beats decode + `:lists.sort` 4.3-5.3x.
-- **Source:** [`geohash_crc.exs`](../examples/geohash_crc.exs), [`image_blur.exs`](../examples/image_blur.exs), [`batched_levenshtein.exs`](../examples/batched_levenshtein.exs), [`matmul.exs`](../examples/matmul.exs), [`sort_u64_keys.exs`](../examples/sort_u64_keys.exs).
+- **Source:** [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs), [`image_blur.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_blur.exs), [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs), [`matmul.exs`](https://github.com/DanielLuning/defk/blob/main/examples/matmul.exs), [`sort_u64_keys.exs`](https://github.com/DanielLuning/defk/blob/main/examples/sort_u64_keys.exs).
 - **Status:** measured; image_blur and batched_levenshtein provisional.
 
 ### 6.10 Byte loops: process four bytes per iteration with no per-byte index arithmetic
@@ -1024,7 +1024,7 @@ changed speed by 1.5x.
 - **Numbers:** WebSocket masking kernel 32-36 GB/s from 64 KiB up (memory
   bandwidth), 27 us per 1 MiB frame (38 GB/s).
 - **Conditions:** under load.
-- **Source:** [`ws_masking.exs`](../examples/ws_masking.exs) (2ae646a).
+- **Source:** [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs) (2ae646a).
 - **Status:** provisional.
 
 ```elixir
@@ -1049,7 +1049,7 @@ compiles to one `ror`. A shift by a variable count is a checked operation.
   taking `n` and unmasked `t1` 236 ns per step; rounds as loops 190-211 ns;
   unrolled with literal rotates 173-186 ns.
 - **Conditions:** under load (load 13-36).
-- **Source:** [`hash_chain.exs`](../examples/hash_chain.exs), [`keccak.exs`](../examples/keccak.exs), [`hashes.exs`](../examples/hashes.exs); builtin rotates are `defk-52v.6`.
+- **Source:** [`hash_chain.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hash_chain.exs), [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs); builtin rotates are `defk-52v.6`.
 - **Status:** provisional.
 
 ```elixir
@@ -1066,7 +1066,7 @@ and no copy per call, and `@b64[band(x, 63)]` needs no bounds check.
   (`geohash_crc`, written before attributes existed). Emitting each binary
   attribute once per module instead of at every inlined use site shrank the
   generated C for `hashes.exs` from 2,115,100 to 326,375 bytes.
-- **Source:** [`codecs.exs`](../examples/codecs.exs), [`geohash_crc.exs`](../examples/geohash_crc.exs), `defk-ivt`, `defk-qx3` comment 2026-10-10.
+- **Source:** [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs), [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs), `defk-ivt`, `defk-qx3` comment 2026-10-10.
 - **Status:** measured; the per-call table build in `geohash_crc` and `utf8_valid` is superseded by `defk-ivt`.
 
 ```elixir
@@ -1097,11 +1097,11 @@ out[o] = @b64[band(bsr(x, 18), 63)]
   EXLA 6-8x faster than defk. Keccak: ex_keccak (tiny-keccak) is ~1.7x faster
   than the kernel on 10k x 32-byte messages (per-message overhead) and level
   at 16 MB (19.1 vs 20.7 ms, under load).
-- **Source:** [`hashes.exs`](../examples/hashes.exs), [`hash_chain.exs`](../examples/hash_chain.exs), [`cosine_topk.exs`](../examples/cosine_topk.exs), [`keccak.exs`](../examples/keccak.exs).
+- **Source:** [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs), [`hash_chain.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hash_chain.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs).
 - **Status:** measured; hash_chain, cosine, the keccak 16 MB comparison provisional.
 
 The wrapper jobs and what would reopen each are in
-[examples/README.md, "Where a wrapper is the right choice"](../examples/README.md#where-a-wrapper-is-the-right-choice).
+[examples/README.md, "Where a wrapper is the right choice"](https://github.com/DanielLuning/defk/blob/main/examples/README.md#where-a-wrapper-is-the-right-choice).
 
 ### 7.2 A hand-written NIF is not automatically fast
 
@@ -1123,7 +1123,7 @@ The wrapper jobs and what would reopen each are in
     fast64 C NIF is 2.1x slower than the base64 kernel.
 - **Conditions:** pcm_mix, ws_masking, batched_levenshtein, hll, gorilla,
   cosine under load; hashes and codecs load not recorded.
-- **Source:** [`pcm_mix.exs`](../examples/pcm_mix.exs), [`ws_masking.exs`](../examples/ws_masking.exs), [`batched_levenshtein.exs`](../examples/batched_levenshtein.exs), [`hll_update_many.exs`](../examples/hll_update_many.exs), [`gorilla_encode.exs`](../examples/gorilla_encode.exs), [`cosine_topk.exs`](../examples/cosine_topk.exs), [`hashes.exs`](../examples/hashes.exs), [`codecs.exs`](../examples/codecs.exs).
+- **Source:** [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs), [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs).
 - **Status:** mostly provisional.
 
 ### 7.3 A NIF on a normal scheduler that doesn't yield blocks it for the whole call
@@ -1138,7 +1138,7 @@ The wrapper jobs and what would reopen each are in
   `/health` to 33 ms median and 77-90 ms p99 against 1.1 ms and 8-10 ms for
   the yielding kernel.
 - **Conditions:** most under load; fuzzy_search before its cut-off.
-- **Source:** [`pcm_mix.exs`](../examples/pcm_mix.exs), [`ws_masking.exs`](../examples/ws_masking.exs), [`one_brc/rustler.exs`](../examples/one_brc/rustler.exs) (dae1457), [`keccak.exs`](../examples/keccak.exs), [`sat-solver.md`](research/sat-solver.md) (2ed5c84), `defk-yzw`, [`fuzzy_search/README.md`](../examples/fuzzy_search/README.md).
+- **Source:** [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`one_brc/rustler.exs`](https://github.com/DanielLuning/defk/blob/main/examples/one_brc/rustler.exs) (dae1457), [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs), [`sat-solver.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/sat-solver.md) (2ed5c84), `defk-yzw`, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md).
 - **Status:** provisional.
 
 ### 7.4 Dirty CPU or yielding
@@ -1146,7 +1146,7 @@ The wrapper jobs and what would reopen each are in
 A dirty CPU NIF keeps normal schedulers free, but the process can't be
 suspended or garbage-collected until it returns, a killed process doesn't
 stop it, and each call pays a hop to the dirty scheduler. defk yields from
-normal schedulers instead ([`beam-nifs.md`](beam-nifs.md)).
+normal schedulers instead ([`beam-nifs.md`](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md)).
 
 - **Numbers:** 1BRC 10M / 100M rows: Rustler plain NIF 67 / 760 ms,
   `schedule = "DirtyCpu"` 34 / 318 ms (2.4x faster: the plain NIF shared
@@ -1154,7 +1154,7 @@ normal schedulers instead ([`beam-nifs.md`](beam-nifs.md)).
   calls pay the hop: gorilla_stream's dirty NIF is 2.75-2.9x slower than the
   kernel at 100-point blocks.
 - **Conditions:** 1BRC under load (load average ~21), best of 3; Rust 1.94.1, rustler 0.37.4.
-- **Source:** [`one_brc/rustler.exs`](../examples/one_brc/rustler.exs), `defk-n4r.8`, [`gorilla_encode.exs`](../examples/gorilla_encode.exs).
+- **Source:** [`one_brc/rustler.exs`](https://github.com/DanielLuning/defk/blob/main/examples/one_brc/rustler.exs), `defk-n4r.8`, [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs).
 - **Status:** provisional.
 
 ---
@@ -1219,18 +1219,18 @@ example or close a workload ticket, add its entries and its line here.
   and `_template.exs`, which hold no findings), `examples/fuzzy_search/`,
   `examples/one_brc/`, `examples/release_debian/` (build cost only, no
   runtime findings).
-- [`examples/README.md`](../examples/README.md): every row, "Measuring
+- [`examples/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/README.md): every row, "Measuring
   correctly", "How verdicts work", "Where a wrapper is the right choice".
-- [`beam-nifs.md`](beam-nifs.md), [`verdict.md`](verdict.md) (no numbers yet),
-  [`fast-path-report.md`](fast-path-report.md), the README's Results, design
+- [`beam-nifs.md`](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md), [`verdict.md`](https://github.com/DanielLuning/defk/blob/main/docs/verdict.md) (no numbers yet),
+  [`fast-path-report.md`](https://github.com/DanielLuning/defk/blob/main/docs/fast-path-report.md), the README's Results, design
   decisions and Known limitations, `docs/adr/`, `docs/cold-tests/` (no
   performance content), [`language.md`](language.md) (copies, bounds facts,
   strips), `bench/`.
-- Research: [`nif-workloads.md`](research/nif-workloads.md),
-  [`string-workloads.md`](research/string-workloads.md),
-  [`nx-boundary.md`](research/nx-boundary.md) (inferred from source, not
-  measured), [`sat-solver.md`](research/sat-solver.md),
-  [`predictable-subsets.md`](research/predictable-subsets.md) (no performance
+- Research: [`nif-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nif-workloads.md),
+  [`string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md),
+  [`nx-boundary.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nx-boundary.md) (inferred from source, not
+  measured), [`sat-solver.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/sat-solver.md),
+  [`predictable-subsets.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/predictable-subsets.md) (no performance
   findings).
 - Tickets: the children of `defk-9p6` and `defk-52v`, and `defk-8qs`,
   `defk-6lr`, `defk-6tt`, `defk-hki`, `defk-agp`, `defk-88q`, `defk-5s3`,
