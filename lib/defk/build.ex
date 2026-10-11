@@ -55,6 +55,83 @@ defmodule Defk.Build do
     base
   end
 
+  @doc """
+  Where the module's library is loaded from at run time (defk-n8f), after
+  `build!/3` built it at `base`.
+
+  A module compiled by Mix from its project's `elixirc_paths` (a `.ex` file)
+  belongs to that Mix app: its library is copied into the app's `ebin/`
+  directory (`Mix.Project.compile_path/0`) as `<Module>-<key>.so`, beside its
+  `.beam`, and `{:app, app, name, fallback}` says to load it from
+  `:code.lib_dir(app)/ebin/<name>` at load time, or from the absolute
+  `fallback` (that copy) when `app` is not in the code path. `ebin/` is
+  always a real directory in `_build` (`priv/` is a symlink to the source
+  `priv/` in dev, which must not gain build output) and `mix release` copies
+  all of it, so the library ships with the release and survives relocation.
+  The cache stays in `_build/<env>/defk`: the copy is made only when
+  missing, and older libraries of the same module are removed from `ebin/`.
+
+  Any other module (a script, `Mix.install`, `Code.compile_string/2`, a test
+  file) gets `{:path, base}`: the absolute build path, as before.
+  """
+  @spec placement!(module(), String.t(), String.t() | nil) ::
+          {:app, atom(), String.t(), String.t()} | {:path, String.t()}
+  def placement!(module, base, file) do
+    case owning_app(file) do
+      {app, ebin} ->
+        name = Path.basename(base) <> ".so"
+        target = Path.join(ebin, name)
+        unless File.exists?(target), do: install!(base <> ".so", target, module)
+        {:app, app, name, target}
+
+      nil ->
+        {:path, base}
+    end
+  end
+
+  # {app, ebin} when `file` is compiled by Mix into its project's ebin
+  defp owning_app(file) do
+    with true <- is_binary(file) and Path.extname(file) == ".ex",
+         true <- Code.ensure_loaded?(Mix.Project) and Mix.Project.get() != nil,
+         config = Mix.Project.config(),
+         app when is_atom(app) and app != nil <- config[:app],
+         true <- in_elixirc_paths?(file, config) do
+      {app, Mix.Project.compile_path(config)}
+    else
+      _ -> nil
+    end
+  end
+
+  defp in_elixirc_paths?(file, config) do
+    root = Path.dirname(Mix.Project.project_file() || Path.join(File.cwd!(), "mix.exs"))
+    file = Path.expand(file)
+
+    config
+    |> Keyword.get(:elixirc_paths, ["lib"])
+    |> Enum.any?(fn p ->
+      p = Path.expand(p, root)
+      file == p or String.starts_with?(file, p <> "/")
+    end)
+  end
+
+  # Copy atomically (another VM compiling the same app never sees a torn
+  # file), then drop this module's libraries with another key.
+  defp install!(src, target, module) do
+    dir = Path.dirname(target)
+    File.mkdir_p!(dir)
+    tmp = "#{target}.#{System.pid()}.#{System.unique_integer([:positive])}.tmp"
+    File.cp!(src, tmp)
+    File.rename!(tmp, target)
+
+    stale = ~r/\A#{Regex.escape(Atom.to_string(module))}-[0-9a-f]{10}\.so\z/
+
+    for f <- File.ls!(dir), f != Path.basename(target), f =~ stale do
+      File.rm(Path.join(dir, f))
+    end
+
+    :ok
+  end
+
   # Run the compiler. A failed build never leaves a half-written .so behind,
   # or the next build would take it for a cache hit.
   defp run_cc!(cc, args, module, file, base) do

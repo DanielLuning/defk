@@ -217,7 +217,10 @@ defmodule Defk.ReportTest do
                &match?({_, _, {:vectorize, _, _}}, &1)
              )
 
-      base = String.trim_trailing(Examples.Kernels.__defk_lib__(), ".so")
+      # the remarks would be cached beside the build, not the shipped copy
+      name = Path.basename(Examples.Kernels.__defk_lib__(), ".so")
+      base = Path.join([Mix.Project.build_path(), "defk", name])
+      assert File.exists?(base <> ".so")
       assert Path.wildcard(base <> "*.remarks") == []
     end
 

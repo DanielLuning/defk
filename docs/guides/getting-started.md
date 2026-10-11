@@ -20,11 +20,9 @@ wrapper NIF is the better choice, is on the [scope page](../scope.md).
     `gcc libc6-dev`)
   - Alpine: `apk add build-base`
 
-  The machine that only runs your code needs no compiler. But a
-  `mix release` does not carry the kernels' native libraries yet (ticket
-  `defk-n8f`), so a release moved to another machine or path fails to start
-  unless you copy them yourself: read [Deploying](deploying.md) before you
-  ship one. Why defk compiles C at build time is recorded in
+  The machine that only runs your code needs no compiler: a `mix release`
+  carries the kernels' native libraries (see [Deploying](deploying.md)).
+  Why defk compiles C at build time is recorded in
   [ADR 0002](https://github.com/DanielLuning/defk/blob/main/docs/adr/0002-c-compiler-at-build-time.md).
 
 ## Add defk to a project
