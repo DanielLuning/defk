@@ -2589,7 +2589,12 @@ defmodule Defk.Compiler do
 
   defp builtin(f, [a], node, _) when f in @math1 do
     numeric!(a, arg(node, 0), "#{f}/1")
-    c = if f in [:sqrt, :log, :exp], do: "defk_#{f}(ctx, #{to_f(a)})", else: "#{f}(#{to_f(a)})"
+
+    c =
+      if f in [:sqrt, :log, :log2, :log10, :exp],
+        do: "defk_#{f}(ctx, #{to_f(a)})",
+        else: "#{f}(#{to_f(a)})"
+
     val(c, :f64)
   end
 
@@ -2632,6 +2637,8 @@ defmodule Defk.Compiler do
     sqrt: "a number",
     exp: "a number",
     log: "a number",
+    log2: "a number",
+    log10: "a number",
     sin: "a number",
     cos: "a number",
     band: "two integers",
@@ -3453,7 +3460,7 @@ defmodule Defk.Compiler do
   # the float checks, which make a strip worth flagging, and the other checks
   # that may join them (defk-hki): i64/u64 overflow, element access, narrow
   # write ranges and float-to-integer conversions.
-  @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log exp pow to_f32)
+  @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log log2 log10 exp pow to_f32)
   @nf_joins ~w(add_i64 sub_i64 mul_i64 neg_i64 abs_i64 add_u64 sub_u64 mul_u64 trunc round
                get_in_f64 to_u8 to_i16 to_i32) ++
               for(t <- ~w(f64 i64 u8 u64 i16 i32 f32), op <- ~w(get put), do: "#{op}_#{t}")

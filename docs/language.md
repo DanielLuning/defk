@@ -528,8 +528,8 @@ hint shows the comparison to write (`x != 0`).
 
 ### Builtins
 
-Builtins are called like local functions. `sqrt`, `exp`, `log`, `sin`, `cos`
-and `pow` are also callable as `:math.sqrt/1` and so on; any other `:math`
+Builtins are called like local functions. `sqrt`, `exp`, `log`, `log2`, `log10`, `sin`,
+`cos` and `pow` are also callable as `:math.sqrt/1` and so on; any other `:math`
 function is [`unsupported-call`](compile-errors.md#unsupported-call). A builtin called with the
 wrong types is [`builtin-arguments`](compile-errors.md#builtin-arguments).
 
@@ -544,6 +544,7 @@ wrong types is [`builtin-arguments`](compile-errors.md#builtin-arguments).
 | `div(a, b)`, `rem(a, b)` | two `i64`, or two `u64` | the same type | see [Integer arithmetic](#integer-arithmetic) and [u64](#u64) |
 | `sqrt(x)` | a number | `f64` | `ArithmeticError` for a negative `x` |
 | `log(x)` | a number | `f64` | `ArithmeticError` for `x <= 0` |
+| `log2(x)`, `log10(x)` | a number | `f64`, the same bits as `:math.log2/1` and `:math.log10/1` | `ArithmeticError` for `x <= 0` |
 | `exp(x)`, `sin(x)`, `cos(x)` | a number | `f64` | |
 | `pow(a, b)` | two numbers | `f64`, like `:math.pow/2` (`pow(2, 10)` is `1024.0`) | |
 | `alloc(type, n)` | an element type and an `i64` length | a new zero-filled array | see [Arrays](#6-arrays) |
@@ -560,11 +561,9 @@ wrong types is [`builtin-arguments`](compile-errors.md#builtin-arguments).
 [`unknown-function`](compile-errors.md#unknown-function) with the hint to use `len/1`.
 
 Other `:math` functions are written from the builtins, or computed in
-Elixir. `:math.log2(x)` is `log(x) / log(2.0)` and `:math.log10(x)` is
-`log(x) / log(10.0)` (the compile error offers this rewrite); the quotient
-can differ from `:math.log2/1` in the last bit, so the one rule holds for the
-expression as written (the kernel and its Elixir mode agree exactly), and an
-Elixir reference that calls `:math.log2/1` agrees only within a tolerance.
+Elixir. `log2` and `log10` call the same libm function as `:math.log2/1` and
+`:math.log10/1`, so they agree with `:math` bit for bit (not so
+`log(x) / log(2.0)`, which can differ in the last bit).
 
 `dbg/1` and `IO.inspect/1,2` are accepted around an expression: native code
 evaluates the expression and ignores the call, and Elixir mode prints it (see
@@ -994,7 +993,6 @@ that compiles. The error for each says the same.
 | `Enum.all?(a, &(&1 > 0))` | `Enum.all?(a, fn x -> x > 0 end)` | [`fn-argument`](compile-errors.md#fn-argument) |
 | `length(a)`, `byte_size(a)` | `len(a)` | [`unknown-function`](compile-errors.md#unknown-function) |
 | `unless c do ... end` | `if not c do ... end` | [`unsupported-construct`](compile-errors.md#unsupported-construct) |
-| `:math.log2(x)`, `:math.log10(x)` | `log(x) / log(2.0)`, `log(x) / log(10.0)` (may differ from `:math` in the last bit) | [`unsupported-call`](compile-errors.md#unsupported-call) |
 | a map of counters, `Map.update(m, k, 1, &(&1 + 1))` | an array indexed by the key: `counts = alloc(i64, 256)`, `counts[k] = counts[k] + 1` | [`unsupported-map`](compile-errors.md#unsupported-map) |
 | `xs :: list(float)` | `xs :: [f64]`, packed in Elixir with `for x <- xs, into: <<>>, do: <<x::float-64-native>>` | [`unknown-type`](compile-errors.md#unknown-type) |
 | `:: String.t()` as a result | `:: [u8]`: it reaches Elixir as a binary, text if the bytes are | [`unknown-type`](compile-errors.md#unknown-type) |

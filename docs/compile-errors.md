@@ -21,6 +21,7 @@ anchor `#<code>` is the same on GitHub and on HexDocs.
 ## Codes
 
 Compiling 21 files (.ex)
+Compiling 21 files (.ex)
 ### kernel-head
 
 A kernel head is `name(arg :: type, ...) :: return_type`.
@@ -777,7 +778,7 @@ end
 A kernel calls builtins and the other kernels in its module.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a kernel runs as native code: it can call its builtins (len, bit_size, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, mulhi, clz, ctz, popcount, rotl64, rotr64, rotl, rotr, f64_to_u64) and the kernels in this module, which are inlined
+- why: a kernel runs as native code: it can call its builtins (len, bit_size, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, log2, log10, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, mulhi, clz, ctz, popcount, rotl64, rotr64, rotl, rotr, f64_to_u64) and the kernels in this module, which are inlined
 - hint: define it as a kernel in this module, or compute it in Elixir and pass the result in
 
 Rejected:
