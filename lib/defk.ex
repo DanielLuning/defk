@@ -56,7 +56,8 @@ defmodule Defk do
       the call's first millisecond, so short calls fanned out with
       `Task.async_stream/3` spread over the schedulers. Turn it off only for
       a module whose kernels are called many times a microsecond's work at a
-      time, where the 9 ns shows. See the
+      time, where the 9 ns shows. The option is unstable: the heuristic is
+      new and may be retuned or replaced. See the
       [runtime contract](runtime-contract.md#1-preemption-a-long-kernel-yields).
     * `max_owned: bytes` is the most one kernel call may hold in arrays it
       allocates or copies (every one lives until the kernel returns, so an

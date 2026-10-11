@@ -89,6 +89,7 @@ above.
 | `use Defk, elixir_mode: true \| false` | documented (README, `language.md`, `ElixirMode`) | 8 examples, tests | **public** | how scripts get `__defk_elixir__/2` |
 | `use Defk, report: :full` | documented (README, `Defk.Report`, `performance.md`) | 1 example, tests | **public** (the option) / **unstable** (what it adds) | output is clang's remarks, `unknown` with another `CC` |
 | `use Defk, max_owned: bytes` (added by `defk-4b2`, after this ADR) | documented (`Defk`, `language.md`, `runtime-contract.md`) | tests | **public** | the per-call owned-buffer budget; its default (half of physical memory) may be tuned |
+| `use Defk, adaptive_slice: true \| false` (added by `defk-04y`, after this ADR) | documented (`Defk`, `runtime-contract.md`, `performance.md`) | tests, `bench/adaptive_slice*.exs` | **unstable** | an opt-out for a scheduling heuristic that is new and may be retuned, replaced or dropped as the runtime learns more (`+swt very_low` still does better) |
 | `defk ..., yield: false` (per kernel, not a `use Defk` option) | documented (`language.md` "one option exists") | 5 examples, tests, bench | **public** | the one kernel option; runtime-contract escape hatch |
 | `config :defk, mode: :native \| :elixir` | documented (README, `language.md`, `ElixirMode`) | 12 examples' docs, tests | **public** | `:dev`/`:test` only, read at compile time |
 | `CC` environment variable | documented (README, `language.md`, compile error hint) | builds | **public** | the elixir_make convention |
