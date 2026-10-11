@@ -104,7 +104,7 @@ defmodule Defk.LanguageDoc.Isolated do
 
   defp sketch(job, module) do
     compile_quietly(sketch_source(job, module))
-    apply(Module.concat([module]), :run, [])
+    Module.concat([module]).run()
   end
 
   # compiler warnings are the sketches' own (unused variables, an unused

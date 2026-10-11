@@ -183,13 +183,7 @@ defmodule Defk.LanguageDoc do
         {:skip, reason}
 
       [_, "run", spec] ->
-        {setup, defs} =
-          case String.split(spec || "", ~r/(^|\s)\|\s*defs:\s*/, parts: 2) do
-            [setup, defs] -> {setup, defs}
-            [setup] -> {setup, ""}
-          end
-
-        {:sketch, %{setup: String.trim(setup), defs: defs}}
+        parse_run(spec || "")
 
       [_, "exunit", needs] ->
         {:exunit, needs}
@@ -203,6 +197,17 @@ defmodule Defk.LanguageDoc do
       _ ->
         {:bad, spec}
     end
+  end
+
+  # run: <bindings> | defs: <module-level code>
+  defp parse_run(spec) do
+    {setup, defs} =
+      case String.split(spec, ~r/(^|\s)\|\s*defs:\s*/, parts: 2) do
+        [setup, defs] -> {setup, defs}
+        [setup] -> {setup, ""}
+      end
+
+    {:sketch, %{setup: String.trim(setup), defs: defs}}
   end
 
   defp kernel?(%{body: body}), do: body =~ @kernel
