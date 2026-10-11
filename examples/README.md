@@ -132,10 +132,12 @@ The verdict comes from the measurement and is a recommendation:
 
 | Verdict | Rule | Recommendation |
 |---|---|---|
-| `good` | defk ≥ 2× faster than the Elixir baseline | defk helps, **once** the baseline is `optimized` |
-| `marginal` | 1×–2× | use Elixir |
-| `poor` | defk slower | use Elixir |
+| `good` | defk ≥ 1.9× faster than the Elixir baseline (the 2× bar less a 5% tie band) | defk helps, **once** the baseline is `optimized` |
+| `marginal` | 0.95×–1.9× (the 1× line less the same band) | use Elixir |
+| `poor` | below 0.95× | use Elixir |
 | `out_of_scope` | can't be written as a kernel | use Elixir |
+
+**Tie band.** A speedup within 5% below a threshold counts as reaching it: 1.9× is `good`, 1.899× is `marginal`; 0.95× is `marginal`, 0.949× is `poor`. Noise of a few percent on a result that sits on a line (a 1.0× tie, a 2.0× bar) then does not flip the verdict, and the recommendation was the same on both sides of the 1× line anyway. Examples still prefer inputs with a clear margin. The sweep's `crossover` stays at a plain 2×.
 
 Target workloads add optional keys to `report/1`. None of them changes the verdict, and
 scripts that do not pass them need no change:

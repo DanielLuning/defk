@@ -28,9 +28,23 @@ defmodule Defk.BenchTest do
 
   test "verdict thresholds" do
     assert Bench.verdict(2.0) == :good
-    assert Bench.verdict(1.99) == :marginal
+    assert Bench.verdict(1.99) == :good
     assert Bench.verdict(1.0) == :marginal
-    assert Bench.verdict(0.99) == :poor
+    assert Bench.verdict(1.5) == :marginal
+    assert Bench.verdict(0.5) == :poor
+  end
+
+  test "verdict tie band: 5% below each threshold counts as reaching it" do
+    # 2x line
+    assert Bench.verdict(1.9) == :good
+    assert Bench.verdict(1.899) == :marginal
+    # 1x line
+    assert Bench.verdict(0.95) == :marginal
+    assert Bench.verdict(0.949) == :poor
+    # compare/2 uses the unrounded speedup
+    assert Bench.compare(1000, 1000).verdict == :marginal
+    assert Bench.compare(1900, 1000).verdict == :good
+    assert Bench.compare(949, 1000).verdict == :poor
   end
 
   test "crossover is the first size with defk >= 2x, or nil" do
@@ -65,8 +79,8 @@ defmodule Defk.BenchTest do
 
     assert %{speedup: 1.5, verdict: :marginal} = Bench.compare(3000, 2000)
     assert %{speedup: 0.5, verdict: :poor} = Bench.compare(1000, 2000)
-    # unrounded speedup decides: 1.999 rounds to 2.0 but is not good
-    assert %{speedup: 2.0, verdict: :marginal} = Bench.compare(1999, 1000)
+    # unrounded speedup decides: 1.8999 rounds to 1.9 but is below the band edge
+    assert %{speedup: 1.9, verdict: :marginal} = Bench.compare(18_999, 10_000)
     # a zero defk time cannot divide by zero
     assert %{verdict: :good} = Bench.compare(5, 0)
   end
