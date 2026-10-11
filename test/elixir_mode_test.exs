@@ -440,7 +440,7 @@ defmodule Defk.ElixirModeTest do
   end
 
   describe "catalog kernels" do
-    test "lib/examples.ex" do
+    test "test/support/examples.ex" do
       x = f64s([1.0, 2.5, -3.0, 0.125])
       agree(Examples.Kernels, :add, [1, 2])
       agree(Examples.Kernels, :add, [@max, 1])
