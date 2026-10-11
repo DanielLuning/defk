@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-ivt",
     "defk-n4r.2",
@@ -17,8 +17,8 @@
   ],
   "parent": "defk-52v",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "BLAKE2b and BLAKE3 from scratch vs blake2_elixir and b3 NIFs",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:42Z"
+  "updated_at": "2026-10-11T12:14:22Z"
 }
