@@ -13,11 +13,15 @@
     {
       "text": "Triage (2026-10-11): start with option 1 (per-kernel byte budget on live owned bytes, raising 'out of memory', configurable via use Defk, native-only limit documented in docs/language.md Limits) plus option 3 (fast-path report note for a copy/alloc inside a loop). Option 2 (free dead owned buffers early) only if a narrow case is clearly safe; otherwise a follow-up ticket.",
       "timestamp": "2026-10-11T20:10:55Z"
+    },
+    {
+      "text": "Decision (2026-10-11): the max_owned default stays at half of physical memory.",
+      "timestamp": "2026-10-11T20:51:48Z"
     }
   ],
   "priority": 3,
   "status": "closed",
   "title": "Bound the memory a kernel's owned buffers may hold, so copies or allocs in a loop raise instead of exhausting the node",
   "type": "task",
-  "updated_at": "2026-10-11T20:24:42Z"
+  "updated_at": "2026-10-11T20:51:48Z"
 }
