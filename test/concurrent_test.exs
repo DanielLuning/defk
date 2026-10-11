@@ -19,6 +19,7 @@ end
 
 defmodule Defk.ConcurrentTest do
   use ExUnit.Case, async: true
+  import Defk.Test.Frames
 
   alias Defk.ConcurrentTest.K
 
@@ -59,8 +60,7 @@ defmodule Defk.ConcurrentTest do
     assert K.__defk_stats__().yields > y0, "no call yielded, so nothing was suspended"
     assert K.__defk_stats__().promotions > p0, "no call promoted a frame"
 
-    wait_until(fn -> K.__defk_stats__().frames_live == 0 end)
-    assert %{frames_live: 0} = K.__defk_stats__()
+    assert_frames_live(K)
 
     # the same again with a yield at every safepoint, so the callers interleave
     # at their densest
@@ -81,8 +81,7 @@ defmodule Defk.ConcurrentTest do
       K.__defk_force_yields__(false)
     end
 
-    wait_until(fn -> K.__defk_stats__().frames_live == 0 end)
-    assert %{frames_live: 0} = K.__defk_stats__()
+    assert_frames_live(K)
   end
 
   defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + @timeout) do

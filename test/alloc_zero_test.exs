@@ -110,6 +110,7 @@ end
 defmodule Defk.AllocZeroTest do
   # async: false: the forced-yield tests flip a flag of K's library
   use ExUnit.Case, async: false
+  import Defk.Test.Frames
   use Defk.Properties
 
   alias Defk.AllocZeroTest.K
@@ -186,7 +187,7 @@ defmodule Defk.AllocZeroTest do
       assert res == zero_bytes(n)
       # one safepoint per strip, each yielding: the zeroing was resumed
       assert ys >= 4
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     end
 
     test "under forced yields, every kernel agrees with Elixir mode" do
@@ -221,7 +222,7 @@ defmodule Defk.AllocZeroTest do
     test "a raise in the middle of zeroing frees the buffers" do
       assert {:raise, %ArgumentError{}} = agree(:zeros, [-1])
       assert {:raise, %Enum.OutOfBoundsError{}} = forced(fn -> agree(:nested, [0, 1]) end)
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     end
   end
 
