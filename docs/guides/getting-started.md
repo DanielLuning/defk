@@ -192,7 +192,7 @@ hint: write the for ..., reduce: loop (start from 0.0 if the values are floats):
     for x <- xs, reduce: 0.0 do
       acc -> acc + x
     end
-(defk unsupported-call: docs/language.md#unsupported-call)
+(defk unsupported-call: docs/compile-errors.md#unsupported-call)
 ```
 
 Each error has the same parts:
@@ -202,8 +202,8 @@ Each error has the same parts:
 - **hint** says what to write instead, often with a rewrite of your own code
   that compiles.
 - **The code** in the last line (`unsupported-call`) is stable. Its entry in
-  [Compile errors](../language.md#11-compile-errors) has an example and the
-  rewrite; this one is [`unsupported-call`](../language.md#unsupported-call).
+  [Compile errors](../compile-errors.md) has an example and the
+  rewrite; this one is [`unsupported-call`](../compile-errors.md#unsupported-call).
   `mix run -e 'Defk.Errors.explain!("unsupported-call")'` prints the same
   entry in a terminal.
 
@@ -228,7 +228,7 @@ From people writing their first kernels:
   values up to 2^64 - 1 are [`u64`](../language.md#u64).
 - **Arrays can't come out of an `if`.** Write to the array inside each
   branch instead of returning it from the branch (planned:
-  [`array-in-branch`](../language.md#array-in-branch)).
+  [`array-in-branch`](../compile-errors.md#array-in-branch)).
 - **Elixir mode in a script.** In a `Mix.install` script, add
   `use Defk, elixir_mode: true` to get the plain Elixir version of each
   kernel for checking (see [Testing kernels](testing.md)). In a Mix
