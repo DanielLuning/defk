@@ -2,14 +2,19 @@ defmodule Defk.Errors do
   @moduledoc """
   Kernel compile errors: the registry of error codes and the error format.
 
-  Every rejection the compiler makes has a stable code, a readable slug that is
-  also its anchor in `docs/language.md` (`docs/language.md#<code>`) once that
-  file exists. Codes are never renamed. `explain!/1` prints a code's entry. `codes/0` lists them with a one-line summary, whether the
-  construct is outside the kernel subset for good (`:subset`), planned
+  Every rejection the compiler makes has a stable code, a readable slug that
+  is also its heading in the [language reference](language.md#11-compile-errors)
+  (`docs/language.md#<code>`). Codes are never renamed. `explain!/1` prints a
+  code's entry. `codes/0` lists them, each with a one-line summary, whether
+  the construct is outside the kernel subset for good (`:subset`), planned
   (`:planned`), or a mistake in a construct that is in it (`:error`), the
-  default `why`/`hint`, and a failing `example` with its `rewrite` (both module
-  bodies; the test suite checks the example is rejected with that code and the
-  rewrite compiles).
+  default `why`/`hint`, and a failing `example` with its `rewrite` (both
+  module bodies; the test suite checks the example is rejected with that code
+  and the rewrite compiles).
+
+  The codes are the stable part: `codes/0` and `explain!/1` are public. The
+  keys of an entry map may change in any version, and so may `fetch!/1`,
+  which is unstable. The rest of this module is the compiler's.
 
   A compile error prints in Elixir's diagnostic frame, then why and how to fix:
 
@@ -26,7 +31,8 @@ defmodule Defk.Errors do
 
   Without `docs/language.md` (a build from a copy of `lib/` alone) the footer
   is `(defk unsupported-map; mix run -e 'Defk.Errors.explain!("unsupported-map")')`.
-  The "Compile errors" section of `docs/language.md` is `reference/0`.
+  The "Compile errors" section of the language reference is generated from
+  this registry, so the two never differ.
   """
 
   @docs "docs/language.md#"
@@ -892,21 +898,56 @@ defmodule Defk.Errors do
 
   @by_code Map.new(@codes, &{&1.code, &1})
 
-  @doc "Every error code, in documentation order."
+  @typedoc """
+  A registry entry. The code is stable; the keys of the map are not, and may
+  change in any version.
+  """
+  @type entry :: %{
+          required(:code) => String.t(),
+          required(:kind) => :error | :subset | :planned,
+          optional(atom()) => term()
+        }
+
+  @doc """
+  Every error code's entry, in documentation order: `code`, `kind`
+  (`:error`, `:subset` or `:planned`), `summary`, `why`, `hint`, and a failing
+  `example` with its `rewrite`.
+
+  The codes are stable; the keys of the entries are not.
+
+      iex> "unsupported-map" in Enum.map(Defk.Errors.codes(), & &1.code)
+      true
+  """
+  @spec codes() :: [entry()]
   def codes, do: @codes
 
-  @doc "The registry entry for `code`."
+  @doc """
+  The registry entry for `code`. Raises `KeyError` for an unknown code.
+
+  Unstable: the shape of the entry may change in any version.
+
+      iex> Defk.Errors.fetch!("unsupported-map").kind
+      :subset
+  """
+  @spec fetch!(String.t()) :: entry()
   def fetch!(code), do: Map.fetch!(@by_code, code)
 
-  @doc "The docs/language.md anchor for `code`."
+  @doc false
+  # The docs/language.md anchor for `code`, for the error footer.
   def docs(code), do: @docs <> code
 
   @doc """
   Prints the registry entry for `code`: summary, why, hint, example and rewrite.
 
-  Raises `ArgumentError` for an unknown code.
+  Raises `ArgumentError` for an unknown code. The footer of a compile error
+  names this command when the language reference is not at hand:
 
-      mix run -e 'Defk.Errors.explain!("unsupported-map")'
+  ```bash
+  mix run -e 'Defk.Errors.explain!("unsupported-map")'
+  ```
+
+      iex> Defk.Errors.explain!("no-such-code")
+      ** (ArgumentError) unknown defk error code "no-such-code"
   """
   @spec explain!(String.t()) :: :ok
   def explain!(code) do

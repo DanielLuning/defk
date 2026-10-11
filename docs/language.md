@@ -215,11 +215,14 @@ For each kernel, a public function with the kernel's name and arity and an
 `binary()`, a tuple result is a tuple of those). Calling it runs the native
 code.
 
-Per module, also:
+Per module, also these functions. They are `@doc false` in your module; the
+`Defk` module docs describe them once, with which are public and which are
+unstable (debugging output that may change in any version):
 
 | Function | Returns |
 |---|---|
 | `__defk_c_source__/0` | the generated C source of the module's kernels |
+| `__defk_report__/0` | the fast-path report as data, `[{kernel, line, fact}]` (see `Defk.Report`; `Defk.Report.print/1` prints it) |
 | `__defk_lib__/0` | the path of the compiled NIF library (`.so`) |
 | `__defk_kernels__/0` | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
 | `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:}` |
