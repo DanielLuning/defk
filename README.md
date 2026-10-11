@@ -30,7 +30,7 @@ Elixir wins as part of the record.
 
 ## Examples: where defk helps, and where Elixir is the right choice
 
-[`examples/`](examples) is a growing catalog of real use cases, each written in
+[`examples/`](https://github.com/DanielLuning/defk/blob/main/examples) is a growing catalog of real use cases, each written in
 Elixir and in defk, checked for agreement and measured end to end.
 `elixir examples/run_all.exs` prints the scoreboard. The measurement rules are
 in [`examples/README.md`](examples/README.md).
@@ -129,7 +129,7 @@ why, inlined calls, copies and flagged float checks. `Mod.__defk_report__/0`
 returns the same facts as data, so a test can assert that a hot loop stays
 tight. `use Defk, report: :full` adds clang's vectorisation verdict for each
 loop, at the cost of one extra compiler pass. See
-[`docs/fast-path-report.md`](docs/fast-path-report.md).
+[`docs/fast-path-report.md`](https://github.com/DanielLuning/defk/blob/main/docs/fast-path-report.md).
 
 ## Design decisions the benchmarks validated
 

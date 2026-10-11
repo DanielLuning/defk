@@ -1767,7 +1767,7 @@ including ordinary `def`s of the kernel's own module, are not callable
   kernels yield at every clock read, so a test can run every resume path.
 
 The BEAM side of all this (scheduling, `enif_schedule_nif`, resources,
-upgrade) is in [docs/beam-nifs.md](beam-nifs.md).
+upgrade) is in [docs/beam-nifs.md](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md).
 
 ## 10. Elixir mode
 
