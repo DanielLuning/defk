@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-11T12:43:04Z",
+  "description": "Found by defk-52v.3 (examples/lz4_snappy_decode.exs). Inside an Enum.reduce_while (or for reduce:) body, `if done, do: {:halt, {out, s}}, else: (out = put1(out, i); {:cont, {out, s}})` where put1/2 is a kernel that writes out[i] and returns out: the inlined callee copies `out` before its write on EVERY iteration (report: \"copy: out is copied before this write: another binding still sees its buffer\"), and every copy lives until the kernel returns. Time and memory are quadratic in the loop length. Writing `out[i] = 1` directly in the same branch does not copy, and hoisting the call out of the branch (`out = put1(out, i)` first, then `if done, do: {:halt, ...}, else: {:cont, ...}`) does not copy either.\n\nReproduction (Mix.install script):\n\n    defk put1(out :: [u8], i :: i64) :: [u8] do\n      out[i] = 1\n      out\n    end\n\n    defk fill(n :: i64) :: i64 do\n      out = alloc(u8, n)\n      {out, s} =\n        Enum.reduce_while(0..(n - 1)//1, {out, 0}, fn i, {out, s} -\u003e\n          if i == n - 1 do\n            {:halt, {out, s + out[0]}}\n          else\n            out = put1(out, i)\n            {:cont, {out, s}}\n          end\n        end)\n      s + out[1]\n    end\n\nMeasured: n = 1k 92 us, 10k 12 ms, 40k 202 ms (hoisted: 1, 4, 7 us); 40k holds ~1.6 GB of copies. In the LZ4/Snappy decoder (copy helper per element, 4 MB output) the BEAM was SIGKILLed (exit 137, out of memory): a kernel took the node down, which the runtime contract says it must not.\n\nLikely cause: the \"read after the write\" test for an inlined callee's array parameter sees the caller's `out` read by name in the other branch of the enclosing if (or in the next iteration through the accumulator), although the caller rebinds `out` to the result. The direct-write path already handles this case.\n\nDone when: the reproduction copies nothing (fast-path report has no copy note for fill/1, timing linear), a test covers a helper call in one branch with a read in the other, and docs/language.md Copies says how a helper call in a branch behaves. Separately consider a bound on the memory a kernel's copies may hold (a copy in a loop that keeps every buffer until return can exhaust memory).",
+  "id": "defk-33b",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "[BUG] A helper kernel that writes and returns an array, called in one branch of a loop body whose other branch reads the array, copies the whole array every iteration and keeps every copy",
+  "type": "bug",
+  "updated_at": "2026-10-11T12:43:04Z"
+}
