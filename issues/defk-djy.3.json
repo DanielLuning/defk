@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [
     "defk-djy.1",
+    "defk-djy.11",
     "defk-djy.2"
   ],
   "blocks": [
@@ -18,5 +19,5 @@
   "status": "open",
   "title": "Write the API docs: moduledocs, function docs, doctests, specs",
   "type": "task",
-  "updated_at": "2026-10-10T14:58:43Z"
+  "updated_at": "2026-10-11T11:54:09Z"
 }
