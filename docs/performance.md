@@ -1725,9 +1725,10 @@ whose initial accumulator is the array when the loop sat in such a branch.
 **Fixed in `defk-tif`:** the condition, `case` subject and clause heads that
 chose a branch ran before it, so they no longer count as reads after the
 call (the ticket first blamed the other branch's `{:halt, st}` tail, which
-was never counted). Still a trap: a nested loop whose range or init also
-reads the array (`0..st[@h_n]`) copies it; read range bounds into locals
-first. The example keeps its workaround: restart, propagate, analyze,
+was never counted). A nested loop whose range also read the array
+(`0..st[@h_n]`) copied it too, until `defk-8tw`: a loop's range and initial
+value are evaluated before its first iteration, so they no longer count as
+reads in the loop (a bound read into a local first is no longer needed). The example keeps its workaround: restart, propagate, analyze,
 backjump, learn and decide are called on every step with an active flag
 (empty ranges and guarded writes when inactive), and only the tail
 branches. `Mod.__defk_c_source__/0` shows the copies as
@@ -1736,7 +1737,7 @@ its callees, so the 14-kernel module is 2.35 MB of C and a 683 KB `.so`,
 about 3 minutes of clang at load 4 (6.20).
 
 - **Conditions:** Apple clang 21; load 4-5 for the compile time.
-- **Source:** [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs) (header, `SatEx.Kernels.search/2`), `defk-tif`, `defk-52v.15`.
+- **Source:** [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs) (header, `SatEx.Kernels.search/2`), `defk-tif`, `defk-8tw`, `defk-52v.15`.
 - **Status:** measured (copies, from the generated C); provisional (times).
 
 <!-- defk-example skip: kernel-subset code, the shape of the solver's step -->

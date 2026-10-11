@@ -1484,7 +1484,15 @@ where it cannot prove that:
   same test (an input array, an array from outside the loop that the loop
   reads, or one array given to two accumulators). Otherwise the
   accumulator's buffer is the loop's alone and every write to it, in the
-  body or in a called kernel that returns it, is in place.
+  body or in a called kernel that returns it, is in place. The loop's
+  range (start, end and step of its first generator) and its initial value
+  are evaluated once, before the first iteration, so reading the array
+  there is not a read in the loop:
+  `for k <- 0..(st[0] - 1)//1, reduce: st do st -> (st[k] = 0; st) end` and
+  `Enum.reduce_while(0..st[0]//1, {st, st[1]}, fn ...)` write `st` in place,
+  also as nested loops. An array the generator walks (`x <- st`), a later
+  generator (evaluated again for each value of the ones before it) and a
+  filter read the array while the loop runs, so there it still copies.
 
 Renaming copies nothing: `b = a`, a swap `{prev, cur} = {cur, prev}`, passing
 an array to a kernel and returning one are each a pointer move. So does a
