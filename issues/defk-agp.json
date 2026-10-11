@@ -6,7 +6,7 @@
   "description": "Found in defk-9p6.13 (cosine_topk.exs), trying a dimension-major index (scores += column * q[d], one axpy per dimension). Repro (report: :full):\n\n  defk axpy(m :: [f32], s :: f64) :: [f64] do\n    out = alloc(f64, len(m))\n    for i \u003c- 0..(len(m) - 1)//1 do\n      out[i] = out[i] + m[i] * s\n    end\n    out\n  end\n\nBoth bounds checks are dropped, but the report says 'non-finite: float checks raise where they fail: the body's state cannot be restored from a snapshot to replay a strip' and 'not vectorised: Cannot vectorize early exit loop with writes to memory'. A flagged strip would need to undo the strip's writes to out (or snapshot the strip's slice of out) before replaying with raising checks. The dimension-major cosine scan (100k x 384, in place into a 100k-element f64 score array) ran ~26 ms, no faster than the row-major dot with 8 partial sums (20 ms), which does vectorise via SLP. The same read-modify-write shape is matmul's i-k-j inner loop (out[i * p + j] = out[i * p + j] + aik * b[k * p + j]) and any histogram/accumulator update; worth checking whether matmul is held back by it.",
   "id": "defk-agp",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "comments": [
     {
