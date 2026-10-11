@@ -10,9 +10,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Decision: ADOPTED as the default (defk-04y). A yielding kernel's function now calls its NIF __defk_native_\u003cname\u003e__ with :erlang.statistics(:total_run_queue_lengths) as an extra last argument; a value \u003e 0 makes the call yield every 50 us (DEFK_SHORT_SLICE_US) for its first 1 ms (DEFK_SHORT_FOR_US), then 250 us as before (defk_slice_init in priv/defk_runtime.h). `use Defk, adaptive_slice: false` opts out. Kernels that never yield are unchanged.\n\nMeasured on OTP 29.0.3, 12 schedulers, load average 2.2-2.9 at the start of each block (4-5 during some); treatments interleaved in one VM, medians, two sessions.\n(1) Check cost per call (idle / 11 schedulers busy): total_run_queue_lengths 7.8 / 9.3 ns; own queue (run_queue_lengths + nth scheduler_id) 60 / 81 ns; statistics(:run_queue) 43 / 1954 ns; scheduler_id 3 ns. Tiny yielding call count_primes(10): 40-43 -\u003e 49-58 ns (total check), 102-132 ns (own). The NIF API exposes no run-queue length, so the check has to be in Elixir. 9 ns = 0.0014% of a 0.65 ms call.\n(2) Lone calls vs 250 us: 0.65 ms -0.6..+0.1% (12 sched), -0.2..-0.1% (1 sched); 2M +0.1..+0.2%: noise. fixed 50 us for the whole call: +8.1% / +7.1% on one scheduler.\n(3) Tick gap, one scheduler, 2M count_primes: lone p99 2.25 ms all treatments; with 3 more kernels queued p99 3.2 ms (250 us and adaptive alike; fixed50 2.05). 15 runs of final code: median worst 3.30 ms (250 us) vs 3.34 (adaptive). Slices are never longer than 250 us.\n(4) Spread, wall ms / schedulers: 48 x 0.65 ms async_stream 13.6-13.7/3 -\u003e adaptive 5.6-5.7/10-11 (own-queue 5.8-5.9/10, fixed50 5.6-5.7/10-11, +swt very_low 4.4/10-12, Elixir 4.6/11). async+await_many 4.6-5.0/11 -\u003e 4.3-4.5/12. 12 x 0.55 ms 4.2/2 -\u003e 2.1/7 (own 2.4/5, fixed50 2.1/6, swt 1.2-1.3/10-11, Elixir 1.3/11). 48 x 5 ms 35.5-35.7 -\u003e 31.4-31.6 (12 schedulers either way).\n(5) Examples (Task.async_stream chunks): batched_levenshtein 12 chunks 3.8-3.9/2 -\u003e 1.9/5-6 (swt 1.0-1.1/9-10); monte_carlo_rtp 1M 48 chunks 12.7/3 -\u003e 5.5/10 (swt 4.6/8-9); cosine_topk 100k 12 chunks 7.7-7.8/5 -\u003e 3.9-4.1/9-10 (swt 3.7/8-9). Recovers 70-93% of what +swt very_low gains; +swt very_low is still 1.1-1.8x better, and bigger chunks / Task.async+await_many stay the first advice.\nDidn't help: switching to 50 us inside the kernel after a resume that waited \u003e 20 us (no Elixir check): 12.7/3 vs 13.6/3.\n\nAdoption rule met: the check costs ~0.0014% of a 0.65 ms call, and most of the spread is recovered. Recorded in docs/performance.md 4.9 (4.1/4.3 point to it), docs/guides/runtime-contract.md section 1, examples/README.md rule 7. Benches: bench/run_queue_check_cost.exs, bench/adaptive_slice.exs (single / tick / spread), bench/adaptive_slice_examples.exs; fixed50 and gap columns used the experimental API of commit be24cd7. Tests: test/adaptive_slice_test.exs.",
+      "timestamp": "2026-10-11T18:36:27Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Experiment: short slices only when the caller's run queue is crowded (spread short parallel kernel calls without slowing lone calls)",
   "type": "task",
-  "updated_at": "2026-10-11T17:26:09Z"
+  "updated_at": "2026-10-11T18:36:27Z"
 }
