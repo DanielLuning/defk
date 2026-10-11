@@ -219,7 +219,7 @@ Per module, also:
 
 | Function | Returns |
 |---|---|
-| `__defk_source__/0` | the generated C source of the module's kernels |
+| `__defk_c_source__/0` | the generated C source of the module's kernels |
 | `__defk_lib__/0` | the path of the compiled NIF library (`.so`) |
 | `__defk_kernels__/0` | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
 | `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:}` |
@@ -1311,7 +1311,7 @@ Here `a` is copied at the write, because `b` is read after it; without the
 through the rest of the block, and for a loop or branch, everything its whole
 statement reads: it is conservative, so a kernel may copy where Elixir would
 not have to (for example when `b` is read only in the other branch of an
-`if`). Copies are not reported; `Mod.__defk_source__/0` shows them as
+`if`). Copies are not reported; `Mod.__defk_c_source__/0` shows them as
 `defk_copy_*` calls. Like `alloc`, every copy lives until the kernel returns.
 
 ### Returning
@@ -1843,15 +1843,7 @@ Each entry below gives the code's summary, its kind, the default why and hint
 (an error may say more about your code), and a failing example with the
 rewrite; the test suite checks that each example is rejected with its code and
 each rewrite compiles. The entries are generated from the registry in
-`lib/defk/errors.ex`; after changing it, regenerate them with
-
-```
-mix run -e 'IO.write(Defk.Errors.reference())'
-```
-
-and replace everything from the first `###` heading of this section to the
-end of the section with its output (`test/language_doc_test.exs` fails until
-they match).
+`lib/defk/errors.ex` and checked by the test suite (maintainers: `docs/agents/generated-docs.md`).
 
 ### kernel-head
 

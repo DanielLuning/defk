@@ -12,7 +12,7 @@ defmodule Defk.Test do
   @doc """
   Runs `Mod.fun/arity` (via apply with args) in both native and Elixir mode
   and asserts they agree: both return identical values with === (bit-exact
-  floats), or both raise the same exception module for the same `reason/1`.
+  floats), or both raise the same exception module for the same `agreement_reason/1`.
   Returns the native outcome, `{:ok, value}` or `{:raise, exception}`.
   """
   def assert_agrees(mod, fun, args) do
@@ -36,9 +36,9 @@ defmodule Defk.Test do
                "#{call}: native #{inspect(a, limit: 8)}, Elixir mode #{inspect(b, limit: 8)}"
 
       {{:raise, a}, {:raise, b}} ->
-        assert {a.__struct__, reason(a)} == {b.__struct__, reason(b)},
-               "#{call}: native raised #{inspect(a)} (#{inspect(reason(a))}), " <>
-                 "Elixir mode raised #{inspect(b)} (#{inspect(reason(b))})"
+        assert {a.__struct__, agreement_reason(a)} == {b.__struct__, agreement_reason(b)},
+               "#{call}: native raised #{inspect(a)} (#{inspect(agreement_reason(a))}), " <>
+                 "Elixir mode raised #{inspect(b)} (#{inspect(agreement_reason(b))})"
 
       _ ->
         flunk(
@@ -97,11 +97,11 @@ defmodule Defk.Test do
   exception no rule covers gives `{:other, message}`, so it agrees only with
   the identical message.
   """
-  def reason(%ArithmeticError{message: m}), do: match_reason(m, @arith)
-  def reason(%ArgumentError{message: m}), do: match_reason(m, @arg)
-  def reason(%Enum.OutOfBoundsError{}), do: :index
-  def reason(%CaseClauseError{}), do: :clause
-  def reason(e), do: {:other, Exception.message(e)}
+  def agreement_reason(%ArithmeticError{message: m}), do: match_reason(m, @arith)
+  def agreement_reason(%ArgumentError{message: m}), do: match_reason(m, @arg)
+  def agreement_reason(%Enum.OutOfBoundsError{}), do: :index
+  def agreement_reason(%CaseClauseError{}), do: :clause
+  def agreement_reason(e), do: {:other, Exception.message(e)}
 
   defp match_reason(m, rules) do
     Enum.find_value(rules, {:other, m}, fn {pat, r} -> if matches?(m, pat), do: r end)

@@ -47,7 +47,7 @@ defmodule Defk.FrameTagTest do
   end
 
   test "the tag is emitted and checked at step entry" do
-    src = K.__defk_source__()
+    src = K.__defk_c_source__()
     assert src =~ ~r/#define DEFK_HEADER_HASH \d+ULL/
     assert src =~ "defk_frame_of(env, argv[0], sizeof *F, &exc)"
   end

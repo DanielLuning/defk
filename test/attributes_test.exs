@@ -120,7 +120,7 @@ defmodule Defk.AttributesTest do
 
   # the C of one kernel in the module's generated source
   defp kernel_c(name) do
-    [_, c] = String.split(K.__defk_source__(), "/* ---- #{name}/", parts: 2)
+    [_, c] = String.split(K.__defk_c_source__(), "/* ---- #{name}/", parts: 2)
     c |> String.split("/* ---- ", parts: 2) |> hd()
   end
 

@@ -269,7 +269,7 @@ defmodule Defk.MultiClauseTest do
     end
 
     test "costs nothing over the cond: the same tests in the same order" do
-      src = K.__defk_source__()
+      src = K.__defk_c_source__()
       multi = kernel_c(src, "one_dod")
       cond = kernel_c(src, "one_dod_cond")
       assert normalise(multi) == normalise(cond)
@@ -366,7 +366,7 @@ defmodule Defk.MultiClauseTest do
 
       # an if-chain testing each literal once, each arm one assignment, and
       # the clause error at its end (clang makes a switch where that pays)
-      c = normalise(kernel_c(K.__defk_source__(), "digit"))
+      c = normalise(kernel_c(K.__defk_c_source__(), "digit"))
       tests = Enum.filter(c, &(&1 =~ "if ("))
 
       assert tests == for(l <- ["0", "1", "2", "-1"], do: "if ((v == INT64_C(#{l}))) {"),

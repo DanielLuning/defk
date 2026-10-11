@@ -292,7 +292,7 @@ defmodule Defk.BitstringTest do
       assert K.regrown(i64s(xs)) == {out, bits2}
       assert agrees(:regrown, [i64s(xs)]) == {:ok, {out, bits2}}
       assert agrees(:regrown, [<<>>]) == {:ok, {i64s([0, 0, 0, 0]), <<>>}}
-      assert K.__defk_source__() =~ "regrown"
+      assert K.__defk_c_source__() =~ "regrown"
     end
 
     test "Enum.reduce_while and a called kernel's bitstring" do
@@ -308,7 +308,7 @@ defmodule Defk.BitstringTest do
     test "a value that does not fit its size raises in both modes" do
       for {x, n} <- [{4, 2}, {-1, 8}, {256, 8}, {1, 0}, {-1, 64}, {2, 1}] do
         assert {:raise, %ArgumentError{} = e} = agrees(:pack, [i64s([x]), n])
-        assert Defk.Test.reason(e) == :segment_fit
+        assert Defk.Test.agreement_reason(e) == :segment_fit
         assert Exception.message(e) =~ "bitstring segment value #{x} does not fit in #{n} bits"
       end
 
@@ -323,18 +323,18 @@ defmodule Defk.BitstringTest do
 
       for {x, n} <- [{2 ** 63, 32}, {top, 63}, {6, 2}] do
         assert {:raise, %ArgumentError{} = e} = agrees(:pack_u64, [<<x::64-native>>, n])
-        assert Defk.Test.reason(e) == :segment_fit
+        assert Defk.Test.agreement_reason(e) == :segment_fit
         assert Exception.message(e) =~ "bitstring segment value #{x} does not fit in #{n} bits"
       end
 
       assert {:raise, %ArgumentError{} = e} = agrees(:pack_u64, [<<top::64-native>>, 65])
-      assert Defk.Test.reason(e) == :segment_size
+      assert Defk.Test.agreement_reason(e) == :segment_size
     end
 
     test "a size outside 0..64 raises in both modes" do
       for n <- [65, -1, 1000, -(2 ** 63)] do
         assert {:raise, %ArgumentError{} = e} = agrees(:pack, [i64s([0]), n])
-        assert Defk.Test.reason(e) == :segment_size
+        assert Defk.Test.agreement_reason(e) == :segment_size
       end
 
       # also with no element to append: the check is per segment
@@ -373,7 +373,7 @@ defmodule Defk.BitstringTest do
 
         for x <- [lo - 1, hi + 1], x in -(2 ** 63)..(2 ** 63 - 1) do
           assert {:raise, %ArgumentError{} = e} = agrees(:pack_signed, [i64s([x]), n])
-          assert Defk.Test.reason(e) == :segment_fit
+          assert Defk.Test.agreement_reason(e) == :segment_fit
 
           assert Exception.message(e) =~
                    "bitstring segment value #{x} does not fit in #{n} signed bits"
@@ -395,7 +395,7 @@ defmodule Defk.BitstringTest do
     test "a size outside 0..64 raises, as for unsigned segments" do
       for n <- [65, -1] do
         assert {:raise, %ArgumentError{} = e} = agrees(:pack_signed, [i64s([0]), n])
-        assert Defk.Test.reason(e) == :segment_size
+        assert Defk.Test.agreement_reason(e) == :segment_size
       end
     end
 

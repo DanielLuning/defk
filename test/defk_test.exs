@@ -13,7 +13,7 @@ defmodule DefkTest do
     assert Defk.Test.assert_agrees(T, :add1, [5]) == {:ok, 6}
   end
 
-  test "Defk.Test.reason/1 normalises the kernel's and Elixir mode's messages" do
+  test "Defk.Test.agreement_reason/1 normalises the kernel's and Elixir mode's messages" do
     reasons = [
       {%ArithmeticError{message: "i64 overflow in 3 * 4"}, :overflow},
       {%ArithmeticError{message: "trunc/1: 9.22337e+18 does not fit in i64"}, :overflow},
@@ -34,6 +34,6 @@ defmodule DefkTest do
       {%RuntimeError{message: "defk bug"}, {:other, "defk bug"}}
     ]
 
-    for {e, reason} <- reasons, do: assert(Defk.Test.reason(e) == reason, inspect(e))
+    for {e, reason} <- reasons, do: assert(Defk.Test.agreement_reason(e) == reason, inspect(e))
   end
 end

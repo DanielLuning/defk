@@ -108,7 +108,14 @@ defmodule Defk do
       if elixir? or name in bits, do: Defk.ElixirMode.native_name(name), else: name
     end
 
-    {c_src, all_sigs} = Defk.Compiler.compile(env.module, kernels, env.file, nif_name: nif_name)
+    fault_hooks? = fault_hooks?()
+
+    {c_src, all_sigs} =
+      Defk.Compiler.compile(env.module, kernels, env.file,
+        nif_name: nif_name,
+        fault_hooks: fault_hooks?
+      )
+
     lib = Defk.Build.build!(env.module, c_src, env.file)
 
     # the fast-path report: defk's own notes, and clang's vectorisation under
@@ -132,26 +139,53 @@ defmodule Defk do
     elixir_mode =
       if elixir?, do: Defk.ElixirMode.definitions(kernels, all_sigs, env.file), else: []
 
+    # The generated functions are `@doc false` (ADR-0006); the descriptions
+    # they used to carry, for the Defk moduledoc (defk-djy.3):
+    #   __defk_c_source__/0      generated C source
+    #   __defk_report__/0        the fast-path report, [{kernel, line, fact}]; see Defk.Report
+    #   __defk_lib__/0           path of the compiled NIF library
+    #   __defk_stats__/0         runtime counters: frames_live, promotions, yields
+    #   __defk_kernels__/0       the kernels' signatures: name, arity, params as
+    #                            [{name, type}], and ret
+    #   __defk_force_yields__/1  testing: true makes this module's kernels yield at
+    #                            every clock read (module-wide, not per process)
+    corrupt_tags = corrupt_tags_def(fault_hooks?)
+
     quote do
       @on_load :__defk_load__
       @doc false
       def __defk_load__, do: :erlang.load_nif(unquote(String.to_charlist(lib)), 0)
-      @doc "Generated C source."
-      def __defk_source__, do: unquote(c_src)
-      @doc "The fast-path report, `[{kernel, line, fact}]`; see `Defk.Report`."
-      def __defk_report__, do: unquote(Macro.escape(report))
-      @doc "Path of the compiled NIF library."
-      def __defk_lib__, do: unquote(lib <> ".so")
-      @doc "Runtime counters: frames_live, promotions, yields."
-      def __defk_stats__, do: :erlang.nif_error(:defk_not_loaded)
-      @doc "The kernels' signatures: name, arity, `params` as `[{name, type}]`, and `ret`."
-      def __defk_kernels__, do: unquote(Macro.escape(sigs))
-      @doc "Testing: `true` makes this module's kernels yield at every clock read."
-      def __defk_force_yields__(_on), do: :erlang.nif_error(:defk_not_loaded)
       @doc false
-      def __defk_corrupt_tags__(_on), do: :erlang.nif_error(:defk_not_loaded)
+      def __defk_c_source__, do: unquote(c_src)
+      @doc false
+      def __defk_report__, do: unquote(Macro.escape(report))
+      @doc false
+      def __defk_lib__, do: unquote(lib <> ".so")
+      @doc false
+      def __defk_stats__, do: :erlang.nif_error(:defk_not_loaded)
+      @doc false
+      def __defk_kernels__, do: unquote(Macro.escape(sigs))
+      @doc false
+      def __defk_force_yields__(_on), do: :erlang.nif_error(:defk_not_loaded)
+      unquote(corrupt_tags)
       unquote_splicing(stubs)
       unquote_splicing(elixir_mode)
+    end
+  end
+
+  # `__defk_corrupt_tags__/1` deliberately breaks the frame-tag check, so it
+  # is generated only when the user's module compiles under MIX_ENV=test
+  # (scripts without Mix never get it).
+  defp fault_hooks? do
+    Code.ensure_loaded?(Mix.Project) and Mix.Project.get() != nil and Mix.env() == :test
+  end
+
+  defp corrupt_tags_def(false), do: nil
+
+  defp corrupt_tags_def(true) do
+    quote do
+      @doc false
+      def __defk_corrupt_tags__(_on), do: :erlang.nif_error(:defk_not_loaded)
     end
   end
 

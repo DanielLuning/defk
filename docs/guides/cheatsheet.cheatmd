@@ -44,7 +44,7 @@ iex> Geo.dot(a, a)
 | Function | Gives |
 |---|---|
 | `__defk_elixir__(:f, args)` | one call in Elixir mode |
-| `__defk_source__/0` | the generated C |
+| `__defk_c_source__/0` | the generated C |
 | `__defk_report__/0` | the fast-path report as data |
 | `__defk_stats__/0` | `frames_live`, `promotions`, `yields` |
 | `__defk_force_yields__/1` | testing: yield at every safepoint |

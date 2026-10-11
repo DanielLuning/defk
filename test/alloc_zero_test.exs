@@ -139,7 +139,7 @@ defmodule Defk.AllocZeroTest do
   end
 
   defp kernel_c(name) do
-    [_ | chunks] = String.split(K.__defk_source__(), "/* ---- ")
+    [_ | chunks] = String.split(K.__defk_c_source__(), "/* ---- ")
     Enum.find(chunks, &String.starts_with?(&1, "#{name}/")) || flunk("no kernel #{name}")
   end
 

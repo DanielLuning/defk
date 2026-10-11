@@ -18,7 +18,7 @@ defmodule Defk.YieldFalseStripTest do
   defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
 
   test "a yield: false strip loop compiles without set-but-not-used" do
-    src = K.__defk_source__()
+    src = K.__defk_c_source__()
     assert src =~ "DEFK_SHORT(v_rem_"
 
     dir = Path.join(System.tmp_dir!(), "defk_yield_false_strip_test")

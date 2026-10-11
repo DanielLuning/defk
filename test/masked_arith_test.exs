@@ -158,8 +158,11 @@ defmodule Defk.MaskedArithTest do
 
       for f <- [:band_ones, :attr_ones] do
         case {agrees(f, [x, y]), expect} do
-          {{:raise, %ArithmeticError{} = e}, :overflow} -> assert Defk.Test.reason(e) == :overflow
-          {got, want} -> assert got == want
+          {{:raise, %ArithmeticError{} = e}, :overflow} ->
+            assert Defk.Test.agreement_reason(e) == :overflow
+
+          {got, want} ->
+            assert got == want
         end
       end
 
@@ -193,14 +196,14 @@ defmodule Defk.MaskedArithTest do
     assert {:raise, %ArithmeticError{message: "div/2 by zero"}} = agrees(:leaf_div, [1, 0])
     assert agrees(:leaf_div, [@min, 1]) == {:ok, band(@min * 3, 255)}
     assert {:raise, %ArithmeticError{} = e} = agrees(:leaf_rem, [@max, 2])
-    assert Defk.Test.reason(e) == :overflow
+    assert Defk.Test.agreement_reason(e) == :overflow
     assert agrees(:leaf_rem, [3, 5]) == {:ok, band(15 + rem(15, 7), 255)}
     assert agrees(:leaf_bsr, [@min, @max]) == {:ok, band((@min >>> 3) * @max, 0xFFFF)}
     assert agrees(:var_bsl, [1, 63]) == {:ok, 1}
     assert agrees(:var_bsl, [3, 7]) == {:ok, band((3 <<< 7) + 1, 255)}
     assert agrees(:var_bsl, [@max, 200]) == {:ok, 1}
     assert {:raise, %ArithmeticError{} = e} = agrees(:var_bsl, [1, -1])
-    assert Defk.Test.reason(e) == :negative_shift
+    assert Defk.Test.agreement_reason(e) == :negative_shift
   end
 
   test "a mask that is not 2^k - 1, or not a literal, gets the checked form" do
@@ -219,7 +222,7 @@ defmodule Defk.MaskedArithTest do
     for c <- [true, false], x <- @values, y <- @values, do: agrees(:pick, [c, x, y])
     assert K.pick(true, @max, @max) == 1
 
-    src = K.__defk_source__()
+    src = K.__defk_c_source__()
     refute src =~ "defk_get_u8("
     for x <- @values, y <- @values, do: assert(agrees(:lookup, [x, y]) == {:ok, 0})
   end

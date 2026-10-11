@@ -79,7 +79,7 @@ stable code (`Defk.Errors.codes/0`). Every rejection in the module is reported
 at once, up to 10.
 
 At `mix compile`, `defk` type-checks the body, emits C
-(`_build/dev/defk/*.c`; also `Mod.__defk_source__/0`), builds a NIF with
+(`_build/dev/defk/*.c`; also `Mod.__defk_c_source__/0`), builds a NIF with
 `cc -O3`, and generates the Elixir stubs plus `@spec`s.
 
 | Piece | File |

@@ -95,7 +95,7 @@ defmodule Defk.ScaledFactsTest do
   @i64_max 0x7FFFFFFFFFFFFFFF
 
   defp kernel_c(name) do
-    [_, c] = String.split(K.__defk_source__(), "/* ---- #{name}/", parts: 2)
+    [_, c] = String.split(K.__defk_c_source__(), "/* ---- #{name}/", parts: 2)
     c |> String.split("/* ---- ", parts: 2) |> hd()
   end
 

@@ -153,7 +153,7 @@ defmodule Defk.Properties do
 
     case Defk.Test.assert_agrees(mod, fun, args) do
       {:raise, %ArgumentError{} = e} ->
-        assert Defk.Test.reason(e) == :badarg, "#{fun}#{inspect(args)}: #{inspect(e)}"
+        assert Defk.Test.agreement_reason(e) == :badarg, "#{fun}#{inspect(args)}: #{inspect(e)}"
 
       other ->
         flunk("#{fun}#{inspect(args, limit: 5)}: expected ArgumentError, got #{inspect(other)}")

@@ -82,11 +82,11 @@ defmodule Defk.MixProject do
       groups_for_extras: [Guides: @guides, Reference: @reference],
       groups_for_modules: [
         Kernels: [Defk],
-        Testing: [Defk.Test, Defk.Case],
-        Benchmarking: [Defk.Bench, Defk.Bench.TickGap, Defk.Report],
+        Testing: [Defk.Test, Defk.ElixirMode],
+        "Benchmarking (unstable)": [Defk.Bench, Defk.Bench.TickGap],
+        Report: [Defk.Report],
         "Bits helpers": [Defk.Bits],
-        Errors: [Defk.Errors],
-        Internals: [Defk.ElixirMode]
+        Errors: [Defk.Errors]
       ]
     ]
   end

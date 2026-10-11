@@ -243,7 +243,7 @@ defmodule Defk.ReportTest do
     end
 
     test "the remark pass leaves the cached .so as it was" do
-      src = Full.__defk_source__()
+      src = Full.__defk_c_source__()
       base = String.trim_trailing(Full.__defk_lib__(), ".so")
       before = File.read!(base <> ".so")
       stat = File.stat!(base <> ".so")

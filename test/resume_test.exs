@@ -337,7 +337,7 @@ defmodule Defk.ResumeTest do
   end
 
   defp kernel_c(name) do
-    [_, rest] = String.split(K.__defk_source__(), "/* ---- #{name} (yielding) ---- */\n")
+    [_, rest] = String.split(K.__defk_c_source__(), "/* ---- #{name} (yielding) ---- */\n")
     rest |> String.split("/* ---- ") |> hd()
   end
 
@@ -379,7 +379,7 @@ defmodule Defk.ResumeTest do
   # new module `name` with a stub for each NIF, and returns the module and a
   # function that calls the kernel.
   defp lost_mutant(name, edit) do
-    src = Defk.ResumeTest.Lost.__defk_source__()
+    src = Defk.ResumeTest.Lost.__defk_c_source__()
 
     assert String.contains?(src, @lost_case) and String.contains?(src, @lost_return),
            "the generated C changed shape; update the lost-resume tests"

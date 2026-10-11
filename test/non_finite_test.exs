@@ -240,7 +240,7 @@ defmodule Defk.NonFiniteTest do
 
   defp raises(fun, args, module, reason) do
     assert {:raise, %^module{} = e} = agrees(fun, args)
-    assert Defk.Test.reason(e) == reason
+    assert Defk.Test.agreement_reason(e) == reason
     # raised by the failing operation itself, also after a flagged strip's
     # replay (never its fallback, which names no operation)
     refute e.message == "float result is inf or NaN"
@@ -473,7 +473,7 @@ defmodule Defk.NonFiniteTest do
   defp first_error(fun, args, kind) do
     {module, reason} = reason_of(kind)
     assert {:raise, %^module{} = e} = agrees(fun, args)
-    assert Defk.Test.reason(e) == reason
+    assert Defk.Test.agreement_reason(e) == reason
     refute e.message == "float result is inf or NaN"
   end
 

@@ -494,7 +494,9 @@ defmodule Defk.LanguageDoc do
     do: assert(a === b, "#{where}: native #{inspect(a)}, Elixir mode #{inspect(b)}")
 
   defp agree!(where, {:raise, a}, {:raise, b}) do
-    reasons = {{a.__struct__, Defk.Test.reason(a)}, {b.__struct__, Defk.Test.reason(b)}}
+    reasons =
+      {{a.__struct__, Defk.Test.agreement_reason(a)},
+       {b.__struct__, Defk.Test.agreement_reason(b)}}
 
     assert elem(reasons, 0) == elem(reasons, 1),
            "#{where}: native raised #{inspect(a)}, Elixir mode raised #{inspect(b)}"

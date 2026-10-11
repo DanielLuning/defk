@@ -212,11 +212,9 @@ Every compile error the compiler marks as outside the kernel subset for good:
 
 ## Keeping this page true
 
-The two lists of compile errors are generated from `Defk.Errors`. After
-changing the registry, regenerate them with
-`mix run -e 'IO.write(Defk.Errors.scope(:planned))'` and
-`mix run -e 'IO.write(Defk.Errors.scope(:subset))'`, and replace each list
-with its output. `test/scope_doc_test.exs` fails until they match, and also
-checks that every planned code is named in the "Not yet" list with a ticket,
-and that every code named in "Won't be" is outside the subset for good. The
-example kernel above runs in native code and in Elixir mode in the tests.
+The two lists of compile errors are generated from `Defk.Errors` and checked
+by the test suite (maintainers: `docs/agents/generated-docs.md`). The tests
+also check that every planned code is named in the "Not yet" list with a
+ticket, and that every code named in "Won't be" is outside the subset for
+good. The example kernel above runs in native code and in Elixir mode in the
+tests.

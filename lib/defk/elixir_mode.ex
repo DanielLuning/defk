@@ -134,12 +134,15 @@ defmodule Defk.ElixirMode do
 
     doc =
       quote do
-        @doc "Elixir mode: runs kernel `name` with `args` as plain Elixir (see `Defk.ElixirMode`)."
+        # @doc false (ADR-0006), documented in the Defk moduledoc (defk-djy.3):
+        # runs kernel `name` with `args` as plain Elixir (see `Defk.ElixirMode`)
+        @doc false
       end
 
     source =
       quote do
-        @doc "Generated Elixir mode source."
+        # generated Elixir mode source
+        @doc false
         def __defk_elixir_source__,
           do: unquote(Enum.map_join(kernels, "\n\n", &Macro.to_string/1))
       end
