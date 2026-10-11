@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-11T14:29:59Z",
+  "description": "From the defk-fr7 stress runs (2026-10-11): at load above ~100 on the 12-core M4, ScaledFactsTest 'a dropped bounds check is never wrong' and 'a dropped overflow check is never wrong' failed every run with ExUnit's default 60 s per-test timeout, and BinaryLiteralsTest 'other segments are rejected' hit it once. All pass alone. Find why these tests take tens of seconds (kernel compiles per property case? clang per case?), make them cheaper (compile once, fewer runs in the default suite and the long form under :deep), or give them an explicit @tag timeout with a reason. Done when they finish well under the limit at load ~100, and the default suite time doesn't grow.",
+  "id": "defk-o4n",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Slow property tests hit ExUnit's 60 s timeout when the machine is loaded",
+  "type": "bug",
+  "updated_at": "2026-10-11T14:29:59Z"
+}
