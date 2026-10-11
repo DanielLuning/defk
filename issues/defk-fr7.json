@@ -16,6 +16,10 @@
     {
       "text": "NOT reproduced: 20 isolated report-test runs (remarks cache removed each time) at load 25-55, plus 11 full mix test runs at load 35-180 with 8-12 CPU hogs, 3 concurrent same-worktree runs x8: the 'dot hot loop vectorises' test never failed. Ruled out: timeout (remark pass has none, System.cmd blocks), clang non-determinism (no budget; remark file identical), async races (report tests async:false, Full compiled once per run). Remaining plausible: lib/defk/build.ex remarks! cached a torn/empty .remarks (non-atomic File.write!, killed run) which then fails every rerun until the cache key changes, matching 'failed on every rerun'; also cc --version probe failing under load -\u003e clang? false silently. Hardened: atomic write, empty/remark-less cache = miss, pid in temp names; test added (fails without the fix). Other flakes seen under load are different causes: frames_live destructor race (cwl family: MultiClauseTest, BitstringHelperTest, RaiseCleanupTest, BitstringTest killed-mid-build), 60s ExUnit timeouts (ScaledFactsTest properties, BinaryLiteralsTest). Reopen if it recurs, with the .remarks file kept.",
       "timestamp": "2026-10-11T14:29:16Z"
+    },
+    {
+      "text": "Reopened by the coordinator: the cause was not reproduced (20 isolated + 32 parallel + 11 full runs under load, no failure). cda979a hardens the .remarks cache (atomic write, a file with no remark line is a miss) but that is a suspect, not a proven cause. Unproven second suspect: 'cc --version' failing under load makes clang?/0 return false. If it recurs: keep the .remarks file and log remark_pass's exit status and output.",
+      "timestamp": "2026-10-11T14:29:58Z"
     }
   ],
   "priority": 3,
