@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Fixed on branch defk-8tw/loop-range-read-copy (2163954). Cause: lib/defk/compiler.ex lower_reduce/5 and reduce_while_loop/5 built loop_reads (the outer names read in the loop, which reduce_accs/7 makes live for the initial accumulator's copy test, loop_owned/2) from reads(quals) / reads(src), so st read in the first generator's range (0..(st[0] - 1)//1, also len(st) or a step) put st's buffer in 'seen' and the initial value st was copied ('the initial value of st is copied: the accumulator's buffer is the loop's alone'), once per run of the loop, i.e. once per outer iteration when nested. The init itself was never counted (it is inside the loop node, and reduce_accs reads only reads_outside), so init-only reads did not copy; the init shape copied only together with a range read. Fix: quals_reads/1 leaves out the first generator's range (start, end, step: evaluated once, before the first iteration and before any write; later iterations read the accumulator). Kept: an array the first generator walks (x \u003c- st), later generators (evaluated again per outer value, reading the outer st) and filters. Reads of the pre-loop binding after the loop still copy (env.live). Reproduction (outer for over r, inner for k \u003c- 1..(st[0]-1)//1, reduce: st): before 1 copy note + 1 defk_copy_i64, r=100k 6.1 ms; after none, 0.18 ms. Tests (test/value_semantics_test.exs 'defk-8tw'): range_bound (nested for), range_top, range_len, range_step, range_init (inner reduce_while with range+init reading st in a tif-style branch), init_reads: no copy note, no defk_copy_, agreement properties, forced yields. Negatives still copying and agreeing: range_old_after (alias read after), range_second_gen, range_walks, range_filter. Mutations: no fix fails the positive test; dropping every range generator fails range_second_gen (property + test), dropping the first generator even for an array walk fails range_walks, dropping filters fails range_filter. Docs: language.md Copies (array accumulator bullet), performance.md 6.24, cdcl_sat.exs notes (locals kept, kernels unchanged). mix ci passes.",
+      "timestamp": "2026-10-11T17:32:05Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "A nested loop whose range or init reads the array it updates copies that array",
   "type": "bug",
-  "updated_at": "2026-10-11T17:23:12Z"
+  "updated_at": "2026-10-11T17:32:05Z"
 }
