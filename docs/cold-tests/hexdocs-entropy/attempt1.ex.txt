@@ -1,0 +1,24 @@
+defmodule App.Entropy do
+  use Defk
+
+  @window 4096
+
+  defk entropy(data :: [u8]) :: [f64] do
+    n = div(byte_size(data), @window)
+
+    for w <- 0..(n - 1) do
+      counts = for i <- 0..(@window - 1), reduce: %{} do
+        acc ->
+          b = data[w * @window + i]
+          Map.update(acc, b, 1, &(&1 + 1))
+      end
+
+      counts
+      |> Map.values()
+      |> Enum.reduce(0.0, fn c, h ->
+        p = c / @window
+        h - p * :math.log2(p)
+      end)
+    end
+  end
+end

@@ -1,0 +1,72 @@
+defmodule Ex do
+  @w 4096
+  # first pass
+  def first(bin) do
+    n = div(byte_size(bin), @w)
+    for w <- 0..(n - 1)//1, into: <<>> do
+      <<h::float-64-native>> = <<ent(binary_part(bin, w * @w, @w))::float-64-native>>
+      <<h::float-64-native>>
+    end
+  end
+
+  defp ent(win) do
+    win |> :binary.bin_to_list() |> Enum.frequencies() |> Map.values()
+    |> Enum.reduce(0.0, fn c, h -> p = c / @w; h - p * :math.log2(p) end)
+  end
+
+  # optimised: :counters, 8 bytes per step, results appended to binary
+  def fast(bin) do
+    n = div(byte_size(bin), @w)
+    c = :counters.new(256, [:atomics])
+    loop(bin, n, c, <<>>)
+  end
+
+  defp loop(_bin, 0, _c, acc), do: acc
+  defp loop(bin, n, c, acc) do
+    <<win::binary-size(@w), rest::binary>> = bin
+    count(win, c)
+    h = sum(c, 0, 0.0)
+    loop(rest, n - 1, c, <<acc::binary, h::float-64-native>>)
+  end
+
+  defp count(<<a, b, c2, d, e, f, g, h, rest::binary>>, c) do
+    :counters.add(c, a + 1, 1); :counters.add(c, b + 1, 1); :counters.add(c, c2 + 1, 1); :counters.add(c, d + 1, 1)
+    :counters.add(c, e + 1, 1); :counters.add(c, f + 1, 1); :counters.add(c, g + 1, 1); :counters.add(c, h + 1, 1)
+    count(rest, c)
+  end
+  defp count(<<>>, _), do: :ok
+
+  defp sum(_c, 256, h), do: h
+  defp sum(c, i, h) do
+    v = :counters.get(c, i + 1)
+    if v > 0 do
+      :counters.put(c, i + 1, 0)
+      p = v / @w
+      sum(c, i + 1, h - p * :math.log2(p))
+    else
+      sum(c, i + 1, h)
+    end
+  end
+end
+
+size = 64 * 1024 * 1024
+input = :crypto.strong_rand_bytes(div(size, 2)) <> :binary.copy(<<0, 1, 2, 3, 4, 5, 6, 7>>, div(size, 16))
+IO.puts("input #{byte_size(input)} bytes")
+
+# agreement (log2 vs log(p)/log(2) may differ in last ulp)
+small = binary_part(input, 0, 4096 * 50)
+a = for <<x::float-64-native <- App.Entropy.entropy(small)>>, do: x
+b = for <<x::float-64-native <- Ex.fast(small)>>, do: x
+IO.puts("max abs diff native vs elixir: #{Enum.zip(a, b) |> Enum.map(fn {x, y} -> abs(x - y) end) |> Enum.max()}")
+
+time = fn name, f ->
+  f.()
+  best = for _ <- 1..3, do: elem(:timer.tc(f), 0)
+  IO.puts("#{name}: #{Enum.min(best) / 1000} ms  (#{Float.round(byte_size(input) / Enum.min(best), 1)} MB/s)")
+end
+
+time.("kernel", fn -> App.Entropy.entropy(input) end)
+time.("elixir optimised", fn -> Ex.fast(input) end)
+smallin = binary_part(input, 0, 4 * 1024 * 1024)
+{t, _} = :timer.tc(fn -> Ex.first(smallin) end)
+IO.puts("elixir first pass: #{t / 1000} ms for 4 MB => #{Float.round(4 * 1048576 / t, 1)} MB/s")

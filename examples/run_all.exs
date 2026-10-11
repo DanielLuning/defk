@@ -26,16 +26,44 @@ files =
 results =
   for file <- files do
     IO.write("running #{file} ... ")
-    {out, status} = System.cmd("elixir", [Path.join(dir, file)], stderr_to_stdout: true)
+    # stdout and stderr are captured separately: with stderr_to_stdout a stderr
+    # write (a Logger line, a VM warning) can land inside the result line and
+    # the `^DEFK_RESULT (.*)$` match silently fails. stderr goes to a file
+    # that is printed, together with stdout, when the example fails.
+    err_file =
+      Path.join(System.tmp_dir!(), "defk_run_all_#{System.unique_integer([:positive])}.err")
 
-    case Regex.run(~r/^DEFK_RESULT (.*)$/m, out) do
-      [_, json] when status == 0 ->
-        r = JSON.decode!(json)
+    {out, status} =
+      System.cmd("sh", ["-c", ~s(exec elixir "$0" 2>"$1"), Path.join(dir, file), err_file])
+
+    err =
+      File.read(err_file)
+      |> then(fn
+        {:ok, e} -> e
+        _ -> ""
+      end)
+
+    File.rm(err_file)
+
+    # the first DEFK_RESULT line counts; it is valid only if its JSON parses
+    result =
+      with [_, json] <- Regex.run(~r/^DEFK_RESULT (.*)$/m, out),
+           {:ok, r} <- JSON.decode(json) do
+        r
+      else
+        _ -> nil
+      end
+
+    case result do
+      r when is_map(r) and status == 0 ->
         IO.puts("done")
         r
 
       _ ->
-        IO.puts("FAILED (exit #{status})\n" <> out)
+        IO.puts(
+          "FAILED (exit #{status}, #{if result, do: "result line found", else: "no DEFK_RESULT line"})\n" <>
+            "--- stdout ---\n#{out}\n--- stderr ---\n#{err}\n--- end ---"
+        )
 
         %{
           "example" => Path.rootname(file),

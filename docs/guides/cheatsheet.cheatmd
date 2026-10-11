@@ -101,7 +101,8 @@ or NaN raises too. [Expressions](../language.md#4-expressions-and-operators)
 
 - `len`, `min`, `max`, `abs`
 - `float`, `trunc`, `round`
-- `sqrt`, `exp`, `log`, `sin`, `cos`, `pow` (also `:math.sqrt/1` ...)
+- `sqrt`, `exp`, `log`, `log2`, `log10`, `sin`, `cos`, `pow` (also `:math.sqrt/1`,
+  `:math.log2/1` ...), bit for bit what `:math` gives
 - `alloc(type, n)`: a new zero-filled array
 - `wrap64`, `mulhi`, `clz`, `ctz`, `popcount`, `rotl`, `rotr`, `rotl64`, `rotr64`
 - `u64_le(bytes, i)`, `u32_le`, `u16_le` and `_be`: word loads
@@ -219,6 +220,9 @@ Or `alloc` the largest size and return `{out, count}`.
 | `length(a)`, `byte_size(a)` | `len(a)` | [`unknown-function`](../compile-errors.md#unknown-function) |
 | `unless c do` | `if not c do` | [`unsupported-construct`](../compile-errors.md#unsupported-construct) |
 | a hash that wraps at 64 bits | `band(expr, 0xFFFFFFFFFFFFFFFF)` | [masked arithmetic](../language.md#masked-arithmetic) |
+| a map of counters per key | `counts = alloc(i64, 256)`, `counts[k] = counts[k] + 1` | [`unsupported-map`](../compile-errors.md#unsupported-map) |
+| `xs :: list(float)` | `xs :: [f64]`, packed in Elixir | [`unknown-type`](../compile-errors.md#unknown-type) |
+| returning text, `:: String.t()` | `:: [u8]`, a binary in Elixir | [`unknown-type`](../compile-errors.md#unknown-type) |
 | maps, strings, atoms | pack values into binaries in Elixir first | [`unsupported-map`](../compile-errors.md#unsupported-map) |
 
 The full table: [Unsupported, write this instead](../language.md#unsupported-write-this-instead).

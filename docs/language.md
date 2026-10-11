@@ -264,7 +264,7 @@ error: cannot compile MyApp.Kernels: C compiler `cc` not found
 
 why: a kernel is compiled to native code at build time, so a C toolchain is needed on the build machine, as for elixir_make packages
 hint: install one (macOS: `xcode-select --install`; Debian/Ubuntu: `apt install build-essential`; Alpine: `apk add build-base`), or set `CC` to a compiler path
-(defk no-c-compiler: docs/language.md#no-c-compiler)
+(defk no-c-compiler: https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#no-c-compiler)
 ```
 
 If the C compiler runs but fails, the `CompileError` says
@@ -528,8 +528,8 @@ hint shows the comparison to write (`x != 0`).
 
 ### Builtins
 
-Builtins are called like local functions. `sqrt`, `exp`, `log`, `sin`, `cos`
-and `pow` are also callable as `:math.sqrt/1` and so on; any other `:math`
+Builtins are called like local functions. `sqrt`, `exp`, `log`, `log2`, `log10`, `sin`,
+`cos` and `pow` are also callable as `:math.sqrt/1` and so on; any other `:math`
 function is [`unsupported-call`](compile-errors.md#unsupported-call). A builtin called with the
 wrong types is [`builtin-arguments`](compile-errors.md#builtin-arguments).
 
@@ -544,6 +544,7 @@ wrong types is [`builtin-arguments`](compile-errors.md#builtin-arguments).
 | `div(a, b)`, `rem(a, b)` | two `i64`, or two `u64` | the same type | see [Integer arithmetic](#integer-arithmetic) and [u64](#u64) |
 | `sqrt(x)` | a number | `f64` | `ArithmeticError` for a negative `x` |
 | `log(x)` | a number | `f64` | `ArithmeticError` for `x <= 0` |
+| `log2(x)`, `log10(x)` | a number | `f64`, the same bits as `:math.log2/1` and `:math.log10/1` | `ArithmeticError` for `x <= 0` |
 | `exp(x)`, `sin(x)`, `cos(x)` | a number | `f64` | |
 | `pow(a, b)` | two numbers | `f64`, like `:math.pow/2` (`pow(2, 10)` is `1024.0`) | |
 | `alloc(type, n)` | an element type and an `i64` length | a new zero-filled array | see [Arrays](#6-arrays) |
@@ -558,6 +559,11 @@ wrong types is [`builtin-arguments`](compile-errors.md#builtin-arguments).
 
 `length/1`, `byte_size/1` and `tuple_size/1` are
 [`unknown-function`](compile-errors.md#unknown-function) with the hint to use `len/1`.
+
+Other `:math` functions are written from the builtins, or computed in
+Elixir. `log2` and `log10` call the same libm function as `:math.log2/1` and
+`:math.log10/1`, so they agree with `:math` bit for bit (not so
+`log(x) / log(2.0)`, which can differ in the last bit).
 
 `dbg/1` and `IO.inspect/1,2` are accepted around an expression: native code
 evaluates the expression and ignores the call, and Elixir mode prints it (see
@@ -987,6 +993,9 @@ that compiles. The error for each says the same.
 | `Enum.all?(a, &(&1 > 0))` | `Enum.all?(a, fn x -> x > 0 end)` | [`fn-argument`](compile-errors.md#fn-argument) |
 | `length(a)`, `byte_size(a)` | `len(a)` | [`unknown-function`](compile-errors.md#unknown-function) |
 | `unless c do ... end` | `if not c do ... end` | [`unsupported-construct`](compile-errors.md#unsupported-construct) |
+| a map of counters, `Map.update(m, k, 1, &(&1 + 1))` | an array indexed by the key: `counts = alloc(i64, 256)`, `counts[k] = counts[k] + 1` | [`unsupported-map`](compile-errors.md#unsupported-map) |
+| `xs :: list(float)` | `xs :: [f64]`, packed in Elixir with `for x <- xs, into: <<>>, do: <<x::float-64-native>>` | [`unknown-type`](compile-errors.md#unknown-type) |
+| `:: String.t()` as a result | `:: [u8]`: it reaches Elixir as a binary, text if the bytes are | [`unknown-type`](compile-errors.md#unknown-type) |
 
 ## 5. Variables and binding
 
@@ -1828,7 +1837,9 @@ only when the write would otherwise be visible elsewhere.
 A construct outside the kernel subset, or a mistake in one inside it, is a
 compile error when the module compiles. Every rejection in the module is
 reported in one `CompileError` (up to 10 shown, the rest counted), without
-the errors an earlier one causes. Each is printed in Elixir's diagnostic
+the errors an earlier one causes. The compiler does not look inside a
+construct it rejected, so errors in the body of a rejected `for` appear on
+the next compile, once it is rewritten. Each is printed in Elixir's diagnostic
 frame, then why it is rejected, a hint (with a rewrite from your own code
 where the compiler has one, which compiles where it is shown), and its stable
 code, with a link to the code's entry in the [compile errors](compile-errors.md)
@@ -1843,12 +1854,15 @@ error: maps are not in the kernel subset
   └─ lib/my_app/kernels.ex:5:9: MyApp.Kernels.f/1
 
 why: a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read
-hint: pass the values as separate arguments, or pack them into an array before the call
+hint: pass the values as separate arguments, or pack them into an array before the call; for a count per key, index an array by the key (counts = alloc(i64, 256), then counts[b] = counts[b] + 1)
 (defk unsupported-map: https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#unsupported-map)
 ```
 
 "not in the kernel subset" means the construct stays out; "not supported yet"
-means it is planned. Codes are never renamed. `Defk.Errors.codes/0` lists them,
+means it is planned; other wordings ("is not a kernel builtin", "is not a
+kernel type") are mistakes with a fix in the hint. The link in the last line
+is a URL in a project that depends on defk, and the page's path inside the
+defk repository. Codes are never renamed. `Defk.Errors.codes/0` lists them,
 and `mix run -e 'Defk.Errors.explain!("unsupported-map")'` prints one entry.
 The [compile errors](compile-errors.md) page has every code, its default why
 and hint, a failing example and the rewrite.

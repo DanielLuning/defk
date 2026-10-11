@@ -1,0 +1,71 @@
+probes = [
+ {"P1 math.log2", """
+ defmodule P1 do
+   use Defk
+   defk f(p :: f64) :: f64 do
+     :math.log2(p)
+   end
+ end
+ """},
+ {"P2 pipe", """
+ defmodule P2 do
+   use Defk
+   defk f(d :: [u8]) :: i64 do
+     d |> len()
+   end
+ end
+ """},
+ {"P3 list param", """
+ defmodule P3 do
+   use Defk
+   defk f(xs :: list(f64)) :: f64 do
+     0.0
+   end
+ end
+ """},
+ {"P4 map counter", """
+ defmodule P4 do
+   use Defk
+   defk f(d :: [u8]) :: i64 do
+     m = %{}
+     for b <- d, reduce: 0 do
+       acc -> acc + 1
+     end
+   end
+ end
+ """},
+ {"P5 string return", """
+ defmodule P5 do
+   use Defk
+   defk f(d :: [u8]) :: String.t() do
+     "abc"
+   end
+ end
+ """},
+ {"P6 valid? call + unused", """
+ defmodule P6 do
+   use Defk
+   defk f(d :: [u8]) :: bool do
+     String.valid?(d)
+   end
+ end
+ """},
+ {"P7 two defects, one if with array", """
+ defmodule P7 do
+   use Defk
+   defk f(d :: [u8], flag :: bool) :: [u8] do
+     out = alloc(u8, 4)
+     if flag, do: out, else: d
+   end
+ end
+ """}
+]
+for {name, src} <- probes do
+  IO.puts("=== #{name}")
+  try do
+    Code.compile_string(src)
+    IO.puts("COMPILED OK")
+  rescue
+    e -> IO.puts(Exception.message(e))
+  end
+end

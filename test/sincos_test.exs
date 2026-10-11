@@ -53,6 +53,28 @@ defmodule Defk.SincosTest.K do
     o
   end
 
+  defk p_log2(a :: [f64]) :: [f64] do
+    n = len(a)
+    o = alloc(f64, n)
+
+    for i <- 0..(n - 1)//1 do
+      o[i] = log2(a[i])
+    end
+
+    o
+  end
+
+  defk p_log10(a :: [f64]) :: [f64] do
+    n = len(a)
+    o = alloc(f64, n)
+
+    for i <- 0..(n - 1)//1 do
+      o[i] = :math.log10(a[i])
+    end
+
+    o
+  end
+
   defk p_pow_half(a :: [f64]) :: [f64] do
     n = len(a)
     o = alloc(f64, n)
@@ -182,6 +204,8 @@ defmodule Defk.SincosTest do
     p_sqrt: [args: probe_args()],
     p_exp: [args: small()],
     p_log: [args: probe_args()],
+    p_log2: [args: probe_args()],
+    p_log10: [args: probe_args()],
     p_pow_half: [args: non_negative()],
     p_pow_two: [args: small()],
     p_expm1: [args: small()],

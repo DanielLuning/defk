@@ -172,11 +172,11 @@ defmodule Defk.LanguageDoc do
   end
 
   defp parse_annotation(spec) do
-    case Regex.run(~r/^([a-z-]+)(?::\s*(.*))?$/, spec) do
+    case ~r/^([a-z-]+)(?::\s*(.*))?$/ |> Regex.run(spec) |> with_argument() do
       [_, "compiles", reason] when is_binary(reason) and reason != "" ->
         {:compiles, reason}
 
-      [_, "error", code] ->
+      [_, "error", code] when is_binary(code) ->
         if code =~ ~r/^[a-z0-9-]+$/, do: {:error, code}, else: {:bad, spec}
 
       [_, "skip", reason] when is_binary(reason) and reason != "" ->
@@ -191,13 +191,17 @@ defmodule Defk.LanguageDoc do
       [_, "script", note] when is_binary(note) and note != "" ->
         {:script, note}
 
-      [_, "known-failure", t] ->
+      [_, "known-failure", t] when is_binary(t) ->
         if t =~ ~r/^defk-\w+/, do: {:known_failure, t}, else: {:bad, spec}
 
       _ ->
         {:bad, spec}
     end
   end
+
+  # Regex.run leaves out an unmatched trailing group: the argument is then nil
+  defp with_argument([whole, name]), do: [whole, name, nil]
+  defp with_argument(match), do: match
 
   # run: <bindings> | defs: <module-level code>
   defp parse_run(spec) do
