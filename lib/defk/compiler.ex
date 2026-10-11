@@ -2642,6 +2642,19 @@ defmodule Defk.Compiler do
     Map.merge(val(c, :i64), facts)
   end
 
+  # copy(out, at, src, from, n) and copy_back(out, at, off, n) (defk-52v.16):
+  # `out` with a range replaced, checked once for the whole range
+  # (defk_rcopy_T and defk_rcopy_back_T in defk_runtime.h).
+  defp builtin(:copy, [%{t: {:arr, e}} = a, at, %{t: {:arr, e}} = s, from, n], node, env) do
+    ints = coerce_args!([at, from, n], node, [1, 3, 4], ["index", "source index", "length"])
+    range_copy(:copy, a, s, ints, node, env)
+  end
+
+  defp builtin(:copy_back, [%{t: {:arr, _}} = a, at, off, n], node, env) do
+    ints = coerce_args!([at, off, n], node, [1, 2, 3], ["index", "offset", "length"])
+    range_copy(:copy_back, a, nil, ints, node, env)
+  end
+
   # mulhi, clz, ctz, popcount, rotl64, rotr64 (Defk.Builtins.bits/0): the
   # Defk.Bits functions on the u64 bit patterns; the helpers are in
   # defk_runtime.h. The counts are in 0..64.
@@ -2817,7 +2830,10 @@ defmodule Defk.Compiler do
     rotl: "an integer, an i64 count and an i64 width",
     rotr: "an integer, an i64 count and an i64 width",
     f64_to_u64: "a number",
-    crc32c: "an integer crc, an integer word and an i64 width (8, 16, 32 or 64)"
+    crc32c: "an integer crc, an integer word and an i64 width (8, 16, 32 or 64)",
+    copy:
+      "an array, an i64 index, a source array of the same element type, an i64 source index and an i64 length",
+    copy_back: "an array, an i64 index, an i64 offset and an i64 length"
   }
 
   @spec builtin_arguments!(term(), term(), term()) :: no_return()
@@ -2828,6 +2844,8 @@ defmodule Defk.Compiler do
     arity =
       cond do
         name in [:clz, :ctz] -> if match?([_, _], vals), do: 2, else: 1
+        name == :copy -> 5
+        name == :copy_back -> 4
         name in [:rotl, :rotr, :crc32c] -> 3
         name in [:div, :rem, :min, :max, :pow, :mulhi, :rotl64, :rotr64] -> 2
         name in @loads or name in @bitwise -> if name == :bnot, do: 1, else: 2
@@ -3073,6 +3091,129 @@ defmodule Defk.Compiler do
 
         {zero, a}
     end
+  end
+
+  # ---------------------------------------------------------- range copies --
+  # copy(out, at, src, from, n) and copy_back(out, at, off, n) give `out`
+  # with a range replaced (defk-52v.16), as a kernel that writes and returns
+  # its array parameter would: the buffer is written in place when it is the
+  # kernel's own and no other binding of it is read after the call (what
+  # inline/4 takes as live for a callee), and copied first otherwise. One
+  # check covers the range. A copy of at most DEFK_COPY_STRIP bytes runs at
+  # once and is charged to the budget like a loop over its bytes; a longer
+  # one runs in strips with a safepoint after each, as alloc/2's zeroing does,
+  # unless the kernel has yield: false or the length is known to be short.
+  @copy_at_once 1024 * 1024
+
+  defp coerce_args!(vals, {name, _, args}, idx, labels) do
+    Enum.zip_with([vals, idx, labels], fn [v, i, l] ->
+      coerce!(v, :i64, Enum.at(args, i), "#{name}/#{length(args)} #{l}")
+    end)
+  end
+
+  defp range_copy(f, a, s, ints, node, env) do
+    {:arr, e} = a.t
+    {sv, [at, x, n]} = Enum.map_reduce(ints, [], &bind_tmp/2)
+    {sd, d} = range_dest(a, node, env)
+    dst = fresh("copy", a.t)
+
+    {ss, src} =
+      cond do
+        s == nil -> {[], nil}
+        s[:var] -> {[], s.c}
+        true -> with {st, [c]} <- bind_tmp(s, []), do: {st, c}
+      end
+
+    {{_, _}, yield?} = Process.get(:defk_report_kernel)
+    hi = Enum.at(ints, 2)[:hi]
+    once? = not yield? or (is_integer(hi) and hi * @elem_bytes[e] <= @copy_at_once)
+    k = fresh("copied", {:c, "int64_t"})
+    args = if f == :copy, do: "#{at}, #{src}, #{x}, #{n}", else: "#{at}, #{x}, #{n}"
+    call = "#{k} = defk_r#{f}_#{e}(ctx, #{dst}, #{args}, #{if once?, do: 1, else: 0});\n"
+    ticks = "DEFK_TICKS(DEFK_ZERO_TICKS(#{k}))\n"
+
+    run =
+      if once?,
+        do: [call, ticks],
+        else: [
+          call,
+          "if (DEFK_LIKELY(#{k} >= 0)) {\n",
+          ticks,
+          "} else {\n",
+          copy_strips(f, dst, at, src, x, n),
+          "}\n"
+        ]
+
+    what = Macro.to_string(node)
+
+    note(
+      :bounds,
+      node,
+      :kept,
+      "#{what}: one range check for the whole copy" <>
+        if(once?,
+          do: "",
+          else: "; over DEFK_COPY_STRIP bytes it runs in strips, a safepoint after each"
+        )
+    )
+
+    fin = (d[:fin] || false) and (s == nil or s[:fin] == true)
+    r = %{val(dst, a.t, dst) | owned: true}
+
+    {[sv, ss, sd, "#{dst} = #{d.c};\n", run],
+     Map.merge(r, %{buf: d[:buf] || make_ref(), fin: fin, len_lo: a[:len_lo]})}
+  end
+
+  # a value in a fresh local of its own (an argument the strip loop reads
+  # after a yield)
+  defp bind_tmp(v, acc) do
+    c = fresh("arg", v.t)
+    {"#{c} = #{v.c};\n", acc ++ [c]}
+  end
+
+  # the array a range copy writes: `a`'s buffer, or a copy of it when another
+  # binding may see that buffer after the call or it is not the kernel's own
+  defp range_dest(a, {name, _, args} = node, env) do
+    outer = MapSet.union(env.live, pairs(env, reads_outside(env.stmt, node)))
+
+    if a.owned and not shared?(Map.put(a, :id, make_ref()), outer) do
+      {[], a}
+    else
+      {s, b} = copied(Map.put(a, :var, nil), "#{name}")
+
+      note(
+        :copy,
+        node,
+        :copied,
+        "the array is copied before #{name}/#{length(args)}: #{copy_why(a)}"
+      )
+
+      {s, b}
+    end
+  end
+
+  # a long copy in strips of DEFK_COPY_STRIP bytes, a safepoint after each: a
+  # loop whose frame state is its arguments and the bytes done
+  defp copy_strips(f, dst, at, src, x, n) do
+    done = fresh("done", {:c, "uint64_t"})
+    bytes = "(uint64_t)#{n} * sizeof(*#{dst}.data)"
+    d = "(uint8_t *)(#{dst}.data + #{at})"
+
+    step =
+      if f == :copy,
+        do: "defk_move_strip(#{d}, (const uint8_t *)(#{src}.data + #{x}), #{bytes}, #{done})",
+        else: "defk_back_strip(#{d}, (uint64_t)#{x} * sizeof(*#{dst}.data), #{bytes}, #{done})"
+
+    in_loop(fn id ->
+      [
+        "#{done} = 0;\n",
+        "defk_l#{id}:;\nwhile (#{done} < #{bytes}) {\n",
+        "uint64_t defk_z0 = #{done};\n",
+        "#{done} = #{step};\n",
+        safepoint("DEFK_ZERO_TICKS(#{done} - defk_z0)"),
+        "}\n"
+      ]
+    end)
   end
 
   # The statements `es` of a block, each `x = alloc(e, len)` marked (meta
