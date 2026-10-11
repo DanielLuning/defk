@@ -15,9 +15,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-djy",
+  "comments": [
+    {
+      "text": "Extras: README.md (Guides) and docs/language.md (Reference) only, appended via @guides/@reference lists in mix.exs. ADRs, research, cold tests, verdict, fast-path-report, beam-nifs left out of HexDocs (internal project history, no Evidence group). Three repo-relative links in README/language.md changed to GitHub URLs to silence ex_doc warnings. lib/examples.ex moved to test/support/examples.ex (only tests used it). mix docs --warnings-as-errors added to ci before credo; ~1s warm, ~20s cold.",
+      "timestamp": "2026-10-11T11:20:09Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Set up ex_doc and mix docs (config, groups, CI)",
   "type": "task",
-  "updated_at": "2026-10-11T11:17:19Z"
+  "updated_at": "2026-10-11T11:20:09Z"
 }
