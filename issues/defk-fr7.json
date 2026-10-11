@@ -24,11 +24,15 @@
     {
       "text": "Cause found (coordinator, 2026-10-11), deterministic, not load: the cached .remarks files hold absolute paths of the checkout that built them (e.g. /Users/.../defk/_build/test/defk/Elixir.Defk.ReportTest.Full-\u003chash\u003e.c). Repro: create a worktree, copy _build from another checkout, run 'mix test test/report_test.exs --only clang' -\u003e 'dot's hot loop vectorises' and 'an empty cached .remarks file is a miss' fail every time; the same tests pass in the checkout that built the cache. Every failing sighting was in an agent worktree whose _build had been copied from main (djy.3, djy.7, djy.13 ...), which is why it 'failed on every rerun' there. The cache key (hash) matches, but the remark lines name another checkout's .c path, so they don't attach to this module. Real-world impact: a project directory that is moved or restored from a CI/Docker cache at another path silently loses vectorisation facts from report: :full. Fix: make the cached remarks path-independent (store paths relative to the build dir, or match remarks by the .c basename), or include the absolute build path in the cache key; add a test that copies a built cache to a different directory.",
       "timestamp": "2026-10-11T15:21:17Z"
+    },
+    {
+      "text": "Fixed on branch defk-fr7/remarks-path-independent. Remark lines are now normalised to the .c basename in Defk.Build.parse_remarks, and Defk.Report.full matches by Path.basename(base \u003c\u003e '.c'). The basename holds module+cache key, so it identifies this kernel; the cache stays valid after a move (cheaper than keying on the build dir). Repro test: copies the built cache to another dir and compares Report.full facts (failed with 'clang gave no remark', passes now). Other path-dependent artefacts: __defk_lib__/0 compiles the absolute .so path into the beam (moved project with stale beam points at old .so; relevant to defk-n8f releases, not fixed here); the cached .c/.so themselves embed no paths needed for correctness. mix test: 1 failure in bitstring_helper_test under load, passes alone (cwl family).",
+      "timestamp": "2026-10-11T15:42:18Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Flaky: ReportTest 'dot's hot loop vectorises' sometimes gets no vectorisation remark from clang",
   "type": "bug",
-  "updated_at": "2026-10-11T15:21:37Z"
+  "updated_at": "2026-10-11T15:42:18Z"
 }
