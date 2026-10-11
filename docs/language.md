@@ -254,7 +254,13 @@ At `mix compile`, when the module is compiled:
    library.
 4. `ERTS_INCLUDE_DIR` (the elixir_make convention) builds against another
    ERTS's `erl_nif.h` instead of the running one's.
-5. The module loads its library in an `@on_load` hook.
+5. A module of a Mix app (compiled from the project's `elixirc_paths`) gets
+   a copy of its library in the app's `ebin/`, beside its `.beam`, and loads
+   it from there through `:code.lib_dir(app)`, so it ships in a `mix release`
+   and works wherever the app is moved ([Deploying](guides/deploying.md#releases)).
+   Any other module (a script, `Code.compile_string/2`, a test file) loads it
+   from the absolute build path.
+6. The module loads its library in an `@on_load` hook.
 
 The C compiler runs on the build machine, at compile time only. If it cannot
 be run, the build fails with [`no-c-compiler`](compile-errors.md#no-c-compiler):

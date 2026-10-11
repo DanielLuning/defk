@@ -258,11 +258,12 @@ reload of identical source maps to the same image. The compiler is the system
 `cc` or `$CC` (ADR-0002; around `build!/3` in lib/defk/build.ex).
 
 **Loading.** The stub module declares `@on_load :__defk_load__` and calls
-`:erlang.load_nif(lib, 0)` with that absolute build path
-(around `__defk_load__` in lib/defk.ex); `Mod.__defk_lib__/0` returns it (`__defk_lib__` in lib/defk.ex).
-Known limitation: a `mix release` does not copy `_build/<env>/defk`, so a
-release is not relocatable until the `.so` ships in `priv/` — see
-`examples/release_debian/README.md` and ticket `defk-n8f`.
+`:erlang.load_nif(lib, 0)` (`lib_defs` in lib/defk.ex); `Mod.__defk_lib__/0`
+returns the path. A module of a Mix app gets a copy of the `.so` in its app's
+`ebin/` (`Defk.Build.placement!/3`) and resolves `lib` at load time through
+`:code.lib_dir(app)`, so the library ships in a `mix release` and survives
+relocation (defk-n8f; `examples/release_debian/README.md`). Any other module
+(a script, `Code.compile_string/2`) loads the absolute build path.
 
 **ERTS keeps a library mapped while a suspended kernel runs.** docs/project.md design decision 8: recompiling a module builds a new `.so`; a yielded kernel
 reschedules *its own* library's step function, and ERTS keeps that library

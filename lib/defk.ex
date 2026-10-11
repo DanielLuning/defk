@@ -96,7 +96,10 @@ defmodule Defk do
     * `CC` names the C compiler (default `cc`), and `ERTS_INCLUDE_DIR` builds
       against another ERTS's headers, as in elixir_make.
     * The C source and the library are written to
-      `_build/<env>/defk/<Module>-<key>.{c,so}`. This path is unstable.
+      `_build/<env>/defk/<Module>-<key>.{c,so}`; a module of a Mix app also
+      gets a copy of the library in its app's `ebin/`, which it loads from
+      wherever the app is (so it ships in a `mix release`). These paths are
+      unstable.
 
   How a module compiles, and the errors when the C compiler is missing:
   [Compile-time behaviour](language.md#compile-time-behaviour) and
@@ -359,16 +362,15 @@ defmodule Defk do
     # ("Generated functions") describes them, with their stability.
     corrupt_tags = corrupt_tags_def(fault_hooks?)
 
+    lib_defs = lib_defs(Defk.Build.placement!(env.module, lib, env.file))
+
     quote do
       @on_load :__defk_load__
-      @doc false
-      def __defk_load__, do: :erlang.load_nif(unquote(String.to_charlist(lib)), 0)
+      unquote(lib_defs)
       @doc false
       def __defk_c_source__, do: unquote(c_src)
       @doc false
       def __defk_report__, do: unquote(Macro.escape(report))
-      @doc false
-      def __defk_lib__, do: unquote(lib <> ".so")
       @doc false
       def __defk_stats__, do: :erlang.nif_error(:defk_not_loaded)
       @doc false
@@ -378,6 +380,39 @@ defmodule Defk do
       unquote(corrupt_tags)
       unquote_splicing(stubs)
       unquote_splicing(elixir_mode)
+    end
+  end
+
+  # __defk_load__/0 and __defk_lib__/0 (Defk.Build.placement!/3). A Mix app's
+  # module loads its library from beside its beams, wherever the app is at
+  # load time (a release, a moved _build: defk-n8f); anything else from the
+  # absolute build path. Only :code and :filename at load time: the on_load
+  # function may run before other applications' modules are loaded.
+  defp lib_defs({:path, base}) do
+    quote do
+      @doc false
+      def __defk_load__, do: :erlang.load_nif(unquote(String.to_charlist(base)), 0)
+      @doc false
+      def __defk_lib__, do: unquote(base <> ".so")
+    end
+  end
+
+  defp lib_defs({:app, app, name, fallback}) do
+    rel = String.to_charlist(Path.join("ebin", Path.rootname(name)))
+    fallback = String.to_charlist(Path.rootname(fallback))
+
+    quote do
+      defp __defk_lib_base__ do
+        case :code.lib_dir(unquote(app)) do
+          dir when is_list(dir) -> :filename.join(dir, unquote(rel))
+          _ -> unquote(fallback)
+        end
+      end
+
+      @doc false
+      def __defk_load__, do: :erlang.load_nif(__defk_lib_base__(), 0)
+      @doc false
+      def __defk_lib__, do: :unicode.characters_to_binary(__defk_lib_base__() ++ ~c".so")
     end
   end
 
