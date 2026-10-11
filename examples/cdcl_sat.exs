@@ -157,9 +157,10 @@
 #     call); the kernels keep the workaround they were measured with: every
 #     helper is called on every step with an "active" flag (empty loop
 #     ranges and guarded writes when inactive).
-#     An array passed as a loop's initial value must not also be read in the
-#     loop's range or init (st[@h_n] in 0..st[@h_n]): that copies it too, so
-#     those reads go to a local first.
+#     An array passed as a loop's initial value and also read in the loop's
+#     range (st[@h_n] in 0..st[@h_n]) was copied too, so the kernels read
+#     those bounds into a local first; fixed in defk-8tw (the range and init
+#     are evaluated before the first iteration), the locals are kept.
 #   - An array cannot be the value of an if, also inside a for reduce
 #     body's tuple: a branch gives numbers ({dp, dk}) and the tuple with
 #     the array is built after it.
@@ -2319,504 +2320,512 @@ defmodule SatEx.Enumerate do
   end
 end
 
-# ---- agreement: one solve ---------------------------------------------------------
-alias SatEx.{Cdcl, Dpll, Gen}
-alias SatEx.Kernels, as: K
-import Bitwise
+# DEFK_SAT_LIB=1 stops here: sat_per_call.exs loads the modules above (the
+# same Mix.install, the same C, so the compiled kernel is the cached one) and
+# leaves the agreement checks and the four reports to this script.
+unless System.get_env("DEFK_SAT_LIB") == "1" do
+  # ---- agreement: one solve ---------------------------------------------------------
+  alias SatEx.{Cdcl, Dpll, Gen}
+  alias SatEx.Kernels, as: K
+  import Bitwise
 
-kcall = fn cnf, n, cap, budget ->
-  {l, o} = SatEx.pack(cnf)
-  K.solve(l, o, n, cap, budget)
-end
+  kcall = fn cnf, n, cap, budget ->
+    {l, o} = SatEx.pack(cnf)
+    K.solve(l, o, n, cap, budget)
+  end
 
-decode = fn
-  {1, m, c} -> {1, for(<<x::signed-64-native <- m>>, do: x), c}
-  {s, _m, c} -> {s, [], c}
-end
+  decode = fn
+    {1, m, c} -> {1, for(<<x::signed-64-native <- m>>, do: x), c}
+    {s, _m, c} -> {s, [], c}
+  end
 
-# (1) the kernel against its Elixir mode, exactly (===): status, model and
-# conflict count. Elixir mode rebuilds the state binary on every write, so
-# it gets small formulas and a small learned-clause arena (cap 48, which
-# also exercises the forced restart + reduce when the arena is full)
-# near-threshold 3-SAT (n = 10..60) gives conflicts, restarts and reductions
-mode_cases =
-  for(seed <- 1..80, do: Gen.cnf(seed, 16, 8)) ++
-    for seed <- 1..60,
+  # (1) the kernel against its Elixir mode, exactly (===): status, model and
+  # conflict count. Elixir mode rebuilds the state binary on every write, so
+  # it gets small formulas and a small learned-clause arena (cap 48, which
+  # also exercises the forced restart + reduce when the arena is full)
+  # near-threshold 3-SAT (n = 10..60) gives conflicts, restarts and reductions
+  mode_cases =
+    for(seed <- 1..80, do: Gen.cnf(seed, 16, 8)) ++
+      for seed <- 1..60,
+          do:
+            (
+              n = 10 + rem(seed, 51)
+              {n, Gen.k3(n, 4.26, seed)}
+            )
+
+  {mode_us, mode_ok} =
+    :timer.tc(fn ->
+      Enum.all?(mode_cases, fn {n, cnf} ->
+        {l, o} = SatEx.pack(cnf)
+        args = [l, o, n, 48, 1 <<< 40]
+        K.__defk_elixir__(:solve, args) === apply(K, :solve, args)
+      end)
+    end)
+
+  # (2) the kernel against the Elixir CDCL, the same algorithm: identical
+  # (status, model, conflicts) on 2,000 random CNFs and at 3-SAT n = 100
+  cdcl_ok =
+    Enum.all?(1..2000, fn seed ->
+      {n, cnf} = Gen.cnf(seed, 40, 10)
+      decode.(kcall.(cnf, n, 64, 1 <<< 58)) === Cdcl.solve(cnf, n, 64)
+    end) and
+      Enum.all?(1..200, fn seed ->
+        n = 20 + rem(seed, 81)
+        cnf = Gen.k3(n, 4.26, seed)
+        decode.(kcall.(cnf, n, 256, 1 <<< 58)) === Cdcl.solve(cnf, n, 256)
+      end) and
+      Enum.all?(1..3, fn seed ->
+        cnf = Gen.k3(100, 4.26, seed)
+
+        decode.(kcall.(cnf, 100, SatEx.default_cap(300 * 3, 100), 1 <<< 58)) ===
+          Cdcl.solve(cnf, 100, SatEx.default_cap(300 * 3, 100))
+      end)
+
+  # (3) the anchors: the same status as picosat and a model that satisfies
+  # every clause (the model itself need not match); simple_sat on the small
+  # ones (it searches once per variable on UNSAT)
+  anchor_ok =
+    Enum.all?(1..2000, fn seed ->
+      {n, cnf} =
+        if rem(seed, 2) == 0,
+          do: Gen.cnf(seed + 10_000, 40, 10),
+          else:
+            (
+              n = 10 + rem(seed, 71)
+              {n, Gen.k3(n, 4.26, seed)}
+            )
+
+      case {decode.(kcall.(cnf, n, SatEx.default_cap(64, n), 1 <<< 58)), Picosat.solve(cnf)} do
+        {{1, m, _}, {:ok, _}} -> Gen.satisfies?(cnf, m)
+        {{0, _, _}, {:error, :unsatisfiable}} -> true
+        _ -> false
+      end
+    end)
+
+  simple_ok =
+    Enum.all?(1..300, fn seed ->
+      {n, cnf} = Gen.cnf(seed + 20_000, 10, 5)
+
+      case {decode.(kcall.(cnf, n, 64, 1 <<< 58)), SimpleSat.solve(cnf)} do
+        {{1, _, _}, {:ok, m}} -> Gen.satisfies?(cnf, m)
+        {{0, _, _}, {:error, :unsatisfiable}} -> true
+        _ -> false
+      end
+    end)
+
+  # (4) forced yields: every safepoint yields, the results do not change
+  plain =
+    for seed <- 1..100,
         do:
           (
-            n = 10 + rem(seed, 51)
-            {n, Gen.k3(n, 4.26, seed)}
+            {n, cnf} = Gen.cnf(seed, 40, 10)
+            kcall.(cnf, n, 64, 1 <<< 58)
           )
 
-{mode_us, mode_ok} =
-  :timer.tc(fn ->
-    Enum.all?(mode_cases, fn {n, cnf} ->
-      {l, o} = SatEx.pack(cnf)
-      args = [l, o, n, 48, 1 <<< 40]
-      K.__defk_elixir__(:solve, args) === apply(K, :solve, args)
-    end)
-  end)
+  k100 = Gen.k3(100, 4.26, 2)
+  plain100 = kcall.(k100, 100, 4096, 1 <<< 58)
+  K.__defk_force_yields__(true)
 
-# (2) the kernel against the Elixir CDCL, the same algorithm: identical
-# (status, model, conflicts) on 2,000 random CNFs and at 3-SAT n = 100
-cdcl_ok =
-  Enum.all?(1..2000, fn seed ->
-    {n, cnf} = Gen.cnf(seed, 40, 10)
-    decode.(kcall.(cnf, n, 64, 1 <<< 58)) === Cdcl.solve(cnf, n, 64)
-  end) and
-    Enum.all?(1..200, fn seed ->
-      n = 20 + rem(seed, 81)
-      cnf = Gen.k3(n, 4.26, seed)
-      decode.(kcall.(cnf, n, 256, 1 <<< 58)) === Cdcl.solve(cnf, n, 256)
-    end) and
-    Enum.all?(1..3, fn seed ->
-      cnf = Gen.k3(100, 4.26, seed)
-
-      decode.(kcall.(cnf, 100, SatEx.default_cap(300 * 3, 100), 1 <<< 58)) ===
-        Cdcl.solve(cnf, 100, SatEx.default_cap(300 * 3, 100))
-    end)
-
-# (3) the anchors: the same status as picosat and a model that satisfies
-# every clause (the model itself need not match); simple_sat on the small
-# ones (it searches once per variable on UNSAT)
-anchor_ok =
-  Enum.all?(1..2000, fn seed ->
-    {n, cnf} =
-      if rem(seed, 2) == 0,
-        do: Gen.cnf(seed + 10_000, 40, 10),
-        else:
+  yield_ok =
+    plain ==
+      for(
+        seed <- 1..100,
+        do:
           (
-            n = 10 + rem(seed, 71)
-            {n, Gen.k3(n, 4.26, seed)}
+            {n, cnf} = Gen.cnf(seed, 40, 10)
+            kcall.(cnf, n, 64, 1 <<< 58)
           )
+      ) and
+      plain100 == kcall.(k100, 100, 4096, 1 <<< 58)
 
-    case {decode.(kcall.(cnf, n, SatEx.default_cap(64, n), 1 <<< 58)), Picosat.solve(cnf)} do
-      {{1, m, _}, {:ok, _}} -> Gen.satisfies?(cnf, m)
-      {{0, _, _}, {:error, :unsatisfiable}} -> true
-      _ -> false
+  K.__defk_force_yields__(false)
+
+  # (5) bad input raises ArgumentError natively and in Elixir mode; the step
+  # budget and the arena capacity are declared limits: status 2, never a
+  # wrong answer
+  raises? = fn f ->
+    try do
+      f.()
+      false
+    rescue
+      ArgumentError -> true
     end
-  end)
-
-simple_ok =
-  Enum.all?(1..300, fn seed ->
-    {n, cnf} = Gen.cnf(seed + 20_000, 10, 5)
-
-    case {decode.(kcall.(cnf, n, 64, 1 <<< 58)), SimpleSat.solve(cnf)} do
-      {{1, _, _}, {:ok, m}} -> Gen.satisfies?(cnf, m)
-      {{0, _, _}, {:error, :unsatisfiable}} -> true
-      _ -> false
-    end
-  end)
-
-# (4) forced yields: every safepoint yields, the results do not change
-plain =
-  for seed <- 1..100,
-      do:
-        (
-          {n, cnf} = Gen.cnf(seed, 40, 10)
-          kcall.(cnf, n, 64, 1 <<< 58)
-        )
-
-k100 = Gen.k3(100, 4.26, 2)
-plain100 = kcall.(k100, 100, 4096, 1 <<< 58)
-K.__defk_force_yields__(true)
-
-yield_ok =
-  plain ==
-    for(
-      seed <- 1..100,
-      do:
-        (
-          {n, cnf} = Gen.cnf(seed, 40, 10)
-          kcall.(cnf, n, 64, 1 <<< 58)
-        )
-    ) and
-    plain100 == kcall.(k100, 100, 4096, 1 <<< 58)
-
-K.__defk_force_yields__(false)
-
-# (5) bad input raises ArgumentError natively and in Elixir mode; the step
-# budget and the arena capacity are declared limits: status 2, never a
-# wrong answer
-raises? = fn f ->
-  try do
-    f.()
-    false
-  rescue
-    ArgumentError -> true
-  end
-end
-
-bad_ok =
-  Enum.all?([[[1, 0]], [[1, -5]], [[4]]], fn cnf ->
-    {l, o} = SatEx.pack(cnf)
-    args = [l, o, 3, 16, 1000]
-
-    raises?.(fn -> apply(K, :solve, args) end) and
-      raises?.(fn -> K.__defk_elixir__(:solve, args) end)
-  end)
-
-limit_ok =
-  elem(kcall.(k100, 100, 4096, 50), 0) == 2 and elem(kcall.(k100, 100, 0, 1 <<< 58), 0) == 2 and
-    elem(
-      K.__defk_elixir__(
-        :solve,
-        Tuple.to_list(SatEx.pack(Gen.k3(30, 4.26, 3))) ++ [30, 4, 1 <<< 40]
-      ),
-      0
-    ) ==
-      elem(kcall.(Gen.k3(30, 4.26, 3), 30, 4, 1 <<< 40), 0)
-
-IO.puts(
-  "one solve: kernel === Elixir mode on #{length(mode_cases)} CNFs (#{div(mode_us, 1000)} ms): #{mode_ok}; " <>
-    "=== the Elixir CDCL on 2,000 CNFs, 200 3-SAT n=20..100 and n=100: #{cdcl_ok}; status = picosat's, models valid (2,000): #{anchor_ok}; " <>
-    "vs simple_sat (300 small): #{simple_ok}; forced yields: #{yield_ok}; bad literals raise: #{bad_ok}; " <>
-    "budget and capacity give status 2: #{limit_ok}"
-)
-
-one_ok = mode_ok and cdcl_ok and anchor_ok and simple_ok and yield_ok and bad_ok and limit_ok
-
-# ---- agreement: Crux's enumeration in one call (solve_all) ------------------------
-shapes = [{2, 2, 4}, {4, 3, 8}, {8, 3, 12}, {12, 4, 16}]
-
-formulas =
-  for {p, k, pool} <- shapes,
-      seed <- 1..2,
-      f = Gen.ash(p, k, pool, seed),
-      f.cnf != [],
-      do: {{p, k, pool, seed}, f}
-
-with_solver = fn solver, f ->
-  Process.put(Crux.Implementation, solver)
-  f.()
-end
-
-# Is every scenario sufficient (cube and not F is UNSAT, Crux's own
-# implies_formula? query) and do the scenarios cover F (F and no scenario is
-# UNSAT)? Both checked with picosat.
-valid_cover? = fn f, cubes ->
-  e = SatEx.encode(f)
-  blocking = Enum.map(cubes, fn c -> Enum.map(c, &(-&1)) end)
-
-  Enum.all?(cubes, fn c ->
-    Picosat.solve(Enum.map(c, &[&1]) ++ e.query) == {:error, :unsatisfiable}
-  end) and
-    Picosat.solve(f.cnf ++ blocking) == {:error, :unsatisfiable}
-end
-
-# Crux's scenarios as cubes again (bound variable -> literal)
-to_cubes = fn f, scenarios ->
-  ids = Map.new(f.bindings, fn {id, var} -> {var, id} end)
-
-  Enum.map(scenarios, fn s ->
-    Enum.map(s, fn {var, val} -> if val, do: ids[var], else: -ids[var] end)
-  end)
-end
-
-batch =
-  for {shape, f} <- formulas do
-    e = SatEx.encode(f)
-    kcubes = SatEx.cubes_kernel(e)
-    pico = with_solver.(Picosat, fn -> Crux.satisfying_scenarios(f) end)
-    mine = SatEx.satisfying_scenarios(f)
-
-    %{
-      shape: shape,
-      # exact: the Elixir loop with the Elixir CDCL finds the same cubes in the same order
-      same_as_elixir: kcubes == SatEx.Enumerate.cubes(e),
-      # Crux's API shape: the same maps as running Crux on the Elixir loop
-      same_api: mine == SatEx.Enumerate.satisfying_scenarios(f),
-      cover: valid_cover?.(f, kcubes) and valid_cover?.(f, to_cubes.(f, pico)),
-      same_as_picosat: Enum.sort(mine) == Enum.sort(pico),
-      n: length(mine),
-      n_pico: length(pico)
-    }
   end
 
-# Elixir mode on the small shapes (it rebuilds the state per write)
-batch_mode_ok =
-  Enum.all?(for({{p, _, _, _}, f} <- formulas, p <= 4, do: f), fn f ->
-    args = SatEx.batch_args(SatEx.encode(f), 64)
-    K.__defk_elixir__(:solve_all, args) === apply(K, :solve_all, args)
-  end)
+  bad_ok =
+    Enum.all?([[[1, 0]], [[1, -5]], [[4]]], fn cnf ->
+      {l, o} = SatEx.pack(cnf)
+      args = [l, o, 3, 16, 1000]
 
-{_, big} = List.last(formulas)
-big_e = SatEx.encode(big)
-big_cubes = SatEx.cubes_kernel(big_e)
-K.__defk_force_yields__(true)
-batch_yield_ok = SatEx.cubes_kernel(big_e) == big_cubes
-K.__defk_force_yields__(false)
-# out_cap 1 overflows, status 3, and the retry gets the same cubes
-retry_ok = SatEx.cubes_kernel(big_e, 1) == big_cubes
-
-for r <- batch do
-  IO.puts(
-    "  #{inspect(r.shape)}: #{r.n} scenarios (Crux + picosat #{r.n_pico}, same set #{r.same_as_picosat}); " <>
-      "=== the Elixir loop #{r.same_as_elixir and r.same_api}; sufficient and covering: #{r.cover}"
-  )
-end
-
-batch_ok =
-  Enum.all?(batch, &(&1.same_as_elixir and &1.same_api and &1.cover)) and batch_mode_ok and
-    batch_yield_ok and retry_ok
-
-IO.puts(
-  "solve_all: Elixir mode === native on the small shapes: #{batch_mode_ok}; forced yields: #{batch_yield_ok}; " <>
-    "capacity retry: #{retry_ok}; all: #{batch_ok}"
-)
-
-# ---- timing ----------------------------------------------------------------------
-with_timeout = fn f, ms ->
-  t = Task.async(f)
-
-  case Task.yield(t, ms) || Task.shutdown(t, :brutal_kill) do
-    {:ok, r} -> r
-    _ -> :timeout
-  end
-end
-
-best = fn f, runs -> Enum.map(1..runs, fn _ -> elem(:timer.tc(f), 0) end) |> Enum.min() end
-{load1, _} = System.cmd("uptime", [])
-IO.puts("\n#{String.trim(load1)}")
-
-# interleaved best-of: every round runs each side once, after a full GC
-interleaved = fn sides, rounds ->
-  Enum.reduce(1..rounds, %{}, fn _, best ->
-    Enum.reduce(sides, best, fn {name, f}, best ->
-      :erlang.garbage_collect()
-      {us, _} = :timer.tc(f)
-      Map.update(best, name, us, &min(&1, us))
+      raises?.(fn -> apply(K, :solve, args) end) and
+        raises?.(fn -> K.__defk_elixir__(:solve, args) end)
     end)
-  end)
-end
 
-times = fn f, k -> fn -> for _ <- 1..k, do: f.() end end
-fmt_us = fn us, k -> :erlang.float_to_binary(us / k, decimals: 1) end
+  limit_ok =
+    elem(kcall.(k100, 100, 4096, 50), 0) == 2 and elem(kcall.(k100, 100, 0, 1 <<< 58), 0) == 2 and
+      elem(
+        K.__defk_elixir__(
+          :solve,
+          Tuple.to_list(SatEx.pack(Gen.k3(30, 4.26, 3))) ++ [30, 4, 1 <<< 40]
+        ),
+        0
+      ) ==
+        elem(kcall.(Gen.k3(30, 4.26, 3), 30, 4, 1 <<< 40), 0)
 
-# One call per formula, as Crux.Implementation.solve_expression/1 makes them:
-# the list of clauses in, {:ok, model} or {:error, :unsatisfiable} out (the
-# kernel side packs the list and unpacks the model). Each side 200 calls.
-IO.puts("\nOne solve, us per call (best of 5 interleaved rounds of 200 calls):")
+  IO.puts(
+    "one solve: kernel === Elixir mode on #{length(mode_cases)} CNFs (#{div(mode_us, 1000)} ms): #{mode_ok}; " <>
+      "=== the Elixir CDCL on 2,000 CNFs, 200 3-SAT n=20..100 and n=100: #{cdcl_ok}; status = picosat's, models valid (2,000): #{anchor_ok}; " <>
+      "vs simple_sat (300 small): #{simple_ok}; forced yields: #{yield_ok}; bad literals raise: #{bad_ok}; " <>
+      "budget and capacity give status 2: #{limit_ok}"
+  )
 
-per_call =
-  for {p, k, pool} <- [{4, 3, 8}, {8, 3, 12}, {12, 4, 16}], seed <- 1..2 do
-    cnf = Gen.ash(p, k, pool, seed).cnf
-    simple = with_timeout.(fn -> best.(fn -> SimpleSat.solve(cnf) end, 3) end, 10_000)
+  one_ok = mode_ok and cdcl_ok and anchor_ok and simple_ok and yield_ok and bad_ok and limit_ok
 
-    b =
-      interleaved.(
-        [
-          {:picosat, times.(fn -> Picosat.solve(cnf) end, 200)},
-          {:cdcl, times.(fn -> Cdcl.solve(cnf) end, 200)},
-          {:dpll, times.(fn -> Dpll.solve(cnf) end, 200)},
-          {:defk, times.(fn -> SatEx.solve(cnf) end, 200)}
-        ],
-        5
+  # ---- agreement: Crux's enumeration in one call (solve_all) ------------------------
+  shapes = [{2, 2, 4}, {4, 3, 8}, {8, 3, 12}, {12, 4, 16}]
+
+  formulas =
+    for {p, k, pool} <- shapes,
+        seed <- 1..2,
+        f = Gen.ash(p, k, pool, seed),
+        f.cnf != [],
+        do: {{p, k, pool, seed}, f}
+
+  with_solver = fn solver, f ->
+    Process.put(Crux.Implementation, solver)
+    f.()
+  end
+
+  # Is every scenario sufficient (cube and not F is UNSAT, Crux's own
+  # implies_formula? query) and do the scenarios cover F (F and no scenario is
+  # UNSAT)? Both checked with picosat.
+  valid_cover? = fn f, cubes ->
+    e = SatEx.encode(f)
+    blocking = Enum.map(cubes, fn c -> Enum.map(c, &(-&1)) end)
+
+    Enum.all?(cubes, fn c ->
+      Picosat.solve(Enum.map(c, &[&1]) ++ e.query) == {:error, :unsatisfiable}
+    end) and
+      Picosat.solve(f.cnf ++ blocking) == {:error, :unsatisfiable}
+  end
+
+  # Crux's scenarios as cubes again (bound variable -> literal)
+  to_cubes = fn f, scenarios ->
+    ids = Map.new(f.bindings, fn {id, var} -> {var, id} end)
+
+    Enum.map(scenarios, fn s ->
+      Enum.map(s, fn {var, val} -> if val, do: ids[var], else: -ids[var] end)
+    end)
+  end
+
+  batch =
+    for {shape, f} <- formulas do
+      e = SatEx.encode(f)
+      kcubes = SatEx.cubes_kernel(e)
+      pico = with_solver.(Picosat, fn -> Crux.satisfying_scenarios(f) end)
+      mine = SatEx.satisfying_scenarios(f)
+
+      %{
+        shape: shape,
+        # exact: the Elixir loop with the Elixir CDCL finds the same cubes in the same order
+        same_as_elixir: kcubes == SatEx.Enumerate.cubes(e),
+        # Crux's API shape: the same maps as running Crux on the Elixir loop
+        same_api: mine == SatEx.Enumerate.satisfying_scenarios(f),
+        cover: valid_cover?.(f, kcubes) and valid_cover?.(f, to_cubes.(f, pico)),
+        same_as_picosat: Enum.sort(mine) == Enum.sort(pico),
+        n: length(mine),
+        n_pico: length(pico)
+      }
+    end
+
+  # Elixir mode on the small shapes (it rebuilds the state per write)
+  batch_mode_ok =
+    Enum.all?(for({{p, _, _, _}, f} <- formulas, p <= 4, do: f), fn f ->
+      args = SatEx.batch_args(SatEx.encode(f), 64)
+      K.__defk_elixir__(:solve_all, args) === apply(K, :solve_all, args)
+    end)
+
+  {_, big} = List.last(formulas)
+  big_e = SatEx.encode(big)
+  big_cubes = SatEx.cubes_kernel(big_e)
+  K.__defk_force_yields__(true)
+  batch_yield_ok = SatEx.cubes_kernel(big_e) == big_cubes
+  K.__defk_force_yields__(false)
+  # out_cap 1 overflows, status 3, and the retry gets the same cubes
+  retry_ok = SatEx.cubes_kernel(big_e, 1) == big_cubes
+
+  for r <- batch do
+    IO.puts(
+      "  #{inspect(r.shape)}: #{r.n} scenarios (Crux + picosat #{r.n_pico}, same set #{r.same_as_picosat}); " <>
+        "=== the Elixir loop #{r.same_as_elixir and r.same_api}; sufficient and covering: #{r.cover}"
+    )
+  end
+
+  batch_ok =
+    Enum.all?(batch, &(&1.same_as_elixir and &1.same_api and &1.cover)) and batch_mode_ok and
+      batch_yield_ok and retry_ok
+
+  IO.puts(
+    "solve_all: Elixir mode === native on the small shapes: #{batch_mode_ok}; forced yields: #{batch_yield_ok}; " <>
+      "capacity retry: #{retry_ok}; all: #{batch_ok}"
+  )
+
+  # ---- timing ----------------------------------------------------------------------
+  with_timeout = fn f, ms ->
+    t = Task.async(f)
+
+    case Task.yield(t, ms) || Task.shutdown(t, :brutal_kill) do
+      {:ok, r} -> r
+      _ -> :timeout
+    end
+  end
+
+  best = fn f, runs -> Enum.map(1..runs, fn _ -> elem(:timer.tc(f), 0) end) |> Enum.min() end
+  {load1, _} = System.cmd("uptime", [])
+  IO.puts("\n#{String.trim(load1)}")
+
+  # interleaved best-of: every round runs each side once, after a full GC
+  interleaved = fn sides, rounds ->
+    Enum.reduce(1..rounds, %{}, fn _, best ->
+      Enum.reduce(sides, best, fn {name, f}, best ->
+        :erlang.garbage_collect()
+        {us, _} = :timer.tc(f)
+        Map.update(best, name, us, &min(&1, us))
+      end)
+    end)
+  end
+
+  times = fn f, k -> fn -> for _ <- 1..k, do: f.() end end
+  fmt_us = fn us, k -> :erlang.float_to_binary(us / k, decimals: 1) end
+
+  # One call per formula, as Crux.Implementation.solve_expression/1 makes them:
+  # the list of clauses in, {:ok, model} or {:error, :unsatisfiable} out (the
+  # kernel side packs the list and unpacks the model). Each side 200 calls.
+  IO.puts("\nOne solve, us per call (best of 5 interleaved rounds of 200 calls):")
+
+  per_call =
+    for {p, k, pool} <- [{4, 3, 8}, {8, 3, 12}, {12, 4, 16}], seed <- 1..2 do
+      cnf = Gen.ash(p, k, pool, seed).cnf
+      simple = with_timeout.(fn -> best.(fn -> SimpleSat.solve(cnf) end, 3) end, 10_000)
+
+      b =
+        interleaved.(
+          [
+            {:picosat, times.(fn -> Picosat.solve(cnf) end, 200)},
+            {:cdcl, times.(fn -> Cdcl.solve(cnf) end, 200)},
+            {:dpll, times.(fn -> Dpll.solve(cnf) end, 200)},
+            {:defk, times.(fn -> SatEx.solve(cnf) end, 200)}
+          ],
+          5
+        )
+
+      IO.puts(
+        "  Ash P=#{p} seed #{seed} (#{SatEx.nvars(cnf)} vars, #{length(cnf)} clauses): picosat #{fmt_us.(b.picosat, 200)}, " <>
+          "Elixir CDCL #{fmt_us.(b.cdcl, 200)}, DPLL #{fmt_us.(b.dpll, 200)}, defk #{fmt_us.(b.defk, 200)}, " <>
+          "simple_sat #{if is_integer(simple), do: simple, else: "> 10 s"}"
       )
 
-    IO.puts(
-      "  Ash P=#{p} seed #{seed} (#{SatEx.nvars(cnf)} vars, #{length(cnf)} clauses): picosat #{fmt_us.(b.picosat, 200)}, " <>
-        "Elixir CDCL #{fmt_us.(b.cdcl, 200)}, DPLL #{fmt_us.(b.dpll, 200)}, defk #{fmt_us.(b.defk, 200)}, " <>
-        "simple_sat #{if is_integer(simple), do: simple, else: "> 10 s"}"
-    )
+      {{p, seed}, b}
+    end
 
-    {{p, seed}, b}
-  end
+  # Crux.satisfying_scenarios/1, the whole enumeration (Crux on picosat, on the
+  # Elixir CDCL, on simple_sat; the same loop in Elixir; the kernel's
+  # solve_all), ms
+  IO.puts("\nCrux's satisfying_scenarios, ms (best of 3 interleaved rounds):")
 
-# Crux.satisfying_scenarios/1, the whole enumeration (Crux on picosat, on the
-# Elixir CDCL, on simple_sat; the same loop in Elixir; the kernel's
-# solve_all), ms
-IO.puts("\nCrux's satisfying_scenarios, ms (best of 3 interleaved rounds):")
+  enum_times =
+    for {{p, _k, _pool, seed}, f} <- formulas, p >= 4 do
+      simple =
+        if p <= 4,
+          do:
+            with_timeout.(
+              fn ->
+                best.(
+                  fn -> with_solver.(SimpleSat, fn -> Crux.satisfying_scenarios(f) end) end,
+                  1
+                )
+              end,
+              10_000
+            ),
+          else: :skipped
 
-enum_times =
-  for {{p, _k, _pool, seed}, f} <- formulas, p >= 4 do
-    simple =
-      if p <= 4,
-        do:
-          with_timeout.(
-            fn ->
-              best.(fn -> with_solver.(SimpleSat, fn -> Crux.satisfying_scenarios(f) end) end, 1)
-            end,
-            10_000
-          ),
-        else: :skipped
+      b =
+        interleaved.(
+          [
+            {:crux_picosat,
+             fn -> with_solver.(Picosat, fn -> Crux.satisfying_scenarios(f) end) end},
+            {:crux_cdcl, fn -> with_solver.(Cdcl, fn -> Crux.satisfying_scenarios(f) end) end},
+            {:loop_cdcl, fn -> SatEx.Enumerate.satisfying_scenarios(f) end},
+            {:defk, fn -> SatEx.satisfying_scenarios(f) end}
+          ],
+          3
+        )
 
+      ms = fn us -> :erlang.float_to_binary(us / 1000, decimals: 2) end
+
+      IO.puts(
+        "  Ash P=#{p} seed #{seed}: Crux + picosat #{ms.(b.crux_picosat)}, Crux + Elixir CDCL #{ms.(b.crux_cdcl)}, " <>
+          "Elixir loop #{ms.(b.loop_cdcl)}, defk solve_all #{ms.(b.defk)}, Crux + simple_sat #{case simple do
+            us when is_integer(us) -> ms.(us)
+            :timeout -> "> 10 s"
+            :skipped -> "not run"
+          end}"
+      )
+
+      {{p, seed}, b}
+    end
+
+  # random 3-SAT at the threshold, n = 200, three seeds, ms
+  IO.puts("\nRandom 3-SAT, n = 200, 852 clauses, ms (best of 3 interleaved rounds):")
+  k200 = for seed <- 1..3, do: Gen.k3(200, 4.26, seed)
+
+  for {cnf, seed} <- Enum.with_index(k200, 1) do
     b =
       interleaved.(
         [
-          {:crux_picosat,
-           fn -> with_solver.(Picosat, fn -> Crux.satisfying_scenarios(f) end) end},
-          {:crux_cdcl, fn -> with_solver.(Cdcl, fn -> Crux.satisfying_scenarios(f) end) end},
-          {:loop_cdcl, fn -> SatEx.Enumerate.satisfying_scenarios(f) end},
-          {:defk, fn -> SatEx.satisfying_scenarios(f) end}
+          {:picosat, fn -> Picosat.solve(cnf) end},
+          {:cdcl, fn -> Cdcl.solve(cnf) end},
+          {:defk, fn -> SatEx.solve(cnf) end}
         ],
         3
       )
 
-    ms = fn us -> :erlang.float_to_binary(us / 1000, decimals: 2) end
+    status = if match?({:ok, _}, Picosat.solve(cnf)), do: "SAT", else: "UNSAT"
 
     IO.puts(
-      "  Ash P=#{p} seed #{seed}: Crux + picosat #{ms.(b.crux_picosat)}, Crux + Elixir CDCL #{ms.(b.crux_cdcl)}, " <>
-        "Elixir loop #{ms.(b.loop_cdcl)}, defk solve_all #{ms.(b.defk)}, Crux + simple_sat #{case simple do
-          us when is_integer(us) -> ms.(us)
-          :timeout -> "> 10 s"
-          :skipped -> "not run"
-        end}"
+      "  seed #{seed} (#{status}, #{elem(Cdcl.solve(cnf, 200, nil), 2)} conflicts): picosat #{div(b.picosat, 1000)}, " <>
+        "Elixir CDCL #{div(b.cdcl, 1000)}, defk #{div(b.defk, 1000)}"
     )
-
-    {{p, seed}, b}
   end
 
-# random 3-SAT at the threshold, n = 200, three seeds, ms
-IO.puts("\nRandom 3-SAT, n = 200, 852 clauses, ms (best of 3 interleaved rounds):")
-k200 = for seed <- 1..3, do: Gen.k3(200, 4.26, seed)
-
-for {cnf, seed} <- Enum.with_index(k200, 1) do
-  b =
-    interleaved.(
-      [
-        {:picosat, fn -> Picosat.solve(cnf) end},
-        {:cdcl, fn -> Cdcl.solve(cnf) end},
-        {:defk, fn -> SatEx.solve(cnf) end}
-      ],
-      3
-    )
-
-  status = if match?({:ok, _}, Picosat.solve(cnf)), do: "SAT", else: "UNSAT"
+  # S5's instance (n = 300, seed 7, SAT): one run each, and the tick-gap floor
+  # of this machine (a 1 ms ticker on one scheduler beside an idle process)
+  k300 = Gen.k3(300, 4.26, 7)
+  t300 = fn f -> div(elem(:timer.tc(f), 0), 1000) end
 
   IO.puts(
-    "  seed #{seed} (#{status}, #{elem(Cdcl.solve(cnf, 200, nil), 2)} conflicts): picosat #{div(b.picosat, 1000)}, " <>
-      "Elixir CDCL #{div(b.cdcl, 1000)}, defk #{div(b.defk, 1000)}"
+    "Random 3-SAT, n = 300 (S5's instance), one run, ms: picosat #{t300.(fn -> Picosat.solve(k300) end)}, " <>
+      "Elixir CDCL #{t300.(fn -> Cdcl.solve(k300) end)}, defk #{t300.(fn -> SatEx.solve(k300) end)}; " <>
+      "tick-gap floor (idle, max/p99 ms): #{(fn g -> "#{g.max}/#{g.p99}" end).(Defk.Bench.TickGap.run(fn -> Process.sleep(200) end))}"
   )
-end
 
-# S5's instance (n = 300, seed 7, SAT): one run each, and the tick-gap floor
-# of this machine (a 1 ms ticker on one scheduler beside an idle process)
-k300 = Gen.k3(300, 4.26, 7)
-t300 = fn f -> div(elem(:timer.tc(f), 0), 1000) end
+  {load2, _} = System.cmd("uptime", [])
+  IO.puts("#{String.trim(load2)}\n")
 
-IO.puts(
-  "Random 3-SAT, n = 300 (S5's instance), one run, ms: picosat #{t300.(fn -> Picosat.solve(k300) end)}, " <>
-    "Elixir CDCL #{t300.(fn -> Cdcl.solve(k300) end)}, defk #{t300.(fn -> SatEx.solve(k300) end)}; " <>
-    "tick-gap floor (idle, max/p99 ms): #{(fn g -> "#{g.max}/#{g.p99}" end).(Defk.Bench.TickGap.run(fn -> Process.sleep(200) end))}"
-)
+  # ---- reports ---------------------------------------------------------------------
+  # The best Elixir per formula: the CDCL or the DPLL sketch, whichever was
+  # faster in the table above (the DPLL wins on some small formulas)
+  best_elixir = fn p, seed ->
+    b = Map.new(per_call)[{p, seed}]
+    if b.dpll < b.cdcl, do: &Dpll.solve/1, else: &Cdcl.solve/1
+  end
 
-{load2, _} = System.cmd("uptime", [])
-IO.puts("#{String.trim(load2)}\n")
+  per_call_report = fn name, expected, p, k, pool, reason ->
+    cnfs = for seed <- 1..2, do: {seed, Gen.ash(p, k, pool, seed).cnf}
+    solvers = for {seed, cnf} <- cnfs, do: {best_elixir.(p, seed), cnf}
 
-# ---- reports ---------------------------------------------------------------------
-# The best Elixir per formula: the CDCL or the DPLL sketch, whichever was
-# faster in the table above (the DPLL wins on some small formulas)
-best_elixir = fn p, seed ->
-  b = Map.new(per_call)[{p, seed}]
-  if b.dpll < b.cdcl, do: &Dpll.solve/1, else: &Cdcl.solve/1
-end
+    Defk.Bench.report(
+      name: name,
+      expected: expected,
+      baseline: :optimized,
+      realistic_size:
+        "one Crux solve of an Ash-shaped formula, P = #{p} policies (two formulas, 100 calls each)",
+      elixir: fn -> for {s, cnf} <- solvers, _ <- 1..100, do: s.(cnf) end,
+      defk: fn -> for {_, cnf} <- cnfs, _ <- 1..100, do: SatEx.solve(cnf) end,
+      native:
+        {fn -> for {_, cnf} <- cnfs, _ <- 1..100, do: Picosat.solve(cnf) end,
+         "picosat_elixir 0.2.3"},
+      check: fn ->
+        one_ok and
+          Enum.all?(cnfs, fn {_, cnf} ->
+            case {SatEx.solve(cnf), Picosat.solve(cnf)} do
+              {{:ok, m}, {:ok, _}} -> Gen.satisfies?(cnf, m)
+              {a, b} -> a == b
+            end
+          end)
+      end,
+      reason: reason
+    )
+  end
 
-per_call_report = fn name, expected, p, k, pool, reason ->
-  cnfs = for seed <- 1..2, do: {seed, Gen.ash(p, k, pool, seed).cnf}
-  solvers = for {seed, cnf} <- cnfs, do: {best_elixir.(p, seed), cnf}
+  # 1. S3: the whole enumeration, the catalog entry (run_all reads this line)
+  {_, f3} = Enum.find(formulas, fn {shape, _} -> shape == {12, 4, 16, 1} end)
+  b3 = Map.new(enum_times)[{12, 1}]
+
+  elixir3 =
+    if b3.loop_cdcl < b3.crux_cdcl,
+      do: fn -> SatEx.Enumerate.satisfying_scenarios(f3) end,
+      else: fn -> with_solver.(Cdcl, fn -> Crux.satisfying_scenarios(f3) end) end
 
   Defk.Bench.report(
-    name: name,
-    expected: expected,
+    name: "cdcl_sat",
+    expected: :good,
     baseline: :optimized,
     realistic_size:
-      "one Crux solve of an Ash-shaped formula, P = #{p} policies (two formulas, 100 calls each)",
-    elixir: fn -> for {s, cnf} <- solvers, _ <- 1..100, do: s.(cnf) end,
-    defk: fn -> for {_, cnf} <- cnfs, _ <- 1..100, do: SatEx.solve(cnf) end,
+      "Crux.satisfying_scenarios on an Ash-shaped formula, P = 12 policies (109 vars, 280 clauses)",
+    elixir: elixir3,
+    defk: fn -> SatEx.satisfying_scenarios(f3) end,
     native:
-      {fn -> for {_, cnf} <- cnfs, _ <- 1..100, do: Picosat.solve(cnf) end,
-       "picosat_elixir 0.2.3"},
-    check: fn ->
-      one_ok and
-        Enum.all?(cnfs, fn {_, cnf} ->
+      {fn -> with_solver.(Picosat, fn -> Crux.satisfying_scenarios(f3) end) end,
+       "Crux 0.1.4 + picosat_elixir 0.2.3"},
+    check: fn -> batch_ok and valid_cover?.(f3, to_cubes.(f3, SatEx.satisfying_scenarios(f3))) end,
+    reason:
+      "Crux's enumeration (a solve, one implication query per literal, a blocking clause, repeat) in one kernel call: no boundary per solve and C-speed CDCL; faster than Crux on picosat too"
+  )
+
+  r1 =
+    per_call_report.(
+      "cdcl_sat_s1",
+      :good,
+      4,
+      3,
+      8,
+      "pre-registered marginal: an Ash-sized formula per call; the kernel's call, pack and unpack cost less than the Elixir CDCL's setup"
+    )
+
+  r2 =
+    per_call_report.(
+      "cdcl_sat_s2",
+      :good,
+      12,
+      4,
+      16,
+      "a 105-variable formula per call: the solve outweighs packing"
+    )
+
+  # S4, with S5 (responsiveness at n = 300, seed 7: SAT, picosat about 1 s) beside it
+  r4 =
+    Defk.Bench.report(
+      name: "cdcl_sat_s4",
+      expected: :good,
+      baseline: :optimized,
+      runs: 3,
+      realistic_size: "random 3-SAT, n = 200 at ratio 4.26 (852 clauses), three seeds",
+      elixir: fn -> for cnf <- k200, do: Cdcl.solve(cnf) end,
+      defk: fn -> for cnf <- k200, do: SatEx.solve(cnf) end,
+      native: {fn -> for cnf <- k200, do: Picosat.solve(cnf) end, "picosat_elixir 0.2.3"},
+      check: fn ->
+        Enum.all?(k200, fn cnf ->
           case {SatEx.solve(cnf), Picosat.solve(cnf)} do
             {{:ok, m}, {:ok, _}} -> Gen.satisfies?(cnf, m)
             {a, b} -> a == b
           end
         end)
-    end,
-    reason: reason
-  )
-end
+      end,
+      responsiveness: [
+        elixir: fn -> Cdcl.solve(k300) end,
+        defk: fn -> SatEx.solve(k300) end,
+        native: fn -> Picosat.solve(k300) end
+      ],
+      reason:
+        "CDCL against the same CDCL in Elixir; picosat is ahead of both on hard instances (more heuristics)"
+    )
 
-# 1. S3: the whole enumeration, the catalog entry (run_all reads this line)
-{_, f3} = Enum.find(formulas, fn {shape, _} -> shape == {12, 4, 16, 1} end)
-b3 = Map.new(enum_times)[{12, 1}]
+  # run_all.exs reads the first DEFK_RESULT line; check the others here
+  others = [{r1, :good}, {r2, :good}, {r4, :good}]
 
-elixir3 =
-  if b3.loop_cdcl < b3.crux_cdcl,
-    do: fn -> SatEx.Enumerate.satisfying_scenarios(f3) end,
-    else: fn -> with_solver.(Cdcl, fn -> Crux.satisfying_scenarios(f3) end) end
-
-Defk.Bench.report(
-  name: "cdcl_sat",
-  expected: :good,
-  baseline: :optimized,
-  realistic_size:
-    "Crux.satisfying_scenarios on an Ash-shaped formula, P = 12 policies (109 vars, 280 clauses)",
-  elixir: elixir3,
-  defk: fn -> SatEx.satisfying_scenarios(f3) end,
-  native:
-    {fn -> with_solver.(Picosat, fn -> Crux.satisfying_scenarios(f3) end) end,
-     "Crux 0.1.4 + picosat_elixir 0.2.3"},
-  check: fn -> batch_ok and valid_cover?.(f3, to_cubes.(f3, SatEx.satisfying_scenarios(f3))) end,
-  reason:
-    "Crux's enumeration (a solve, one implication query per literal, a blocking clause, repeat) in one kernel call: no boundary per solve and C-speed CDCL; faster than Crux on picosat too"
-)
-
-r1 =
-  per_call_report.(
-    "cdcl_sat_s1",
-    :good,
-    4,
-    3,
-    8,
-    "pre-registered marginal: an Ash-sized formula per call; the kernel's call, pack and unpack cost less than the Elixir CDCL's setup"
-  )
-
-r2 =
-  per_call_report.(
-    "cdcl_sat_s2",
-    :good,
-    12,
-    4,
-    16,
-    "a 105-variable formula per call: the solve outweighs packing"
-  )
-
-# S4, with S5 (responsiveness at n = 300, seed 7: SAT, picosat about 1 s) beside it
-r4 =
-  Defk.Bench.report(
-    name: "cdcl_sat_s4",
-    expected: :good,
-    baseline: :optimized,
-    runs: 3,
-    realistic_size: "random 3-SAT, n = 200 at ratio 4.26 (852 clauses), three seeds",
-    elixir: fn -> for cnf <- k200, do: Cdcl.solve(cnf) end,
-    defk: fn -> for cnf <- k200, do: SatEx.solve(cnf) end,
-    native: {fn -> for cnf <- k200, do: Picosat.solve(cnf) end, "picosat_elixir 0.2.3"},
-    check: fn ->
-      Enum.all?(k200, fn cnf ->
-        case {SatEx.solve(cnf), Picosat.solve(cnf)} do
-          {{:ok, m}, {:ok, _}} -> Gen.satisfies?(cnf, m)
-          {a, b} -> a == b
-        end
-      end)
-    end,
-    responsiveness: [
-      elixir: fn -> Cdcl.solve(k300) end,
-      defk: fn -> SatEx.solve(k300) end,
-      native: fn -> Picosat.solve(k300) end
-    ],
-    reason:
-      "CDCL against the same CDCL in Elixir; picosat is ahead of both on hard instances (more heuristics)"
-  )
-
-# run_all.exs reads the first DEFK_RESULT line; check the others here
-others = [{r1, :good}, {r2, :good}, {r4, :good}]
-
-unless Enum.all?(others, fn {r, v} -> r.correct and r.verdict == v end) do
-  IO.puts("a cdcl_sat size failed its check or measured another verdict")
-  System.halt(1)
+  unless Enum.all?(others, fn {r, v} -> r.correct and r.verdict == v end) do
+    IO.puts("a cdcl_sat size failed its check or measured another verdict")
+    System.halt(1)
+  end
 end

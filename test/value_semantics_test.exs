@@ -545,6 +545,164 @@ defmodule Defk.ValueSemanticsTest.K do
     end)
   end
 
+  # A loop whose range or initial value reads the array its body writes and
+  # returns (defk-8tw): the first generator's range and the initial value are
+  # evaluated once, before the first iteration, and later iterations read the
+  # accumulator, so the array is not copied.
+  defk range_bound(n :: i64, r :: i64) :: [i64] do
+    st0 = alloc(i64, 8)
+    st0[0] = 2
+
+    for _ <- 0..r//1, reduce: st0 do
+      st ->
+        st =
+          for k <- 1..(st[0] - 1)//1, reduce: st do
+            st ->
+              st[k] = st[k] + n
+              st
+          end
+
+        st[0] = min(st[0] + 1, 8)
+        st
+    end
+  end
+
+  defk range_top(n :: i64) :: [i64] do
+    st = alloc(i64, 8)
+    st[0] = min(max(n, 1), 8)
+
+    for k <- 0..(st[0] - 1)//1, reduce: st do
+      st ->
+        st[k] = st[k] + k
+        st
+    end
+  end
+
+  defk range_len(r :: i64) :: [i64] do
+    st0 = alloc(i64, 8)
+
+    for _ <- 0..r//1, reduce: st0 do
+      st ->
+        for k <- 0..(len(st) - 1)//1, reduce: st do
+          st ->
+            st[k] = st[k] + k
+            st
+        end
+    end
+  end
+
+  defk range_step(r :: i64) :: [i64] do
+    st0 = alloc(i64, 8)
+
+    for _ <- 0..r//1, reduce: st0 do
+      st ->
+        for k <- 1..7//(rem(st[0], 3) + 1), reduce: st do
+          st ->
+            st[k] = st[k] + 1
+            st[0] = st[0] + 1
+            st
+        end
+    end
+  end
+
+  # an inner reduce_while whose range and initial value read the array, in
+  # one branch of an outer reduce_while chosen by reading it
+  defk range_init(n :: i64, m :: i64) :: [i64] do
+    st0 = alloc(i64, 8)
+    st0[0] = 3
+
+    Enum.reduce_while(0..n//1, st0, fn _, st ->
+      if st[1] >= m do
+        {:halt, st}
+      else
+        {st, _} =
+          Enum.reduce_while(1..(st[0] - 1)//1, {st, st[0]}, fn j, {st, x} ->
+            st[j] = st[j] + x
+            {:cont, {st, x - 1}}
+          end)
+
+        st[0] = min(st[0] + 1, 8)
+        {:cont, st}
+      end
+    end)
+  end
+
+  defk init_reads(r :: i64) :: [i64] do
+    st0 = alloc(i64, 8)
+
+    for _ <- 0..r//1, reduce: st0 do
+      st ->
+        {st, _} =
+          for j <- 0..3//1, reduce: {st, st[0]} do
+            {st, x} ->
+              st[j] = band(st[j] + x + 1, 0xFFFF)
+              {st, x + 1}
+          end
+
+        st
+    end
+  end
+
+  # Negative cases: the buffer before the loop is read while it runs or
+  # after it, so it copies. An alias read after the loop: old[0] is 3.
+  defk range_old_after(n :: i64) :: i64 do
+    st = alloc(i64, 8)
+    st[0] = 3
+    old = st
+
+    st2 =
+      for k <- 0..(st[0] - 1)//1, reduce: st do
+        st ->
+          st[k] = st[k] + n
+          st
+      end
+
+    old[0] * 1000 + st2[0]
+  end
+
+  # a later generator's range is evaluated again for each i: it reads the
+  # outer st (in place, it would see the writes)
+  defk range_second_gen(r :: i64) :: i64 do
+    st = alloc(i64, 4)
+    st[0] = 2
+
+    st =
+      for _ <- 0..r//1, k <- 0..st[0]//1, reduce: st do
+        st ->
+          st[1] = st[1] + k
+          st[0] = st[0] + 1
+          st
+      end
+
+    st[0]
+  end
+
+  # the generator walks the array while the loop writes the accumulator
+  defk range_walks(n :: i64) :: [i64] do
+    st = alloc(i64, 4)
+    st[0] = n
+
+    for x <- st, reduce: st do
+      st ->
+        st[1] = st[1] + x + 1
+        st
+    end
+  end
+
+  # a filter reads the outer st on every iteration
+  defk range_filter(r :: i64) :: i64 do
+    st = alloc(i64, 4)
+
+    st =
+      for _ <- 0..r//1, st[0] < 2, reduce: st do
+        st ->
+          st[0] = st[0] + 1
+          st
+      end
+
+    st[0]
+  end
+
   # A helper that writes its array parameter, then binds the name again from
   # a call or a reduce loop and returns the new binding (defk-3z5): the array
   # returned carries the write, so nothing is lost and nothing is copied.
@@ -857,6 +1015,60 @@ defmodule Defk.ValueSemanticsTest do
     end
   end
 
+  describe "a loop whose range or init reads the array it writes (defk-8tw)" do
+    @once [:range_bound, :range_top, :range_len, :range_step, :range_init, :init_reads]
+    @once_copied [:range_old_after, :range_second_gen, :range_walks, :range_filter]
+
+    test "writes in place: the range and init are evaluated before the first write" do
+      for k <- @once do
+        assert copy_notes(k) == [], "#{k}: #{inspect(copy_notes(k))}"
+        assert copies(kernel_c(K, k)) == 0, "#{k}"
+      end
+    end
+
+    test "still copies when the buffer before the loop is read while it runs or after it" do
+      for k <- @once_copied do
+        assert [_ | _] = copy_notes(k), "#{k}"
+        assert copies(kernel_c(K, k)) > 0, "#{k}"
+      end
+    end
+
+    test "agrees with Elixir mode, also under forced yields" do
+      assert agree(:range_bound, [1, 0]) == {:ok, i64s([3, 1, 0, 0, 0, 0, 0, 0])}
+      assert {:ok, _} = agree(:range_bound, [3, 20])
+      assert agree(:range_top, [4]) == {:ok, i64s([4, 1, 2, 3, 0, 0, 0, 0])}
+      assert agree(:range_len, [1]) == {:ok, i64s(for k <- 0..7, do: 2 * k)}
+      assert {:ok, _} = agree(:range_step, [10])
+      assert {:ok, _} = agree(:range_init, [100, 40])
+      assert {:ok, _} = agree(:init_reads, [10])
+      # in place, old[0] would be 3 + n
+      assert agree(:range_old_after, [5]) == {:ok, 3008}
+      # in place, the second range would grow with st[0]
+      assert agree(:range_second_gen, [1]) == {:ok, 8}
+      # in place, x would see st[1] after the first write
+      assert agree(:range_walks, [1]) == {:ok, i64s([1, 5, 0, 0])}
+      # in place, the filter would stop at st[0] = 2
+      assert agree(:range_filter, [5]) == {:ok, 6}
+
+      K.__defk_force_yields__(true)
+
+      try do
+        for k <- [:range_bound, :range_init], m <- [-1, 7, 2_000] do
+          assert {:ok, _} = agree(k, [2_000, m])
+        end
+
+        for k <- [:range_len, :range_step, :init_reads, :range_second_gen, :range_filter] do
+          assert {:ok, _} = agree(k, [2_000])
+        end
+
+        for k <- [:range_top, :range_old_after, :range_walks],
+            do: assert({:ok, _} = agree(k, [7]))
+      after
+        K.__defk_force_yields__(false)
+      end
+    end
+  end
+
   describe "a written parameter bound again and returned (defk-3z5)" do
     @rebound [:rebind_call, :rebind_reduce, :rebind_tuple]
 
@@ -1151,6 +1363,20 @@ defmodule Defk.ValueSemanticsTest do
     ],
     halt_on_outer: [args: StreamData.fixed_list([StreamData.integer(-1..200)])],
     cond_after_arm: [args: StreamData.fixed_list([StreamData.boolean()])],
+    range_bound: [
+      args: StreamData.fixed_list([StreamData.integer(-1..200), StreamData.integer(-1..60)])
+    ],
+    range_top: [args: StreamData.fixed_list([G.i64(-2..12)])],
+    range_len: [args: StreamData.fixed_list([StreamData.integer(-1..200)])],
+    range_step: [args: StreamData.fixed_list([StreamData.integer(-1..200)])],
+    range_init: [
+      args: StreamData.fixed_list([StreamData.integer(-1..200), StreamData.integer(-1..60)])
+    ],
+    init_reads: [args: StreamData.fixed_list([StreamData.integer(-1..200)])],
+    range_old_after: [args: StreamData.fixed_list([G.i64()])],
+    range_second_gen: [args: StreamData.fixed_list([StreamData.integer(-1..60)])],
+    range_walks: [args: StreamData.fixed_list([G.i64()])],
+    range_filter: [args: StreamData.fixed_list([StreamData.integer(-1..200)])],
     rebind_call: [args: StreamData.fixed_list([StreamData.integer(0..20)])],
     rebind_reduce: [args: StreamData.fixed_list([G.array(:i64)])],
     rebind_tuple: [args: StreamData.fixed_list([StreamData.integer(0..40)])],
