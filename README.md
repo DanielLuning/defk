@@ -33,7 +33,7 @@ Elixir wins as part of the record.
 [`examples/`](https://github.com/DanielLuning/defk/blob/main/examples) is a growing catalog of real use cases, each written in
 Elixir and in defk, checked for agreement and measured end to end.
 `elixir examples/run_all.exs` prints the scoreboard. The measurement rules are
-in [`examples/README.md`](examples/README.md), and what we have learned about
+in [`examples/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/README.md), and what we have learned about
 speed on the BEAM (fast and slow Elixir spellings, native BIFs, schedulers,
 the NIF boundary, fast kernels) is in [`docs/performance.md`](docs/performance.md).
 
@@ -58,6 +58,7 @@ The full reference for kernel authors (every construct, its exact semantics, the
 
 When to use defk and when Elixir or a wrapper NIF is the better choice, what is planned (with its ticket) and what stays out by design is on the scope page, [`docs/scope.md`](docs/scope.md).
 
+<!-- defk-example skip: the call after the module needs caller data (bin_a, bin_b); the kernel itself is checked in docs/language.md -->
 ```elixir
 defmodule Stats do
   use Defk

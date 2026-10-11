@@ -301,6 +301,44 @@ defmodule Defk.LanguageDoc do
     "#{check}: #{kernel}#{known}"
   end
 
+  # ---------------------------------------------------------------- extras --
+
+  @doc """
+  The Markdown extras of the HexDocs build, from the project's `:docs` config
+  (the one list in mix.exs), so a new page is covered by the doc checks as soon
+  as it is an extra.
+  """
+  def extras do
+    for path <- Mix.Project.config()[:docs][:extras], Path.extname(path) == ".md", do: path
+  end
+
+  # ----------------------------------------------------------------- links --
+
+  @doc """
+  The link targets of a Markdown document's inline links (`[text](target)`),
+  outside fenced code blocks and inline code.
+  """
+  def links(doc) do
+    {_, kept} =
+      doc
+      |> String.split("\n")
+      |> Enum.reduce({false, []}, fn line, {fenced?, acc} ->
+        cond do
+          Regex.match?(~r/^\s*(```|~~~)/, line) -> {not fenced?, acc}
+          fenced? -> {fenced?, acc}
+          true -> {fenced?, [line | acc]}
+        end
+      end)
+
+    # a link's text may wrap over lines, so scan the joined prose
+    kept
+    |> Enum.reverse()
+    |> Enum.join("\n")
+    |> String.replace(~r/`[^`\n]*`/, "")
+    |> then(&Regex.scan(~r/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/, &1, capture: :all_but_first))
+    |> List.flatten()
+  end
+
   # --------------------------------------------------------------- anchors --
 
   @doc """
