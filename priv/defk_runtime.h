@@ -81,15 +81,10 @@ typedef struct {
   int nowned, cap;
   int finished;
   int is_resource;
-  /* the yield slice of this call (defk-04y, experimental): slice_us until
-     short_left us of kernel time have run, then DEFK_SLICE_US. auto_short > 0:
-     start at DEFK_SLICE_US and switch to auto_short after a resume that
-     waited more than DEFK_GAP_US behind other processes (yielded_at). */
+  /* this call's slice (defk-04y): slice_us until short_left us of kernel
+     time have run (0: no limit), then DEFK_SLICE_US; see defk_slice_init */
   int64_t slice_us;
   int64_t short_left;
-  int64_t auto_short;
-  int64_t auto_for; /* short_left once auto mode switches */
-  ErlNifTime yielded_at;
 } defk_ctx;
 
 static ErlNifResourceType *defk_frame_rt;
@@ -1614,34 +1609,35 @@ typedef struct {
 #define DEFK_STRIP 2048
 #endif
 
-/* defk-04y (experimental): a resume that waited longer than this behind
-   other processes means the run queue is crowded (auto slice mode). */
-#ifndef DEFK_GAP_US
-#define DEFK_GAP_US 20
+/*
+ * A crowded run queue gets a short slice for the call's first millisecond
+ * (defk-04y). ERTS wakes an idle scheduler from a run queue with waiting
+ * processes by the reductions run there, and a kernel charges a whole
+ * timeslice (4000 reductions) per slice, so at 250 us short kernel calls
+ * fanned out from one process (Task.async_stream) stayed on 2-3 of 12
+ * schedulers. At 50 us they charge five times faster and spread. A lone call
+ * keeps 250 us (a 50 us slice costs it ~7-8% on a busy scheduler), and so
+ * does a crowded call after its first millisecond: calls that long spread
+ * anyway. The generated Elixir function passes the hint as an extra last
+ * argument, :erlang.statistics(:total_run_queue_lengths) (~9 ns); the NIF
+ * API has no run-queue length. docs/performance.md 4.9.
+ */
+#ifndef DEFK_SHORT_SLICE_US
+#define DEFK_SHORT_SLICE_US 50
+#endif
+#ifndef DEFK_SHORT_FOR_US
+#define DEFK_SHORT_FOR_US 1000
 #endif
 
-/* the default slice for a call that did not ask for another */
-__attribute__((unused)) static inline void defk_slice_default(defk_ctx *ctx) {
-  ctx->slice_us = DEFK_SLICE_US;
-  ctx->short_left = 0;
-  ctx->auto_short = 0;
-  ctx->auto_for = 0;
-  ctx->yielded_at = 0;
-}
-
-/* __defk_sliced_<name>__(args..., slice_us, for_us): slice_us > 0 runs the
-   call at that slice for its first for_us us of kernel time (0: all of it);
-   slice_us < 0 is auto: DEFK_SLICE_US until a resume waits, then -slice_us. */
-__attribute__((unused)) static void defk_slice_arg(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM s, ERL_NIF_TERM f) {
-  int64_t us, for_us;
-  defk_slice_default(ctx);
-  if (!enif_get_int64(env, s, &us) || !enif_get_int64(env, f, &for_us) || us == 0 || for_us < 0) return;
-  if (us > 0) {
-    ctx->slice_us = us;
-    ctx->short_left = for_us;
+/* hint: the run-queue length the caller saw (NULL: none passed) */
+__attribute__((unused)) static void defk_slice_init(ErlNifEnv *env, defk_ctx *ctx, const ERL_NIF_TERM *hint) {
+  int64_t waiting;
+  if (hint && enif_get_int64(env, *hint, &waiting) && waiting > 0) {
+    ctx->slice_us = DEFK_SHORT_SLICE_US;
+    ctx->short_left = DEFK_SHORT_FOR_US;
   } else {
-    ctx->auto_short = -us;
-    ctx->auto_for = for_us;
+    ctx->slice_us = DEFK_SLICE_US;
+    ctx->short_left = 0;
   }
 }
 
@@ -1649,11 +1645,6 @@ static void defk_clock_init(defk_clock *c, defk_ctx *ctx) {
   c->last = enif_monotonic_time(ERL_NIF_USEC);
   c->unreported = 0;
   c->ctx = ctx;
-  if (DEFK_UNLIKELY(ctx->auto_short) && ctx->yielded_at && c->last - ctx->yielded_at > DEFK_GAP_US) {
-    ctx->slice_us = ctx->auto_short;
-    ctx->short_left = ctx->auto_for;
-    ctx->auto_short = 0;
-  }
 }
 
 __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c, int64_t budget) {
@@ -1672,10 +1663,7 @@ __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c
   if (DEFK_UNLIKELY(ctx->short_left > 0) && (ctx->short_left -= dt) <= 0) ctx->slice_us = DEFK_SLICE_US;
   if (pct >= 1) {
     c->unreported -= pct * slice;
-    if (enif_consume_timeslice(env, pct > 100 ? 100 : (int)pct)) {
-      ctx->yielded_at = now;
-      return 0;
-    }
+    if (enif_consume_timeslice(env, pct > 100 ? 100 : (int)pct)) return 0;
   }
   return budget;
 }

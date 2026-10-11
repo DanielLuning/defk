@@ -42,7 +42,9 @@ defmodule Defk.Compiler do
   # Every rejection in the module is collected (see "rejections") and raised
   # together as one CompileError after all kernels are compiled.
   # opts: nif_name - the name each kernel's NIF is registered under;
-  #       fault_hooks - register the test-only `__defk_corrupt_tags__/1` (default false)
+  #       fault_hooks - register the test-only `__defk_corrupt_tags__/1` (default false);
+  #       adaptive_slice - a yielding kernel's NIF is `__defk_native_<name>__`
+  #         with the run-queue hint as an extra last argument (default false)
   def compile(module, raw_kernels, file, opts \\ []) do
     Process.put(:defk_file, file)
     Process.put(:defk_module, module)
@@ -125,7 +127,8 @@ defmodule Defk.Compiler do
           module,
           lowered,
           Keyword.get(opts, :nif_name, & &1),
-          Keyword.get(opts, :fault_hooks, false)
+          Keyword.get(opts, :fault_hooks, false),
+          Keyword.get(opts, :adaptive_slice, false)
         )
       ]
       |> IO.iodata_to_binary()
@@ -140,8 +143,17 @@ defmodule Defk.Compiler do
       ]
       |> IO.iodata_to_binary()
 
-    # every kernel's signature, helpers included (Elixir mode defines them too)
-    {c, Enum.map(kernels, &Map.take(&1, [:name, :arity, :params, :ret]))}
+    # every kernel's signature, helpers included (Elixir mode defines them
+    # too); `yields`: its NIF yields (so it takes the run-queue hint)
+    yielding = for k <- lowered, yields?(k), into: MapSet.new(), do: {k.name, k.arity}
+
+    {c,
+     Enum.map(
+       kernels,
+       &(&1
+         |> Map.take([:name, :arity, :params, :ret])
+         |> Map.put(:yields, MapSet.member?(yielding, {&1.name, &1.arity})))
+     )}
   end
 
   # A helper (a kernel with a bitstring parameter, defk-ooq) has no NIF: it
@@ -5443,7 +5455,7 @@ defmodule Defk.Compiler do
     scalars = for {{p, t}, i} <- Enum.with_index(k.params), t in @scalars, do: {p, t, i}
 
     params = Enum.map(scalars, fn {p, _, _} -> "p_#{sanitize(p)}" end)
-    yields? = k.yield and k.sp_count > 0
+    yields? = yields?(k)
     {stmts, saves} = safepoint_saves(k, params)
     # the frame holds what some safepoint spills
     framed = if yields?, do: Enum.uniq(Enum.flat_map(saves, &elem(&1, 1))), else: []
@@ -5660,9 +5672,8 @@ defmodule Defk.Compiler do
       "#{f} local;\nERL_NIF_TERM res;\n",
       "local.ctx.err = 0;\nlocal.ctx.owned = NULL;\nlocal.ctx.nowned = local.ctx.cap = 0;\nlocal.ctx.finished = local.ctx.is_resource = 0;\n",
       "local.resume = 0;\nmemset(local.copy, 0, sizeof local.copy);\n",
-      # defk-04y (experimental): the sliced NIF passes the call's slice last
-      "if (argc > #{k.arity}) defk_slice_arg(env, &local.ctx, argv[#{k.arity}], argv[#{k.arity + 1}]);\n",
-      "else defk_slice_default(&local.ctx);\n",
+      # the run-queue hint, when the NIF takes one, is the last argument
+      "defk_slice_init(env, &local.ctx, argc > #{k.arity} ? &argv[#{k.arity}] : NULL);\n",
       "int r = guard_#{k.cid}(env, &local, argv, &res);\n",
       promote(yields?, k),
       "defk_finish(&local.ctx);\n",
@@ -5685,16 +5696,17 @@ defmodule Defk.Compiler do
     end
   end
 
-  @doc false
-  # defk-04y (experimental): the NIF that takes the call's slice as two
-  # extra trailing arguments (slice_us, for_us), see defk_slice_arg
-  def sliced_name(name), do: :"__defk_sliced_#{name}__"
+  # a yielding kernel's NIF takes the run-queue hint as an extra last
+  # argument (defk_slice_init) unless the module opted out
+  defp yields?(k), do: k.yield and k.sp_count > 0
 
-  defp emit_init(module, kernels, nif_name, fault_hooks?) do
+  defp emit_init(module, kernels, nif_name, fault_hooks?, adaptive?) do
     funcs =
       Enum.map(kernels, fn k ->
-        "  {\"#{nif_name.(k.name)}\", #{k.arity}, nif_#{k.cid}, 0},\n" <>
-          "  {\"#{sliced_name(nif_name.(k.name))}\", #{k.arity + 2}, nif_#{k.cid}, 0},\n"
+        if adaptive? and yields?(k),
+          do:
+            "  {\"#{Defk.ElixirMode.native_name(k.name)}\", #{k.arity + 1}, nif_#{k.cid}, 0},\n",
+          else: "  {\"#{nif_name.(k.name)}\", #{k.arity}, nif_#{k.cid}, 0},\n"
       end)
 
     [

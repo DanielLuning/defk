@@ -808,6 +808,10 @@ Elixir answer for BLAKE2b; BLAKE3 is not in OpenSSL.
   `monte_carlo_rtp` at 1M spins: 48 kernel tasks of ~0.7 ms on 2-3
   schedulers, verdict ~1x, while at 10M (~5 ms chunks) they spread.
 - **Conditions:** under load (load average 5-7 on 12 cores), OTP 29.0.3.
+- **Since `defk-04y`:** these are the numbers with 250 us slices (`use Defk,
+  adaptive_slice: false`). By default a kernel on a crowded run queue now
+  takes 50 us slices for its first millisecond, which recovers most of the
+  spread (4.9).
 - **Source:** `defk-8qs` comments 2026-10-10, `defk-6lr`, [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs).
 - **Status:** provisional.
 
@@ -848,9 +852,10 @@ slice; Elixir uses that many in about 5 us.
   before it (4); `bump_reductions(4000)` + yield before the call (15-18 ->
   12-13 ms, 3 -> 4 schedulers). Shortening the kernel slice to 50 us spreads
   (12 schedulers, 5.8-7.4 ms) but costs 11-18% on one scheduler, so it was
-  not adopted.
+  not adopted for every call; a short first slice only on a crowded run
+  queue was, and is the default (4.9).
 - **Conditions:** under load.
-- **Source:** `defk-8qs`, `defk-6lr` (open), [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md#measuring-correctly) rule 7, [`image_blur.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_blur.exs).
+- **Source:** `defk-8qs`, `defk-6lr` (closed by `defk-04y`, 4.9), [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md#measuring-correctly) rule 7, [`image_blur.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_blur.exs).
 - **Status:** provisional.
 
 ### 4.4 Elixir: one chunk per scheduler, and more chunks don't help
@@ -904,6 +909,75 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
   1.5-2.3 ms against ~1.9 ms for one call.
 - **Source:** [`geo_nearest.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geo_nearest.exs), [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs).
 - **Status:** measured (geo_nearest); provisional (rolling_stats).
+
+### 4.9 A short first slice on a crowded run queue spreads short kernel calls (default since `defk-04y`)
+
+A yielding kernel's function reads `:erlang.statistics(:total_run_queue_lengths)`
+and passes it to its NIF. When processes are waiting, the call yields every
+50 us instead of every 250 us for its first millisecond, so it charges
+reductions five times faster there and ERTS wakes idle schedulers (4.2). A lone
+call keeps 250 us. `use Defk, adaptive_slice: false` turns it off.
+
+- **Cost of the check per call** (ns, idle / 11 schedulers busy):
+  `statistics(:total_run_queue_lengths)` 7.8 / 9.3;
+  `statistics(:run_queue_lengths)` plus `:lists.nth` of `system_info(:scheduler_id)`
+  (the caller's own queue) 60 / 81; `statistics(:run_queue)` 43 / 1954 (it
+  locks every queue); `system_info(:scheduler_id)` alone 3. A tiny yielding
+  call (`count_primes(10)`) goes from 40-43 to 49-58 ns with the total check
+  and to 102-132 ns with the own-queue check. The NIF API has no run-queue
+  length, so the check is a BIF call in Elixir. 9 ns is 0.0014% of a 0.65 ms call.
+- **Lone calls** (`count_primes`, median of 15 interleaved rounds, vs the
+  250 us slice): 0.65 ms call -0.6 to +0.1% on 12 schedulers, -0.2 to -0.1%
+  on one; 2M (~0.5 s) +0.1 to +0.2%: noise. A 50 us slice for the whole call
+  (`fixed50`) costs +8.1% (0.65 ms) and +7.1% (2M) on one scheduler and
+  +0.4% / +7.1% on 12.
+- **Spread** (wall ms / schedulers used, median of 9 rounds, two sessions;
+  250 us -> adaptive (total check) -> own-queue check -> `fixed50` ->
+  250 us under `+swt very_low`; Elixir of equal length on a default VM):
+  - 48 x 0.65 ms, `Task.async_stream`: 13.6-13.7 / 3 -> 5.6-5.7 / 10-11 ->
+    5.8-5.9 / 10 -> 5.6-5.7 / 10-11 -> 4.4 / 10-12; Elixir 4.6 / 11.
+  - 48 x 0.65 ms, `Task.async` + `Task.await_many`: 4.6-5.0 / 11 -> 4.3-4.5
+    / 12 (all treatments 4.3-4.9).
+  - 12 x 0.55 ms, `Task.async_stream`: 4.2 / 2 -> 2.1 / 7 -> 2.4 / 5 ->
+    2.1-2.2 / 6 -> 1.2-1.3 / 10-11; Elixir 1.3 / 11.
+  - 48 x 5 ms (already spread): 35.5-35.7 / 11-12 -> 31.4-31.6 / 12 ->
+    31.8-32.3 / 12 -> 31.9-33.0 / 11-12 -> 30.9-31.4 / 11.
+- **Examples** (12 or 48 chunks under `Task.async_stream`, median of 15, two
+  sessions; 250 us -> adaptive -> own-queue -> `fixed50` -> `+swt very_low`):
+  `batched_levenshtein` 234k words, 12 chunks 3.8-3.9 / 2 -> 1.9 / 5-6 ->
+  2.2 / 4-5 -> 1.9-2.0 / 5 -> 1.0-1.1 / 9-10; `monte_carlo_rtp` 1M, 48
+  chunks 12.7 / 3 -> 5.5 / 10 -> 5.7-5.9 / 9 -> 5.5 / 10 -> 4.6 / 8-9;
+  `cosine_topk` 100k, 12 chunks 7.7-7.8 / 5 -> 3.9-4.1 / 9-10 -> 4.5 / 9
+  -> 4.1 / 9-10 -> 3.7 / 8-9. One call: 5.6 ms, 30 ms and 20 ms. The adaptive
+  slice recovers 70-93% of what `+swt very_low` gains (synthetic and
+  examples); under `+swt very_low` the treatments do not differ.
+- **Tick gap** (1 ms ticker, one scheduler, 2M `count_primes`): lone, p99
+  2.25 ms for every treatment; with three more kernel calls queued, p99
+  3.2 ms for 250 us and adaptive alike (the slice is short only for the
+  first ms), 2.05 ms for `fixed50`; over 15 runs of the final code, worst
+  gap per run median 3.30 ms (max 3.99) at 250 us and 3.34 ms (max 3.83)
+  adaptive. A slice is never longer than 250 us, so the gap never grows.
+- **Didn't help:** switching to 50 us inside the kernel after a resume that
+  waited more than 20 us (no Elixir check): 48 x 0.65 ms 12.7 / 3 against
+  13.6 / 3, `batched_levenshtein` 3.0 / 2 against 3.9 / 2. The first 250 us slice already charges
+  4000 reductions, and the queue's wakeup counter needs more of them sooner.
+  The own-queue check spreads slightly less than the total check and costs
+  7x more; `statistics(:run_queue)` costs ~2 us when schedulers are busy.
+- **Still better:** `+swt very_low` (4.3) beats the adaptive slice by
+  another 1.1-1.8x on these fan-outs. Fewer, bigger chunks or `Task.async` +
+  `Task.await_many` remain the first fix.
+- **Conditions:** load average 2.2-2.9 at the start of each block (rising
+  to 4-5 during some), OTP 29.0.3, 12 schedulers; treatments interleaved in
+  one VM. The `fixed50` and in-kernel-gap columns used the experimental API
+  of commit c552fb1.
+- **Source:** `defk-04y`, `defk-6lr`, [`bench/run_queue_check_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/run_queue_check_cost.exs), [`bench/adaptive_slice.exs`](https://github.com/DanielLuning/defk/blob/main/bench/adaptive_slice.exs), [`bench/adaptive_slice_examples.exs`](https://github.com/DanielLuning/defk/blob/main/bench/adaptive_slice_examples.exs), `defk_slice_init` in [`priv/defk_runtime.h`](https://github.com/DanielLuning/defk/blob/main/priv/defk_runtime.h).
+- **Status:** measured (moderate load noted).
+
+<!-- defk-example skip: generated code, shown for what a yielding kernel's function does -->
+```elixir
+# what `defk spin(n :: i64) :: i64` (a yielding kernel) defines
+def spin(n), do: __defk_native_spin__(n, :erlang.statistics(:total_run_queue_lengths))
+```
 
 ---
 
