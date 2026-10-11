@@ -16,9 +16,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-djy",
+  "comments": [
+    {
+      "text": "Resolution (branch defk-djy.9/hexdocs-cold-test, commits 4164204, 94f7c20). Log: docs/cold-tests/hexdocs-entropy.md (HexDocs-only session, 2026-10-11, fresh Sonnet), referenced from docs/verdict.md DX.\n| # | point | resolution |\n| 1 | footer = local abs path | fixed: URL in any dependent project, path only inside the defk repo (lib/defk/errors.ex docs/2; moduledoc, language.md 11, getting-started) |\n| 2 | dead links in built docs | fixed: ex_doc writes doc/*.md links unrewritten; mix.exs docs alias rewrites them to flat page names and fails on any relative link in doc/*.md|html leading nowhere; docs_checks_test checks every extra link names a HexDocs page |\n| 3 | no log2 | fixed: :math.log2/log10 get rewrite log(x)/log(2.0) + last-bit caveat; language.md Builtins, cheatsheet, getting-started; builtin = defk-ngj |\n| 4 | byte_size wording | fixed: 'is not a kernel builtin'; docs explain the wordings |\n| 5 | errors stop at first group | documented (getting-started, language.md 11); ticket defk-uw9 |\n| 6 | generic hints | fixed: unknown-type hints for list()/String.t, map counter hint, array-in-branch no longer guesses a[0]/b[0]; rows in language.md and cheatsheet; for-collect rewrite = defk-djy.13 |\n| 7 | alloc in loop | fixed: getting-started trip-up with checked example; report note = defk-djy.15 |\n| 8 | no histogram guidance | measuring.md points at performance 2.12; catalog entry = defk-9p6.28 |\n| 9 | Defk.Bench / Mix.install / check: | fixed in measuring.md section 4 |\n| 10 | all-schedulers recipe | fixed: measuring.md checked script |\n| 11 | [u8] property | fixed: testing.md boundary advice + checked BytesTest |\n| 12 | release caveat | fixed: getting-started caveat; deploying.md inline steps + sketch Dockerfile (comment on defk-n8f) |\n| 13 | scope planned vs exploring; text as [u8] | fixed in scope.md |\n| 14 | provisional 5(b) numbers | fixed: scope.md marks the list provisional |\n| 15 | README as main page | ticket defk-djy.14 (ready-for-human, options + recommendation) |\nAlso fixed 2 pre-existing dialyzer warnings in test/support from defk-djy.12. CI steps all green (full mix test 1358 passed before the merge of main; docs tests rerun after).",
+      "timestamp": "2026-10-11T12:54:16Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Docs cold test against the built HexDocs",
   "type": "task",
-  "updated_at": "2026-10-11T12:29:38Z"
+  "updated_at": "2026-10-11T12:54:16Z"
 }
