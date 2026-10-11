@@ -304,7 +304,8 @@ defp crc64_whole(<<b, rest::binary>>, crc),
 ```
 
 When 32-bit values suffice the JIT is fast: CRC32C by slicing-by-8 runs at
-1.6 GB/s in Elixir, and a kernel is only 1.39-1.65x ahead (`hashes.exs`).
+1.6 GB/s in Elixir, and a kernel with the same tables is only 1.39-1.65x
+ahead (`hashes.exs`). The `crc32c/3` builtin changes that (6.21).
 
 ### 2.5 Bit syntax does not beat `bsr`/`band` for splitting a bignum
 
@@ -1518,14 +1519,94 @@ for b <- 0..(nb - 1)//1, reduce: {h0, h1, h2, h3, h4, h5, h6, h7} do
 end
 ```
 
+### 6.21 CRC32C: the `crc32c/3` builtin, in three streams, is level with crc32cer
+
+`crc32c(crc, x, 64)` runs the CPU's CRC32C instruction where it has one and
+a slicing-by-8 table step elsewhere, chosen once per kernel library at run
+time (see [Hardware builtins](language.md#hardware-builtins)). One
+instruction waits for the previous one, so a single chain is
+latency-bound; three independent streams over thirds of each 6 KB block,
+joined by advancing the register over 2 KB of zeros (a linear map: four
+table lookups), keep three in flight. That is what Google's crc32c, inside
+crc32cer, does on arm64.
+
+- **Numbers** (4 MB message, best of 5, three runs of `hashes.exs`):
+  - kernel, instruction, three streams: 0.147-0.165 ms (25-28 GB/s);
+  - crc32cer 1.1.4: 0.134-0.140 ms, so the kernel is 0.84-0.91x of it;
+  - kernel, table fallback (`DEFK_PORTABLE_BUILTINS=1`), three streams:
+    0.68-0.70 ms (6 GB/s);
+  - the previous kernel, slicing-by-8 without the builtin: 1.83-1.88 ms;
+  - Elixir slicing-by-8 (the optimised baseline): 2.59-2.65 ms, so 17-18x
+    for the kernel, verdict `good` (it was `marginal`, 1.39-1.65x);
+  - one chain, one word per step: instruction 0.39 ms (10.8 GB/s, also in
+    plain C), table 1.89 ms;
+  - 1k 32-byte keys: Elixir 0.031-0.033 ms, the kernel batch 0.033-0.036
+    ms with the packing (0.89-0.94x): short keys stay with Elixir or
+    crc32cer.
+- **What did not help, or cost:** the instruction as a C intrinsic returns
+  a 32-bit value, and widening it to the kernel's `i64` put a `mov w, w` on
+  the chain: 0.536 ms instead of 0.39 for one chain. The runtime keeps the
+  register 64-bit (the instruction clears the top half), which removed it.
+  Three streams in Elixir (the same slicing-by-8 step on three 2 KB
+  sub-binaries, joined with the shift table) are 2.2x slower than one
+  chain, 5.6-6.4 vs 2.57-2.59 ms: the JIT's cost is the operations, not
+  the chain, so the Elixir baseline stays one chain.
+- **Conditions:** Apple M4 Pro, Apple clang 21, OTP 29, load averages 25-40
+  (other agents running); the rows of one run are timed one after the
+  other.
+- **Source:** [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs), `defk-ulk.4`.
+  - arm64 Linux, Debian with GCC 14 in a podman VM on the same M4 (the
+    `getauxval` check picks the instruction; `crc32c_test.exs` passes
+    there): three streams 0.194-0.195 ms, table 0.721-0.722 ms; one chain
+    0.402 ms, table 1.78 ms.
+- **Status:** provisional (loaded machine). arm64 macOS timed; arm64 Linux
+  only in a VM on the same CPU; x86-64 compiled (Apple clang, zig cc for
+  x86_64-linux-gnu) and checked, not timed (the SSE4.2 path of the
+  runtime code ran under Rosetta 2 and agreed, which is not an x86
+  timing).
+
+<!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
+```elixir
+# three streams of @s bytes, then shift(shift(c0) ^ c1) ^ c2
+for j <- i..(i + @s - 8)//8, reduce: {crc, 0, 0} do
+  {c0, c1, c2} ->
+    {crc32c(c0, w(b, j), 64), crc32c(c1, w(b, j + @s), 64), crc32c(c2, w(b, j + 2 * @s), 64)}
+end
+```
+
+### 6.22 Choosing a hardware instruction at run time costs nothing measurable
+
+A portable build cannot assume a CPU feature, so `crc32c/3` checks once per
+kernel library (cached; every later call reads the cached state and
+branches) and falls back to a table. The instruction is inline assembly, so
+it is inlined even where the build target lacks the feature; GCC will not
+inline a `target("+crc")` function into code built without it.
+
+- **Numbers** (4 MB, one word per step, best of 15, three rounds):
+  - in a kernel: 0.389-0.393 ms with the check, 0.390-0.393 ms with the
+    instruction called directly;
+  - in plain C (Apple clang): 389 us both ways, with or without an opaque
+    call per iteration standing in for a safepoint;
+  - the intrinsic in a `target("+crc")` function under GCC 16 built for
+    plain armv8-a: 648 us (a call per word); the inline assembly 400 us;
+  - a Linux arm64 build (zig cc, musl, in the podman VM on the M4):
+    397-400 us dispatched, 391-398 us direct; the table 1.76-1.78 ms;
+  - a kernel built by Debian's GCC 14 for its default armv8-a (no `crc`
+    feature at build time, so the check is real): 0.402 ms, level with
+    the plain-C direct loop.
+- **Conditions:** as 6.21.
+- **Source:** `defk-ulk.4` comment, scratch benchmark of the runtime code.
+- **Status:** provisional (loaded machine); x86-64 not timed.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
 
 ### 7.1 Hardware instructions and SIMD libraries beat a portable kernel
 
-- **Numbers:** CRC32C: crc32cer (hardware CRC32C) is 14x faster than the
-  kernel. SHA-256: `:crypto` on the SHA instructions 100-104 ns per chain step
+- **Numbers:** CRC32C: crc32cer (hardware CRC32C) was 14x faster than the
+  table kernel; with the `crc32c/3` hardware builtin (6.21) the kernel is
+  0.84-0.91x of it. SHA-256: `:crypto` on the SHA instructions 100-104 ns per chain step
   against 175-178 for the portable kernel. Dense dot-product top-k: Nx +
   EXLA 6-8x faster than defk. Keccak: ex_keccak (tiny-keccak) is ~1.7x faster
   than the kernel on 10k x 32-byte messages (per-message overhead) and level
@@ -1536,8 +1617,8 @@ end
 A target flag does not close these gaps. At every arm64 level, and as
 remarks for x86-64 up to v4, clang emits no CRC32, SHA or SHA3 instruction
 from the kernels' scalar code: `crc32c` runs at 1.00x with `-mcpu=native`.
-Closing them needs a hardware builtin (CRC32C) or vector values (UTF-8,
-base64, substring search). See [`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md) (`defk-ulk.1`;
+Closing them needs a hardware builtin (CRC32C, done: 6.21) or vector values
+(UTF-8, base64, substring search). See [`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md) (`defk-ulk.1`;
 provisional).
 
 The wrapper jobs and what would reopen each are in
@@ -1767,4 +1848,5 @@ example or close a workload ticket, add its entries and its line here.
   `defk-t11.5`, `defk-6g6`, `defk-j5n`, `defk-qx3`, `defk-z69`, `defk-t11.2`,
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
-  `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`.
+  `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
+  `defk-ulk.4`.

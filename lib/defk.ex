@@ -100,7 +100,7 @@ defmodule Defk do
   | `__defk_report__/0` | unstable | the fast-path report as data, `[{kernel, line, fact}]`; read it with `Defk.Report.print/1` |
   | `__defk_lib__/0` | unstable | the path of the compiled NIF library (`.so`) |
   | `__defk_kernels__/0` | unstable | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
-  | `__defk_stats__/0` | unstable | the library's runtime counters: `%{frames_live:, promotions:, yields:}` |
+  | `__defk_stats__/0` | unstable | the library's runtime counters: `%{frames_live:, promotions:, yields:, crc32c:}` |
 
   **Public** functions keep their meaning; a change would come with a
   deprecation. **Unstable** ones are for debugging and tools, and their
