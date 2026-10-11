@@ -2,7 +2,8 @@
 
 Two HexDocs pages hold text generated from the compile-error registry
 (`Defk.Errors`, `lib/defk/errors.ex`). After changing the registry,
-regenerate and paste:
+regenerate and paste. Run `mix compile` first: otherwise `mix run` prints
+"Compiling N files (.ex)" into the output, and that line ends up in the page.
 
 - `docs/compile-errors.md`, the error catalogue (its own HexDocs page; the
   compile error footer links `<page>#<code>`): run

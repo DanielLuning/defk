@@ -20,8 +20,6 @@ anchor `#<code>` is the same on GitHub and on HexDocs.
 
 ## Codes
 
-Compiling 21 files (.ex)
-Compiling 21 files (.ex)
 ### kernel-head
 
 A kernel head is `name(arg :: type, ...) :: return_type`.
@@ -267,7 +265,7 @@ defk f(x), do: x * 2
 A clause parameter is an integer literal (i64), true/false (bool), a variable or _, each variable once, with an optional guard.
 
 - kind: outside the kernel subset (permanent)
-- why: the clauses compile to a case over the parameters, which matches single i64 and bool values; a function head has no variables to pin
+- why: the clauses compile to a case over the parameters, which matches single i64 and bool values: a kernel has no binaries, lists or maps to take apart in a head, and a function head has no variables to pin
 - hint: match a literal, a variable or _, and test the rest in the guard
 
 Rejected:
