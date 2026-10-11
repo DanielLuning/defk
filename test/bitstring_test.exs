@@ -200,6 +200,7 @@ end
 
 defmodule Defk.BitstringTest do
   use ExUnit.Case, async: false
+  import Defk.Test.Frames
   use Defk.Properties
 
   alias Defk.BitstringTest.K
@@ -350,7 +351,7 @@ defmodule Defk.BitstringTest do
     test "an error mid-build frees the buffer and leaves no frame" do
       xs = List.duplicate(1, 5000) ++ [2]
       assert {:raise, %ArgumentError{}} = agrees(:pack, [i64s(xs), 1])
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     end
   end
 
@@ -483,20 +484,35 @@ defmodule Defk.BitstringTest do
       try do
         :erlang.garbage_collect()
         base = :erlang.memory(:binary)
-        pid = spawn(fn -> K.pack(xs, 64) end)
-        ref = Process.monitor(pid)
-
-        # suspended between two steps with a buffer of at least 16 MB built
-        wait_until(fn -> :erlang.memory(:binary) > base + 16_000_000 end, 1)
-        assert Process.alive?(pid), "the kernel finished before it could be killed"
-        Process.exit(pid, :kill)
-        assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, @timeout
+        kill_mid_build(xs, base)
 
         # the frame, and the buffer it owned, are gone
-        wait_until(fn -> K.__defk_stats__().frames_live == 0 end)
+        assert_frames_live(K)
         wait_until(fn -> :erlang.memory(:binary) < base + 8_000_000 end)
       after
         K.__defk_force_yields__(false)
+      end
+    end
+
+    # Spawns the build and kills it once a 16 MB buffer is built. Under heavy load
+    # this process can be starved until the kernel has already finished; that
+    # attempt proves nothing, so try again (the finished one has freed its frame).
+    defp kill_mid_build(xs, base, attempts \\ 20) do
+      pid = spawn(fn -> K.pack(xs, 64) end)
+      ref = Process.monitor(pid)
+
+      # suspended between two steps with a buffer of at least 16 MB built
+      wait_until(fn -> :erlang.memory(:binary) > base + 16_000_000 end, 1)
+
+      if Process.alive?(pid) do
+        Process.exit(pid, :kill)
+        assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, @timeout
+      else
+        assert_receive {:DOWN, ^ref, :process, ^pid, _}, @timeout
+        assert attempts > 1, "the kernel finished before it could be killed, every time"
+        assert_frames_live(K)
+        wait_until(fn -> :erlang.memory(:binary) < base + 8_000_000 end)
+        kill_mid_build(xs, base, attempts - 1)
       end
     end
   end

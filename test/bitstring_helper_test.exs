@@ -135,6 +135,7 @@ end
 
 defmodule Defk.BitstringHelperTest do
   use Defk.Case, async: false
+  import Defk.Test.Frames
   use Defk.Properties
 
   alias Defk.BitstringHelperTest.K
@@ -304,7 +305,7 @@ defmodule Defk.BitstringHelperTest do
 
       # the frames of the finished calls go with this process's garbage
       :erlang.garbage_collect()
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     end
   end
 
