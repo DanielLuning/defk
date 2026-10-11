@@ -39,6 +39,7 @@ end
 
 defmodule Defk.HeapBinaryYieldTest do
   use ExUnit.Case, async: true
+  import Defk.Test.Frames
 
   alias Defk.HeapBinaryYieldTest.K
 
@@ -132,8 +133,7 @@ defmodule Defk.HeapBinaryYieldTest do
 
       # the kernel kept yielding after the GC between its steps
       wait_until(fn -> K.__defk_stats__().yields > after_gc end)
-      wait_until(fn -> K.__defk_stats__().frames_live == 0 end)
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     after
       K.__defk_force_yields__(false)
     end

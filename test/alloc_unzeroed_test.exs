@@ -394,6 +394,7 @@ end
 
 defmodule Defk.AllocUnzeroedTest do
   use ExUnit.Case, async: false
+  import Defk.Test.Frames
   use Defk.Properties
 
   alias Defk.AllocUnzeroedTest.{K, Shapes}
@@ -470,7 +471,7 @@ defmodule Defk.AllocUnzeroedTest do
       assert {:raise, %ArgumentError{message: "stop"}} = agree(:raise_mid, [10, 4])
       assert agree(:raise_mid, [3, 4]) == {:ok, <<1, 1, 1>>}
       assert agree(:slow_fill, [7]) == {:ok, i64s([0, 1, 3, 6, 10, 0, 1])}
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     end
 
     test "under forced yields, a resume in the middle of the writes" do
@@ -487,7 +488,7 @@ defmodule Defk.AllocUnzeroedTest do
         K.__defk_force_yields__(false)
       end
 
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     end
 
     test "the near misses read zeros where they did not write" do
