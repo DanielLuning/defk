@@ -107,6 +107,42 @@ Mix them with edge values:
   ([yielding](../language.md#9-yielding-and-the-runtime-contract-in-practice));
 - binaries whose size is not a multiple of the element size, and values
   that do not fit a narrow element type on write.
+- the boundaries of your kernel's own structure: for a kernel that works in
+  windows or rows of `k` elements, lengths `k - 1`, `k`, `k + 1` and `2k`,
+  and a last window that is cut short.
+
+For a `[u8]` kernel, the input is the binary itself, so `stream_data`'s
+`binary/1` generates it directly. Mix generated lengths with the boundary
+ones (here 2048, the strip length, and the edges of the byte values that
+`limit` cuts at):
+
+<!-- defk-example exunit: Bytes from docs/guides/testing.md -->
+```elixir
+defmodule BytesTest do
+  use ExUnit.Case, async: true
+  use ExUnitProperties
+
+  import Defk.Test, only: [assert_agrees: 3]
+
+  @edges [0, 1, 2047, 2048, 2049, 4096]
+
+  test "agrees at the boundary lengths" do
+    for n <- @edges, limit <- [0, 1, 255, 256] do
+      assert_agrees(Bytes, :count_below, [:crypto.strong_rand_bytes(n), limit])
+    end
+  end
+
+  property "agrees on generated binaries" do
+    check all(
+            n <- one_of([integer(0..100), member_of(@edges)]),
+            bytes <- binary(length: n),
+            limit <- integer(-1..257)
+          ) do
+      assert_agrees(Bytes, :count_below, [bytes, limit])
+    end
+  end
+end
+```
 
 defk's own suite draws from such generators
 ([`test/support/generators.ex`](https://github.com/DanielLuning/defk/blob/main/test/support/generators.ex))

@@ -71,6 +71,7 @@ defmodule Defk.LanguageDoc.Isolated do
   # ------------------------------------------------------------ the child --
 
   @doc false
+  @spec main(String.t()) :: no_return()
   def main(file) do
     jobs = file |> File.read!() |> :erlang.binary_to_term()
     File.write!(file <> ".out", :erlang.term_to_binary(execute(jobs)))

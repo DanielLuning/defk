@@ -1,0 +1,33 @@
+defmodule App.Entropy do
+  use Defk
+
+  @window 4096
+
+  defk entropy(data :: [u8]) :: [f64] do
+    n = div(len(data), @window)
+    out = alloc(f64, n)
+    counts = alloc(i64, 256)
+
+    for w <- 0..(n - 1)//1 do
+      for i <- 0..255//1 do
+        counts[i] = 0
+      end
+
+      for i <- 0..(@window - 1)//1 do
+        b = data[w * @window + i]
+        counts[b] = counts[b] + 1
+      end
+
+      h =
+        for c <- counts, c > 0, reduce: 0.0 do
+          acc ->
+            p = c / @window
+            acc - p * log(p) / log(2.0)
+        end
+
+      out[w] = h
+    end
+
+    out
+  end
+end

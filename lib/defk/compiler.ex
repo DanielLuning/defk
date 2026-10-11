@@ -476,8 +476,17 @@ defmodule Defk.Compiler do
 
     hint =
       case t do
-        {n, _, ctx} when is_atom(n) and is_atom(ctx) and is_map_key(instead, n) ->
+        {n, _, ctx} when is_atom(n) and (is_atom(ctx) or ctx == []) and is_map_key(instead, n) ->
           [hint: "the kernel type for #{n} is #{instead[n]}"]
+
+        {:list, _, ctx} when is_atom(ctx) or is_list(ctx) ->
+          [
+            hint:
+              "a list is passed as a packed array, [f64] for floats or [i64] for integers, built in Elixir with for x <- xs, into: <<>>, do: <<x::float-64-native>>"
+          ]
+
+        {{:., _, [{:__aliases__, _, [:String]}, :t]}, _, []} ->
+          [hint: "text is a [u8]: a binary in Elixir, in and out of a kernel"]
 
         [{n, _, ctx}] when is_atom(n) and is_atom(ctx) ->
           [hint: "array element types are #{@elems_text}"]
@@ -1963,21 +1972,11 @@ defmodule Defk.Compiler do
 
     case Enum.uniq_by(vals, & &1.t) do
       [%{t: {:arr, _} = t} | _] ->
-        rewrite =
-          case node do
-            {:if, _, [c, [do: {a, _, x}, else: {b, _, y}]]}
-            when is_atom(a) and is_atom(x) and is_atom(b) and is_atom(y) ->
-              [rewrite: "if #{Macro.to_string(c)}, do: #{a}[0], else: #{b}[0]"]
-
-            _ ->
-              []
-          end
-
+        # no rewrite: what to do instead depends on how the array is used
         err!(
           node,
           "array-in-branch",
-          "this #{name} gives an array (#{fmt(t)})#{of}; arrays from #{name} branches are not supported yet",
-          rewrite
+          "this #{name} gives an array (#{fmt(t)})#{of}; arrays from #{name} branches are not supported yet"
         )
 
       [%{t: t}] ->
@@ -2590,7 +2589,12 @@ defmodule Defk.Compiler do
 
   defp builtin(f, [a], node, _) when f in @math1 do
     numeric!(a, arg(node, 0), "#{f}/1")
-    c = if f in [:sqrt, :log, :exp], do: "defk_#{f}(ctx, #{to_f(a)})", else: "#{f}(#{to_f(a)})"
+
+    c =
+      if f in [:sqrt, :log, :log2, :log10, :exp],
+        do: "defk_#{f}(ctx, #{to_f(a)})",
+        else: "#{f}(#{to_f(a)})"
+
     val(c, :f64)
   end
 
@@ -2633,6 +2637,8 @@ defmodule Defk.Compiler do
     sqrt: "a number",
     exp: "a number",
     log: "a number",
+    log2: "a number",
+    log10: "a number",
     sin: "a number",
     cos: "a number",
     band: "two integers",
@@ -3454,7 +3460,7 @@ defmodule Defk.Compiler do
   # the float checks, which make a strip worth flagging, and the other checks
   # that may join them (defk-hki): i64/u64 overflow, element access, narrow
   # write ranges and float-to-integer conversions.
-  @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log exp pow to_f32)
+  @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log log2 log10 exp pow to_f32)
   @nf_joins ~w(add_i64 sub_i64 mul_i64 neg_i64 abs_i64 add_u64 sub_u64 mul_u64 trunc round
                get_in_f64 to_u8 to_i16 to_i32) ++
               for(t <- ~w(f64 i64 u8 u64 i16 i32 f32), op <- ~w(get put), do: "#{op}_#{t}")

@@ -127,7 +127,9 @@ defmodule Defk.Test do
     {"non-finite", :non_finite},
     {"inf or NaN", :non_finite},
     {"sqrt of negative", :non_finite},
-    {"log of non-positive", :non_finite}
+    {"log of non-positive", :non_finite},
+    {"log2 of non-positive", :non_finite},
+    {"log10 of non-positive", :non_finite}
   ]
 
   @arg [

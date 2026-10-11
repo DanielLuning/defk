@@ -458,6 +458,8 @@ Map.update(acc, name, {t, t, t, 1}, fn {mn, mx, s, c} -> {min(mn, t), max(mx, t)
 
 ### 2.12 Dense counters: `:atomics` plus one rebuild for big batches, sorted keys for small ones
 
+For counting bytes (a 256-bin histogram, per window or over a whole binary) see 2.16, "Counting bytes".
+
 - **Numbers:** fold hashes into a 16k-register HyperLogLog, ms at 100 / 1k /
   10k / 100k: anchor (bit-by-bit rank) 0.044 / 0.17 / 3.1 / 17-24; top-down
   rank 0.036 / 0.10 / 2.5 / 10.3; sorted integer keys + splice 0.019 / 0.058
@@ -528,6 +530,90 @@ al = band(t, 0xFFFFFFFF)
 bh = band(bsr(th, 24) + bsl(tl, 8), 0xFFFFFFFF)   # th, tl: b ^ c
 # slow: one word, a bignum above 2^59
 a = band(a + b + x, 0xFFFFFFFFFFFFFFFF)
+```
+
+### 2.15 LZ-style decoders in Elixir: copy each match with `binary_part/3`, and match the input
+
+An LZ4 or Snappy decoder appends to one output binary, and a match copies
+earlier output. Copying a match as one `binary_part/3` of the output (or
+`:binary.copy/2` of the offset-long pattern when the match overlaps itself)
+is 3-4x faster than copying it byte by byte with `:binary.at/2`; reading the
+input by matching the rest of the binary beats indexing it with
+`binary_part/3` and `:binary.at/2`. iodata output is not an option: a match
+reads output up to 64 KB back. A block stored as one literal (incompressible
+data) is a sub-binary of the input in Elixir, with no copy at all.
+
+- **Numbers:** 64 KB JSON-like block, Snappy / LZ4: byte-by-byte match
+  copies 650-820 us / 0.7-1.4 ms; `binary_part` copies 175-240 us /
+  230-450 us; positional input 310-325 us / 295-320 us; the kernels 63-72 us
+  / 70-77 us. Incompressible 64 KB: Elixir 0.6-1 us, kernel 15 us (it copies
+  every byte); 4 MB: 0.08-0.7 ms against 0.95 ms. The `binary_part` times
+  were bimodal (230 or 450 us for the same LZ4 call in one run, a GC before
+  every sample).
+- **Conditions:** best of interleaved rounds, three runs, load averages 24-85.
+- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs), `defk-52v.3`.
+- **Status:** provisional.
+
+<!-- defk-example skip: a fragment, the match copy of the Elixir decoders without its offset checks -->
+```elixir
+# fast: one copy per match, the overlap as a repeated pattern
+if off >= l do
+  <<out::binary, binary_part(out, size - off, l)::binary>>
+else
+  pat = binary_part(out, size - off, off)
+  <<out::binary, :binary.copy(pat, div(l, off))::binary, binary_part(pat, 0, rem(l, off))::binary>>
+end
+# slow: a byte at a time
+bytes(<<out::binary, :binary.at(out, from)>>, from + 1, l - 1)
+```
+
+### 2.16 Counting bytes: 16-bit pairs into `:atomics`, eight per step; a kernel is still 6-12x faster
+
+A byte histogram (256 counts) or a histogram per window (entropy) is an
+indexed increment per byte, and Elixir's cheapest one is a BIF call:
+`:atomics.add/3`. Fewer calls is what helps: count 16-bit pairs into a
+65,536-slot `:atomics` (one call per two bytes) and fold the pairs into the
+256 bins once. The fold costs ~0.35 ms, so below ~512 KB count single bytes,
+eight per binary-pattern step. `:atomics` beats `:counters`, and anything
+that copies (a map, a tuple) or scans per value (`:binary.matches/2` 256
+times) loses. For windows, read and reset each bin with one
+`:atomics.exchange(a, i, 0)`. Split over the schedulers with a table per
+chunk and sum them; a shared `:counters` with `write_concurrency` is slower.
+No OTP BIF counts bytes.
+
+- **Numbers:** histogram of 16 MB, one process, ms: pairs into `:atomics`
+  43.0-43.9 (390 MB/s); `:atomics` 8 bytes per step 75-77, 1 byte 91-92;
+  `:counters` 8 bytes per step 101-103 (163 MB/s), 1 byte 112-115,
+  comprehension 116-123; at 1 MB (x16 for 16 MB) `Enum.frequencies` of
+  `bin_to_list` 136-169, `Map.update` 202-209, a 256-tuple with `setelement`
+  62-80, `:binary.matches/2` per value 24.7-26.4. In 12 chunks: pairs
+  8.7-9.9, `:atomics` 8-byte 12.1-13.3, `:counters` 8-byte 15.9-17.7, one
+  shared `:counters` 23-26. Pairs against bytes, one process: 4 KB 0.38 /
+  0.023, 64 KB 0.95-0.98 / 0.30, 512 KB 2.24-2.34 / 2.31, 1 MB 3.6-3.8 /
+  4.7. Entropy of 4,096 windows of 4 KiB: `:counters` get + put 121-123,
+  `:atomics` exchange 90-91, plus a tuple of per-count terms (no log per
+  bin) 83.5-84.3; in 12 chunks 13.4-14.4. The kernel: 3.6-3.8 ms one call
+  (4.6 GB/s), 1.40-1.71 ms in 12 chunks (5.5-6.6x parallel vs parallel,
+  11.4-12.7x one process vs one call, 19-28x at 4-64 KB); entropy 4.7-5.2
+  ms one call, 1.83-2.0 ms in 12 chunks (6.7-10.2x, 17.0-17.9x).
+- **Conditions:** 16 MB, half random bytes and half text; best of 5 in two
+  interleaved rounds (variants), best of 9 (`Defk.Bench`, seven runs);
+  under load (load average 12-31 on 12 cores).
+- **Source:** [`byte_histogram.exs`](https://github.com/DanielLuning/defk/blob/main/examples/byte_histogram.exs), `defk-9p6.28`; the cold test that asked for it, `docs/cold-tests/hexdocs-entropy.md` (`defk-djy.9`).
+- **Status:** provisional.
+
+<!-- defk-example run: bin = :binary.copy(<<1, 2, 3>>, 6) -->
+```elixir
+# fast (from ~512 KB): 16-bit pairs, one :atomics.add per two bytes (unrolled 8 per step in the source)
+a = :atomics.new(65_536, signed: false)
+for <<pair::16 <- bin>>, do: :atomics.add(a, pair + 1, 1)
+# then fold slot i into bins (i >>> 8) + 1 and (i &&& 255) + 1 once
+# fast below ~512 KB: bytes, 8 per step
+c = :atomics.new(256, signed: false)
+for <<b <- bin>>, do: :atomics.add(c, b + 1, 1)
+# slow
+bin |> :binary.bin_to_list() |> Enum.frequencies()
+for <<b <- bin>>, reduce: %{}, do: (m -> Map.update(m, b, 1, &(&1 + 1)))
 ```
 
 ---
@@ -1182,7 +1268,126 @@ d = rotr(bxor(d, a), 16, 32)                               # one ror
 d = band(bsr(t, 16) + bsl(t, 16), 0xFFFFFFFF)              # lsl + bfxil
 ```
 
-### 6.15 A kernel shaped like the reference C runs level with it: Argon2id at 0.88-1.02x of ref.c
+### 6.15 Byte copies: eight bytes per `u64_le`, and call an array-writing helper outside branches
+
+A kernel can only store one element at a time, so a byte-copy loop (an LZ
+decoder's literals and matches) pays a bounds check and an overflow check
+per byte; clang does not merge eight checked byte stores into one 64-bit
+store. Loading a word with `u64_le` and storing its eight bytes, with a
+7-byte overshoot when the buffers have slack, is the best spelling today;
+a word store or copy builtin (`defk-52v.16`) would remove the per-byte
+checks. Separately, a helper kernel that writes and returns the output must
+be called at the top of the loop body: called in one branch of an `if`
+whose other branch reads the array, it copies the whole buffer on every
+iteration and keeps every copy until the kernel returns (`defk-33b`).
+
+- **Numbers:** 4 MB of text, LZ4 / Snappy: byte loops 5.3 / 9.6-10.1 ms,
+  byte loops over the destination index 5.7-6.2 / 9.0-9.6 ms, words 4.7-4.8
+  / 8.0 ms; `yield: false` saved 10-20% (it blocks the scheduler, so it is not used). Per LZ4 sequence about 13 ns against
+  optimised liblz4's 2 ns. The helper in a branch: 47-53 ms instead of 0.1
+  ms at 64 KB, and the BEAM was SIGKILLed (out of memory) at 4 MB; a 1-byte
+  reproduction is quadratic (40k iterations 202 ms against 7 us hoisted).
+- **Conditions:** under load (load averages 13-85).
+- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (header), `defk-52v.3`, `defk-33b`, `defk-52v.16`.
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code (u64_le, array writes, helper kernels), not plain Elixir -->
+```elixir
+# fast: both helpers on every element, one length 0
+out = copy_lit(out, op, src, s, lit)
+out = copy_back(out, op + lit, off, ln - lit)
+# slow: the helper in one branch, the array read in the other
+if last, do: {:halt, {out, op}}, else: (out = copy_back(out, op, off, ml); {:cont, {out, op + ml}})
+```
+
+### 6.16 Target flags: on arm64 the CPU features buy nothing, the tuning does
+
+A kernel built for the host CPU (`-mcpu=native`, Apple M4) or for armv8.2-a
+is no faster than today's build, which Apple clang already targets at
+`apple-m1`. The same 24 of the catalogue's 200 loops vectorise, at the same
+widths, at every arm64 level. NEON is the baseline; SVE is not available on
+Apple silicon. What changed speed is the *tuning*: a generic build
+(`-mcpu=generic`, what a portable Linux/aarch64 build gets) won or lost on
+some kernels, and `-mtune=generic` alone reproduced it while
+`-march=armv8-a` (fewer features, same tuning) did not.
+
+- **Numbers:** these are speedups over the default build, as medians of 7-9
+  interleaved rounds in two runs.
+  - native and armv8.2-a: within ±3% on all 42 timed kernels where the runs
+    agree (`matmul`, Horspool, `mix_s16` and the image kernels are noisier
+    between rounds than between levels).
+  - generic, slower: `sort_i64` 0.78 / 0.78 (0.94 in a third run), cosine
+    0.93, `keccak256` 0.93, `convolve` 0.93-0.95, `dot` 0.95, HLL 0.94-0.95,
+    `decode64` 0.95.
+  - generic, faster: the SHA-256 chain 1.18-1.19 (171 -> 145 ns per step).
+  - `-mtune=generic` alone: `sort_i64` 0.94, SHA-256 1.17, `keccak256` 0.92.
+  - `-march=armv8-a` alone: 1.00-1.03 on the same kernels.
+- **Conditions:** Apple M4 Pro, Apple clang 21, kernels timed alone at the
+  examples' shapes (`bench/simd/cases.exs`). Load averages were 13-154 at
+  the start of the runs. The levels were built through a `CC` wrapper per
+  level.
+- **Source:** [`docs/research/simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md), [`bench/simd/time.exs`](https://github.com/DanielLuning/defk/blob/main/bench/simd/time.exs), `defk-ulk.1`.
+- **Status:** provisional (loaded machine). Linux/aarch64 hardware and
+  upstream clang were not measured.
+
+```bash
+# time every catalogue kernel at each target level of this machine, interleaved
+mix run bench/simd/time.exs 9
+SIMD_LEVELS="default:,tune:-mtune=generic" mix run bench/simd/time.exs 7
+```
+
+### 6.17 On x86-64, no level vectorises an in-order float reduction (remarks only)
+
+These are clang's loop-vectorize remarks for x86-64 targets, compiled on the
+Mac. Nothing was timed.
+
+- `sum`, `dot` and cosine stay scalar at SSE2, v2, v3 and v4 ("cannot prove
+  it is safe to reorder floating-point operations"). On arm64 they vectorise
+  as ordered reductions.
+- Write partial sums (6.6) where the order is yours to choose: `topk`'s
+  eight partial sums vectorise on both.
+- v3 doubles the width of the loops that do vectorise (4 x f64, 32 bytes).
+  It also vectorises `ws_mask`'s main 4-byte loop, which SSE2 and v2 leave
+  scalar.
+- v4 keeps 256-bit vectors.
+- No level emits an FMA under `-ffp-contract=off`. With
+  `-ffp-contract=on`, v3 emits 11-87 per float module.
+
+- **Source:** [`docs/research/simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md), `bench/simd/remarks.exs`, `bench/simd/fma_check.sh`, `defk-ulk.1`.
+- **Status:** static, not timed. The timing run on x86-64 hardware is
+  described in the research note.
+
+### 6.18 Counting into a table: four interleaved tables, and window bounds as `max`/`min`
+
+`h[b] = h[b] + 1` on consecutive equal bytes waits on its own previous
+store. Counting bytes `i`, `i + 1`, `i + 2`, `i + 3` into four 256-entry
+tables and summing them at the end breaks that chain. For a loop over one
+window of a buffer, write the bounds as `lo = max(k * w, 0)` and
+`hi = min(lo + w, len(data))` so the reads are proven in range.
+
+- **Numbers:** 16 MB histogram, one call: one table 5.8-6.0 ms, four
+  tables 3.6-3.7 ms (1.6x). Entropy of 4 KiB windows: one table and a
+  `log2` per bin 7.6 ms, four tables 5.8-5.9, four tables and a table of
+  per-count terms 4.7-4.8; with the window range written
+  `(k * w)..(k * w + w - 1)` every byte read kept its bounds check (four
+  tables 8.5 ms, with the term table 7.0).
+- **Conditions:** under load (load average 12-23).
+- **Source:** [`byte_histogram.exs`](https://github.com/DanielLuning/defk/blob/main/examples/byte_histogram.exs) (header), `defk-9p6.28`.
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code (alloc, array writes), not plain Elixir; the kernels are checked in the example -->
+```elixir
+# fast: four tables, proven window bounds
+lo = max(k * w, 0)
+hi = min(lo + w, len(data))
+for i <- lo..(hi - 4)//4 do
+  a = data[i]; b = data[i + 1]; c = data[i + 2]; d = data[i + 3]
+  h[a] = h[a] + 1; h[256 + b] = h[256 + b] + 1; h[512 + c] = h[512 + c] + 1; h[768 + d] = h[768 + d] + 1
+end
+# slow: one table, and a range the compiler cannot prove inside data
+for i <- (k * w)..(k * w + w - 1)//1, do: (b = data[i]; h[b] = h[b] + 1)
+
+### 6.19 A kernel shaped like the reference C runs level with it: Argon2id at 0.88-1.02x of ref.c
 
 Argon2's compression G is BLAKE2b's round with multiplications, over 1 KiB
 blocks of a large `[i64]`. Written as the reference's `fill_block` (XOR the
@@ -1210,7 +1415,7 @@ a = wrap64(a + b + 2 * band(a, 0xFFFFFFFF) * band(b, 0xFFFFFFFF))  # GB's add, m
 x = mulhi(wrap64(bsl(j1, 32)), j1)                                 # j1 * j1 >>> 32, j1 < 2^32
 ```
 
-### 6.16 Give each helper kernel one call site: inlining multiplies code per site
+### 6.20 Give each helper kernel one call site: inlining multiplies code per site
 
 Every kernel call is inlined (`defk-6ag`), so a helper called from two
 sites of a helper called from three sites is compiled six times. In
@@ -1249,6 +1454,13 @@ end
   at 16 MB (19.1 vs 20.7 ms, under load).
 - **Source:** [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs), [`hash_chain.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hash_chain.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs).
 - **Status:** measured; hash_chain, cosine, the keccak 16 MB comparison provisional.
+
+A target flag does not close these gaps. At every arm64 level, and as
+remarks for x86-64 up to v4, clang emits no CRC32, SHA or SHA3 instruction
+from the kernels' scalar code: `crc32c` runs at 1.00x with `-mcpu=native`.
+Closing them needs a hardware builtin (CRC32C) or vector values (UTF-8,
+base64, substring search). See [`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md) (`defk-ulk.1`;
+provisional).
 
 The wrapper jobs and what would reopen each are in
 [examples/README.md, "Where a wrapper is the right choice"](https://github.com/DanielLuning/defk/blob/main/examples/README.md#where-a-wrapper-is-the-right-choice).
@@ -1320,7 +1532,29 @@ normal schedulers instead ([`beam-nifs.md`](https://github.com/DanielLuning/defk
 - **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs), `defk-52v.2`.
 - **Status:** provisional.
 
-### 7.6 Argon2 with several lanes: the wrapper's threads win; a sequential kernel is 0.25x
+### 7.6 Hex NIFs built by rebar3's port compiler may be unoptimised; check the flags before comparing
+
+rebar3's `pc` plugin adds no `-O` flag: a package that sets none builds its
+C at `-O0`. lz4_erl 0.2.4 (liblz4 1.7.5) sets no CFLAGS; snappyer 1.2.10
+sets `-O2` in CFLAGS but compiles its C++ with CXXFLAGS, which has none. So
+`mix deps.get` gives -O0 builds of both reference libraries. Rebuilt with
+`CFLAGS=-O3 CXXFLAGS=-O2` (a separate `MIX_INSTALL_DIR`, or `mix deps.compile
+--force` with the variables set), they are the speed the libraries are known
+for, and much faster than a from-scratch kernel.
+
+- **Numbers:** 64 KB / 4 MB JSON-like block: snappyer as installed 99-184 us
+  / 5.9-6.8 ms, rebuilt 23-26 us / 1.6 ms; lz4_erl as installed 92-97 us /
+  5.2-5.5 ms, rebuilt 8-9 us / 0.9 ms; nimble_lz4 (lz4_flex, a precompiled
+  Rust release build) 20-24 us / 1.1-2.3 ms. The kernels 63-77 us / 4.1-4.9
+  ms: 1.3-1.6x faster than the as-installed NIFs, 3x (Snappy) and 9x (LZ4)
+  slower than the optimised builds. lz4_erl runs on a normal scheduler: a
+  4 MB decode gaps a 1 ms ticker by 5.1-11.3 ms as installed, 0.9 ms
+  rebuilt; the kernels stay at the ~2 ms floor.
+- **Conditions:** under load (load averages 24-85).
+- **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (`LZ_NIF_OPT=1`), `defk-52v.3`.
+- **Status:** provisional.
+
+### 7.7 Argon2 with several lanes: the wrapper's threads win; a sequential kernel is 0.25x
 
 argon2_elixir runs `parallelism` lanes on as many pthreads inside its dirty
 NIF. A kernel call is one thread, and splitting lanes across kernel calls
@@ -1333,12 +1567,12 @@ sequence.
   lanes: 87-120 vs 340-523 ms (0.23-0.28x). 24 hashes at the defaults
   started at once (12 dirty schedulers x 4 threads against kernels on 12
   normal schedulers): 235-285 vs 275-589 ms, so with every core busy the
-  threads buy less. One lane: level (6.15).
+  threads buy less. One lane: level (6.19).
 - **Conditions:** under load (load averages 14-38).
 - **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs), `defk-52v.9`, `defk-52v.17`.
 - **Status:** provisional.
 
-### 7.7 A killed process does not stop a dirty NIF; a yielding kernel's memory goes at the kill
+### 7.8 A killed process does not stop a dirty NIF; a yielding kernel's memory goes at the kill
 
 The tick gap cannot tell a dirty NIF from a yielding kernel: a dirty NIF
 never holds a normal scheduler. What tells them apart is the kill. Killing
@@ -1417,7 +1651,8 @@ Process.exit(pid, :kill)                       # pid is inside a long dirty NIF
   Gorilla's middle block sizes gain most; parallel Elixir sorting
   (`sort_u64_keys`); 64-bit hashes in 16-bit limbs in Elixir (`hashes`); the
   per-call state copy of value semantics (`defk-sve.1`); EXLA for matmul
-  (`defk-7tk`); libvips for the image jobs; Linux (every number here is macOS
+  (`defk-7tk`); libvips for the image jobs; x86-64 timings at the target
+  levels (`defk-ulk.1`, remarks only so far); Linux (every number here is macOS
   on arm64).
 - **Quiet-machine snapshot.** Most provisional entries wait for `defk-sgw.4`.
 - **Tie band.** Verdicts at 1.0x and 2x flip with noise until `defk-9p6.24` lands.
@@ -1454,4 +1689,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-t11.5`, `defk-6g6`, `defk-j5n`, `defk-qx3`, `defk-z69`, `defk-t11.2`,
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
-  `defk-sve`, `defk-ulk`.
+  `defk-sve`, `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`.

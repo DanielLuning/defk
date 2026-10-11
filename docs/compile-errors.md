@@ -21,6 +21,7 @@ anchor `#<code>` is the same on GitHub and on HexDocs.
 ## Codes
 
 Compiling 21 files (.ex)
+Compiling 21 files (.ex)
 ### kernel-head
 
 A kernel head is `name(arg :: type, ...) :: return_type`.
@@ -480,7 +481,7 @@ An if, cond or case used as a value gives no array, alone or in a tuple; arrays 
 
 - kind: not supported yet (planned)
 - why: an if/cond/case may give numbers, booleans or tuples of them, not arrays yet
-- hint: do the array work inside each branch
+- hint: do the array work inside each branch, so that each branch gives a number: read the element there (if p, do: a[i], else: b[i]), or write the output array in each branch
 
 Rejected:
 
@@ -777,7 +778,7 @@ end
 A kernel calls builtins and the other kernels in its module.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a kernel runs as native code: it can call its builtins (len, bit_size, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, mulhi, clz, ctz, popcount, rotl64, rotr64, rotl, rotr, f64_to_u64) and the kernels in this module, which are inlined
+- why: a kernel runs as native code: it can call its builtins (len, bit_size, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, log2, log10, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, mulhi, clz, ctz, popcount, rotl64, rotr64, rotl, rotr, f64_to_u64) and the kernels in this module, which are inlined
 - hint: define it as a kernel in this module, or compute it in Elixir and pass the result in
 
 Rejected:
@@ -1483,7 +1484,7 @@ Maps and structs are not in the kernel subset.
 
 - kind: outside the kernel subset (permanent)
 - why: a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read
-- hint: pass the values as separate arguments, or pack them into an array before the call
+- hint: pass the values as separate arguments, or pack them into an array before the call; for a count per key, index an array by the key (counts = alloc(i64, 256), then counts[b] = counts[b] + 1)
 
 Rejected:
 

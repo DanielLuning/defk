@@ -4,7 +4,7 @@ defmodule Defk.Builtins do
   # compiler, Elixir mode and the compile errors.
 
   # f64 -> f64 math, also callable as :math.sqrt/1 and so on
-  @math1 [:sqrt, :exp, :log, :sin, :cos]
+  @math1 [:sqrt, :exp, :log, :log2, :log10, :sin, :cos]
   # i64 -> i64 bitwise, as Elixir's Bitwise; each also has an operator form
   @bitwise [:band, :bor, :bxor, :bnot, :bsl, :bsr]
   @bitwise_ops %{&&&: :band, |||: :bor, "^^^": :bxor, "~~~": :bnot, <<<: :bsl, >>>: :bsr}
