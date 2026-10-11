@@ -60,7 +60,7 @@ above.
 | `Defk.defk/2` (`defk head, opts` without body) | no `@doc` | multi-clause kernels | **public** | head of a multi-clause kernel with options (`language.md`) |
 | `Defk.defk/1` (`defk head`) | no `@doc` | multi-clause kernels | **public** | head of a multi-clause kernel |
 | `Defk.__before_compile__/1` | no `@doc` | `@before_compile` | **hidden** | must stay public; add `@doc false` |
-| `Defk.arg_vars/1` | `@doc false` | `Defk.ElixirMode` | **hidden** | internal helper; move out of `Defk` (rename list) |
+| `Defk.arg_vars/1` | moved to `Defk.Args.vars/1` | `Defk.Args` | **hidden** | internal helper; moved out of `Defk` in defk-djy.16 |
 | `Defk.Test.assert_agrees/3` | `@doc` in hidden module | tests 29, `language.md`, `verdict.md` | **public** | the agreement check |
 | `Defk.Test.reason/1` | `@doc` in hidden module | tests 9 | **public** | what "same reason" means in agreement; users need it to assert a raise. Rename candidate |
 | `Defk.Case.in_both_modes/1` (macro) | hidden module | tests 2 | **hidden** | see open question 4 |
@@ -158,6 +158,7 @@ Before people depend on these names (no tickets yet; the maintainer decides):
    macro into `Defk.Test`, open question 4).
 6. **`Defk.arg_vars/1`** is a public internal helper on the user-facing
    module. Move it to `Defk.ElixirMode` or a hidden helper module.
+   Done in defk-djy.16: moved to `Defk.Args.vars/1`.
 7. **Three spellings of one switch**: `use Defk, elixir_mode: true`
    (compile Elixir mode in), `config :defk, mode: :elixir` (default call path)
    and `with_mode(:elixir, fun)` (per process). They mean different things,
