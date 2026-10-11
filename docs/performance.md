@@ -621,6 +621,38 @@ bin |> :binary.bin_to_list() |> Enum.frequencies()
 for <<b <- bin>>, reduce: %{}, do: (m -> Map.update(m, b, 1, &(&1 + 1)))
 ```
 
+### 2.17 A CDCL solver in Elixir: one `:atomics` array in the C layout, 5.7-5.8x behind the same solver as a kernel
+
+For a search with mutable tables (watch lists, trail, heap, clause arena)
+the fastest Elixir we found is the C algorithm on one `:atomics` array with
+the tables at offsets, the offsets passed as arguments in the hot
+recursion. A read in a tight loop costs about 6.4 ns for `:atomics`, 5.7 ns
+for a map and 4.7 ns for the process dictionary (a tuple read is 1.8 ns,
+but a tuple write copies it and a map update allocates). The same algorithm
+on both sides gives identical results (status, model, conflict count), so
+the speedup is the kernel's alone: 5.7-5.8x on random 3-SAT at n = 200
+(1,167-1,198 vs 201-207 ms for three instances), 5.6x on the UNSAT one
+(946-955 vs 170-171 ms). On small formulas the solver's setup dominates: a 27-variable
+Ash formula costs the Elixir CDCL 30-52 us, where the research's 20-line DPLL
+sketch (lists, unit propagation, shortest-clause branching) is 20-54 us; above
+45 variables the CDCL wins (115 against 400-560 us at 105 variables).
+simple_sat, Crux's pure-Elixir fallback, is 0.25-1,100 ms per call there.
+Blocking literals in the watches and local minimisation of learned clauses
+helped both sides (seed 3: 31,773 to 24,241 conflicts).
+
+- **Conditions:** load 3.5-7.7, four runs; OTP 29, Elixir 1.20.2.
+- **Source:** [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs) (`SatEx.Cdcl`, header), `defk-52v.15`.
+- **Status:** provisional.
+
+<!-- defk-example skip: an excerpt of the solver, not a runnable block -->
+```elixir
+# fast: one :atomics array, offsets read once and passed down
+defp g(st, i), do: :atomics.get(st, i + 1)
+nxt = g(st, ownext + node)
+if g(st, olval + g(st, owblock + node)) == 1, do: walk(st, fl, node, nxt, o)
+# slow: clauses as lists rewritten per assignment (DPLL), or a tuple per table
+```
+
 ---
 
 ## 3. BIFs and OTP libraries that are already native
@@ -1069,6 +1101,25 @@ bits = Bloom.Kernels.add(bits, hashes, 7)
 The same rule holds for any benchmark of a kernel that returns a large
 binary: time it in a fresh process, not in a process that holds the other
 inputs.
+
+### 5.10 Many small solves: run the caller's loop inside the kernel (12x), not one call per solve (2.3-5.3x)
+
+Crux's `satisfying_scenarios` (Ash authorization) makes 1 + V solver calls
+per scenario: a solve, one implication query per literal of the cube, a
+blocking clause, repeat. At an Ash-shaped formula with 12 policies (109
+variables, 280 clauses, 89 scenarios) the whole loop in one kernel call
+(`solve_all`) takes 17.5-18.7 ms against 217-224 ms for the best Elixir (the same
+loop in Elixir on the Elixir CDCL; Crux on it is 248-264 ms): 11.8-12.4x, and
+4.05-4.09x faster than Crux on picosat_elixir's NIF (71-73 ms). Called once per solve,
+as `Crux.Implementation` does, the same kernel is 2.3-5.3x at 26-28 variables
+and 2.48-2.58x at 104-109 (packing the clause list and unpacking the model are
+part of each call), 1.63-1.76x faster than picosat. The batch input is the
+formula and Crux's negation-encoding query in one CSR array; the blocking
+clauses are the output.
+
+- **Conditions:** load 3.5-7.7, four runs; Crux 0.1.4, picosat_elixir 0.2.3.
+- **Source:** [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs), `defk-52v.15`; the per-call guidance entry is `defk-9p6.25`.
+- **Status:** provisional.
 
 ---
 
@@ -1659,6 +1710,43 @@ bytes unconditionally into slack the next sequence overwrites. A word store
 (`put_u64_le`, option (a) of `defk-52v.16`) was not added: the copies were
 the per-byte cost, and a word store would still be a check per word.
 
+### 6.24 A solver with many tables: one state array with named offsets, and every helper called on every step
+
+Under the rule that a helper returns every array it writes (`defk-n4r.4`),
+a CDCL solver keeps all of its tables in one `[i64]`, with the offsets in a
+header whose slots are module attributes (`st[st[@o_lval] + l]`), so each
+helper is `st = helper(st, ...)`. Two copy traps cost the whole state per
+step until they were removed: a helper called in one branch of an
+`Enum.reduce_while` fn whose other tail returns the accumulator copies it
+on every iteration (`defk-tif`; the first kernel took 1.9 s instead of
+1 ms at n = 100), and so does a nested loop whose initial accumulator is the
+array when the loop sits in such a branch, or when its range or init also
+reads the array (`0..st[@h_n]`). The fix: call restart, propagate, analyze,
+backjump, learn and decide on every step with an active flag (empty ranges
+and guarded writes when inactive), branch only on the tail, and read range
+bounds into locals first. `Mod.__defk_c_source__/0` shows the copies as
+`defk_copy_i64`. Code size: every defk is also an entry point that inlines
+its callees, so the 14-kernel module is 2.35 MB of C and a 683 KB `.so`,
+about 3 minutes of clang at load 4 (6.20).
+
+- **Conditions:** Apple clang 21; load 4-5 for the compile time.
+- **Source:** [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs) (header, `SatEx.Kernels.search/2`), `defk-tif`, `defk-52v.15`.
+- **Status:** measured (copies, from the generated C); provisional (times).
+
+<!-- defk-example skip: kernel-subset code, the shape of the solver's step -->
+```elixir
+# no copies: every helper on every step, the branch only picks the tail
+Enum.reduce_while(1..budget//1, st, fn _, st ->
+  st = restart(st)
+  st = propagate(st)
+  learning = ...
+  st = analyze(st, learning)
+  st = decide(st, running and not conflict)
+  if st[@h_status] != 3, do: {:halt, st}, else: {:cont, st}
+end)
+# copies st every step: if conflict, do: (st = analyze(st); {:cont, st}), else: {:halt, st}
+```
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -1828,6 +1916,24 @@ Process.exit(pid, :kill)                       # pid is inside a long dirty NIF
 # us is the rest of the killed hash, not the probe's own ~0.1 ms
 ```
 
+### 7.9 picosat_elixir holds a scheduler for the whole solve, and is the stronger solver on hard instances
+
+On random 3-SAT at n = 300 (seed 7, SAT), a 1 ms ticker on one scheduler
+waits 1,270-1,342 ms while picosat_elixir solves (1.27-1.30 s, one
+uninterrupted normal-scheduler NIF call), 2.5-6.0 ms (p99 2.3) beside the
+CDCL kernel (1.95-1.98 s) and 2.1-3.0 ms beside the Elixir CDCL (10.8-11.3 s;
+one run had a 136 ms gap, under load); the idle floor was 2.0 ms. PicoSAT's search
+is stronger than the kernel's (MiniSat-style: Luby restarts, LBD reduction,
+local minimisation): 86-88 against 170-171 ms on an UNSAT n = 200 instance, and at
+n = 300 the kernel did not finish in 60 s on 4 of 7 seeds where picosat
+took 3.9-16.7 s. A kernel matches the C only where it runs the same
+algorithm (6.19); here the yield and the budget (`status 2` instead of a
+blocked scheduler) are what it adds.
+
+- **Conditions:** load 3.5-7.7, four runs.
+- **Source:** [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs), [`sat-solver.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/sat-solver.md), `defk-52v.15`.
+- **Status:** provisional.
+
 ---
 
 ## 8. Myths we disproved and open questions
@@ -1913,4 +2019,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
-  `defk-ulk.4`.
+  `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`.
