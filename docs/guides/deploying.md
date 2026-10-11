@@ -23,7 +23,7 @@ build and the runtime need, and where defk falls short today.
 | macOS | `xcode-select --install` |
 
 Without one, the build stops with the
-[`no-c-compiler`](../language.md#no-c-compiler) error, which names the
+[`no-c-compiler`](../compile-errors.md#no-c-compiler) error, which names the
 compiler it looked for and these packages. Set `ERTS_INCLUDE_DIR` to build
 against another ERTS's `erl_nif.h` instead of the running one's, as with
 `elixir_make`.

@@ -27,8 +27,8 @@ defmodule Defk.LanguageDoc do
   # with no kernel, or one that doesn't parse. Kernels without a `defmodule`
   # are wrapped in one with `use Defk`, and the iex lines call it as `M`; a
   # block's own `defmodule Name` is renamed and the iex lines call it as
-  # `Name`. The generated error reference (section 11, "Compile errors") is
-  # the registry's text (test/language_doc_test.exs) and its examples are
+  # `Name`. The generated error catalogue (docs/compile-errors.md, "Codes") is
+  # the registry's text (test/compile_errors_doc_test.exs) and its examples are
   # checked from the registry (test/compile_errors_test.exs), so it is left
   # out here.
 
@@ -60,11 +60,11 @@ defmodule Defk.LanguageDoc do
   end
 
   # lines of the generated error reference: from the first ### of the
-  # "Compile errors" section to the next ## heading
+  # "Codes" section (docs/compile-errors.md) to the next ## heading
   defp registry_span(lines) do
     numbered = Enum.with_index(lines, 1)
 
-    with {_, h} <- Enum.find(numbered, fn {l, _} -> l =~ ~r/^## \d+\. Compile errors$/ end),
+    with {_, h} <- Enum.find(numbered, fn {l, _} -> l =~ ~r/^## Codes$/ end),
          {_, first} <-
            Enum.find(numbered, fn {l, n} -> n > h and String.starts_with?(l, "### ") end) do
       last =

@@ -209,17 +209,17 @@ Or `alloc` the largest size and return `{out, count}`.
 
 | Written first | Write instead | Code |
 |---|---|---|
-| `Enum.sum(a)` | `for x <- a, reduce: 0.0 do acc -> acc + x end` | [`unsupported-call`](../language.md#unsupported-call) |
-| `a \|> f(b)` | `f(a, b)` | [`pipe`](../language.md#pipe) |
-| `for x <- a, do: x * 2` as a value | `out = alloc(f64, len(a))`, write `out[i]`, return `out` | [`for-collect`](../language.md#for-collect) |
-| `[x \| acc]` then `Enum.reverse/1` | a bitstring accumulator, or `{out, count}` | [`unsupported-list`](../language.md#unsupported-list) |
-| `for {x, i} <- Enum.with_index(a)` | `for i <- 0..(len(a) - 1)//1` and `x = a[i]` | [`generator-pattern`](../language.md#generator-pattern) |
-| `<<a, b, rest::binary>> = bin` | `a = bin[0]`, `b = bin[1]` | [`bitstring-match`](../language.md#bitstring-match) |
-| `x ** 2` | `x * x`, or `pow(x, 2)` | [`unsupported-expression`](../language.md#unsupported-expression) |
-| `length(a)`, `byte_size(a)` | `len(a)` | [`unknown-function`](../language.md#unknown-function) |
-| `unless c do` | `if not c do` | [`unsupported-construct`](../language.md#unsupported-construct) |
+| `Enum.sum(a)` | `for x <- a, reduce: 0.0 do acc -> acc + x end` | [`unsupported-call`](../compile-errors.md#unsupported-call) |
+| `a \|> f(b)` | `f(a, b)` | [`pipe`](../compile-errors.md#pipe) |
+| `for x <- a, do: x * 2` as a value | `out = alloc(f64, len(a))`, write `out[i]`, return `out` | [`for-collect`](../compile-errors.md#for-collect) |
+| `[x \| acc]` then `Enum.reverse/1` | a bitstring accumulator, or `{out, count}` | [`unsupported-list`](../compile-errors.md#unsupported-list) |
+| `for {x, i} <- Enum.with_index(a)` | `for i <- 0..(len(a) - 1)//1` and `x = a[i]` | [`generator-pattern`](../compile-errors.md#generator-pattern) |
+| `<<a, b, rest::binary>> = bin` | `a = bin[0]`, `b = bin[1]` | [`bitstring-match`](../compile-errors.md#bitstring-match) |
+| `x ** 2` | `x * x`, or `pow(x, 2)` | [`unsupported-expression`](../compile-errors.md#unsupported-expression) |
+| `length(a)`, `byte_size(a)` | `len(a)` | [`unknown-function`](../compile-errors.md#unknown-function) |
+| `unless c do` | `if not c do` | [`unsupported-construct`](../compile-errors.md#unsupported-construct) |
 | a hash that wraps at 64 bits | `band(expr, 0xFFFFFFFFFFFFFFFF)` | [masked arithmetic](../language.md#masked-arithmetic) |
-| maps, strings, atoms | pack values into binaries in Elixir first | [`unsupported-map`](../language.md#unsupported-map) |
+| maps, strings, atoms | pack values into binaries in Elixir first | [`unsupported-map`](../compile-errors.md#unsupported-map) |
 
 The full table: [Unsupported, write this instead](../language.md#unsupported-write-this-instead).
 

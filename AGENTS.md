@@ -38,4 +38,4 @@ Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/age
 
 ### Generated docs
 
-After changing the `Defk.Errors` registry, regenerate parts of `docs/language.md` and `docs/scope.md`. See `docs/agents/generated-docs.md`.
+After changing the `Defk.Errors` registry, regenerate `docs/compile-errors.md` and parts of `docs/scope.md`. See `docs/agents/generated-docs.md`.

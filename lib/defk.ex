@@ -220,7 +220,7 @@ defmodule Defk do
   safepoints, so it never yields: use it only for a kernel that always
   finishes in well under a millisecond, since a long kernel without
   safepoints blocks its scheduler for its whole run. Any other option is the
-  compile error [`unknown-option`](language.md#unknown-option).
+  compile error [`unknown-option`](compile-errors.md#unknown-option).
 
       iex> defmodule MyApp.Small do
       ...>   use Defk
