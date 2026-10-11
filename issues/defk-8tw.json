@@ -5,7 +5,9 @@
   "created": "2026-10-11T17:20:27Z",
   "description": "Found in defk-52v.15 and confirmed by defk-tif (examples/cdcl_sat.exs notes). A nested loop whose range or initial value reads the array that the loop body then writes and returns (e.g. for k \u003c- 0..(st[@h_n] - 1)//1, reduce: st do ... st[k] = ... end, or an inner reduce_while init that reads st) copies st, because the range/init read counts as a read after the write. Workaround today: read the bound into a local first (n = st[@h_n]; for k \u003c- 0..(n - 1)//1, ...). The range and init are evaluated once before the loop runs, so they are not later reads of the buffer the body writes. Done when both shapes compile with no defk_copy_ (report copy notes and generated C), negative cases that really read the old buffer later still copy, agreement with Elixir mode incl. forced yields holds, and docs/language.md Copies mentions it. See defk-33b and defk-tif for the analysis (nested/2, taken/2, other_arms_out/2 in lib/defk/compiler.ex).",
   "id": "defk-8tw",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "priority": 3,
   "status": "open",
   "title": "A nested loop whose range or init reads the array it updates copies that array",
