@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Fixed on branch defk-tif/reduce-while-tail-copy (7476fd6). Cause: not the other arm's {:halt, a} tail (defk-33b's taken/2 already drops sibling arms) but the if condition a[1] == 5. lib/defk/compiler.ex nested/2 gives an if/cond/case arm out = env.live + reads_outside(taken(stmt, arm)); taken/2 kept the conditions, case subject and clause heads of the branch nodes holding the arm, so the condition's read of a counted as a read after the arm. The inlined h's parameter (new id, same buf) was then shared? -\u003e copy per iteration; the nested reduce_while init {a, -1, 0} in the arm copied for the same reason. With the condition on i (if i == 5) nothing was copied. Fix: other_arms_out/2 also blanks the condition (if), subject (case) and clause heads (cond/case) of each construct holding the arm: they ran before it in the same run of the statement, and the next iteration reads the arm's new binding. Conditions of branch constructs not holding the arm (e.g. a later if in the same statement) are kept. Before: e1 2 defk_copy_ + copy note, n=100k 13.5 ms; after: none, 49 us. Tests (test/value_semantics_test.exs 'defk-tif'): e1 (halt_on), tuple acc, cond, case, nested reduce_while init: no copy note, no defk_copy_, agreement properties, forced yields. Negatives still copying and agreeing: alias old = a read after the call, array bound outside the loop read in the condition and rebound in the arm, a later if's condition in the same statement reading the pre-call array (cond_after_arm). Mutation: keeping the if condition fails the positive test; blanking every if condition in the statement fails cond_after_arm (native 11 vs Elixir 21); dropping all reads outside the arm fails read_after_in_stmt. cdcl_sat: a straightforward search2 (helpers only in their branches, cond/if on st) compiles with 0 copies in solve2, same status/conflicts as solve, 0-25% slower than the always-call form (n=100: 0.79-1.43 ms vs 0.71-1.19 ms); example kept, comment updated. Still a trap (not changed): a nested loop whose range/init also reads the array (0..st[@h_n]). Docs: language.md Copies, performance.md 6.15 and 6.24.",
+      "timestamp": "2026-10-11T17:19:47Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "A helper call in one Enum.reduce_while branch copies the accumulator array every iteration when another branch's tail returns it",
   "type": "bug",
-  "updated_at": "2026-10-11T17:06:59Z"
+  "updated_at": "2026-10-11T17:19:47Z"
 }
