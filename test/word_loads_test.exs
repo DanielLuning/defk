@@ -154,12 +154,12 @@ defmodule Defk.WordLoadsTest do
   end
 
   test "a provable i + w <= len drops the check" do
-    src = Proven.__defk_source__()
+    src = Proven.__defk_c_source__()
     refute src =~ ~r/defk_u(64|32|16)_(le|be)\(ctx/
     refute src =~ "defk_get_u8("
     assert src =~ "defk_u64_le_at("
 
-    assert Short.__defk_source__() =~ "defk_u64_le(ctx"
+    assert Short.__defk_c_source__() =~ "defk_u64_le(ctx"
 
     for n <- [0, 1, 7, 8, 9, 16, 17, 100] do
       bytes = :crypto.strong_rand_bytes(n)

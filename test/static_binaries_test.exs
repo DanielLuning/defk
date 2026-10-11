@@ -68,7 +68,7 @@ defmodule Defk.StaticBinariesTest do
       )
 
   test "a repeated attribute is one array, referenced at every use" do
-    c = K.__defk_source__()
+    c = K.__defk_c_source__()
     assert count(c, escaped(@t)) == 1
 
     [_, name] =
@@ -82,12 +82,12 @@ defmodule Defk.StaticBinariesTest do
   end
 
   test "a repeated identical literal is one array" do
-    c = K.__defk_source__()
+    c = K.__defk_c_source__()
     assert count(c, escaped("shared literal")) == 1
   end
 
   test "two different attributes give two arrays, the empty binary a third" do
-    c = K.__defk_source__()
+    c = K.__defk_c_source__()
     assert count(c, escaped("a different table, 0123456789")) == 1
     names = arrays(c)
     assert [_, _, _, _] = names
@@ -96,7 +96,7 @@ defmodule Defk.StaticBinariesTest do
   end
 
   test "declarations come before the first function that uses them" do
-    c = K.__defk_source__()
+    c = K.__defk_c_source__()
     [{decl, _}] = :binary.matches(c, "static const uint8_t") |> Enum.take(1)
     {fun, _} = :binary.match(c, "/* ---- ")
     assert decl < fun

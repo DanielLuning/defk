@@ -41,7 +41,8 @@ defmodule Defk.Compiler do
 
   # Every rejection in the module is collected (see "rejections") and raised
   # together as one CompileError after all kernels are compiled.
-  # opts: nif_name - the name each kernel's NIF is registered under
+  # opts: nif_name - the name each kernel's NIF is registered under;
+  #       fault_hooks - register the test-only `__defk_corrupt_tags__/1` (default false)
   def compile(module, raw_kernels, file, opts \\ []) do
     Process.put(:defk_file, file)
     Process.put(:defk_module, module)
@@ -113,7 +114,12 @@ defmodule Defk.Compiler do
     body =
       [
         Enum.map(lowered, &emit_entry/1),
-        emit_init(module, lowered, Keyword.get(opts, :nif_name, & &1))
+        emit_init(
+          module,
+          lowered,
+          Keyword.get(opts, :nif_name, & &1),
+          Keyword.get(opts, :fault_hooks, false)
+        )
       ]
       |> IO.iodata_to_binary()
 
@@ -5328,7 +5334,7 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp emit_init(module, kernels, nif_name) do
+  defp emit_init(module, kernels, nif_name, fault_hooks?) do
     funcs =
       Enum.map(kernels, fn k -> "  {\"#{nif_name.(k.name)}\", #{k.arity}, nif_#{k.cid}, 0},\n" end)
 
@@ -5337,7 +5343,11 @@ defmodule Defk.Compiler do
       funcs,
       "  {\"__defk_stats__\", 0, defk_stats_nif, 0},\n",
       "  {\"__defk_force_yields__\", 1, defk_force_yields_nif, 0},\n",
-      "  {\"__defk_corrupt_tags__\", 1, defk_corrupt_tags_nif, 0},\n};\n\n",
+      if(fault_hooks?,
+        do: "  {\"__defk_corrupt_tags__\", 1, defk_corrupt_tags_nif, 0},\n",
+        else: ""
+      ),
+      "};\n\n",
       "ERL_NIF_INIT(#{Atom.to_string(module)}, defk_funcs, defk_load, NULL, defk_upgrade, NULL)\n"
     ]
   end

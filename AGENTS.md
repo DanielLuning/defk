@@ -35,3 +35,7 @@ The five default triage labels (`needs-triage`, `needs-info`, `ready-for-agent`,
 ### Domain docs
 
 Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Generated docs
+
+After changing the `Defk.Errors` registry, regenerate parts of `docs/language.md` and `docs/scope.md`. See `docs/agents/generated-docs.md`.

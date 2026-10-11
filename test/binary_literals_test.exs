@@ -90,7 +90,7 @@ defmodule Defk.BinaryLiteralsTest do
   defp agrees(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
 
   defp kernel_c(name) do
-    [_, c] = String.split(K.__defk_source__(), "/* ---- #{name}/", parts: 2)
+    [_, c] = String.split(K.__defk_c_source__(), "/* ---- #{name}/", parts: 2)
     c |> String.split("/* ---- ", parts: 2) |> hd()
   end
 

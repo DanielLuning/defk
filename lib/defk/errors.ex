@@ -939,28 +939,20 @@ defmodule Defk.Errors do
 
   defp indent_block(text), do: text |> String.split("\n") |> Enum.map_join("\n", &indent/1)
 
-  @doc """
-  The entries of the "Compile errors" section of `docs/language.md`, one
-  `### <code>` heading per code (the anchor the error footer links), in
-  registry order. Regenerate that section with:
-
-      mix run -e 'IO.write(Defk.Errors.reference())'
-
-  The test suite checks the document contains this text verbatim.
-  """
+  @doc false
+  # The entries of the "Compile errors" section of docs/language.md, one
+  # `### <code>` heading per code (the anchor the error footer links), in
+  # registry order. Maintainer note: docs/agents/generated-docs.md. The test
+  # suite checks the document contains this text verbatim.
   @spec reference() :: String.t()
   def reference, do: Enum.map_join(@codes, "\n", &reference_entry/1)
 
-  @doc """
-  The generated lists of `docs/scope.md`: every code of `kind` (`:planned`
-  or `:subset`), one Markdown bullet per code linking its entry in
-  `docs/language.md`, with its summary, in registry order. Regenerate them with:
-
-      mix run -e 'IO.write(Defk.Errors.scope(:planned))'
-      mix run -e 'IO.write(Defk.Errors.scope(:subset))'
-
-  The test suite checks the page contains this text verbatim.
-  """
+  @doc false
+  # The generated lists of docs/scope.md: every code of `kind` (:planned or
+  # :subset), one Markdown bullet per code linking its entry in
+  # docs/language.md, with its summary, in registry order. Maintainer note:
+  # docs/agents/generated-docs.md. The test suite checks the page contains
+  # this text verbatim.
   @spec scope(:planned | :subset) :: String.t()
   def scope(kind) when kind in [:planned, :subset] do
     for %{kind: ^kind} = e <- @codes, into: "" do

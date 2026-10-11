@@ -165,7 +165,7 @@ defmodule Defk.ElementTypesTest do
 
   defp raises(fun, args, module, reason) do
     assert {:raise, %^module{} = e} = agrees(fun, args)
-    assert Defk.Test.reason(e) == reason
+    assert Defk.Test.agreement_reason(e) == reason
     e
   end
 

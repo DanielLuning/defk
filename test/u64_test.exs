@@ -264,8 +264,8 @@ defmodule Defk.U64Test do
   # the exact result, or :overflow for an ArithmeticError of that reason
   defp outcome(fun, args) do
     case agrees(fun, args) do
-      {:raise, %ArithmeticError{} = e} -> {:raise, Defk.Test.reason(e)}
-      {:raise, %ArgumentError{} = e} -> {:raise, Defk.Test.reason(e)}
+      {:raise, %ArithmeticError{} = e} -> {:raise, Defk.Test.agreement_reason(e)}
+      {:raise, %ArgumentError{} = e} -> {:raise, Defk.Test.agreement_reason(e)}
       other -> other
     end
   end
@@ -375,7 +375,7 @@ defmodule Defk.U64Test do
     t = Defk.Generators.pack(:i64, Enum.to_list(100..163))
     for h <- @u64s, do: assert(outcome(:top, [t, h]) == {:ok, 100 + bsr(h, 58)})
 
-    src = K.__defk_source__()
+    src = K.__defk_c_source__()
     [top] = Regex.run(~r/---- top\/2.*?---- /s, src)
     refute top =~ "defk_get_i64("
     refute top =~ "defk_u64_to_i64("
@@ -602,7 +602,7 @@ defmodule Defk.U64Test do
   defp bits_outcome(f) do
     {:ok, f.()}
   rescue
-    e -> {:raise, e.__struct__, Defk.Test.reason(e)}
+    e -> {:raise, e.__struct__, Defk.Test.agreement_reason(e)}
   end
 
   # the kernel's result is the Elixir function's (and both modes agree)
@@ -612,7 +612,7 @@ defmodule Defk.U64Test do
     got =
       case native do
         {:ok, v} -> {:ok, v}
-        {:raise, e} -> {:raise, e.__struct__, Defk.Test.reason(e)}
+        {:raise, e} -> {:raise, e.__struct__, Defk.Test.agreement_reason(e)}
       end
 
     assert got == bits_outcome(fn -> apply(Defk.Bits, bits_fun, args) end),

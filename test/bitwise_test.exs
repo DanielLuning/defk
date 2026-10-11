@@ -181,7 +181,7 @@ defmodule Defk.BitwiseTest do
 
   defp expect(outcome, :overflow) do
     assert {:raise, %ArithmeticError{message: "i64 overflow in " <> _} = e} = outcome
-    assert Defk.Test.reason(e) == :overflow
+    assert Defk.Test.agreement_reason(e) == :overflow
   end
 
   defp expect(outcome, value), do: assert(outcome == {:ok, value})
@@ -253,7 +253,7 @@ defmodule Defk.BitwiseTest do
 
   test "bitwise expressions in if arms compile to a select" do
     # only pick and pick_shift have if arms: the flagged forms are theirs
-    c = K.__defk_source__()
+    c = K.__defk_c_source__()
     assert c =~ "defk_add_i64_s(&"
     assert c =~ "defk_bsr_i64_s(&"
     assert c =~ "defk_bsl_i64_s(&"
@@ -269,8 +269,8 @@ defmodule Defk.BitwiseTest do
   end
 
   test "masked indexes into a 256-element table have no bounds check" do
-    refute Lookup.__defk_source__() =~ "defk_get_u8("
-    assert Wide.__defk_source__() =~ "defk_get_u8("
+    refute Lookup.__defk_c_source__() =~ "defk_get_u8("
+    assert Wide.__defk_c_source__() =~ "defk_get_u8("
 
     for h <- @values do
       expect(agrees(Lookup, :low_byte, [h]), 0)

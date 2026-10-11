@@ -1409,7 +1409,8 @@ static ERL_NIF_TERM defk_stats_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
   return map;
 }
 
-static ERL_NIF_TERM defk_corrupt_tags_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+// registered only when the module is compiled with fault hooks (MIX_ENV=test)
+static __attribute__((unused)) ERL_NIF_TERM defk_corrupt_tags_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
   atomic_store(&defk_corrupt_tags, enif_is_identical(argv[0], enif_make_atom(env, "true")));
   return enif_make_atom(env, "ok");

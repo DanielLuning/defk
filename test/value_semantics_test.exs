@@ -261,7 +261,7 @@ defmodule Defk.ValueSemanticsTest do
 
   # the generated C of kernel `name` in `mod`
   defp kernel_c(mod, name) do
-    [_ | chunks] = String.split(mod.__defk_source__(), "/* ---- ")
+    [_ | chunks] = String.split(mod.__defk_c_source__(), "/* ---- ")
     Enum.find(chunks, &String.starts_with?(&1, "#{name}/")) || flunk("no kernel #{name}")
   end
 
@@ -390,7 +390,7 @@ defmodule Defk.ValueSemanticsTest do
       ]
 
       for mod <- mods do
-        assert copies(mod.__defk_source__()) == 0, inspect(mod)
+        assert copies(mod.__defk_c_source__()) == 0, inspect(mod)
       end
     end
   end
