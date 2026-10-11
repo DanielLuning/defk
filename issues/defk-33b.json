@@ -12,11 +12,15 @@
     {
       "text": "Memory bound for copies split out to defk-4b2 (not done here): every copy/alloc is an owned slot kept until return, so a per-iteration copy that remains legitimate still grows without bound; options and reasoning in the ticket.",
       "timestamp": "2026-10-11T13:22:37Z"
+    },
+    {
+      "text": "Fixed on branch defk-33b/helper-in-branch-copy (a162b96). Cause: lib/defk/compiler.ex nested/1 gave every nested block env.out = env.nest, the enclosing statement's live set plus everything the statement reads, so an if/cond/case arm saw the reads of its sibling arms as live. In the reproduction the if's nest held the reduce_while accumulator out's {id, buf}; inline/4 copies that into the callee's live set (outer), and the callee's parameter binding has a new id but the same buf, so before_write's shared?/2 copied on every iteration. A direct out[i] = 1 escaped only because shared? ignores the binding's own id. Fix: nested/2 takes the block; for a block that is exactly one arm of an if, cond or case in the current statement (arm?/2), out = env.live (read after the statement) + what the statement reads outside the alternatives (taken/2 prunes sibling arms; conditions, case subjects and patterns kept). Loop and fn bodies (run again) keep env.nest. Refines all copy decisions (callee writes, direct writes, hoist, accumulator init), never removes a genuine read. Tests (test/value_semantics_test.exs, 'a helper call in one branch (defk-33b)'): the reproduction plus if/cond/case arms in reduce_while, the hoisted form, for reduce: with a read in a branch after the call: no copy note, no defk_copy_ in the C, agreement properties, forced yields. Negatives still copying and agreeing: array bound outside the loop rebound in a branch (next iteration sees the old one), read after the if, read later in the same statement, alias of the accumulator read after the call. Reproduction before: copy note on fill/1, 1k 87 us, 10k 10 ms, 40k 135 ms; after: no note, 40k 1-2 us, 4M 0.1-0.3 ms (load ~25). Docs: language.md Copies, performance.md 6.15, lz4_snappy_decode.exs comments (workaround kept). Memory bound split to defk-4b2. for reduce: cannot return an array from a branch (array-in-branch), so its branch form is not expressible; covered via a read in a branch after the call.",
+      "timestamp": "2026-10-11T13:33:21Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "[BUG] A helper kernel that writes and returns an array, called in one branch of a loop body whose other branch reads the array, copies the whole array every iteration and keeps every copy",
   "type": "bug",
-  "updated_at": "2026-10-11T13:22:37Z"
+  "updated_at": "2026-10-11T13:33:21Z"
 }
