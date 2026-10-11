@@ -676,7 +676,7 @@ makes it the `u64` value, at no cost. One step waits for the previous one
 (3 cycles on an Apple M4), so this loop runs at about 10 GB/s; three
 independent streams joined at the end run at about 28 GB/s, level with the
 crc32cer NIF (`examples/hashes.exs` has that kernel, and
-[Performance notes](performance.md), 6.18 and 6.19, the numbers).
+[Performance notes](performance.md), 6.21 and 6.22, the numbers).
 
 Which implementation runs, and what it costs, depends on the CPU:
 
