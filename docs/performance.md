@@ -458,6 +458,8 @@ Map.update(acc, name, {t, t, t, 1}, fn {mn, mx, s, c} -> {min(mn, t), max(mx, t)
 
 ### 2.12 Dense counters: `:atomics` plus one rebuild for big batches, sorted keys for small ones
 
+For counting bytes (a 256-bin histogram, per window or over a whole binary) see 2.16, "Counting bytes".
+
 - **Numbers:** fold hashes into a 16k-register HyperLogLog, ms at 100 / 1k /
   10k / 100k: anchor (bit-by-bit rank) 0.044 / 0.17 / 3.1 / 17-24; top-down
   rank 0.036 / 0.10 / 2.5 / 10.3; sorted integer keys + splice 0.019 / 0.058
@@ -563,6 +565,55 @@ else
 end
 # slow: a byte at a time
 bytes(<<out::binary, :binary.at(out, from)>>, from + 1, l - 1)
+```
+
+### 2.16 Counting bytes: 16-bit pairs into `:atomics`, eight per step; a kernel is still 6-12x faster
+
+A byte histogram (256 counts) or a histogram per window (entropy) is an
+indexed increment per byte, and Elixir's cheapest one is a BIF call:
+`:atomics.add/3`. Fewer calls is what helps: count 16-bit pairs into a
+65,536-slot `:atomics` (one call per two bytes) and fold the pairs into the
+256 bins once. The fold costs ~0.35 ms, so below ~512 KB count single bytes,
+eight per binary-pattern step. `:atomics` beats `:counters`, and anything
+that copies (a map, a tuple) or scans per value (`:binary.matches/2` 256
+times) loses. For windows, read and reset each bin with one
+`:atomics.exchange(a, i, 0)`. Split over the schedulers with a table per
+chunk and sum them; a shared `:counters` with `write_concurrency` is slower.
+No OTP BIF counts bytes.
+
+- **Numbers:** histogram of 16 MB, one process, ms: pairs into `:atomics`
+  43.0-43.9 (390 MB/s); `:atomics` 8 bytes per step 75-77, 1 byte 91-92;
+  `:counters` 8 bytes per step 101-103 (163 MB/s), 1 byte 112-115,
+  comprehension 116-123; at 1 MB (x16 for 16 MB) `Enum.frequencies` of
+  `bin_to_list` 136-169, `Map.update` 202-209, a 256-tuple with `setelement`
+  62-80, `:binary.matches/2` per value 24.7-26.4. In 12 chunks: pairs
+  8.7-9.9, `:atomics` 8-byte 12.1-13.3, `:counters` 8-byte 15.9-17.7, one
+  shared `:counters` 23-26. Pairs against bytes, one process: 4 KB 0.38 /
+  0.023, 64 KB 0.95-0.98 / 0.30, 512 KB 2.24-2.34 / 2.31, 1 MB 3.6-3.8 /
+  4.7. Entropy of 4,096 windows of 4 KiB: `:counters` get + put 121-123,
+  `:atomics` exchange 90-91, plus a tuple of per-count terms (no log per
+  bin) 83.5-84.3; in 12 chunks 13.4-14.4. The kernel: 3.6-3.8 ms one call
+  (4.6 GB/s), 1.40-1.71 ms in 12 chunks (5.5-6.6x parallel vs parallel,
+  11.4-12.7x one process vs one call, 19-28x at 4-64 KB); entropy 4.7-5.2
+  ms one call, 1.83-2.0 ms in 12 chunks (6.7-10.2x, 17.0-17.9x).
+- **Conditions:** 16 MB, half random bytes and half text; best of 5 in two
+  interleaved rounds (variants), best of 9 (`Defk.Bench`, seven runs);
+  under load (load average 12-31 on 12 cores).
+- **Source:** [`byte_histogram.exs`](https://github.com/DanielLuning/defk/blob/main/examples/byte_histogram.exs), `defk-9p6.28`; the cold test that asked for it, `docs/cold-tests/hexdocs-entropy.md` (`defk-djy.9`).
+- **Status:** provisional.
+
+<!-- defk-example run: bin = :binary.copy(<<1, 2, 3>>, 6) -->
+```elixir
+# fast (from ~512 KB): 16-bit pairs, one :atomics.add per two bytes (unrolled 8 per step in the source)
+a = :atomics.new(65_536, signed: false)
+for <<pair::16 <- bin>>, do: :atomics.add(a, pair + 1, 1)
+# then fold slot i into bins (i >>> 8) + 1 and (i &&& 255) + 1 once
+# fast below ~512 KB: bytes, 8 per step
+c = :atomics.new(256, signed: false)
+for <<b <- bin>>, do: :atomics.add(c, b + 1, 1)
+# slow
+bin |> :binary.bin_to_list() |> Enum.frequencies()
+for <<b <- bin>>, reduce: %{}, do: (m -> Map.update(m, b, 1, &(&1 + 1)))
 ```
 
 ---
@@ -823,7 +874,7 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
 
 ### 5.1 A call costs tens to a hundred-odd nanoseconds; never call per element
 
-- **Numbers:** README micro-benchmark: kernel call 12 ns against 1.6 ns for
+- **Numbers:** results-snapshot micro-benchmark: kernel call 12 ns against 1.6 ns for
   an Elixir call. `poor_tiny_calls`: "each NIF call adds ~10 ns", about the
   whole per-element cost of the Elixir version, so a kernel call per element
   inside `Enum.map` is 0.38-0.43x. `ws_masking`: at 125 B the call is the
@@ -831,8 +882,8 @@ Task.async_stream(chunks, fn {start, k} -> run(binary_part(bin, start * 8, (k + 
   `hashes`: a kernel call costs ~35 ns more than siphash's NIF call (one call
   per key 0.085 ms for 1k keys, the batch 0.048-0.055 ms). These figures
   disagree (see 8.2, open questions).
-- **Conditions:** README "noisy, single runs"; ws_masking under load.
-- **Source:** [README Results](../README.md), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs).
+- **Conditions:** results snapshot "noisy, single runs"; ws_masking under load.
+- **Source:** [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot-m-series-mac-otp-29-elixir-120-noisy-single-runs), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs).
 - **Status:** measured; ws_masking provisional.
 
 <!-- defk-example run: packed = <<1.0::float-64-native>>; readings = [1.0, 2.0] | defs: defmodule Clamp.Kernels do def clamp_all(packed), do: packed; def clamp(x, lo, hi), do: x |> max(lo) |> min(hi) end -->
@@ -921,7 +972,7 @@ because of term encoding. The kernel's error path uses `sigsetjmp(jb, 0)`:
 plain `setjmp` saves the signal mask on macOS, a syscall that cost 160 ns
 per call.
 
-- **Source:** [README design decisions](../README.md#design-decisions-the-benchmarks-validated), [`beam-nifs.md`](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md), [`nif-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nif-workloads.md) (external number).
+- **Source:** [design decisions](https://github.com/DanielLuning/defk/blob/main/docs/project.md#design-decisions-the-benchmarks-validated), [`beam-nifs.md`](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md), [`nif-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nif-workloads.md) (external number).
 - **Status:** measured (the 160 ns); external (the term-encoding numbers).
 
 ### 5.7 A large `alloc` used to block the scheduler; it is now zeroed in strips
@@ -948,6 +999,72 @@ for i <- 0..(n - 1)//1 do
 end
 ```
 
+### 5.8 A returned state costs a full copy per call: noise at 16 KiB, the whole call from 1 MiB
+
+Value semantics (ADR-0001) means a kernel that updates state copies it once
+per call: one `enif_alloc_binary` and one `memcpy`. That is the same cost as
+Elixir's `:binary.copy/1` of that size, plus ~0.1 us.
+
+- **Numbers** (us per call, the state chained through the kernel; share =
+  copy / call):
+  - **Copy cost:** 0.35-0.39 us at 16 KiB, 14-15 us at 1 MiB, 260-300 us
+    at 16 MiB and 2.2-2.5 ms at 128 MiB. That is 55-75 GB/s from 1 MiB up.
+  - **HLL, 16 KiB, p = 14:** the copy is 75-83% of the call at 100 hashes,
+    30-33% at 1k and 4-5% at 10k. Even at 100 the call is 0.47 us, against
+    0.019 ms for the best Elixir.
+  - **Bloom filter, 1 MiB, k = 7:** the copy is ~100% at 1 and at 100
+    inserts, and 20-25% at 10k.
+  - **Bloom filter, 16 MiB:** ~100% at 1 and at 100 inserts, and 87-89% at
+    10k. Copying 16 MiB evicts the state from the caches, so the writes
+    after it run 4x slower than the same probes on a warm buffer (70-79 us).
+  - **Streaming window, 128 MiB, one byte touched:** 100%, and the copy has
+    no safepoint (`defk-oed`).
+  - **An Elixir `:atomics` Bloom filter** is updated in place. One insert
+    takes 0.08 us, against 15 us (1 MiB) and 260-280 us (16 MiB) for the
+    kernel. 100 inserts take 8-9 us, against the kernel's 15 us and
+    250-310 us. At 10k inserts the kernel wins: 12-15x at 1 MiB and
+    1.6-2.2x at 16 MiB.
+- **Conditions:** best of 7, interleaved, two runs, load average 28-37. The
+  shares are ratios of numbers taken back to back and held within a few
+  points across five runs.
+- **Source:** [`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md), [`bench/state_copy_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/state_copy_cost.exs), `defk-sve.1`.
+- **Status:** provisional.
+
+<!-- defk-example run: import Bitwise; bytes = 1024; b = 77; bits = <<0>>; hashes = <<>> | defs: defmodule Bloom.Kernels do def add(bits, _hashes, _k), do: bits end -->
+```elixir
+# fast for a filter of 1 MiB or more and small batches: :atomics, set in place
+a = :atomics.new(div(bytes, 8), signed: false)
+w = (b >>> 6) + 1
+:atomics.put(a, w, :atomics.get(a, w) ||| 1 <<< (b &&& 63))
+# slow there: a kernel that returns the new bits copies every byte per call
+bits = Bloom.Kernels.add(bits, hashes, 7)
+```
+
+### 5.9 A big state chained through a kernel: one GC per call keeps binary memory at one or two states
+
+- **Numbers:**
+  - **One process**, a 16 MiB state chained through a kernel: it collects
+    once per call. Binary memory peaks at 32 MiB (once 48 MiB) above the
+    base and is freed when the process exits. It reaches 3.7-3.8k calls/s
+    (62-64 GB/s), so 10k calls/s of 16 MiB (168 GB/s) is out of reach.
+    Twelve processes together reach 5.0-6.4k calls/s (85-107 GB/s), with
+    128-320 MiB of binaries live at the peak.
+  - **A 1 MiB state** keeps up 10k calls/s with 1 MiB live, and reaches
+    64.7k calls/s flat out.
+  - **A process that also holds 256 MiB of other live binaries** collects
+    only every 4-5 calls. The dead outputs pile up in between, and each copy
+    lands in cold memory: 1 MiB 14-15 -> 24-27 us, 16 MiB 260-289 ->
+    460-587 us (1.6-2.2x). 16 KiB is unaffected. Measured in the benchmark
+    script's own process, the 1 MiB copy was 46-60 us.
+- **Conditions:** 3 s per row, `:erlang.memory(:binary)` sampled every
+  5 ms, under load (load average 28-37).
+- **Source:** [`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md#gc-and-binary-memory), [`bench/state_copy_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/state_copy_cost.exs), `defk-sve.1`.
+- **Status:** provisional.
+
+The same rule holds for any benchmark of a kernel that returns a large
+binary: time it in a fresh process, not in a process that holds the other
+inputs.
+
 ---
 
 ## 6. Making a defk kernel fast
@@ -963,7 +1080,7 @@ names each kept bounds check and the fact that would drop it. See
   (binary comprehension), defk 0.58, C 0.64; `dot` Elixir 12.2 (list), defk
   0.50, C 0.50. `count_primes(1M)`: Elixir 1400 ms, defk 180, C 186.
 - **Conditions:** "noisy, single runs".
-- **Source:** [README Results](../README.md), `bench/native.c`.
+- **Source:** [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot-m-series-mac-otp-29-elixir-120-noisy-single-runs), `bench/native.c`.
 - **Status:** measured. Later runs give `dot` ~0.56 and `sum` 0.50-0.53 ns/elem (`defk-jlk`).
 
 ### 6.2 Write loops whose indices the compiler can prove in range
@@ -1004,7 +1121,7 @@ and in strips of 2048 with one safepoint each above that.
   1.20x originally, 1.10-1.12x after bounds-check elimination, 1.08-1.09x
   after strips. `DEFK_STRIP` 512 split `prime?`'s 1000-trip loop into two
   strips, +5-6% against `yield: false`; at 2048 the ratio is back to ~1.00.
-- **Source:** `defk-88q`, `defk-5s3` comments 2026-10-05 (commit a6bca78), `defk-jaj` comment 2026-10-05, [README](../README.md#design-decisions-the-benchmarks-validated).
+- **Source:** `defk-88q`, `defk-5s3` comments 2026-10-05 (commit a6bca78), `defk-jaj` comment 2026-10-05, [design decisions](https://github.com/DanielLuning/defk/blob/main/docs/project.md#design-decisions-the-benchmarks-validated).
 - **Status:** measured; the 1.08-1.09x is superseded by 6.4.
 
 ### 6.4 Resume through loop headers; yielding is then nearly free
@@ -1019,7 +1136,7 @@ for LLVM. Resuming through each loop's header fixed it.
   ms to 1.1 ms. Each yield costs ~6-9 us of scheduler work, mostly the I/O
   poll (macOS): 2-3% on `count_primes`, which yields ~3,300 times a second.
 - **Conditions:** load not recorded; Linux not measured.
-- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [README](../README.md).
+- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md).
 - **Status:** measured; a later loaded run disagrees (see 8.2, open questions).
 
 ### 6.5 Float checks: flag the strip, replay on failure
@@ -1042,9 +1159,11 @@ with raising checks if it is set.
   branches). What paid was leaving out checks whose inf/NaN always reaches a
   later checked expression, `sqrt(max(x, 0.0))` needing no check, and `sqrt`
   as one instruction.
+- **Cost:** a flat loop's body is emitted three times instead of twice (the
+  4 benchmark kernels: 12.9 KB to 14.9 KB of code).
 - **Conditions:** 3 runs of 11 interleaved rounds, best of 5 per round;
   shared machine; `defk-hki` under load (load average 5-7.5).
-- **Source:** [README Known limitations](../README.md#known-limitations), [`bench/float_checks.exs`](https://github.com/DanielLuning/defk/blob/main/bench/float_checks.exs) (3737d1a), `defk-6tt`, `defk-hki` comment 2026-10-10 (897e9c4, 042c2f4).
+- **Source:** [language.md, 12. Limits](language.md#12-limits), [`bench/float_checks.exs`](https://github.com/DanielLuning/defk/blob/main/bench/float_checks.exs) (3737d1a), `defk-6tt`, `defk-hki` comment 2026-10-10 (897e9c4, 042c2f4).
 - **Status:** per-expression numbers superseded by `defk-6tt` and `defk-hki`; `defk-hki` provisional.
 
 ### 6.6 What still blocks vectorisation
@@ -1315,6 +1434,90 @@ Mac. Nothing was timed.
 - **Status:** static, not timed. The timing run on x86-64 hardware is
   described in the research note.
 
+### 6.18 Counting into a table: four interleaved tables, and window bounds as `max`/`min`
+
+`h[b] = h[b] + 1` on consecutive equal bytes waits on its own previous
+store. Counting bytes `i`, `i + 1`, `i + 2`, `i + 3` into four 256-entry
+tables and summing them at the end breaks that chain. For a loop over one
+window of a buffer, write the bounds as `lo = max(k * w, 0)` and
+`hi = min(lo + w, len(data))` so the reads are proven in range.
+
+- **Numbers:** 16 MB histogram, one call: one table 5.8-6.0 ms, four
+  tables 3.6-3.7 ms (1.6x). Entropy of 4 KiB windows: one table and a
+  `log2` per bin 7.6 ms, four tables 5.8-5.9, four tables and a table of
+  per-count terms 4.7-4.8; with the window range written
+  `(k * w)..(k * w + w - 1)` every byte read kept its bounds check (four
+  tables 8.5 ms, with the term table 7.0).
+- **Conditions:** under load (load average 12-23).
+- **Source:** [`byte_histogram.exs`](https://github.com/DanielLuning/defk/blob/main/examples/byte_histogram.exs) (header), `defk-9p6.28`.
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code (alloc, array writes), not plain Elixir; the kernels are checked in the example -->
+```elixir
+# fast: four tables, proven window bounds
+lo = max(k * w, 0)
+hi = min(lo + w, len(data))
+for i <- lo..(hi - 4)//4 do
+  a = data[i]; b = data[i + 1]; c = data[i + 2]; d = data[i + 3]
+  h[a] = h[a] + 1; h[256 + b] = h[256 + b] + 1; h[512 + c] = h[512 + c] + 1; h[768 + d] = h[768 + d] + 1
+end
+# slow: one table, and a range the compiler cannot prove inside data
+for i <- (k * w)..(k * w + w - 1)//1, do: (b = data[i]; h[b] = h[b] + 1)
+```
+
+### 6.19 A kernel shaped like the reference C runs level with it: Argon2id at 0.88-1.05x of ref.c
+
+Argon2's compression G is BLAKE2b's round with multiplications, over 1 KiB
+blocks of a large `[i64]`. Written as the reference's `fill_block` (XOR the
+two input blocks into a 128-word scratch, 8 row and 8 column rounds of P on
+it, XOR it back), with GB's `a + b + 2 * lo32(a) * lo32(b)` as one
+`wrap64` expression and the indexing's 32x32-bit products as `mulhi`, the
+kernel ties phc-winner-argon2's portable `ref.c` one lane against one lane.
+
+- **Numbers:** best of 5 interleaved, argon2id, one lane: t=1, 1 MiB
+  0.33-0.37 ms against argon2_elixir's 0.30-0.33 ms (0.88-0.95x: H' and the zeroing of
+  the alloc'd array, which the C skips, are a larger share here; not profiled); t=2, 16 MiB
+  10.1-13.3 vs 9.7-13.5 ms (0.91-1.05x); t=3, 64 MiB 75-93 vs 71-88 ms
+  (0.92-0.98x), about 2.5 GB/s of blocks computed. The scratch's indices
+  (`r[base + s * c + d]` with literal c, d) need no bounds check; the three
+  per word on the big array stay (their block offsets come from data).
+  Masking the scratch's indices with `band(..., 127)` changed nothing.
+- **Conditions:** under load (load averages 14-38); argon2_elixir 4.1.3
+  builds `ref.c` (no SSE) with `cc -O3`.
+- **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (header), `defk-52v.9`.
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code (wrap64 and mulhi builtins), lines of one kernel -->
+```elixir
+a = wrap64(a + b + 2 * band(a, 0xFFFFFFFF) * band(b, 0xFFFFFFFF))  # GB's add, masked
+x = mulhi(wrap64(bsl(j1, 32)), j1)                                 # j1 * j1 >>> 32, j1 < 2^32
+```
+
+### 6.20 Give each helper kernel one call site: inlining multiplies code per site
+
+Every kernel call is inlined (`defk-6ag`), so a helper called from two
+sites of a helper called from three sites is compiled six times. In
+argon2.exs, BLAKE2b's compression called at 2 sites per BLAKE2b, BLAKE2b at
+3 sites per H', and H' at 2 sites per entry kernel gave 26.6 MB of C that
+clang -O3 had not compiled after 10 minutes. One call site per helper (copy
+each BLAKE2b block into a padded 128-byte buffer and compress it in one
+loop; H' as one loop over V_1 .. V_(r+1)) gave 3.6 MB of C and a 1.1 MB
+`.so` in about 2.5 minutes, with no measurable run-time cost (H' hashes at
+most 1 KiB at a time). Each entry kernel is its own copy: the second entry
+(`argon2id` calling `argon2`) is half of the C.
+
+- **Conditions:** under load; Apple clang 21.
+- **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (header), `defk-52v.9`, `defk-6ag`.
+- **Status:** provisional (compile times under load).
+
+<!-- defk-example skip: kernel-subset code, the shape of a helper loop with one call site -->
+```elixir
+# one compression call site: the last, partial block takes the same path
+for b <- 0..(nb - 1)//1, reduce: {h0, h1, h2, h3, h4, h5, h6, h7} do
+  {h0, h1, h2, h3, h4, h5, h6, h7} -> b2b_compress(h0, h1, h2, h3, h4, h5, h6, h7, padded_block(b), ...)
+end
+```
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -1370,7 +1573,7 @@ The wrapper jobs and what would reopen each are in
   bandit_native one 16 MiB frame 8.9-9.0 ms (Elixir 2.0-2.1, defk 0.44-0.66);
   1BRC Rustler plain NIF on a ~28 MB chunk 55 ms (Elixir 13.3, DirtyCpu
   5.6); ex_keccak on 16 MB ~20 ms (kernel ~2 ms); picosat on a hard random
-  3-SAT instance 3,870 ms (`+S 1`); a `yield: false` kernel 867 ms (README;
+  3-SAT instance 3,870 ms (`+S 1`); a `yield: false` kernel 867 ms (results snapshot;
   500-570 ms in later runs). Under HTTP load, a blocking kernel pushed
   `/health` to 33 ms median and 77-90 ms p99 against 1.1 ms and 8-10 ms for
   the yielding kernel.
@@ -1429,6 +1632,57 @@ for, and much faster than a from-scratch kernel.
 - **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (`LZ_NIF_OPT=1`), `defk-52v.3`.
 - **Status:** provisional.
 
+### 7.7 Argon2 with several lanes: the wrapper's threads win; a sequential kernel is 0.25x
+
+argon2_elixir runs `parallelism` lanes on as many pthreads inside its dirty
+NIF. A kernel call is one thread, and splitting lanes across kernel calls
+would copy the whole block array at each of the 4 x t sync points under
+value semantics (`defk-52v.17`), so the kernel computes the lanes in
+sequence.
+
+- **Numbers:** argon2id at argon2_elixir's defaults (t=3, 64 MiB, 4 lanes):
+  argon2_elixir 19.5-24.4 ms, kernel 75-90 ms (0.25-0.29x); 256 MiB, 4
+  lanes: 87-120 vs 340-523 ms (0.23-0.28x). 24 hashes at the defaults
+  started at once (12 dirty schedulers x 4 threads against kernels on 12
+  normal schedulers): 235-285 vs 275-589 ms, so with every core busy the
+  threads buy less. One lane: level (6.19).
+- **Conditions:** under load (load averages 14-38).
+- **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs), `defk-52v.9`, `defk-52v.17`.
+- **Status:** provisional.
+
+### 7.8 A killed process does not stop a dirty NIF; a yielding kernel's memory goes at the kill
+
+The tick gap cannot tell a dirty NIF from a yielding kernel: a dirty NIF
+never holds a normal scheduler. What tells them apart is the kill. Killing
+a process inside a dirty NIF removes the process at once, but the C runs on
+to its end on the dirty scheduler, holding that scheduler and its memory.
+A probe shows it: with one dirty CPU scheduler online
+(`:erlang.system_flag(:dirty_cpu_schedulers_online, 1)`), time a tiny dirty
+call started right after the kill.
+
+- **Numbers:** argon2id, t=4, 256 MiB, 1 lane, killed 60 ms in.
+  argon2_elixir: process down in 0.0 ms, RSS +135-150 MiB at the kill, the
+  probe hash waited 403-498 ms (the rest of the killed hash). Kernel:
+  process down in 0.1-0.3 ms, `frames_live` 1 -> 0 and
+  `:erlang.memory(:binary)` from +256 MiB to +0 at once, probe 0.0-0.1 ms.
+  Tick gaps (1 ms ticker, one normal scheduler, a hash at the defaults, 5
+  runs): idle VM 2.0-2.5 ms, argon2_elixir 2.0-2.1 ms, kernel 2.2-2.5 ms;
+  5-9 ms outliers on both sides across runs, under load. RSS does not fall
+  back within seconds on either side (erts' binary allocator and macOS
+  malloc keep the pages): measure release with `frames_live` and
+  `:erlang.memory(:binary)`, not RSS.
+- **Conditions:** under load (load averages 25-38).
+- **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (kill section), `defk-52v.9`.
+- **Status:** provisional.
+
+<!-- defk-example skip: needs argon2_elixir and a running hash (pid); the probe's shape -->
+```elixir
+:erlang.system_flag(:dirty_cpu_schedulers_online, 1)
+Process.exit(pid, :kill)                       # pid is inside a long dirty NIF
+{us, _} = :timer.tc(fn -> Argon2.Base.hash_password("x", "saltsalt", t_cost: 1, m_cost: 3) end)
+# us is the rest of the killed hash, not the probe's own ~0.1 ms
+```
+
 ---
 
 ## 8. Myths we disproved and open questions
@@ -1453,7 +1707,7 @@ for, and much faster than a from-scratch kernel.
 
 ### 8.2 Open questions
 
-- **Per-call cost.** Sources give ~10 ns (`poor_tiny_calls`), 12 ns (README
+- **Per-call cost.** Sources give ~10 ns (`poor_tiny_calls`), 12 ns (results snapshot
   micro-benchmark), ~35 ns more than a NIF call (`hashes`), ~0.1-0.2 us
   (`per_pair_distance`) and ~0.12-0.13 us (`ws_masking`, under load), and a
   bitstring result adds ~0.1 us (`defk-cao`). No source says which costs are
@@ -1468,13 +1722,13 @@ for, and much faster than a from-scratch kernel.
 - **`mean_std` float-check cost** reads 23%, 29-33%, ~30% and 37-39% on main
   in different sessions, depending on load; only the `defk-hki` result
   (+7.1-8.5%) has its own same-session comparison.
-- **`yield: false` worst gap**: 867 ms in the README, 500-570 ms in later
+- **`yield: false` worst gap**: 867 ms in the results snapshot, 500-570 ms in later
   demo runs (`defk-yzw`).
 - **Not tried or not profiled yet:** Elixir on a one-scheduler VM is slower
   per spin than one process on 12 (185 vs 109 ns, `monte_carlo_rtp`); why
   Gorilla's middle block sizes gain most; parallel Elixir sorting
-  (`sort_u64_keys`); 64-bit hashes in 16-bit limbs in Elixir (`hashes`); the
-  per-call state copy of value semantics (`defk-sve.1`); EXLA for matmul
+  (`sort_u64_keys`); 64-bit hashes in 16-bit limbs in Elixir (`hashes`);
+  EXLA for matmul
   (`defk-7tk`); libvips for the image jobs; x86-64 timings at the target
   levels (`defk-ulk.1`, remarks only so far); Linux (every number here is macOS
   on arm64).
@@ -1495,7 +1749,7 @@ example or close a workload ticket, add its entries and its line here.
 - [`examples/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/README.md): every row, "Measuring
   correctly", "How verdicts work", "Where a wrapper is the right choice".
 - [`beam-nifs.md`](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md), [`verdict.md`](https://github.com/DanielLuning/defk/blob/main/docs/verdict.md) (no numbers yet),
-  [`fast-path-report.md`](https://github.com/DanielLuning/defk/blob/main/docs/fast-path-report.md), the README's Results, design
+  [`fast-path-report.md`](https://github.com/DanielLuning/defk/blob/main/docs/fast-path-report.md), the results snapshot, design
   decisions and Known limitations, `docs/adr/`, `docs/cold-tests/` (no
   performance content), [`language.md`](language.md) (copies, bounds facts,
   strips), `bench/`.
@@ -1513,4 +1767,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-t11.5`, `defk-6g6`, `defk-j5n`, `defk-qx3`, `defk-z69`, `defk-t11.2`,
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
-  `defk-sve`, `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`.
+  `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`.

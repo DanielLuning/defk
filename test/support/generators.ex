@@ -5,7 +5,7 @@ defmodule Defk.Generators do
   # Elixir most plausibly part ways: the i64 limits and their neighbours,
   # the points where a double stops holding every integer (2^53) or any i64
   # (2^63), signed zeros, subnormals, and arrays of length 0, 1 and around
-  # DEFK_STRIP (flat loops run in strips of 2048, README design decision 3),
+  # DEFK_STRIP (flat loops run in strips of 2048, docs/project.md design decision 3),
   # passed aligned or as an unaligned sub-binary.
 
   import StreamData
