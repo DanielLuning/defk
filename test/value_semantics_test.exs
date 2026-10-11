@@ -416,6 +416,135 @@ defmodule Defk.ValueSemanticsTest.K do
     s
   end
 
+  # A helper call in one branch whose condition reads the array, and whose
+  # other branch's tail hands it on (defk-tif): the condition ran before the
+  # call, the other branch runs instead of it, and the next iteration reads
+  # the helper's result, so the helper writes in place. (`step/1` is below.)
+  defk halt_on(n :: i64, m :: i64) :: [i64] do
+    a0 = alloc(i64, 4)
+
+    Enum.reduce_while(0..n//1, a0, fn _, a ->
+      if a[0] == m do
+        {:halt, a}
+      else
+        a = step(a)
+        {:cont, a}
+      end
+    end)
+  end
+
+  defk halt_on_tuple(n :: i64, m :: i64) :: i64 do
+    a0 = alloc(i64, 4)
+
+    {a, s} =
+      Enum.reduce_while(0..n//1, {a0, 0}, fn i, {a, s} ->
+        if a[0] >= m do
+          {:halt, {a, s}}
+        else
+          a = step(a)
+          {:cont, {a, s + i}}
+        end
+      end)
+
+    s + 1000 * a[0]
+  end
+
+  defk halt_on_cond(n :: i64, m :: i64) :: [i64] do
+    a0 = alloc(i64, 4)
+
+    Enum.reduce_while(0..n//1, a0, fn i, a ->
+      cond do
+        a[0] >= m -> {:halt, a}
+        a[1] > i -> {:cont, a}
+        true -> {:cont, step(a)}
+      end
+    end)
+  end
+
+  defk halt_on_case(n :: i64, m :: i64) :: [i64] do
+    a0 = alloc(i64, 4)
+
+    Enum.reduce_while(0..n//1, a0, fn _, a ->
+      case a[0] - m do
+        0 ->
+          {:halt, a}
+
+        _ ->
+          a = step(a)
+          {:cont, a}
+      end
+    end)
+  end
+
+  # the call is an inner reduce_while whose initial tuple holds the
+  # accumulator, in one branch of the outer body
+  defk halt_on_nested(n :: i64, m :: i64) :: [i64] do
+    a0 = alloc(i64, 4)
+
+    Enum.reduce_while(0..n//1, a0, fn _, a ->
+      if a[0] >= m do
+        {:halt, a}
+      else
+        {a, _, _} =
+          Enum.reduce_while(0..3//1, {a, -1, 0}, fn j, {b, x, y} ->
+            b[j] = b[j] + 1
+            b = step(b)
+            {:cont, {b, x + j, y}}
+          end)
+
+        {:cont, a}
+      end
+    end)
+  end
+
+  # Negative cases: the buffer before the call is read later, so it copies.
+  # An alias read after the call: old[0] is the value before step/1.
+  defk halt_on_alias(n :: i64, m :: i64) :: [i64] do
+    a0 = alloc(i64, 4)
+
+    Enum.reduce_while(0..n//1, a0, fn _, a ->
+      if a[0] >= m do
+        {:halt, a}
+      else
+        old = a
+        a = step(a)
+        a[1] = a[1] + old[0]
+        {:cont, a}
+      end
+    end)
+  end
+
+  # a condition after the arm, in the same statement, reads the array from
+  # before the call (in place, it would see the write)
+  defk cond_after_arm(c :: bool) :: i64 do
+    a = alloc(i64, 2)
+
+    x =
+      if c do
+        a = step(a)
+        a[0]
+      else
+        0
+      end + if(a[0] > 0, do: 10, else: 20)
+
+    x
+  end
+
+  # bound outside the loop: the condition reads the outer, unchanged array
+  # in every iteration (in place, it would halt after one)
+  defk halt_on_outer(n :: i64) :: i64 do
+    a = alloc(i64, 4)
+
+    Enum.reduce_while(0..n//1, 0, fn _, s ->
+      if a[0] > 0 do
+        {:halt, s}
+      else
+        a = step(a)
+        {:cont, s + a[0]}
+      end
+    end)
+  end
+
   # A helper that writes its array parameter, then binds the name again from
   # a call or a reduce loop and returns the new binding (defk-3z5): the array
   # returned carries the write, so nothing is lost and nothing is copied.
@@ -678,6 +807,50 @@ defmodule Defk.ValueSemanticsTest do
 
       try do
         for k <- @in_branch, do: agree(k, [2_000])
+      after
+        K.__defk_force_yields__(false)
+      end
+    end
+  end
+
+  describe "a helper call in a branch chosen by reading the array (defk-tif)" do
+    @chosen [:halt_on, :halt_on_tuple, :halt_on_cond, :halt_on_case, :halt_on_nested]
+    @chosen_copied [:halt_on_alias, :halt_on_outer, :cond_after_arm]
+
+    test "writes in place when the condition reads it and the other tail returns it" do
+      for k <- @chosen do
+        assert copy_notes(k) == [], "#{k}: #{inspect(copy_notes(k))}"
+        assert copies(kernel_c(K, k)) == 0, "#{k}"
+      end
+    end
+
+    test "still copies when the buffer before the call is read later" do
+      for k <- @chosen_copied do
+        assert [_ | _] = copy_notes(k), "#{k}"
+        assert copies(kernel_c(K, k)) > 0, "#{k}"
+      end
+    end
+
+    test "agrees with Elixir mode, also under forced yields" do
+      assert agree(:halt_on, [100_000, 5]) == {:ok, i64s([5, 0, 0, 0])}
+      assert agree(:halt_on, [100_000, -1]) == {:ok, i64s([100_001, 0, 0, 0])}
+      assert agree(:halt_on_tuple, [10, 3]) == {:ok, 3003}
+      assert {:ok, _} = agree(:halt_on_cond, [50, 20])
+      assert agree(:halt_on_case, [50, 7]) == {:ok, i64s([7, 0, 0, 0])}
+      assert {:ok, _} = agree(:halt_on_nested, [50, 30])
+      # in place, old[0] would be the value after step/1
+      assert agree(:halt_on_alias, [3, 10]) == {:ok, i64s([4, 6, 0, 0])}
+      assert agree(:halt_on_outer, [5]) == {:ok, 6}
+      assert agree(:cond_after_arm, [true]) == {:ok, 21}
+
+      K.__defk_force_yields__(true)
+
+      try do
+        for k <- @chosen ++ [:halt_on_alias], m <- [-1, 7, 2_000] do
+          assert {:ok, _} = agree(k, [2_000, m])
+        end
+
+        assert agree(:halt_on_outer, [2_000]) == {:ok, 2_001}
       after
         K.__defk_force_yields__(false)
       end
@@ -958,6 +1131,26 @@ defmodule Defk.ValueSemanticsTest do
     read_after_in_stmt: [
       args: StreamData.fixed_list([StreamData.integer(0..4), StreamData.boolean()])
     ],
+    halt_on: [
+      args: StreamData.fixed_list([StreamData.integer(-1..200), StreamData.integer(-1..60)])
+    ],
+    halt_on_tuple: [
+      args: StreamData.fixed_list([StreamData.integer(-1..200), StreamData.integer(-1..60)])
+    ],
+    halt_on_cond: [
+      args: StreamData.fixed_list([StreamData.integer(-1..200), StreamData.integer(-1..60)])
+    ],
+    halt_on_case: [
+      args: StreamData.fixed_list([StreamData.integer(-1..200), StreamData.integer(-1..60)])
+    ],
+    halt_on_nested: [
+      args: StreamData.fixed_list([StreamData.integer(-1..200), StreamData.integer(-1..60)])
+    ],
+    halt_on_alias: [
+      args: StreamData.fixed_list([StreamData.integer(-1..200), StreamData.integer(-1..60)])
+    ],
+    halt_on_outer: [args: StreamData.fixed_list([StreamData.integer(-1..200)])],
+    cond_after_arm: [args: StreamData.fixed_list([StreamData.boolean()])],
     rebind_call: [args: StreamData.fixed_list([StreamData.integer(0..20)])],
     rebind_reduce: [args: StreamData.fixed_list([G.array(:i64)])],
     rebind_tuple: [args: StreamData.fixed_list([StreamData.integer(0..40)])],

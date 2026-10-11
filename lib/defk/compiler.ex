@@ -1138,9 +1138,10 @@ defmodule Defk.Compiler do
 
   # the env of block `ast` nested in the statement `env` is at. An arm of an
   # if, cond or case runs instead of its other arms, so what they read is not
-  # read after it (defk-33b): its live set is what is read after the
-  # statement, and what the statement reads outside the branch's arms. Any
-  # other nested block (a loop or fn body, run again) keeps env.nest.
+  # read after it (defk-33b), and the condition, subject and clause heads that
+  # chose it ran before it (defk-tif): its live set is what is read after the
+  # statement, and what the statement reads outside those. Any other nested
+  # block (a loop or fn body, run again) keeps env.nest.
   defp nested(env, ast) do
     out =
       if arm?(env.stmt, ast),
@@ -1163,9 +1164,12 @@ defmodule Defk.Compiler do
     n
   end
 
-  # Statement `stmt` as it runs when `node` does: every if, cond and case arm
-  # that is an alternative to the arm holding `node` is left out. `stmt`
-  # whole when `node` is not exactly once in it.
+  # Statement `stmt` as it runs when `node` does, from the arm holding it on:
+  # every if, cond and case arm that is an alternative to that arm is left
+  # out, and so are the conditions, subjects and clause heads that chose it
+  # (evaluated before it, in the same run of the statement; a later iteration
+  # reads the arm's new bindings, not the buffers it had). `stmt` whole when
+  # `node` is not exactly once in it.
   defp taken(stmt, node) do
     if occurrences(stmt, node) == 1,
       do: Macro.prewalk(stmt, &if(holds_arm?(&1, node), do: other_arms_out(&1, node), else: &1)),
@@ -1186,17 +1190,17 @@ defmodule Defk.Compiler do
 
   defp arms(_ast), do: []
 
-  defp other_arms_out({:if, m, [c, kw]}, node),
-    do: {:if, m, [c, for({k, b} <- kw, do: {k, arm_or_nil(b, node)})]}
+  defp other_arms_out({:if, m, [_c, kw]}, node),
+    do: {:if, m, [nil, for({k, b} <- kw, do: {k, arm_or_nil(b, node)})]}
 
   defp other_arms_out({:cond, m, [[do: clauses]]}, node),
     do: {:cond, m, [[do: clauses_out(clauses, node)]]}
 
-  defp other_arms_out({:case, m, [subject, [do: clauses]]}, node),
-    do: {:case, m, [subject, [do: clauses_out(clauses, node)]]}
+  defp other_arms_out({:case, m, [_subject, [do: clauses]]}, node),
+    do: {:case, m, [nil, [do: clauses_out(clauses, node)]]}
 
   defp clauses_out(clauses, node) do
-    for {:->, cm, [head, body]} <- clauses, do: {:->, cm, [head, arm_or_nil(body, node)]}
+    for {:->, cm, [_head, body]} <- clauses, do: {:->, cm, [[nil], arm_or_nil(body, node)]}
   end
 
   defp arm_or_nil(body, node), do: if(occurrences(body, node) == 0, do: nil, else: body)
