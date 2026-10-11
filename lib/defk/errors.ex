@@ -2,14 +2,19 @@ defmodule Defk.Errors do
   @moduledoc """
   Kernel compile errors: the registry of error codes and the error format.
 
-  Every rejection the compiler makes has a stable code, a readable slug that is
-  also its anchor in `docs/language.md` (`docs/language.md#<code>`) once that
-  file exists. Codes are never renamed. `explain!/1` prints a code's entry. `codes/0` lists them with a one-line summary, whether the
-  construct is outside the kernel subset for good (`:subset`), planned
+  Every rejection the compiler makes has a stable code, a readable slug that
+  is also its heading on the [compile errors](compile-errors.md) page
+  (`docs/compile-errors.md#<code>`). Codes are never renamed. `explain!/1` prints a
+  code's entry. `codes/0` lists them, each with a one-line summary, whether
+  the construct is outside the kernel subset for good (`:subset`), planned
   (`:planned`), or a mistake in a construct that is in it (`:error`), the
-  default `why`/`hint`, and a failing `example` with its `rewrite` (both module
-  bodies; the test suite checks the example is rejected with that code and the
-  rewrite compiles).
+  default `why`/`hint`, and a failing `example` with its `rewrite` (both
+  module bodies; the test suite checks the example is rejected with that code
+  and the rewrite compiles).
+
+  The codes are the stable part: `codes/0` and `explain!/1` are public. The
+  keys of an entry map may change in any version, and so may `fetch!/1`,
+  which is unstable. The rest of this module is the compiler's.
 
   A compile error prints in Elixir's diagnostic frame, then why and how to fix:
 
@@ -22,20 +27,28 @@ defmodule Defk.Errors do
 
       why: a kernel works on numbers, booleans, tuples and packed arrays; ...
       hint: pass the values as separate arguments, ...
-      (defk unsupported-map: docs/language.md#unsupported-map)
+      (defk unsupported-map: https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#unsupported-map)
 
-  Without `docs/language.md` (a build from a copy of `lib/` alone) the footer
-  is `(defk unsupported-map; mix run -e 'Defk.Errors.explain!("unsupported-map")')`.
-  The "Compile errors" section of `docs/language.md` is `reference/0`.
+  The footer is a link that works outside the repository. When the catalogue
+  page is on disk next to `lib/` (running from the repository, or from a path
+  or git dependency) it is that file's path, relative to the working directory
+  when it lies below it (`docs/compile-errors.md#unsupported-map`). Otherwise
+  (a Hex package, which does not ship `docs/`) it is a URL. The URL points at
+  the `main` branch on GitHub until defk is released on Hex; the release
+  switches it to HexDocs for the installed version (see `@url_base`).
+  The page is generated from this registry, so the two never differ.
   """
 
-  @docs "docs/language.md#"
-
-  # The footer names docs/language.md only when that file exists, so no rendered
-  # error points at a missing path (the file is tracked as an external resource,
-  # so creating or removing it recompiles this module).
-  @external_resource Path.expand("../../docs/language.md", __DIR__)
-  @language_doc_exists File.exists?(Path.expand("../../docs/language.md", __DIR__))
+  # Where an error footer points (defk-djy.6). The page exists in the source
+  # tree only; a dependency checked out from a path or git has it, a Hex
+  # package does not, so then the footer is a URL. defk is not on Hex yet, so
+  # the URL is the GitHub blob on main, which resolves today and keeps every
+  # code's anchor (codes are never renamed). At the Hex release (defk-djy.8)
+  # change the one line below to
+  #   "https://hexdocs.pm/defk/#{Mix.Project.config()[:version]}/compile-errors.html#"
+  # (the version of the install, for an anchor that matches that version).
+  @url_base "https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#"
+  @catalogue Path.expand("../../docs/compile-errors.md", __DIR__)
 
   # Rejections reported per module; later ones are counted, not shown.
   @cap 10
@@ -892,21 +905,61 @@ defmodule Defk.Errors do
 
   @by_code Map.new(@codes, &{&1.code, &1})
 
-  @doc "Every error code, in documentation order."
+  @typedoc """
+  A registry entry. The code is stable; the keys of the map are not, and may
+  change in any version.
+  """
+  @type entry :: %{
+          required(:code) => String.t(),
+          required(:kind) => :error | :subset | :planned,
+          optional(atom()) => term()
+        }
+
+  @doc """
+  Every error code's entry, in documentation order: `code`, `kind`
+  (`:error`, `:subset` or `:planned`), `summary`, `why`, `hint`, and a failing
+  `example` with its `rewrite`.
+
+  The codes are stable; the keys of the entries are not.
+
+      iex> "unsupported-map" in Enum.map(Defk.Errors.codes(), & &1.code)
+      true
+  """
+  @spec codes() :: [entry()]
   def codes, do: @codes
 
-  @doc "The registry entry for `code`."
+  @doc """
+  The registry entry for `code`. Raises `KeyError` for an unknown code.
+
+  Unstable: the shape of the entry may change in any version.
+
+      iex> Defk.Errors.fetch!("unsupported-map").kind
+      :subset
+  """
+  @spec fetch!(String.t()) :: entry()
   def fetch!(code), do: Map.fetch!(@by_code, code)
 
-  @doc "The docs/language.md anchor for `code`."
-  def docs(code), do: @docs <> code
+  @doc false
+  # The link for `code` in the error footer: the catalogue's path when that
+  # file is on disk (`on_disk?`), else its URL.
+  def docs(code, on_disk? \\ File.exists?(@catalogue)) do
+    if on_disk?,
+      do: Path.relative_to_cwd(@catalogue) <> "#" <> code,
+      else: @url_base <> code
+  end
 
   @doc """
   Prints the registry entry for `code`: summary, why, hint, example and rewrite.
 
-  Raises `ArgumentError` for an unknown code.
+  Raises `ArgumentError` for an unknown code. The footer of a compile error
+  names this command when the language reference is not at hand:
 
-      mix run -e 'Defk.Errors.explain!("unsupported-map")'
+  ```bash
+  mix run -e 'Defk.Errors.explain!("unsupported-map")'
+  ```
+
+      iex> Defk.Errors.explain!("no-such-code")
+      ** (ArgumentError) unknown defk error code "no-such-code"
   """
   @spec explain!(String.t()) :: :ok
   def explain!(code) do
@@ -940,7 +993,7 @@ defmodule Defk.Errors do
   defp indent_block(text), do: text |> String.split("\n") |> Enum.map_join("\n", &indent/1)
 
   @doc false
-  # The entries of the "Compile errors" section of docs/language.md, one
+  # The entries of the "Codes" section of docs/compile-errors.md, one
   # `### <code>` heading per code (the anchor the error footer links), in
   # registry order. Maintainer note: docs/agents/generated-docs.md. The test
   # suite checks the document contains this text verbatim.
@@ -950,13 +1003,13 @@ defmodule Defk.Errors do
   @doc false
   # The generated lists of docs/scope.md: every code of `kind` (:planned or
   # :subset), one Markdown bullet per code linking its entry in
-  # docs/language.md, with its summary, in registry order. Maintainer note:
+  # docs/compile-errors.md, with its summary, in registry order. Maintainer note:
   # docs/agents/generated-docs.md. The test suite checks the page contains
   # this text verbatim.
   @spec scope(:planned | :subset) :: String.t()
   def scope(kind) when kind in [:planned, :subset] do
     for %{kind: ^kind} = e <- @codes, into: "" do
-      "- [`#{e.code}`](language.md##{e.code}): #{e.summary}\n"
+      "- [`#{e.code}`](compile-errors.md##{e.code}): #{e.summary}\n"
     end
   end
 
@@ -988,12 +1041,7 @@ defmodule Defk.Errors do
     ])
   end
 
-  # defined for the form in force at compile time, so neither branch is dead
-  if @language_doc_exists do
-    defp footer(code), do: "(defk #{code}: #{docs(code)})"
-  else
-    defp footer(code), do: "(defk #{code}; mix run -e 'Defk.Errors.explain!(\"#{code}\")')"
-  end
+  defp footer(code), do: "(defk #{code}: #{docs(code)})"
 
   # ------------------------------------------------------------ rendering --
 

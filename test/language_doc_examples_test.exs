@@ -232,7 +232,7 @@ defmodule Defk.LanguageDocExamplesTest do
     test "the generated error reference is left out" do
       doc =
         Enum.join(
-          ["## 11. Compile errors", "", "### a-code", fence(@kernel), "## 12. Limits"],
+          ["## Codes", "", "### a-code", fence(@kernel), "## 12. Limits"],
           "\n"
         )
 

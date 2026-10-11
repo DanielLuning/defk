@@ -1,6 +1,12 @@
 defmodule Defk.Bench do
   @moduledoc """
-  Uniform measurement and reporting for `examples/*.exs`.
+  Uniform measurement and reporting for the catalog's examples
+  (`examples/*.exs`).
+
+  **Unstable.** This is catalog tooling: `report/1`, its options, its
+  verdicts and its `DEFK_RESULT` line serve the catalog's runner and may
+  change in any version. To measure your own kernel, follow
+  [Measuring](measuring.md); any benchmarking tool works.
 
   The point of the examples is not to show that defk beats Elixir. It is to
   find the use cases where defk helps Elixir, and to say plainly where it
@@ -32,11 +38,18 @@ defmodule Defk.Bench do
   Target workloads report four more things beside the verdict, none of which
   changes it (see the `:native`, `:responsiveness`, `:realistic_size` and
   `:sweep` options of `report/1`).
+
+  The measurement rules, and every example calling `report/1`, are in the
+  catalog's
+  [README](https://github.com/DanielLuning/defk/blob/main/examples/README.md).
   """
 
   @good 2.0
 
   @doc """
+  Measures an example, prints its table and `DEFK_RESULT` line, and returns
+  the result map (the JSON's fields). Unstable, like the module.
+
   Options:
 
     * `:name` (required) - example name, e.g. `"rolling_stats"`
@@ -73,6 +86,7 @@ defmodule Defk.Bench do
       the first size where defk is at least #{2}x faster, or `nil`. Never
       changes the verdict.
   """
+  @spec report(keyword()) :: map()
   def report(opts) do
     name = Keyword.fetch!(opts, :name)
     expected = Keyword.fetch!(opts, :expected)
@@ -120,11 +134,10 @@ defmodule Defk.Bench do
     result
   end
 
-  @doc """
-  The pure arithmetic behind a report, over measured times in microseconds:
-  `%{elixir_ms, defk_ms, speedup, verdict}`. The verdict uses the unrounded
-  speedup.
-  """
+  @doc false
+  # The pure arithmetic behind a report, over measured times in microseconds:
+  # `%{elixir_ms, defk_ms, speedup, verdict}`. The verdict uses the unrounded
+  # speedup.
   def compare(elixir_us, defk_us) do
     speedup = elixir_us / max(defk_us, 1)
 
@@ -136,10 +149,12 @@ defmodule Defk.Bench do
     }
   end
 
-  @doc "Defk's speedup over the native side, from times in ms (above 1: defk is faster)."
+  @doc false
+  # Defk's speedup over the native side, from times in ms (above 1: defk is faster).
   def native_speedup(native_ms, defk_ms), do: Float.round(native_ms / max(defk_ms, 0.001), 2)
 
-  @doc "One sweep row from times in ms."
+  @doc false
+  # One sweep row from times in ms.
   def sweep_row(size, elixir_ms, defk_ms) do
     %{
       size: size,
@@ -149,15 +164,15 @@ defmodule Defk.Bench do
     }
   end
 
-  @doc "The verdict for a speedup of defk over the Elixir baseline."
+  @doc false
+  # The verdict for a speedup of defk over the Elixir baseline.
   def verdict(s) when s >= @good, do: :good
   def verdict(s) when s >= 1.0, do: :marginal
   def verdict(_), do: :poor
 
-  @doc """
-  The first size label in `rows` (maps with `:size` and `:speedup`, in sweep
-  order) where defk is at least #{2}x faster, or `nil`.
-  """
+  @doc false
+  # The first size label in `rows` (maps with `:size` and `:speedup`, in sweep
+  # order) where defk is at least 2x faster, or `nil`.
   def crossover(rows) do
     Enum.find_value(rows, fn %{size: size, speedup: s} -> if s >= @good, do: size end)
   end

@@ -70,7 +70,7 @@ defmodule Defk.MixProject do
     "docs/scope.md",
     "docs/performance.md"
   ]
-  @reference ["docs/language.md", "docs/guides/cheatsheet.cheatmd"]
+  @reference ["docs/language.md", "docs/compile-errors.md", "docs/guides/cheatsheet.cheatmd"]
 
   defp docs do
     [

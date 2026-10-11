@@ -3,12 +3,13 @@ defmodule Defk.ScopeDocTest do
   # registry's text (Defk.Errors.scope/1), the hand-written "Not yet" list
   # names every planned code with a ticket, the hand-written "Won't be" list
   # names only codes outside the subset for good, and every link into
-  # docs/language.md resolves. Its example kernel runs in
+  # docs/compile-errors.md or docs/language.md resolves. Its example kernel runs in
   # test/language_doc_examples_test.exs.
   use ExUnit.Case, async: true
 
   @doc_path "docs/scope.md"
   @language_path "docs/language.md"
+  @errors_path "docs/compile-errors.md"
 
   setup_all do
     %{doc: File.read!(@doc_path)}
@@ -29,10 +30,10 @@ defmodule Defk.ScopeDocTest do
     text
   end
 
-  # the error codes linked in `text` (other links into docs/language.md are sections)
+  # the error codes linked in `text` (other links are sections of docs/language.md)
   defp codes_linked(text) do
     all = MapSet.new(Defk.Errors.codes(), & &1.code)
-    for [_, a] <- Regex.scan(~r/\(language\.md#([a-z0-9-]+)\)/, text), a in all, do: a
+    for [_, a] <- Regex.scan(~r/\(compile-errors\.md#([a-z0-9-]+)\)/, text), a in all, do: a
   end
 
   defp codes(kind), do: for(%{kind: ^kind, code: code} <- Defk.Errors.codes(), do: code)
@@ -69,11 +70,13 @@ defmodule Defk.ScopeDocTest do
     assert linked -- codes(:subset) == []
   end
 
-  test "every link into docs/language.md resolves", %{doc: doc} do
-    anchors = MapSet.new(Defk.LanguageDoc.anchors(File.read!(@language_path)))
+  test "every link into docs/language.md and docs/compile-errors.md resolves", %{doc: doc} do
+    for {page, path} <- [{"language.md", @language_path}, {"compile-errors.md", @errors_path}] do
+      anchors = MapSet.new(Defk.LanguageDoc.anchors(File.read!(path)))
 
-    for [_, a] <- Regex.scan(~r/\]\(language\.md#([^)]+)\)/, doc) do
-      assert a in anchors, "broken link language.md##{a}"
+      for [_, a] <- Regex.scan(~r/\]\(#{Regex.escape(page)}#([^)]+)\)/, doc) do
+        assert a in anchors, "broken link #{page}##{a}"
+      end
     end
   end
 end

@@ -1,7 +1,8 @@
 defmodule Defk.ElixirMode do
   @moduledoc """
-  Elixir mode: each kernel body compiled to plain Elixir instead of native
-  code, for tests and debugging only (never a fallback, never a baseline).
+  Elixir mode compiles each kernel body to plain Elixir as well as native
+  code. It is for tests and debugging only: never a fallback in production,
+  and not the Elixir version to measure a kernel against.
 
   Its results define what the same code gives in Elixir, with the kernel
   subset's limits applied, so a kernel and its Elixir mode can agree exactly:
@@ -12,7 +13,7 @@ defmodule Defk.ElixirMode do
     * an array write whose value doesn't fit the element type raises
       `ArgumentError` (a `[u8]` write of 300, as the kernel does)
     * an `[f64]` element read whose bits are inf or NaN raises
-      `ArgumentError` (reason `:non_finite_input`, defk-q1c)
+      `ArgumentError` (agreement reason `:non_finite_input`)
     * wrong-typed arguments raise `ArgumentError`, as the kernel does
     * `alloc/2` over 2^48 bytes raises `ArgumentError` ("length too large"),
       and from 2^47 bytes ("out of memory"), as the kernel does
@@ -21,7 +22,7 @@ defmodule Defk.ElixirMode do
     * float operations that would give inf or NaN raise `ArithmeticError`
       at the operation, which plain Elixir already does
 
-  Arrays are binaries and writes rebind them (value semantics, defk-i2e): an
+  Arrays are binaries and writes rebind them (value semantics): an
   array written inside a loop or branch is threaded out as an accumulator.
   Yielding and timing don't exist in Elixir mode. `dbg/1` and `IO.inspect/1,2`
   work inside a kernel body (a kernel compiled to native code ignores them).
@@ -37,6 +38,14 @@ defmodule Defk.ElixirMode do
       default is `:native`) makes every kernel call run in Elixir mode.
     * `with_mode/2` switches the calling process between `:native` and
       `:elixir` for modules compiled with Elixir mode.
+    * `Defk.Test.assert_agrees/3` runs one call both ways and asserts that
+      they agree.
+
+  The generated functions are described, with their stability, in the
+  `Defk` module docs
+  ([Generated functions](Defk.html#module-generated-functions)); the
+  language reference's [Elixir mode](language.md#10-elixir-mode) section and
+  [Testing kernels](testing.md) show how to use them.
   """
 
   alias Defk.ElixirMode.Ops, warn: false
@@ -50,10 +59,25 @@ defmodule Defk.ElixirMode do
   @ints [:i64, :u64]
 
   @doc """
-  Runs `fun` with this process's kernel calls in `mode` (`:native` or
-  `:elixir`), for modules compiled with Elixir mode. Other modules always
-  run natively.
+  Runs `fun` with every kernel call of the calling process in `mode`
+  (`:native` or `:elixir`), and returns what `fun` returns. Other processes
+  are not affected, and the previous mode comes back afterwards, also when
+  `fun` raises.
+
+  Only modules compiled with Elixir mode switch; others always run
+  natively.
+
+      iex> defmodule MyApp.Wrap do
+      ...>   use Defk, elixir_mode: true
+      ...>
+      ...>   defk double(x :: i64) :: i64, do: x * 2
+      ...> end
+      iex> Defk.ElixirMode.with_mode(:native, fn -> MyApp.Wrap.double(21) end)
+      42
+      iex> Defk.ElixirMode.with_mode(:elixir, fn -> MyApp.Wrap.double(2 ** 62) end)
+      ** (ArithmeticError) i64 overflow in 4611686018427387904 * 2
   """
+  @spec with_mode(:native | :elixir, (-> result)) :: result when result: term()
   def with_mode(mode, fun) when mode in [:native, :elixir] and is_function(fun, 0) do
     prev = Process.put(@pdict, mode)
 
@@ -134,14 +158,12 @@ defmodule Defk.ElixirMode do
 
     doc =
       quote do
-        # @doc false (ADR-0006), documented in the Defk moduledoc (defk-djy.3):
-        # runs kernel `name` with `args` as plain Elixir (see `Defk.ElixirMode`)
+        # @doc false (ADR-0006): documented in the Defk moduledoc
         @doc false
       end
 
     source =
       quote do
-        # generated Elixir mode source
         @doc false
         def __defk_elixir_source__,
           do: unquote(Enum.map_join(kernels, "\n\n", &Macro.to_string/1))

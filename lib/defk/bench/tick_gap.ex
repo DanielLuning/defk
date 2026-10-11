@@ -9,6 +9,9 @@ defmodule Defk.Bench.TickGap do
   Elixir loop is preempted by reductions, a yielding kernel by its yield
   budget, a native call that does not yield blocks the ticker for its whole
   run.
+
+  **Unstable.** A measurement helper for the catalog and the benches in
+  `bench/`; it may change in any version.
   """
 
   @doc """
@@ -16,6 +19,7 @@ defmodule Defk.Bench.TickGap do
   `{runtime_us, gaps_us}`. The caller is responsible for the scheduler count
   (see `with_one_scheduler/1`).
   """
+  @spec measure((-> term())) :: {non_neg_integer(), [non_neg_integer()]}
   def measure(fun) do
     parent = self()
     ticker = spawn(fn -> tick(System.monotonic_time(:microsecond), [], parent) end)
@@ -38,7 +42,11 @@ defmodule Defk.Bench.TickGap do
     end
   end
 
-  @doc "Runs `fun` with `:schedulers_online` set to 1 and restores the old value."
+  @doc """
+  Runs `fun` with `:schedulers_online` set to 1, and restores the old value
+  afterwards, also when `fun` raises. Returns what `fun` returns.
+  """
+  @spec with_one_scheduler((-> result)) :: result when result: term()
   def with_one_scheduler(fun) do
     online = :erlang.system_info(:schedulers_online)
     :erlang.system_flag(:schedulers_online, 1)
@@ -54,6 +62,11 @@ defmodule Defk.Bench.TickGap do
   Max and p99 tick gap in ms over `runs` runs of `fun` (default 1), on one
   scheduler: `%{max: ms, p99: ms, runtime_ms: ms}` (runtime of the fastest run).
   """
+  @spec run((-> term()), pos_integer()) :: %{
+          max: float(),
+          p99: float(),
+          runtime_ms: float()
+        }
   def run(fun, runs \\ 1) do
     with_one_scheduler(fn ->
       res = for _ <- 1..runs, do: measure(fun)
@@ -63,11 +76,20 @@ defmodule Defk.Bench.TickGap do
     end)
   end
 
-  @doc "`%{max: ms, p99: ms}` of a list of gaps in microseconds."
+  @doc false
+  # `%{max: ms, p99: ms}` of a list of gaps in microseconds.
   def summary([]), do: %{max: 0.0, p99: 0.0}
   def summary(gaps), do: %{max: to_ms(Enum.max(gaps)), p99: to_ms(percentile(gaps, 0.99))}
 
-  @doc "The `p` quantile (0..1) of a non-empty list, by rank."
+  @doc """
+  The `p` quantile (0..1) of a non-empty list, by rank.
+
+      iex> Defk.Bench.TickGap.percentile([40, 10, 30, 20], 0.5)
+      30
+      iex> Defk.Bench.TickGap.percentile([40, 10, 30, 20], 0.99)
+      40
+  """
+  @spec percentile([number(), ...], float()) :: number()
   def percentile(list, p) do
     n = length(list)
     list |> Enum.sort() |> Enum.drop(min(n - 1, trunc(p * n))) |> hd()
