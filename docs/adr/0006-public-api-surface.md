@@ -1,7 +1,7 @@
 # ADR-0006: The public API surface
 
 - Date: 2026-10-11
-- Status: proposed (needs a maintainer decision; see "Open questions")
+- Status: accepted (2026-10-11: the maintainer accepted every recommendation under "Questions decided")
 - Source: `bw show defk-djy.2` (this audit), parent epic `bw show defk-djy`;
   followed by `defk-djy.3` (API docs)
 
@@ -33,7 +33,7 @@ Tiers:
 `one_brc`, `release_debian`), `bench/`, `demo.exs`, and the user docs named
 above.
 
-## Proposed decision
+## Decision
 
 ### Modules
 
@@ -180,7 +180,9 @@ Doc gaps found on the way (for `defk-djy.3`, not renames): `language.md`'s
 table of generated functions lacks `__defk_report__/0`; the `defk` macro and
 `__using__/1` have no `@doc`; `Defk.Bench` and `TickGap` have no `@spec`.
 
-## Open questions
+## Questions decided
+
+The maintainer accepted the recommendation on all ten (2026-10-11).
 
 1. **Generated reflection functions: `@doc false` in the user's module,
    documented once in `Defk`?** Recommendation: **yes**. Keep the
