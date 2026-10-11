@@ -484,7 +484,7 @@ does not raise. An `[f64]` or `[f32]` input element whose bits are inf or NaN ra
 that isn't taken never raises. Messages differ from Elixir's (they name the
 operation, not the line); run the kernel in Elixir mode to find the line.
 (defk-i00; the checks cost 17-24% on float reductions and about 2x on a
-vectorised elementwise loop today, see README "Known limitations" and
+vectorised elementwise loop today, see [performance.md 6.5](performance.md#65-float-checks-flag-the-strip-replay-on-failure) and
 defk-6tt.)
 
 ### Comparisons
