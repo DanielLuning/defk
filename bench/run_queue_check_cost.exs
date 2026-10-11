@@ -12,6 +12,20 @@ checks = [
   {"statistics(:run_queue_lengths)", fn -> :erlang.statistics(:run_queue_lengths) end},
   {"run_queue_lengths + nth(scheduler_id)",
    fn -> :lists.nth(:erlang.system_info(:scheduler_id), :erlang.statistics(:run_queue_lengths)) end},
+  # a tiny yielding kernel call (count_primes(10)) bare and behind each check
+  {"tiny kernel call", fn -> Examples.Kernels.count_primes(10) end},
+  {"tiny call + total_run_queue_lengths",
+   fn ->
+     if :erlang.statistics(:total_run_queue_lengths) > 0,
+       do: Examples.Kernels.__defk_sliced_count_primes__(10, 50, 1000),
+       else: Examples.Kernels.count_primes(10)
+   end},
+  {"tiny call + own run queue",
+   fn ->
+     if :lists.nth(:erlang.system_info(:scheduler_id), :erlang.statistics(:run_queue_lengths)) > 0,
+       do: Examples.Kernels.__defk_sliced_count_primes__(10, 50, 1000),
+       else: Examples.Kernels.count_primes(10)
+   end},
   {"empty loop", fn -> :ok end}
 ]
 
