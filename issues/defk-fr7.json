@@ -20,11 +20,15 @@
     {
       "text": "Reopened by the coordinator: the cause was not reproduced (20 isolated + 32 parallel + 11 full runs under load, no failure). cda979a hardens the .remarks cache (atomic write, a file with no remark line is a miss) but that is a suspect, not a proven cause. Unproven second suspect: 'cc --version' failing under load makes clang?/0 return false. If it recurs: keep the .remarks file and log remark_pass's exit status and output.",
       "timestamp": "2026-10-11T14:29:58Z"
+    },
+    {
+      "text": "Cause found (coordinator, 2026-10-11), deterministic, not load: the cached .remarks files hold absolute paths of the checkout that built them (e.g. /Users/.../defk/_build/test/defk/Elixir.Defk.ReportTest.Full-\u003chash\u003e.c). Repro: create a worktree, copy _build from another checkout, run 'mix test test/report_test.exs --only clang' -\u003e 'dot's hot loop vectorises' and 'an empty cached .remarks file is a miss' fail every time; the same tests pass in the checkout that built the cache. Every failing sighting was in an agent worktree whose _build had been copied from main (djy.3, djy.7, djy.13 ...), which is why it 'failed on every rerun' there. The cache key (hash) matches, but the remark lines name another checkout's .c path, so they don't attach to this module. Real-world impact: a project directory that is moved or restored from a CI/Docker cache at another path silently loses vectorisation facts from report: :full. Fix: make the cached remarks path-independent (store paths relative to the build dir, or match remarks by the .c basename), or include the absolute build path in the cache key; add a test that copies a built cache to a different directory.",
+      "timestamp": "2026-10-11T15:21:17Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Flaky: ReportTest 'dot's hot loop vectorises' sometimes gets no vectorisation remark from clang",
   "type": "bug",
-  "updated_at": "2026-10-11T14:29:59Z"
+  "updated_at": "2026-10-11T15:21:17Z"
 }
