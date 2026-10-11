@@ -12,11 +12,15 @@
     {
       "text": "2026-10-11 ~14:15: the defk-djy.3 agent saw it fail on every rerun in its worktree, also with its changes stashed, while load average was ~30-50 on 12 cores (5 agents running). Passed in isolation and in full runs at lower load earlier. Strong hint it's load-dependent (timeout or remark pass dropped under contention).",
       "timestamp": "2026-10-11T12:18:32Z"
+    },
+    {
+      "text": "NOT reproduced: 20 isolated report-test runs (remarks cache removed each time) at load 25-55, plus 11 full mix test runs at load 35-180 with 8-12 CPU hogs, 3 concurrent same-worktree runs x8: the 'dot hot loop vectorises' test never failed. Ruled out: timeout (remark pass has none, System.cmd blocks), clang non-determinism (no budget; remark file identical), async races (report tests async:false, Full compiled once per run). Remaining plausible: lib/defk/build.ex remarks! cached a torn/empty .remarks (non-atomic File.write!, killed run) which then fails every rerun until the cache key changes, matching 'failed on every rerun'; also cc --version probe failing under load -\u003e clang? false silently. Hardened: atomic write, empty/remark-less cache = miss, pid in temp names; test added (fails without the fix). Other flakes seen under load are different causes: frames_live destructor race (cwl family: MultiClauseTest, BitstringHelperTest, RaiseCleanupTest, BitstringTest killed-mid-build), 60s ExUnit timeouts (ScaledFactsTest properties, BinaryLiteralsTest). Reopen if it recurs, with the .remarks file kept.",
+      "timestamp": "2026-10-11T14:29:16Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Flaky: ReportTest 'dot's hot loop vectorises' sometimes gets no vectorisation remark from clang",
   "type": "bug",
-  "updated_at": "2026-10-11T13:22:43Z"
+  "updated_at": "2026-10-11T14:29:16Z"
 }
