@@ -26,9 +26,9 @@
 #
 # Pre-registered verdict (defk-52v.9): marginal on speed, with the tick gap
 # and the process kill beside it. Measured: level with the reference C lane
-# for lane (0.88-1.02x), but argon2_elixir's default of 4 lanes runs on 4
+# for lane (0.88-1.05x), but argon2_elixir's default of 4 lanes runs on 4
 # threads and the kernel computes lanes one after another, so at the
-# defaults the kernel is 0.23-0.28x: poor. The pre-registration held for one
+# defaults the kernel is 0.23-0.29x: poor. The pre-registration held for one
 # lane only. This is a comparison with a C NIF on parity and on the runtime
 # contract, not a speedup claim: the Elixir answer is argon2_elixir.
 #
@@ -102,10 +102,10 @@
 # Speed, one hash, best of 5 interleaved rounds (load averages 25-38):
 #
 #                                       argon2_elixir   defk     defk vs C
-#   t=1, 1 MiB, 1 lane                  0.31-0.33 ms    0.34-0.37 ms  0.88-0.92x
-#   t=2, 16 MiB, 1 lane                 9.7-13.5 ms     10.2-13.3 ms  0.91-1.02x
-#   t=3, 64 MiB, 1 lane                 71-88 ms        76-93 ms      0.93-0.98x
-#   t=3, 64 MiB, 4 lanes (default)      19.5-24.4 ms    75-90 ms      0.25-0.28x
+#   t=1, 1 MiB, 1 lane                  0.30-0.33 ms    0.33-0.37 ms  0.88-0.95x
+#   t=2, 16 MiB, 1 lane                 9.7-13.5 ms     10.1-13.3 ms  0.91-1.05x
+#   t=3, 64 MiB, 1 lane                 71-88 ms        75-93 ms      0.92-0.98x
+#   t=3, 64 MiB, 4 lanes (default)      19.5-24.4 ms    75-90 ms      0.25-0.29x
 #   t=3, 256 MiB, 4 lanes               87-120 ms       340-523 ms    0.23-0.28x
 #
 # One lane against one lane the kernel is level with the reference C's
@@ -119,19 +119,19 @@
 # slower, against 3.6-4x for one hash): when every core is busy the lane
 # threads buy less, and what is left is noise from the load. Not tried: lazy masking or other changes to GB (the C does the
 # same operations), avoiding the zeroing of the alloc'd array (the C does
-# not zero it; zeroing is part of the 0.88x at 1 MiB).
+# not zero it; probably part of the 0.88x at 1 MiB, not profiled).
 #
 # The runtime contract. Tick gaps (1 ms ticker on one normal scheduler, five
-# runs of one hash at the defaults, Defk.Bench.TickGap): idle VM 2.0 ms (the
-# loaded machine's floor), argon2_elixir 2.0-2.1 ms, defk 2.2-2.4 ms (one
-# 9.4 ms outlier in one run and an 8.9 ms one on the argon2_elixir side in
-# another, under load). A dirty NIF does not hold the normal schedulers, so
+# runs of one hash at the defaults, Defk.Bench.TickGap): idle VM 2.0-2.5 ms (the
+# loaded machine's floor), argon2_elixir 2.0-2.1 ms, defk 2.2-2.5 ms (one
+# 9.4 ms outlier on the defk side and 8.9 and 5.2 ms ones on the
+# argon2_elixir side across runs, under load). A dirty NIF does not hold the normal schedulers, so
 # the tick gap does not separate the two; what separates them is the kill.
 # Kill mid-hash (t=4, 256 MiB, 1 lane, killed 60 ms in, one dirty CPU
 # scheduler online): both processes are down at once (0.0-0.3 ms), but the
 # killed argon2_elixir hash keeps running on its dirty scheduler with its
 # memory (RSS +135-150 MiB at the kill) until the C returns: a tiny hash
-# started right after the kill waited 411-498 ms for that scheduler. The
+# started right after the kill waited 403-498 ms for that scheduler. The
 # kernel's frame goes at the kill: frames_live 1 -> 0 and
 # :erlang.memory(:binary) back from +256 MiB to +0 at once, and the probe
 # runs in 0.1 ms. (RSS does not fall within seconds on either side; erts'

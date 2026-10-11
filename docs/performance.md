@@ -1388,7 +1388,7 @@ end
 for i <- (k * w)..(k * w + w - 1)//1, do: (b = data[i]; h[b] = h[b] + 1)
 ```
 
-### 6.19 A kernel shaped like the reference C runs level with it: Argon2id at 0.88-1.02x of ref.c
+### 6.19 A kernel shaped like the reference C runs level with it: Argon2id at 0.88-1.05x of ref.c
 
 Argon2's compression G is BLAKE2b's round with multiplications, over 1 KiB
 blocks of a large `[i64]`. Written as the reference's `fill_block` (XOR the
@@ -1398,10 +1398,10 @@ it, XOR it back), with GB's `a + b + 2 * lo32(a) * lo32(b)` as one
 kernel ties phc-winner-argon2's portable `ref.c` one lane against one lane.
 
 - **Numbers:** best of 5 interleaved, argon2id, one lane: t=1, 1 MiB
-  0.34-0.37 ms against argon2_elixir's 0.31-0.33 ms (0.88-0.92x: the H'
-  setup and the zeroing of the alloc'd array weigh most here); t=2, 16 MiB
-  10.2-13.3 vs 9.7-13.5 ms (0.91-1.02x); t=3, 64 MiB 76-93 vs 71-88 ms
-  (0.93-0.98x), about 2.5 GB/s of blocks computed. The scratch's indices
+  0.33-0.37 ms against argon2_elixir's 0.30-0.33 ms (0.88-0.95x: H' and the zeroing of
+  the alloc'd array, which the C skips, are a larger share here; not profiled); t=2, 16 MiB
+  10.1-13.3 vs 9.7-13.5 ms (0.91-1.05x); t=3, 64 MiB 75-93 vs 71-88 ms
+  (0.92-0.98x), about 2.5 GB/s of blocks computed. The scratch's indices
   (`r[base + s * c + d]` with literal c, d) need no bounds check; the three
   per word on the big array stay (their block offsets come from data).
   Masking the scratch's indices with `band(..., 127)` changed nothing.
@@ -1564,7 +1564,7 @@ value semantics (`defk-52v.17`), so the kernel computes the lanes in
 sequence.
 
 - **Numbers:** argon2id at argon2_elixir's defaults (t=3, 64 MiB, 4 lanes):
-  argon2_elixir 19.5-24.4 ms, kernel 75-90 ms (0.25-0.28x); 256 MiB, 4
+  argon2_elixir 19.5-24.4 ms, kernel 75-90 ms (0.25-0.29x); 256 MiB, 4
   lanes: 87-120 vs 340-523 ms (0.23-0.28x). 24 hashes at the defaults
   started at once (12 dirty schedulers x 4 threads against kernels on 12
   normal schedulers): 235-285 vs 275-589 ms, so with every core busy the
@@ -1585,12 +1585,12 @@ call started right after the kill.
 
 - **Numbers:** argon2id, t=4, 256 MiB, 1 lane, killed 60 ms in.
   argon2_elixir: process down in 0.0 ms, RSS +135-150 MiB at the kill, the
-  probe hash waited 411-498 ms (the rest of the killed hash). Kernel:
+  probe hash waited 403-498 ms (the rest of the killed hash). Kernel:
   process down in 0.1-0.3 ms, `frames_live` 1 -> 0 and
   `:erlang.memory(:binary)` from +256 MiB to +0 at once, probe 0.0-0.1 ms.
   Tick gaps (1 ms ticker, one normal scheduler, a hash at the defaults, 5
-  runs): idle VM 2.0 ms, argon2_elixir 2.0-2.1 ms, kernel 2.2-2.4 ms; one
-  ~9 ms outlier on each side across runs, under load. RSS does not fall
+  runs): idle VM 2.0-2.5 ms, argon2_elixir 2.0-2.1 ms, kernel 2.2-2.5 ms;
+  5-9 ms outliers on both sides across runs, under load. RSS does not fall
   back within seconds on either side (erts' binary allocator and macOS
   malloc keep the pages): measure release with `frames_live` and
   `:erlang.memory(:binary)`, not RSS.
