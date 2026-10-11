@@ -403,7 +403,7 @@ defmodule Defk do
   defp wrappers(sigs, nif_name) do
     for %{name: name, params: params, ret: ret} <- sigs do
       specs = for {_, t} <- params, do: spec(t, :in)
-      vs = arg_vars(params)
+      vs = Defk.Args.vars(params)
       call = quote do: unquote(nif_name.(name))(unquote_splicing(vs))
 
       quote do
@@ -416,7 +416,7 @@ defmodule Defk do
   defp dispatch_defs(sigs, mode, nif_name) do
     for %{name: name, params: params, ret: ret} <- sigs do
       specs = for {_, t} <- params, do: spec(t, :in)
-      vs = arg_vars(params)
+      vs = Defk.Args.vars(params)
 
       quote do
         @spec unquote(name)(unquote_splicing(specs)) :: unquote(spec(ret, :out))
@@ -435,28 +435,6 @@ defmodule Defk do
           end
         end
       end
-    end
-  end
-
-  @doc false
-  # The variables a generated function passes its arguments on in: the
-  # parameter names, with a leading underscore dropped (`_scale` is used
-  # there, which Elixir warns about), numbered when that name is taken.
-  def arg_vars(params) do
-    names = MapSet.new(params, &elem(&1, 0))
-
-    for {{p, _}, i} <- Enum.with_index(params) do
-      trimmed = String.trim_leading(Atom.to_string(p), "_")
-
-      name =
-        cond do
-          trimmed == "" -> :"arg#{i}"
-          trimmed == Atom.to_string(p) -> p
-          String.to_atom(trimmed) in names -> :"#{trimmed}#{i}"
-          true -> String.to_atom(trimmed)
-        end
-
-      {name, [generated: true], nil}
     end
   end
 
