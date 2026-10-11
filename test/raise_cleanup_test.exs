@@ -38,6 +38,7 @@ end
 
 defmodule Defk.RaiseCleanupTest do
   use ExUnit.Case, async: false
+  import Defk.Test.Frames
 
   alias Defk.RaiseCleanupTest.K
 
@@ -66,7 +67,7 @@ defmodule Defk.RaiseCleanupTest do
     assert K.__defk_stats__().promotions == promotions0,
            "raise_one yielded; it has yield: false, so its raise must leave the stack frame"
 
-    assert %{frames_live: 0} = K.__defk_stats__()
+    assert_frames_live(K)
 
     # the promoted frame: forced yields, so the frame is a resource when the
     # raise happens and defk_finish runs on the promoted frame
@@ -90,8 +91,7 @@ defmodule Defk.RaiseCleanupTest do
 
     # the resource frames are garbage in this process now
     :erlang.garbage_collect(self())
-    wait_until(fn -> K.__defk_stats__().frames_live == 0 end)
-    assert %{frames_live: 0} = K.__defk_stats__()
+    assert_frames_live(K)
 
     grown = binary_bytes() - before
 
@@ -102,7 +102,7 @@ defmodule Defk.RaiseCleanupTest do
     # every raising call left a working kernel behind
     assert K.raise_one(8, 0) == 0
     assert K.raise_in_loop(10, 0, 0) == 55
-    assert %{frames_live: 0} = K.__defk_stats__()
+    assert_frames_live(K)
   end
 
   defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + 30_000) do

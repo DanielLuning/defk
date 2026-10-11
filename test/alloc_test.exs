@@ -49,6 +49,7 @@ end
 
 defmodule Defk.AllocTest do
   use ExUnit.Case, async: true
+  import Defk.Test.Frames
   use Defk.Properties
   alias Defk.AllocTest.K
 
@@ -146,7 +147,7 @@ defmodule Defk.AllocTest do
       assert both(:at, [a, 0]) == {:ok, 10}
       assert both(:at, [a, 3]) == {:ok, 40}
       assert both(:put_at, [4, 3]) == {:ok, 7}
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     end
 
     test "an index at the i64 extremes raises instead of reaching memory" do
@@ -163,7 +164,7 @@ defmodule Defk.AllocTest do
       # the VM and the kernel are still healthy afterwards
       assert K.at(a, 1) == 20
       assert K.put_at(2, 1) == 7
-      assert %{frames_live: 0} = K.__defk_stats__()
+      assert_frames_live(K)
     end
   end
 
