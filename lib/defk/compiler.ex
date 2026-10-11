@@ -1108,20 +1108,13 @@ defmodule Defk.Compiler do
   # that is an alternative to the arm holding `node` is left out. `stmt`
   # whole when `node` is not exactly once in it.
   defp taken(stmt, node) do
-    if occurrences(stmt, node) == 1 do
-      Macro.prewalk(stmt, fn x ->
-        case arms(x) do
-          [] ->
-            x
-
-          arms ->
-            if Enum.any?(arms, &(occurrences(&1, node) > 0)), do: other_arms_out(x, node), else: x
-        end
-      end)
-    else
-      stmt
-    end
+    if occurrences(stmt, node) == 1,
+      do: Macro.prewalk(stmt, &if(holds_arm?(&1, node), do: other_arms_out(&1, node), else: &1)),
+      else: stmt
   end
+
+  # `x` is an if, cond or case with `node` in one of its arms
+  defp holds_arm?(x, node), do: Enum.any?(arms(x), &(occurrences(&1, node) > 0))
 
   # the arm bodies of an if, cond or case node
   defp arms({:if, _, [_c, kw]}) when is_list(kw), do: for({k, b} <- kw, k in [:do, :else], do: b)
