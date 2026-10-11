@@ -1131,7 +1131,7 @@ formulas. Inside Crux's `satisfying_scenarios` with the kernel as the solver
 (`SatEx.solve/1`), against Crux on the faster of the DPLL sketch and the
 Elixir CDCL: 0.6-0.9x at 5-11 variables (the DPLL solves 5 variables in
 1.2 us, the kernel's pack + call + unpack is 1.8 us; a 1-clause formula
-0.5 us), 1.1-1.6x at 16, 2.4-2.8x at 26-28 (the Ash-sized case, 2.5-2.7x on
+0.5 us), 1.1-1.6x at 16, 2.4-2.8x at 26-28 (the Ash-sized case, 2.5-2.8x on
 two formulas, 20 enumerations each), 3.8-5.1x at 37-50, 4.3-5.0x at 109-166.
 The crossover to the 2x bar is between 16 and 26 variables. Against the NIF
 the kernel per call is 1.3-1.75x faster on one solve at 5-26 variables,
