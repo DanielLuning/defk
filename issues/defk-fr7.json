@@ -1,8 +1,7 @@
 {
-  "assignee": "Daniel Lüning",
+  "assignee": "",
   "blocked_by": [],
   "blocks": [],
-  "closed_at": "2026-10-11T14:29:16Z",
   "created": "2026-10-11T12:02:42Z",
   "description": "test/report_test.exs:234 (describe 'report: :full', @describetag :clang) asserts that Full's dot/2 hot loop has exactly one {:vectorize, :vectorized, why} fact with 'width' in why.\n\nSeen failing once on 2026-10-11 by the defk-djy.7 agent in a full mix test run: clang gave no vectorisation remark for the loop. The agent reported the same failure with its changes stashed, so the cause was not its change. Not reproduced since: 3 isolated runs (mix test test/report_test.exs --only clang) and 2 full-suite runs (seeds 678569, 253049) all passed; the defk-djy.11 agent's full run passed too. Apple clang 21.0.0 (clang-2100.3.34.2), macOS 26.6.\n\nSuspects to check: the remark pass or the .remarks file racing another test that builds the same module or cleans _build/test/defk (async tests, a shared cache path); a timeout or load-dependent fallback that drops remarks; remark parsing when clang writes several remark files. Compare with defk-cwl (another under-load flake).\n\nDone when the cause is found and fixed, or the test is made robust to it, and a loop of full mix test runs under load (e.g. 20 runs with a CPU hog) shows no failure.",
   "id": "defk-fr7",
@@ -20,8 +19,8 @@
     }
   ],
   "priority": 3,
-  "status": "closed",
+  "status": "open",
   "title": "Flaky: ReportTest 'dot's hot loop vectorises' sometimes gets no vectorisation remark from clang",
   "type": "bug",
-  "updated_at": "2026-10-11T14:29:16Z"
+  "updated_at": "2026-10-11T14:29:58Z"
 }
