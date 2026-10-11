@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-11T12:47:33Z",
+  "description": "Found by the HexDocs cold test (defk-djy.9, docs/cold-tests/hexdocs-entropy.md, point 3). A Shannon-entropy kernel needs log2; the subset has log only, so authors write log(p) / log(2.0), which differs from :math.log2/1 by about 1 ulp (max abs diff ~9e-16 on real data). The kernel still agrees with its own Elixir mode, but an Elixir reference using :math.log2/1 needs a tolerance, and Defk.Bench's check: had to be relaxed.\n\ndefk-djy.9 made the compile error for :math.log2/1 and :math.log10/1 give the rewrite log(x) / log(2.0) (and 10.0) with the last-bit caveat, and documented it (language.md Builtins, cheatsheet, getting-started). This ticket is the builtin itself: :math.log2/1 is C's log2() in ERTS (erl_math), so a kernel builtin calling the same libm function gives the same bits on the same machine, and Elixir mode can call :math.log2/1.\n\nDone when log2(x) and log10(x) (and :math.log2/1, :math.log10/1) compile in a kernel, raise ArithmeticError for x \u003c= 0 like log/1, agree bit for bit with :math in native and Elixir mode (an agreement property in the suite), the language.md Builtins table, cheatsheet and Defk.Builtins list them, and the :math.log2 rewrite hint in Defk.Errors is removed.",
+  "id": "defk-ngj",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Builtins log2/1 and log10/1 that match :math bit for bit",
+  "type": "task",
+  "updated_at": "2026-10-11T12:47:33Z"
+}
