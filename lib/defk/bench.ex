@@ -27,6 +27,13 @@ defmodule Defk.Bench do
     * `marginal`     - between 1x and 2x: use Elixir, the gain does not pay
                        for native code
     * `poor`         - defk is slower: use Elixir
+
+  **Tie band.** A speedup within 5% below a threshold counts as reaching it,
+  so a result that sits on a line does not flip verdict from run to run:
+  `good` from 1.9x (2.0 * 0.95), `marginal` from 0.95x, `poor` below 0.95x.
+  The recommendation is the same on both sides of each line (use Elixir
+  for a tie at 1x; the 2x line is the bar for native code), so the flip
+  carried no information. The sweep's `crossover` keeps the plain 2x.
     * `out_of_scope` - defk cannot express the use case at all: use Elixir
 
   A `good` verdict only counts once the Elixir side is `baseline: :optimized`.
@@ -44,7 +51,13 @@ defmodule Defk.Bench do
   [README](https://github.com/DanielLuning/defk/blob/main/examples/README.md).
   """
 
+  # Thresholds, and the tie band: a speedup within 5% below a threshold counts
+  # as reaching it (`defk-9p6.24`).
   @good 2.0
+  @marginal 1.0
+  @band_factor 0.95
+  @good_at @good * @band_factor
+  @marginal_at @marginal * @band_factor
 
   @doc """
   Measures an example, prints its table and `DEFK_RESULT` line, and returns
@@ -165,9 +178,10 @@ defmodule Defk.Bench do
   end
 
   @doc false
-  # The verdict for a speedup of defk over the Elixir baseline.
-  def verdict(s) when s >= @good, do: :good
-  def verdict(s) when s >= 1.0, do: :marginal
+  # The verdict for a speedup of defk over the Elixir baseline: `:good` from
+  # 1.9x, `:marginal` from 0.95x (2x and 1x less the 5% tie band), else `:poor`.
+  def verdict(s) when s >= @good_at, do: :good
+  def verdict(s) when s >= @marginal_at, do: :marginal
   def verdict(_), do: :poor
 
   @doc false
