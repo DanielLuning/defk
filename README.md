@@ -33,7 +33,9 @@ Elixir wins as part of the record.
 [`examples/`](examples) is a growing catalog of real use cases, each written in
 Elixir and in defk, checked for agreement and measured end to end.
 `elixir examples/run_all.exs` prints the scoreboard. The measurement rules are
-in [`examples/README.md`](examples/README.md).
+in [`examples/README.md`](examples/README.md), and what we have learned about
+speed on the BEAM (fast and slow Elixir spellings, native BIFs, schedulers,
+the NIF boundary, fast kernels) is in [`docs/performance.md`](docs/performance.md).
 
 So far:
 
@@ -92,6 +94,7 @@ At `mix compile`, `defk` type-checks the body, emits C
 | StreamData generators by kernel type | `test/support/generators.ex` |
 | Runtime: arrays, checks, safepoints, frames, exceptions | `priv/defk_runtime.h` |
 | BEAM/NIF reference (execution model, lifecycles, errors, upgrade) | `docs/beam-nifs.md` |
+| Performance guide: what is fast on the BEAM, what isn't, and how to fix it | `docs/performance.md` |
 | Example kernels | `lib/examples.ex` |
 | Plain C baseline | `bench/native.c` |
 

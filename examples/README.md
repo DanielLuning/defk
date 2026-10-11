@@ -23,6 +23,8 @@ elixir examples/run_all.exs         # all of them + scoreboard (exit 1 if any cl
 
 ## Measuring correctly
 
+What we have learned about speed on the BEAM, with the numbers behind these rules, is collected in [`docs/performance.md`](../docs/performance.md).
+
 1. **Optimise the Elixir side first.**
    - Use the stdlib, Erlang BIFs and modules (`:binary`, `:lists`, `:array`, ETS), and established Elixir libraries.
    - Pick a better data layout or algorithm.
@@ -163,6 +165,7 @@ Either way the catalog gets updated.
 5. Compile the kernels with `use Defk, elixir_mode: true` and check in the script that each agrees with its Elixir mode (`Mod.__defk_elixir__(name, args)` against the native call, on small and bad inputs). The option works in a `Mix.install` script; the default call path stays native, so timing is unaffected.
 6. Call `Defk.Bench.report/1` with the `expected` verdict, the `baseline` status and a one-sentence `reason`.
 7. Run `elixir examples/run_all.exs` and add a row to the right table above.
+8. Add or update the entries in [`docs/performance.md`](../docs/performance.md) for what you learned, including what didn't help: the numbers, the conditions (size, load: mark loaded runs provisional) and this script as the source.
 
 Planned examples, and the work to optimise each first-pass baseline, are
 tracked as children of epic `defk-9p6` (`bw show defk-9p6`).
