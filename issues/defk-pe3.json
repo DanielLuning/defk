@@ -5,12 +5,10 @@
   "created": "2026-10-11T11:24:19Z",
   "description": "The error catalogue marks bitstring-segment and bitstring-use as planned (kind :planned in lib/defk/errors.ex) but no ticket tracked them; found while writing the scope page (defk-djy.5), which lists every planned item with its ticket.\n\nToday an append to a bitstring accumulator takes big-endian integer segments only (v::size(n), v::k, v, optionally signed), and a bitstring is output only: it starts from \u003c\u003c\u003e\u003e, is appended to, measured with bit_size/1 and returned; a kernel cannot read one, start one from an input binary, and Elixir cannot pass one to an entry kernel. The catalogue's own wording is 'not supported until a workload needs them'.\n\nDone when a target workload needs one of these (name it here), the chosen segment types or reads have an Elixir-mode meaning and agreement properties, and the two codes' entries (or their kind) are updated; or the items are moved to :subset with the reason recorded.",
   "id": "defk-pe3",
-  "labels": [
-    "needs-triage"
-  ],
+  "labels": [],
   "priority": 4,
   "status": "open",
   "title": "Bitstring accumulator: little-endian, float and binary segments, and reading a bitstring (when a workload needs them)",
   "type": "task",
-  "updated_at": "2026-10-11T11:24:20Z"
+  "updated_at": "2026-10-11T11:49:19Z"
 }
