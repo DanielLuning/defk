@@ -7,9 +7,7 @@
   "created": "2026-10-10T14:58:33Z",
   "description": "List everything a user can call or see and decide public vs internal: Defk (defk macro, use Defk options: elixir_mode, report, yield...), Defk.Test (assert_agrees, agreement helpers, reason/1), Defk.Bench and Defk.Bench.TickGap, Defk.Bits, Defk.ElixirMode (with_mode/2), Defk.Report, Defk.Errors (catalogue access?), and the functions use Defk generates (__defk_elixir__/2, __defk_elixir_source__/0, __defk_source__/0, __defk_report__/0, __defk_force_yields__/1 test-only, __defk_native_\u003cname\u003e__). For each: documented public API, documented-but-unstable, or hidden (@moduledoc false / @doc false). Flag naming inconsistencies and anything that should be renamed before people depend on it (rename tickets, not done here). Output: a table in the ticket or docs/adr/, which the API-docs ticket follows. Needs a human decision on what is public.",
   "id": "defk-djy.2",
-  "labels": [
-    "needs-triage"
-  ],
+  "labels": [],
   "parent": "defk-djy",
   "comments": [
     {
