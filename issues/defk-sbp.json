@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-11T12:43:04Z",
+  "description": "Found by defk-52v.3 (examples/lz4_snappy_decode.exs). The spec asked for ArgumentError \"at the offending offset\". raise takes a literal message only (raise-message), so the decoders raise a fixed message per kind of error (\"lz4: match offset out of range\") and the caller cannot learn where. Workaround today: return an error offset in a result tuple and raise in Elixir, which makes every kernel result a tuple and splits the error path.\n\nProposal: allow interpolation of i64 (and u64) expressions only, `raise ArgumentError, \"... #{ip} ...\"`: the C side formats with snprintf into the error term, Elixir mode is the interpolation itself. Strings, floats and other terms stay rejected.\n\nDone when: the interpolated form compiles, both modes give the same message, docs/language.md raise section and the raise-message error entry are updated, and lz4_snappy_decode.exs reports the offset.",
+  "id": "defk-sbp",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "raise with an integer in the message: raise ArgumentError, \"lz4: bad offset at byte #{ip}\"",
+  "type": "task",
+  "updated_at": "2026-10-11T12:43:04Z"
+}
