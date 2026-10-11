@@ -1085,6 +1085,63 @@ out[o] = @b64[band(bsr(x, 18), 63)]
 - **Source:** `defk-j5n` comment 2026-10-08, `defk-6g6` comment 2026-10-09.
 - **Status:** measured.
 
+### 6.14 Target flags: on arm64 the CPU features buy nothing, the tuning does
+
+A kernel built for the host CPU (`-mcpu=native`, Apple M4) or for armv8.2-a
+is no faster than today's build, which Apple clang already targets at
+`apple-m1`. The same 24 of the catalogue's 200 loops vectorise, at the same
+widths, at every arm64 level. NEON is the baseline; SVE is not available on
+Apple silicon. What changed speed is the *tuning*: a generic build
+(`-mcpu=generic`, what a portable Linux/aarch64 build gets) won or lost on
+some kernels, and `-mtune=generic` alone reproduced it while
+`-march=armv8-a` (fewer features, same tuning) did not.
+
+- **Numbers:** these are speedups over the default build, as medians of 7-9
+  interleaved rounds in two runs.
+  - native and armv8.2-a: within ±3% on all 42 timed kernels where the runs
+    agree (`matmul`, Horspool, `mix_s16` and the image kernels are noisier
+    between rounds than between levels).
+  - generic, slower: `sort_i64` 0.78 / 0.78 (0.94 in a third run), cosine
+    0.93, `keccak256` 0.93, `convolve` 0.93-0.95, `dot` 0.95, HLL 0.94-0.95,
+    `decode64` 0.95.
+  - generic, faster: the SHA-256 chain 1.18-1.19 (171 -> 145 ns per step).
+  - `-mtune=generic` alone: `sort_i64` 0.94, SHA-256 1.17, `keccak256` 0.92.
+  - `-march=armv8-a` alone: 1.00-1.03 on the same kernels.
+- **Conditions:** Apple M4 Pro, Apple clang 21, kernels timed alone at the
+  examples' shapes (`bench/simd/cases.exs`). Load averages were 13-154 at
+  the start of the runs. The levels were built through a `CC` wrapper per
+  level.
+- **Source:** [`docs/research/simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md), [`bench/simd/time.exs`](https://github.com/DanielLuning/defk/blob/main/bench/simd/time.exs), `defk-ulk.1`.
+- **Status:** provisional (loaded machine). Linux/aarch64 hardware and
+  upstream clang were not measured.
+
+```bash
+# time every catalogue kernel at each target level of this machine, interleaved
+mix run bench/simd/time.exs 9
+SIMD_LEVELS="default:,tune:-mtune=generic" mix run bench/simd/time.exs 7
+```
+
+### 6.15 On x86-64, no level vectorises an in-order float reduction (remarks only)
+
+These are clang's loop-vectorize remarks for x86-64 targets, compiled on the
+Mac. Nothing was timed.
+
+- `sum`, `dot` and cosine stay scalar at SSE2, v2, v3 and v4 ("cannot prove
+  it is safe to reorder floating-point operations"). On arm64 they vectorise
+  as ordered reductions.
+- Write partial sums (6.6) where the order is yours to choose: `topk`'s
+  eight partial sums vectorise on both.
+- v3 doubles the width of the loops that do vectorise (4 x f64, 32 bytes).
+  It also vectorises `ws_mask`'s main 4-byte loop, which SSE2 and v2 leave
+  scalar.
+- v4 keeps 256-bit vectors.
+- No level emits an FMA under `-ffp-contract=off`. With
+  `-ffp-contract=on`, v3 emits 11-87 per float module.
+
+- **Source:** [`docs/research/simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md), `bench/simd/remarks.exs`, `bench/simd/fma_check.sh`, `defk-ulk.1`.
+- **Status:** static, not timed. The timing run on x86-64 hardware is
+  described in the research note.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -1099,6 +1156,13 @@ out[o] = @b64[band(bsr(x, 18), 63)]
   at 16 MB (19.1 vs 20.7 ms, under load).
 - **Source:** [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs), [`hash_chain.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hash_chain.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs).
 - **Status:** measured; hash_chain, cosine, the keccak 16 MB comparison provisional.
+
+A target flag does not close these gaps. At every arm64 level, and as
+remarks for x86-64 up to v4, clang emits no CRC32, SHA or SHA3 instruction
+from the kernels' scalar code: `crc32c` runs at 1.00x with `-mcpu=native`.
+Closing them needs a hardware builtin (CRC32C) or vector values (UTF-8,
+base64, substring search). See [`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md) (`defk-ulk.1`;
+provisional).
 
 The wrapper jobs and what would reopen each are in
 [examples/README.md, "Where a wrapper is the right choice"](https://github.com/DanielLuning/defk/blob/main/examples/README.md#where-a-wrapper-is-the-right-choice).
@@ -1203,7 +1267,8 @@ normal schedulers instead ([`beam-nifs.md`](https://github.com/DanielLuning/defk
   Gorilla's middle block sizes gain most; parallel Elixir sorting
   (`sort_u64_keys`); 64-bit hashes in 16-bit limbs in Elixir (`hashes`); the
   per-call state copy of value semantics (`defk-sve.1`); EXLA for matmul
-  (`defk-7tk`); libvips for the image jobs; Linux (every number here is macOS
+  (`defk-7tk`); libvips for the image jobs; x86-64 timings at the target
+  levels (`defk-ulk.1`, remarks only so far); Linux (every number here is macOS
   on arm64).
 - **Quiet-machine snapshot.** Most provisional entries wait for `defk-sgw.4`.
 - **Tie band.** Verdicts at 1.0x and 2x flip with noise until `defk-9p6.24` lands.
@@ -1240,4 +1305,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-t11.5`, `defk-6g6`, `defk-j5n`, `defk-qx3`, `defk-z69`, `defk-t11.2`,
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
-  `defk-sve`, `defk-ulk`.
+  `defk-sve`, `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)).
