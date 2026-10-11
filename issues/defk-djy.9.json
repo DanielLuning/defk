@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [
     "defk-djy.10",
+    "defk-djy.12",
     "defk-djy.3",
     "defk-djy.4",
     "defk-djy.5",
@@ -19,5 +20,5 @@
   "status": "open",
   "title": "Docs cold test against the built HexDocs",
   "type": "task",
-  "updated_at": "2026-10-11T11:14:40Z"
+  "updated_at": "2026-10-11T12:11:33Z"
 }
