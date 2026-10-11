@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-ulk.2",
@@ -15,8 +15,8 @@
   ],
   "parent": "defk-ulk",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Research: vectorisation headroom and what target levels buy",
   "type": "task",
-  "updated_at": "2026-10-10T14:54:44Z"
+  "updated_at": "2026-10-11T12:14:21Z"
 }
