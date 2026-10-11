@@ -6,7 +6,7 @@
   "description": "Found by the second cold test (defk-dig, docs/cold-tests/leb128-topk.md). A multi-clause kernel written the natural Elixir way, clauses only, over binary patterns:\n\n    defk decode(\u003c\u003c\u003e\u003e, 0, 0, acc), do: Enum.reverse(acc)\n    defk decode(\u003c\u003cb, rest::binary\u003e\u003e, val, shift, acc) ...\n\nreports clause-head first, and its hint writes the head `defk decode(x1 :: i64, val :: i64, shift :: i64, acc :: i64) :: i64`: the first parameter, a binary pattern, is typed i64, and the list result i64. The real blocker (binary patterns and lists in clause heads are outside the subset) is not reported, so following the hint leads to a second round of errors.\n\nMessage as printed (verbatim):\n    error: decode/4 has clauses but no head\n    why: a clause has patterns, not types; the head gives the kernel its parameter and return types, and Elixir reads the head first too\n    hint: a multi-clause kernel starts with a bodiless head that types its parameters and result, such as `defk decode(x1 :: i64, val :: i64, shift :: i64, acc :: i64) :: i64`, written before the clauses\n    (defk clause-head: docs/language.md#clause-head)\n\nRated 'helped' for its own line but a red herring for the design. Options: (a) when a clause pattern is outside the subset (a binary pattern, a list, a map), report that pattern's code (clause-pattern / bitstring-match / unsupported-list) alongside or instead of clause-head; (b) in the suggested head, type a binary-pattern parameter as [u8] and omit the guess (write `:: type`) where nothing is known, rather than i64.\n\nDone when the case above reports the unsupported pattern (with a hint toward indexed reads over a [u8] or a for over the bytes), the suggested head never types a binary pattern as i64, and compile_errors_test covers it.",
   "id": "defk-x4o",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "comments": [
     {
@@ -18,5 +18,5 @@
   "status": "open",
   "title": "clause-head error hides unsupported clause patterns and suggests i64 for a binary pattern",
   "type": "bug",
-  "updated_at": "2026-10-11T21:01:09Z"
+  "updated_at": "2026-10-11T21:01:10Z"
 }
