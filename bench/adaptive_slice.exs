@@ -1,15 +1,15 @@
-# defk-04y: a short yield slice only when the caller's run queue is crowded.
+# defk-04y: a short yield slice only when the run queue is crowded.
 # Treatments, interleaved in one VM (medians):
-#   today     plain call, 250 us slice
-#   fixed50   50 us slice for the whole call (= DEFK_SLICE_US 50)
-#   adaptive  check of the caller's own run queue in Elixir
-#             (statistics(:run_queue_lengths), nth scheduler_id);
-#             crowded -> 50 us for the first 1 ms of the call
-#   total     the same with statistics(:total_run_queue_lengths) > 0
-#   gap       no check; the kernel starts at 250 us and switches to 50 us
-#             (for 1 ms) after a resume that waited > DEFK_GAP_US (C side)
+#   today     no hint: 250 us slices (what `adaptive_slice: false` compiles)
+#   adaptive  hint = the caller's own run queue
+#             (statistics(:run_queue_lengths), nth scheduler_id)
+#   total     the default kernel function: hint = statistics(:total_run_queue_lengths);
+#             crowded (hint > 0) -> 50 us slices for the call's first 1 ms
+# The fixed50 (50 us for the whole call) and gap (switch to 50 us after a
+# resume that waited) columns in docs/performance.md 4.9 were measured with
+# the experimental API of commit c552fb1 (`git show c552fb1:bench/adaptive_slice.exs`).
 # Run `ERL_FLAGS_LABEL="+swt very_low" elixir --erl "+swt very_low" -S mix run bench/adaptive_slice.exs spread`
-# for the +swt very_low column (only `today` is meaningful there).
+# for the +swt very_low column.
 #
 #   mix run bench/adaptive_slice.exs single [rounds]   one-call cost vs yield: false
 #   mix run bench/adaptive_slice.exs tick [runs]       tick gap on one scheduler
@@ -22,20 +22,13 @@ defmodule Slice do
   def crowded?,
     do: :lists.nth(:erlang.system_info(:scheduler_id), :erlang.statistics(:run_queue_lengths)) > 0
 
-  def call(:today, n), do: K.count_primes(n)
-  def call(:fixed50, n), do: K.__defk_sliced_count_primes__(n, 50, 0)
-  def call(:gap, n), do: K.__defk_sliced_count_primes__(n, -50, 1000)
+  def call(:today, n), do: K.__defk_native_count_primes__(n, 0)
   def call(:noyield, n), do: K.count_primes_noyield(n)
 
-  def call(:adaptive, n) do
-    if crowded?(), do: K.__defk_sliced_count_primes__(n, 50, 1000), else: K.count_primes(n)
-  end
+  def call(:adaptive, n),
+    do: K.__defk_native_count_primes__(n, if(crowded?(), do: 1, else: 0))
 
-  def call(:total, n) do
-    if :erlang.statistics(:total_run_queue_lengths) > 0,
-      do: K.__defk_sliced_count_primes__(n, 50, 1000),
-      else: K.count_primes(n)
-  end
+  def call(:total, n), do: K.count_primes(n)
 
   def call(:elixir, n), do: ex_count_primes(n)
 
@@ -77,7 +70,7 @@ case mode do
     # every treatment back to back (order rotated per round); median of the
     # per-round ratio to `today` and to yield: false
     rounds = if reps > 0, do: reps, else: 15
-    ts = [:noyield, :today, :adaptive, :total, :gap, :fixed50]
+    ts = [:noyield, :today, :adaptive, :total]
 
     for online <- [12, 1], {label, n, k} <- [{"0.65 ms", n_short, 200}, {"2M", 2_000_000, 1}] do
       :erlang.system_flag(:schedulers_online, online)
@@ -106,7 +99,7 @@ case mode do
   "tick" ->
     runs = if reps > 0, do: reps, else: 5
     n_tick = 2_000_000
-    ts = [:today, :adaptive, :total, :gap, :fixed50]
+    ts = [:today, :adaptive, :total]
 
     Defk.Bench.TickGap.with_one_scheduler(fn ->
       # lone kernel vs ticker; then the kernel with 3 other kernel calls queued
@@ -138,7 +131,7 @@ case mode do
 
   "spread" ->
     rounds = if reps > 0, do: reps, else: 9
-    ts = [:today, :fixed50, :adaptive, :total, :gap, :elixir]
+    ts = [:today, :adaptive, :total, :elixir]
     n_ex = Slice.calibrate(:elixir, 650, 1000, 400_000)
     n_ex55 = Slice.calibrate(:elixir, 550, 1000, 400_000)
     n_ex5 = Slice.calibrate(:elixir, 5000, 1000, 2_000_000)

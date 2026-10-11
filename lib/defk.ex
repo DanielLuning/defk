@@ -40,7 +40,7 @@ defmodule Defk do
   ## `use Defk`
 
   `use Defk` imports the `defk/3` macro (and its shorter forms `defk/1` and
-  `defk/2`). A module may mix kernels with ordinary `def`s. Two options:
+  `defk/2`). A module may mix kernels with ordinary `def`s. Three options:
 
     * `elixir_mode: true` compiles Elixir mode into the module in any
       environment, so `__defk_elixir__/2` exists outside `:test` (in a
@@ -49,6 +49,15 @@ defmodule Defk do
     * `report: :full` adds the C compiler's vectorisation of each loop to the
       [fast-path report](`Defk.Report`), at the cost of a second C compile.
       What it adds is unstable.
+    * `adaptive_slice: false` turns off the short first slice on a crowded
+      run queue. By default a yielding kernel's function reads
+      `:erlang.statistics(:total_run_queue_lengths)` (about 9 ns) and, when
+      processes are waiting, yields every 50 µs instead of every 250 µs for
+      the call's first millisecond, so short calls fanned out with
+      `Task.async_stream/3` spread over the schedulers. Turn it off only for
+      a module whose kernels are called many times a microsecond's work at a
+      time, where the 9 ns shows. See the
+      [runtime contract](runtime-contract.md#1-preemption-a-long-kernel-yields).
 
   Any other option raises `ArgumentError`. Module attributes whose names
   start with `@defk_` are reserved for defk: don't define your own.
@@ -153,15 +162,17 @@ defmodule Defk do
   defmacro __using__(opts) do
     elixir_mode = Keyword.get(opts, :elixir_mode, false)
     report = Keyword.get(opts, :report)
+    adaptive = Keyword.get(opts, :adaptive_slice, true)
 
-    if Keyword.keys(opts) -- [:elixir_mode, :report] != [] or not is_boolean(elixir_mode) or
-         report not in [nil, :full] do
+    if Keyword.keys(opts) -- [:elixir_mode, :report, :adaptive_slice] != [] or
+         not is_boolean(elixir_mode) or not is_boolean(adaptive) or report not in [nil, :full] do
       raise ArgumentError,
-            "use Defk accepts only `elixir_mode: true | false` and `report: :full`, got: #{Macro.to_string(opts)}"
+            "use Defk accepts only `elixir_mode: true | false`, `report: :full` and `adaptive_slice: true | false`, got: #{Macro.to_string(opts)}"
     end
 
     quote do
       @defk_elixir_mode unquote(elixir_mode)
+      @defk_adaptive_slice unquote(adaptive)
       @defk_report unquote(report)
       import Defk, only: [defk: 1, defk: 2, defk: 3]
       Module.register_attribute(__MODULE__, :defk_kernels, accumulate: true)
@@ -299,12 +310,18 @@ defmodule Defk do
     end
 
     fault_hooks? = fault_hooks?()
+    adaptive? = Module.get_attribute(env.module, :defk_adaptive_slice)
 
     {c_src, all_sigs} =
       Defk.Compiler.compile(env.module, kernels, env.file,
         nif_name: nif_name,
-        fault_hooks: fault_hooks?
+        fault_hooks: fault_hooks?,
+        adaptive_slice: adaptive?
       )
+
+    # a yielding kernel's NIF takes the run-queue hint (defk-04y): it is
+    # renamed, and the kernel's function passes the hint
+    all_sigs = Enum.map(all_sigs, &Map.update!(&1, :yields, fn y -> adaptive? and y end))
 
     lib = Defk.Build.build!(env.module, c_src, env.file)
 
@@ -318,15 +335,12 @@ defmodule Defk do
     # a helper (a kernel taking a bitstring) is only inlined: no function
     sigs = Enum.reject(all_sigs, &Defk.Bitstring.helper?/1)
 
-    {wrapped, plain} = Enum.split_with(sigs, &(&1.name in bits))
+    {wrapped, plain} = Enum.split_with(sigs, &(&1.name in bits or &1.yields))
 
     stubs =
       if elixir?,
-        do: native_stubs(sigs, nif_name) ++ dispatch_defs(sigs, mode, nif_name),
-        else:
-          render_stubs(plain) ++ native_stubs(wrapped, nif_name) ++ wrappers(wrapped, nif_name)
-
-    stubs = stubs ++ sliced_stubs(sigs, nif_name)
+        do: native_stubs(sigs) ++ dispatch_defs(sigs, mode),
+        else: render_stubs(plain) ++ native_stubs(wrapped) ++ wrappers(wrapped)
 
     elixir_mode =
       if elixir?, do: Defk.ElixirMode.definitions(kernels, all_sigs, env.file), else: []
@@ -348,7 +362,7 @@ defmodule Defk do
       @doc false
       def __defk_stats__, do: :erlang.nif_error(:defk_not_loaded)
       @doc false
-      def __defk_kernels__, do: unquote(Macro.escape(sigs))
+      def __defk_kernels__, do: unquote(Macro.escape(Enum.map(sigs, &Map.delete(&1, :yields))))
       @doc false
       def __defk_force_yields__(_on), do: :erlang.nif_error(:defk_not_loaded)
       unquote(corrupt_tags)
@@ -386,51 +400,53 @@ defmodule Defk do
     end
   end
 
-  # Elixir mode: the NIF keeps its own name, so each kernel gets a bare native
-  # stub plus a kernel-name def that dispatches on the process mode.
-  defp native_stubs(sigs, nif_name) do
-    for %{name: name, params: params} <- sigs do
+  # The NIF of a kernel that gets an Elixir function (Elixir mode, a
+  # bitstring result, the run-queue hint) is renamed: a bare native stub for
+  # it, which the NIF replaces. With the hint it takes one more argument.
+  defp native_stubs(sigs) do
+    for %{name: name, params: params} = sig <- sigs do
       args = for {p, _} <- params, do: Macro.var(:"_#{p}", nil)
+      args = if sig.yields, do: args ++ [Macro.var(:_waiting, nil)], else: args
 
       quote do
         @doc false
-        def unquote(nif_name.(name))(unquote_splicing(args)),
+        def unquote(Defk.ElixirMode.native_name(name))(unquote_splicing(args)),
           do: :erlang.nif_error(:defk_not_loaded)
       end
     end
   end
 
-  # defk-04y (experimental): each kernel's NIF also takes its slice
-  defp sliced_stubs(sigs, nif_name) do
-    for %{name: name, params: params} <- sigs do
-      args = for {p, _} <- params, do: Macro.var(:"_#{p}", nil)
-      sliced = Defk.Compiler.sliced_name(nif_name.(name))
+  # The call of a renamed NIF; a yielding kernel passes how many processes
+  # wait in the run queues, and a crowded queue gets short first slices
+  # (defk_slice_init in priv/defk_runtime.h).
+  defp nif_call(%{name: name, yields: yields}, vs) do
+    native = Defk.ElixirMode.native_name(name)
 
-      quote do
-        @doc false
-        def unquote(sliced)(unquote_splicing(args), _slice_us, _for_us),
-          do: :erlang.nif_error(:defk_not_loaded)
-      end
-    end
+    if yields,
+      do:
+        quote(
+          do: unquote(native)(unquote_splicing(vs), :erlang.statistics(:total_run_queue_lengths))
+        ),
+      else: quote(do: unquote(native)(unquote_splicing(vs)))
   end
 
-  # A kernel that returns a bitstring: its NIF gives {bytes, bit_length},
-  # which this def makes the bitstring (Defk.Bitstring.decode/2).
-  defp wrappers(sigs, nif_name) do
-    for %{name: name, params: params, ret: ret} <- sigs do
+  # A kernel's function that calls its renamed NIF; a bitstring result is
+  # made from the NIF's {bytes, bit_length} (Defk.Bitstring.decode/2).
+  defp wrappers(sigs) do
+    for %{name: name, params: params, ret: ret} = sig <- sigs do
       specs = for {_, t} <- params, do: spec(t, :in)
       vs = Defk.Args.vars(params)
-      call = quote do: unquote(nif_name.(name))(unquote_splicing(vs))
+      body = Defk.Bitstring.decode(ret, nif_call(sig, vs))
 
       quote do
         @spec unquote(name)(unquote_splicing(specs)) :: unquote(spec(ret, :out))
-        def unquote(name)(unquote_splicing(vs)), do: unquote(Defk.Bitstring.decode(ret, call))
+        def unquote(name)(unquote_splicing(vs)), do: unquote(body)
       end
     end
   end
 
-  defp dispatch_defs(sigs, mode, nif_name) do
-    for %{name: name, params: params, ret: ret} <- sigs do
+  defp dispatch_defs(sigs, mode) do
+    for %{name: name, params: params, ret: ret} = sig <- sigs do
       specs = for {_, t} <- params, do: spec(t, :in)
       vs = Defk.Args.vars(params)
 
@@ -442,12 +458,7 @@ defmodule Defk do
               __defk_elixir__(unquote(name), [unquote_splicing(vs)])
 
             _ ->
-              unquote(
-                Defk.Bitstring.decode(
-                  ret,
-                  quote(do: unquote(nif_name.(name))(unquote_splicing(vs)))
-                )
-              )
+              unquote(Defk.Bitstring.decode(ret, nif_call(sig, vs)))
           end
         end
       end

@@ -407,8 +407,9 @@ defmodule Defk.ResumeTest do
     load = quote do: def(__load__(lib), do: :erlang.load_nif(lib, 0))
     Module.create(mod, [load | stubs], Macro.Env.location(__ENV__))
     :ok = mod.__load__(String.to_charlist(lib))
-    [kernel] = for [f, "1", "nif_" <> _] <- nifs, do: String.to_atom(f)
-    {mod, &apply(mod, kernel, [&1])}
+    # the kernel yields, so its NIF takes the run-queue hint last (defk-04y)
+    [kernel] = for [f, "2", "nif_" <> _] <- nifs, do: String.to_atom(f)
+    {mod, &apply(mod, kernel, [&1, 0])}
   end
 
   # Runs the broken kernel under forced yields, bounded well below the 10 s

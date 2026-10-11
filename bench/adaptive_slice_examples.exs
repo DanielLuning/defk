@@ -1,6 +1,7 @@
 # defk-04y: the three examples whose parallel kernel chunks stay on few
 # schedulers (defk-8qs), under each slice treatment of bench/adaptive_slice.exs
-# (today / fixed50 / adaptive / total / gap), interleaved, medians:
+# (today / adaptive / total, the last being the default), interleaved, medians
+# (fixed50 and gap: the experimental API of commit c552fb1):
 #   batched_levenshtein  234k words, 12 chunks of lev_myers (Task.async_stream)
 #   monte_carlo_rtp      1M spins, 48 chunks of simulate (Task.async_stream)
 #   cosine_topk          100k x 384 f32 rows, 12 chunks of topk (Task.async_stream)
@@ -23,28 +24,14 @@ take.("cosine_topk.exs", "Cosine.Kernels")
 take.("cosine_topk.exs", "Cosine.Data")
 
 defmodule SliceEx do
-  # the NIF behind a kernel name (Elixir-mode modules rename it)
-  def nif(mod, name) do
-    if function_exported?(mod, :__defk_elixir__, 2), do: Defk.ElixirMode.native_name(name), else: name
-  end
-
-  def crowded?,
-    do: :lists.nth(:erlang.system_info(:scheduler_id), :erlang.statistics(:run_queue_lengths)) > 0
-
-  def call(:today, m, f, a), do: apply(m, nif(m, f), a)
-  def call(:fixed50, m, f, a), do: apply(m, Defk.Compiler.sliced_name(nif(m, f)), a ++ [50, 0])
-  def call(:gap, m, f, a), do: apply(m, Defk.Compiler.sliced_name(nif(m, f)), a ++ [-50, 1000])
-
-  def call(:total, m, f, a) do
-    if :erlang.statistics(:total_run_queue_lengths) > 0,
-      do: apply(m, Defk.Compiler.sliced_name(nif(m, f)), a ++ [50, 1000]),
-      else: apply(m, nif(m, f), a)
-  end
+  # every kernel here yields, so its NIF is __defk_native_<name>__ with the
+  # run-queue hint last
+  def call(:today, m, f, a), do: apply(m, Defk.ElixirMode.native_name(f), a ++ [0])
+  def call(:total, m, f, a), do: apply(m, f, a)
 
   def call(:adaptive, m, f, a) do
-    if crowded?(),
-      do: apply(m, Defk.Compiler.sliced_name(nif(m, f)), a ++ [50, 1000]),
-      else: apply(m, nif(m, f), a)
+    own = :lists.nth(:erlang.system_info(:scheduler_id), :erlang.statistics(:run_queue_lengths))
+    apply(m, Defk.ElixirMode.native_name(f), a ++ [own])
   end
 
   # runs fun.(item) per item under Task.async_stream (max_concurrency 12),
@@ -125,12 +112,12 @@ end
 one = fn f -> SliceEx.med(for _ <- 1..11, do: elem(:timer.tc(f), 0)) / 1000 end
 
 IO.puts(
-  "# one call: lev_myers #{n_words} words #{one.(fn -> Lev.Kernels.__defk_native_lev_myers__(q, blob, offs_all, 0, n_words) end)} ms, " <>
-    "simulate 1M #{one.(fn -> RTP.Kernels.simulate(reels_b, lines_b, pays_b, 1, 2, 1_000_000) end)} ms, " <>
-    "topk 100k #{one.(fn -> Cosine.Kernels.__defk_native_topk__(:persistent_term.get(:cos), qb, 10, 0) end)} ms"
+  "# one call: lev_myers #{n_words} words #{one.(fn -> Lev.Kernels.__defk_native_lev_myers__(q, blob, offs_all, 0, n_words, 0) end)} ms, " <>
+    "simulate 1M #{one.(fn -> RTP.Kernels.__defk_native_simulate__(reels_b, lines_b, pays_b, 1, 2, 1_000_000, 0) end)} ms, " <>
+    "topk 100k #{one.(fn -> Cosine.Kernels.__defk_native_topk__(:persistent_term.get(:cos), qb, 10, 0, 0) end)} ms"
 )
 
-ts = [:today, :fixed50, :adaptive, :total, :gap]
+ts = [:today, :adaptive, :total]
 
 # results agree across treatments
 for {name, job} <- [lev: lev, rtp: rtp, cos: cos] do
