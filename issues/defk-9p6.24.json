@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-11T21:36:34Z",
   "created": "2026-10-09T20:24:43Z",
   "description": "Seen on the first full run_all.exs after the guidance trio landed (defk-9p6.23): poor_substring_search measured 1.03-1.11x when written (expected: :marginal) and 1.0x on the scoreboard run, which Defk.Bench.verdict/1 classes as :poor (speedup \u003c 1.0), so run_all reported it as not behaving as claimed. The recommendation is the same on both sides of 1.0x (\"use Elixir\"), so the flip carries no information and makes the scoreboard flaky for any honest tie.\n\nOptions:\n(a) A tie band in Defk.Bench: speedups within +-5% of 1.0x are :marginal whichever side they fall on; examples/README.md's verdict table gets a sentence. Simple, and the recommendation column is unchanged.\n(b) Let an example declare `expected: [:marginal, :poor]` and have run_all accept any listed verdict. More flexible, but it lets authors pre-register vagueness.\n(c) Leave the rule and require examples to pick inputs with a clear margin (the interim fix applied to poor_substring_search: report the 16-byte needle, 1.16x, and keep the 64-byte tie in the header).\n\nRecommendation: (a) with the band stated in the README, plus (c) as good practice. It changes the measurement rule, so it is the owner's call: needs-triage.\n\nDone when: the chosen rule is implemented in Defk.Bench with a unit test on the band edges, examples/README.md states it, and run_all is stable across three consecutive runs on a quiet machine.",
   "id": "defk-9p6.24",
@@ -28,8 +29,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Defk.Bench verdict has no tie band: a 1.0x result flips between marginal and poor run to run",
   "type": "task",
-  "updated_at": "2026-10-11T21:25:16Z"
+  "updated_at": "2026-10-11T21:36:34Z"
 }
