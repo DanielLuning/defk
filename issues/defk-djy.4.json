@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-djy.1"
   ],
@@ -21,8 +21,8 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Guides: getting started through deployment",
   "type": "task",
-  "updated_at": "2026-10-11T11:28:59Z"
+  "updated_at": "2026-10-11T11:44:02Z"
 }
