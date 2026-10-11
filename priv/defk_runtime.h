@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #define DEFK_DONE 0
 #define DEFK_YIELD 1
@@ -79,6 +80,7 @@ typedef struct {
   size_t ulen;
   ErlNifBinary *owned; /* binaries we allocated (outputs, aligned copies) */
   int nowned, cap;
+  uint64_t owned_bytes; /* bytes of the live binaries in owned, at most defk_max_owned */
   int finished;
   int is_resource;
   /* this call's slice (defk-04y): slice_us until short_left us of kernel
@@ -188,8 +190,61 @@ static void defk_frame_dtor(ErlNifEnv *env, void *obj) {
   atomic_fetch_sub(&defk_stat_frames_live, 1);
 }
 
+/*
+ * The budget for a call's owned binaries (defk-4b2). Every alloc/2, every
+ * value-semantics copy, every bitstring accumulator buffer and every aligned
+ * copy of an input is a slot in ctx->owned and lives until the kernel returns,
+ * so an alloc or a copy in a loop body keeps one buffer per iteration. On an
+ * OS that overcommits, the node is OOM-killed long before enif_alloc_binary
+ * fails (defk-33b: SIGKILL at ~1.6 GB of 4 MB copies), which breaks the
+ * runtime contract. So a call raises ArgumentError "out of memory" once its
+ * live owned bytes would pass defk_max_owned.
+ *
+ * `use Defk, max_owned: n` compiles DEFK_MAX_OWNED in. The default is half of
+ * physical memory, read once when the library loads: a single call may then
+ * build any result that fits comfortably in RAM, while a runaway loop raises
+ * before it takes the machine's memory (the BEAM and the OS keep the other
+ * half). A fixed default would be too small on large servers or too large on
+ * small machines. sysconf cannot see a container's cgroup limit; such a
+ * deployment sets max_owned. Without a physical memory size the default is
+ * DEFK_OWNED_FALLBACK (4 GiB).
+ *
+ * The check is one compare and one add per allocation, never per element.
+ */
+#define DEFK_OWNED_FALLBACK ((uint64_t)1 << 32)
+static uint64_t defk_max_owned = DEFK_OWNED_FALLBACK;
+
+static void defk_max_owned_init(void) {
+#ifdef DEFK_MAX_OWNED
+  defk_max_owned = (uint64_t)(DEFK_MAX_OWNED);
+#else
+  long pages = sysconf(_SC_PHYS_PAGES), page = sysconf(_SC_PAGESIZE);
+  defk_max_owned = pages > 0 && page > 0 ? (uint64_t)pages * (uint64_t)page / 2 : DEFK_OWNED_FALLBACK;
+#endif
+}
+
+/* A request this large no platform's allocator serves; Elixir mode raises
+   the allocator's "out of memory (allocating N bytes)" for it without trying
+   (Defk.ElixirMode.Ops.alloc/2), so the budget leaves that message alone. */
+#define DEFK_NO_ALLOC_BYTES ((uint64_t)1 << 47)
+
+__attribute__((noreturn, cold)) static void defk_over_budget(defk_ctx *ctx, size_t bytes) {
+  if ((uint64_t)bytes >= DEFK_NO_ALLOC_BYTES)
+    defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", bytes);
+  defk_fail(ctx, DEFK_E_ARG,
+            "out of memory (allocating %zu bytes would take this call's buffers past max_owned, %llu bytes)",
+            bytes, (unsigned long long)defk_max_owned);
+}
+
+/* raise unless `bytes` more fit in the budget (owned_bytes <= defk_max_owned) */
+static inline void defk_owned_check(defk_ctx *ctx, size_t bytes) {
+  if (DEFK_UNLIKELY((uint64_t)bytes > defk_max_owned - ctx->owned_bytes))
+    defk_over_budget(ctx, bytes);
+}
+
 /* Owned binary: off-heap, stable address across yields and GC; uninitialised. */
 static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
+  defk_owned_check(ctx, bytes);
   if (ctx->nowned == ctx->cap) {
     /* one slot per alloc/2 call, so a loop can grow the table without bound:
        a failed grow raises and keeps the old table, whose binaries are freed */
@@ -203,6 +258,7 @@ static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
   ErlNifBinary *b = &ctx->owned[ctx->nowned];
   if (!enif_alloc_binary(bytes, b))
     defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", bytes);
+  ctx->owned_bytes += bytes;
   return ctx->nowned++;
 }
 
@@ -476,6 +532,7 @@ DEFK_RANGE_COPY_FN(f32, float)
 static ERL_NIF_TERM defk_make_arr(ErlNifEnv *env, defk_ctx *ctx, void *data) {
   for (int i = 0; i < ctx->nowned; i++) {
     if (ctx->owned[i].data == data) {
+      ctx->owned_bytes -= ctx->owned[i].size;
       ERL_NIF_TERM t = enif_make_binary(env, &ctx->owned[i]);
       ctx->owned[i].data = NULL; /* no longer ours to release */
       return t;
@@ -1456,8 +1513,10 @@ __attribute__((noinline, unused)) static defk_bits defk_bits_reserve(defk_ctx *c
     ErlNifBinary *bin = &ctx->owned[b.slot1 - 1];
     size_t old = bin->size, cap = old * 2;
     if (cap < need) cap = (size_t)need;
+    defk_owned_check(ctx, cap - old);
     if (!enif_realloc_binary(bin, cap))
       defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", cap);
+    ctx->owned_bytes += cap - old;
     memset(bin->data + old, 0, cap - old);
     return b;
   }
@@ -1772,14 +1831,15 @@ static ERL_NIF_TERM defk_stats_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
   /* which crc32c this library picked at its first call (defk-ulk.4) */
   int crc = atomic_load(&defk_crc32c_state);
   const char *crc_impl = crc == 1 ? "instruction" : crc == 2 ? "table" : "not_called";
-  ERL_NIF_TERM keys[4] = {enif_make_atom(env, "frames_live"), enif_make_atom(env, "promotions"),
-                          enif_make_atom(env, "yields"), enif_make_atom(env, "crc32c")};
-  ERL_NIF_TERM vals[4] = {enif_make_long(env, atomic_load(&defk_stat_frames_live)),
+  ERL_NIF_TERM keys[5] = {enif_make_atom(env, "frames_live"), enif_make_atom(env, "promotions"),
+                          enif_make_atom(env, "yields"), enif_make_atom(env, "crc32c"),
+                          enif_make_atom(env, "max_owned")};
+  ERL_NIF_TERM vals[5] = {enif_make_long(env, atomic_load(&defk_stat_frames_live)),
                           enif_make_long(env, atomic_load(&defk_stat_promotions)),
                           enif_make_long(env, atomic_load(&defk_stat_yields)),
-                          enif_make_atom(env, crc_impl)};
+                          enif_make_atom(env, crc_impl), enif_make_uint64(env, defk_max_owned)};
   ERL_NIF_TERM map;
-  enif_make_map_from_arrays(env, keys, vals, 4, &map);
+  enif_make_map_from_arrays(env, keys, vals, 5, &map);
   return map;
 }
 
@@ -1823,12 +1883,14 @@ static int defk_open_rt(ErlNifEnv *env, ErlNifResourceFlags flags) {
 static int defk_load(ErlNifEnv *env, void **priv, ERL_NIF_TERM info) {
   (void)priv;
   (void)info;
+  defk_max_owned_init();
   return defk_open_rt(env, ERL_NIF_RT_CREATE);
 }
 static int defk_upgrade(ErlNifEnv *env, void **priv, void **old, ERL_NIF_TERM info) {
   (void)priv;
   (void)old;
   (void)info;
+  defk_max_owned_init();
   return defk_open_rt(env, ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER);
 }
 

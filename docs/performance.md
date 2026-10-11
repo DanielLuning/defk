@@ -1859,6 +1859,43 @@ end)
 # copies st every step: if conflict, do: (st = analyze(st); {:cont, st}), else: {:halt, st}
 ```
 
+### 6.25 The owned-buffer budget costs nothing measurable; an iteration with an `alloc` or a copy costs ~50 ns
+
+Every `alloc/2` and every value-semantics copy is an owned binary that lives
+until the kernel returns; since `defk-4b2` each one also checks a per-call
+byte total against `max_owned` (one compare and one add per allocation,
+never per element), so a loop that keeps a buffer per iteration raises
+"out of memory" instead of growing until the OS kills the node.
+
+- **Numbers** (200k iterations, a 32-byte `alloc(i64, 4)` or a 32-byte copy
+  per iteration, mean of the best 5 of 30 calls, three rounds, twice each):
+  `main` 53.6-54.9 ns per `alloc` iteration and 49.9-53.6 ns per copy
+  iteration; with the budget 50.7-54.5 ns and 49.8-54.0 ns. The difference
+  is inside the run-to-run spread. The ~50 ns iteration (an owned binary,
+  a slot in the call's table, the write) is the cost to remove: hoist a
+  scratch array out of the loop (getting-started, "Things that trip people
+  up").
+- **Conditions:** M-series Mac, Apple clang; other work on the machine, so
+  provisional.
+- **Source:** `defk-4b2`, a scratch benchmark of `alloc_loop`/`copy_loop` as
+  in [`test/owned_budget_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/owned_budget_test.exs), `defk_owned_check` in [`priv/defk_runtime.h`](https://github.com/DanielLuning/defk/blob/main/priv/defk_runtime.h).
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code (alloc, indexing), not plain Elixir -->
+```elixir
+# fast: one scratch array, cleared each pass
+h = alloc(i64, 256)
+for w <- 0..(n - 1)//1 do
+  for c <- 0..255//1, do: h[c] = 0
+  ...
+end
+# slow, and bounded only by max_owned: a new array every pass
+for w <- 0..(n - 1)//1 do
+  h = alloc(i64, 256)
+  ...
+end
+```
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer

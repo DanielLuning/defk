@@ -24,6 +24,9 @@ defmodule Defk.Report do
       checks: flagged (one non-finite check per strip) or not, and why
     * `{:inline, :inlined, "f/2"}` for each inlined kernel call
     * `{:copy, :copied, text}` for each copy that value semantics inserts
+    * `{:owned, :per_iteration, text}` for each alloc/2 or copy inside a
+      loop: every iteration keeps a buffer until the kernel returns, counted
+      against the module's `max_owned` budget
     * `{:alloc, :unzeroed | :zeroed | :strips, text}` for each alloc/2: not
       zeroed (the next loop writes every element first), zeroed at once
       (a small constant length, or `yield: false`), or zeroed in strips with

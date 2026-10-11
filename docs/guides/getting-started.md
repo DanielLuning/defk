@@ -238,8 +238,11 @@ From people writing their first kernels:
   (`band(expr, 0xFFFFFFFFFFFFFFFF)`), which gives Elixir's exact result, and
   values up to 2^64 - 1 are [`u64`](../language.md#u64).
 - **An `alloc` inside a loop allocates on every pass, and nothing is freed
-  until the kernel returns.** A scratch array per window or row (a
-  histogram, say) belongs before the loop, cleared at the start of each pass:
+  until the kernel returns.** Past the module's `max_owned` budget (by
+  default half of physical memory) the call raises "out of memory", and the
+  fast-path report notes each such `alloc`. A scratch array per window or
+  row (a histogram, say) belongs before the loop, cleared at the start of
+  each pass:
 
   ```elixir
   defmodule Windows do
