@@ -5,11 +5,13 @@
   "created": "2026-10-11T12:11:32Z",
   "description": "The docs example runner (test/language_doc_examples_test.exs, mechanism in test/support/language_doc.ex) runs kernel blocks and the iex\u003e block after each one, in both native and Elixir mode. Some snippets are still never run:\n\n- docs/performance.md: about 30 elixir blocks, the fast and slow Elixir spellings. They are not kernels, so the runner ignores them.\n- docs/guides/testing.md: the ExUnit test files (assert_agrees, StreamData agreement properties). The defk-djy.4 agent ran them by hand once in a scratch app (7 tests passed).\n- docs/guides/measuring.md:77: a Mix.install script using Defk.Bench.report/1, marked skip.\n- README.md:61: the Stats snippet, marked skip because the call after the module needs bin_a and bin_b.\n\nWhat to do:\n1. Plain Elixir blocks: compile and run them, and where they show a result (iex\u003e or a # =\u003e comment) assert it. Sketches that are deliberate fragments get an explicit marker with a reason, so a fragment is a choice and not the default. Faster-vs-slower claims are not asserted (timing); only that the code runs and gives what it says.\n2. ExUnit test-file blocks: run them as real tests, e.g. write the block to a temporary test file and run it in-process or with a sub-mix, so a guide's test example fails CI when the API changes.\n3. Scripts: run the measuring script with tiny sizes, or turn it into a block the runner can execute. Drop the skip only if it stays fast (CI time budget: a few seconds).\n4. README Stats: give the snippet its inputs (define bin_a/bin_b in the block, or show the call with literal binaries) and drop the skip.\n5. A check that every skip marker has a reason, and a short list of skips in the test output so they stay visible.\n\nDone when every elixir block in the extras either runs in mix ci or carries a skip marker with a reason, the four gaps above run, a deliberate break in each kind of block fails mix ci (shown by temporary mutations), and ci gets no more than a few seconds slower.",
   "id": "defk-djy.12",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-djy",
   "priority": 2,
   "status": "open",
   "title": "Check the doc snippets the example runner skips: plain Elixir sketches, ExUnit test files, scripts",
   "type": "task",
-  "updated_at": "2026-10-11T12:11:32Z"
+  "updated_at": "2026-10-11T12:11:33Z"
 }
