@@ -10,9 +10,15 @@
   "labels": [
     "needs-triage"
   ],
+  "comments": [
+    {
+      "text": "The HexDocs cold test (defk-djy.9) hit this from the docs side: getting-started said the runtime needs no compiler without the release caveat, and the workaround lived only in examples/release_debian on GitHub. defk-djy.9 added the caveat to getting-started and put the workaround steps (same absolute path, a sketch Dockerfile, the __defk_lib__/0 check) in docs/guides/deploying.md. When this ticket lands, remove both.",
+      "timestamp": "2026-10-11T12:48:01Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Ship kernel .so files in mix releases",
   "type": "bug",
-  "updated_at": "2026-10-10T14:54:43Z"
+  "updated_at": "2026-10-11T12:48:01Z"
 }
