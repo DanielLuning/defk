@@ -53,7 +53,8 @@ into; `print/1` lists those after the kernel. `fact` is
 `{topic, verdict, text}`; `Defk.Report` lists the topics: `:kernel`,
 `:bounds`, `:branch`, `:loop`, `:nonfinite`, `:inline`, `:copy`, `:alloc`,
 `:owned` (an `alloc` or a copy inside a loop, which keeps a buffer per
-iteration until the kernel returns) and `:vectorize`.
+iteration until the kernel returns; the note for an `alloc` suggests hoisting
+it before the loop and clearing each pass) and `:vectorize`.
 
 defk's own facts are noted while the kernel is lowered. They cost no extra
 compiler pass and nothing at run time.
