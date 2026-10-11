@@ -144,6 +144,7 @@ defmodule Defk.Test do
     {"does not fit in i64", :element_range},
     # Defk.Bits.clz/2 and friends
     {"is not in 1..64", :bits_width},
+    {"is not 8, 16, 32 or 64", :bits_width},
     {"-bit field", :bits_range},
     {"does not fit in i16", :element_range},
     {"does not fit in i32", :element_range},
