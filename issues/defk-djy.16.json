@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-11T13:06:44Z",
@@ -10,8 +10,8 @@
   ],
   "parent": "defk-djy",
   "priority": 4,
-  "status": "open",
+  "status": "in_progress",
   "title": "Move Defk.arg_vars/1 out of the user-facing Defk module",
   "type": "task",
-  "updated_at": "2026-10-11T13:06:45Z"
+  "updated_at": "2026-10-11T13:07:03Z"
 }
