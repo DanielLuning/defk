@@ -7,6 +7,7 @@
     "defk-djy.6",
     "defk-djy.9"
   ],
+  "closed_at": "2026-10-11T11:56:34Z",
   "created": "2026-10-10T14:58:33Z",
   "description": "Write the supporting guides as ex_doc extras, built from existing material without duplicating it: Getting started (install as a dependency, path/git/Mix.install, the C compiler requirement, first kernel, calling it, reading a compile error); Testing kernels (Elixir mode as the oracle, assert_agrees, agreement properties, forced yields); Measuring (from examples/README.md Measuring correctly and the verdict rules: optimise Elixir first); The runtime contract (yielding, safepoints, failure isolation, what a kernel can and can't do to the VM; from docs/beam-nifs.md and README); Deploying (mix release, C compiler at build time per ADR 0002, examples/release_debian, defk-n8f's outcome); a cheatsheet (.cheatmd) of types, builtins and common rewrites. Decide whether docs/language.md stays one page or is split into several (types, expressions, arrays, control flow, calls, yielding, Elixir mode) with stable anchors; keep the docs example test covering every page.",
   "id": "defk-djy.4",
@@ -25,7 +26,7 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Guides: getting started through deployment",
   "type": "task",
   "updated_at": "2026-10-11T11:56:34Z"
