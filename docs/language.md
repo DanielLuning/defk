@@ -232,7 +232,7 @@ unstable (debugging output that may change in any version):
 | `__defk_report__/0` | the fast-path report as data, `[{kernel, line, fact}]` (see `Defk.Report`; `Defk.Report.print/1` prints it) |
 | `__defk_lib__/0` | the path of the compiled NIF library (`.so`) |
 | `__defk_kernels__/0` | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
-| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:, crc32c:}` (`crc32c` is `:instruction` or `:table`, the [crc32c](#hardware-builtins) implementation it picked at its first call, or `:not_called`) |
+| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:, crc32c:, max_owned:}` (`crc32c` is `:instruction` or `:table`, the [crc32c](#hardware-builtins) implementation it picked at its first call, or `:not_called`; `max_owned` is the [owned-buffer budget](#the-owned-buffer-budget) in bytes) |
 | `__defk_force_yields__/1` | testing: `true` makes this module's kernels yield at every clock read, so every resume path runs; `false` turns it off |
 | `__defk_elixir__/2` | Elixir mode: `Mod.__defk_elixir__(:name, args)` runs one call as plain Elixir (only where Elixir mode is compiled, see [section 10](#10-elixir-mode)) |
 | `__defk_elixir_source__/0` | the generated Elixir mode code (same condition) |
@@ -1313,9 +1313,12 @@ malformed call is [`alloc-form`](compile-errors.md#alloc-form).
   `ArgumentError` "alloc/2: length too large". A size under that which the
   allocator cannot provide raises `ArgumentError` "out of memory".
 - Every array a kernel allocates lives until the kernel returns; an `alloc`
-  inside a loop allocates on every iteration. Arrays that are not returned
-  are freed when the kernel returns or raises, or when its process dies while
-  it is suspended.
+  inside a loop allocates on every iteration, and keeps every one of those
+  arrays until then (the fast-path report notes such an `alloc`). Arrays
+  that are not returned are freed when the kernel returns or raises, or when
+  its process dies while it is suspended. A call that would hold more than
+  its [owned-buffer budget](#the-owned-buffer-budget) raises
+  `ArgumentError` "out of memory".
 - The zeroing yields like a loop: a large buffer is zeroed in strips with a
   safepoint after each, so an 85 MB `alloc` does not hold the scheduler.
   When the first statement after `x = alloc(type, k * n)` that mentions `x`
@@ -1519,8 +1522,50 @@ statement reads; a branch of an `if`, `cond` or `case` leaves out what the
 other branches read, since only one of them runs, and the condition, subject
 or clause head that chose it, which ran before it. It is conservative, so a
 kernel may copy where Elixir would not have to (for example when `b` is read
-earlier in the loop body than the write, which is not a read after it). Copies are not reported; `Mod.__defk_c_source__/0` shows them as
-`defk_copy_*` calls. Like `alloc`, every copy lives until the kernel returns.
+earlier in the loop body than the write, which is not a read after it).
+The fast-path report (`Defk.Report`) notes each copy, and
+`Mod.__defk_c_source__/0` shows them as `defk_copy_*` calls. Like `alloc`,
+every copy lives until the kernel returns, so a copy in a loop body keeps
+one array per iteration (the report notes that too), counted against the
+[owned-buffer budget](#the-owned-buffer-budget).
+
+### The owned-buffer budget
+
+Every array a call allocates (`alloc/2`), every copy above, the buffer of a
+[bitstring accumulator](#the-bitstring-accumulator) and the aligned copy of
+a misaligned input are the kernel's own until it returns. Elixir would
+garbage-collect an array no variable sees any more; a kernel frees them all
+at once when it returns, raises, or its process dies. So a call keeps a
+running total of the bytes it holds, and an allocation that would take it
+past the module's budget raises `ArgumentError`:
+
+```
+** (ArgumentError) out of memory (allocating 1024 bytes would take this call's buffers past max_owned, 8192 bytes)
+```
+
+This keeps a runaway loop from exhausting the machine: an operating system
+that overcommits memory kills the whole node long before an allocation
+fails, which would break the [runtime contract](guides/runtime-contract.md).
+
+- The budget is `use Defk, max_owned: bytes`, a positive integer (an
+  expression such as `4 * 1024 ** 3` or a module attribute is fine), for
+  every kernel of the module. Any other value is an `ArgumentError` when the
+  module compiles.
+- The default is half of the machine's physical memory, read once when the
+  library loads: one call may build any result that fits comfortably in
+  memory, and a loop that keeps a buffer per iteration raises before it
+  takes the memory the node and the OS need. A fixed default would be too
+  small on large servers or too large on small machines. In a container
+  whose memory limit is below the host's, set `max_owned` (the default sees
+  the host's memory). `Mod.__defk_stats__().max_owned` shows the budget.
+- The count is per call: concurrent calls each have their own, a call
+  after a raise starts from zero, and a yield keeps it. An array a kernel
+  returns counts until it returns.
+- It is a [limit](#12-limits) of native code only: Elixir mode does not
+  know which arrays native code would still hold, so it never raises it.
+- A single allocation of 2^47 bytes or more, which no allocator serves,
+  raises the plain "out of memory (allocating N bytes)" of
+  [Allocating](#allocating) instead, the same in both modes.
 
 ### Returning
 
@@ -2104,6 +2149,7 @@ bug.
 | an array variable bound again inside a loop body and read after the loop | the binding is gone after the loop | compile error [`array-rebind-in-loop`](compile-errors.md#array-rebind-in-loop) |
 | a called kernel writing an array parameter it does not return | the write is lost | compile error [`write-not-returned`](compile-errors.md#write-not-returned) |
 | memory of arrays written in a loop while another variable still reads them | the old binaries are garbage collected | each copy (see [Copies](#copies)) lives until the kernel returns |
+| a call holding more bytes in arrays it allocated or copied (an `alloc` or a copy in a loop body) than its [owned-buffer budget](#the-owned-buffer-budget) (`max_owned`, by default half of physical memory) | the old binaries are garbage collected | `ArgumentError` "out of memory (allocating N bytes would take this call's buffers past max_owned, M bytes)"; Elixir mode never raises it |
 | the C compiler is needed at build time | | compile error [`no-c-compiler`](compile-errors.md#no-c-compiler) |
 
 ## 13. Known divergences

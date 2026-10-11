@@ -40,7 +40,7 @@ defmodule Defk do
   ## `use Defk`
 
   `use Defk` imports the `defk/3` macro (and its shorter forms `defk/1` and
-  `defk/2`). A module may mix kernels with ordinary `def`s. Three options:
+  `defk/2`). A module may mix kernels with ordinary `def`s. Four options:
 
     * `elixir_mode: true` compiles Elixir mode into the module in any
       environment, so `__defk_elixir__/2` exists outside `:test` (in a
@@ -58,6 +58,14 @@ defmodule Defk do
       a module whose kernels are called many times a microsecond's work at a
       time, where the 9 ns shows. See the
       [runtime contract](runtime-contract.md#1-preemption-a-long-kernel-yields).
+    * `max_owned: bytes` is the most one kernel call may hold in arrays it
+      allocates or copies (every one lives until the kernel returns, so an
+      `alloc` or a copy in a loop body keeps one per iteration). An
+      allocation past it raises `ArgumentError` "out of memory" instead of
+      letting the operating system kill the node. A positive integer, or an
+      expression giving one; default half of physical memory, read when the
+      library loads. Native code only: Elixir mode never raises it. See
+      [the owned-buffer budget](language.md#the-owned-buffer-budget).
 
   Any other option raises `ArgumentError`. Module attributes whose names
   start with `@defk_` are reserved for defk: don't define your own.
@@ -109,7 +117,7 @@ defmodule Defk do
   | `__defk_report__/0` | unstable | the fast-path report as data, `[{kernel, line, fact}]`; read it with `Defk.Report.print/1` |
   | `__defk_lib__/0` | unstable | the path of the compiled NIF library (`.so`) |
   | `__defk_kernels__/0` | unstable | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
-  | `__defk_stats__/0` | unstable | the library's runtime counters: `%{frames_live:, promotions:, yields:, crc32c:}` |
+  | `__defk_stats__/0` | unstable | the library's runtime counters: `%{frames_live:, promotions:, yields:, crc32c:, max_owned:}` |
 
   **Public** functions keep their meaning; a change would come with a
   deprecation. **Unstable** ones are for debugging and tools, and their
@@ -164,15 +172,20 @@ defmodule Defk do
     report = Keyword.get(opts, :report)
     adaptive = Keyword.get(opts, :adaptive_slice, true)
 
-    if Keyword.keys(opts) -- [:elixir_mode, :report, :adaptive_slice] != [] or
+    # an expression (`4 * 1024 ** 3`, `@limit`): evaluated in the module,
+    # checked in __before_compile__/1 (max_owned!/1)
+    max_owned = Keyword.get(opts, :max_owned)
+
+    if Keyword.keys(opts) -- [:elixir_mode, :report, :adaptive_slice, :max_owned] != [] or
          not is_boolean(elixir_mode) or not is_boolean(adaptive) or report not in [nil, :full] do
       raise ArgumentError,
-            "use Defk accepts only `elixir_mode: true | false`, `report: :full` and `adaptive_slice: true | false`, got: #{Macro.to_string(opts)}"
+            "use Defk accepts only `elixir_mode: true | false`, `report: :full`, `adaptive_slice: true | false` and `max_owned: bytes`, got: #{Macro.to_string(opts)}"
     end
 
     quote do
       @defk_elixir_mode unquote(elixir_mode)
       @defk_adaptive_slice unquote(adaptive)
+      @defk_max_owned unquote(max_owned)
       @defk_report unquote(report)
       import Defk, only: [defk: 1, defk: 2, defk: 3]
       Module.register_attribute(__MODULE__, :defk_kernels, accumulate: true)
@@ -316,7 +329,8 @@ defmodule Defk do
       Defk.Compiler.compile(env.module, kernels, env.file,
         nif_name: nif_name,
         fault_hooks: fault_hooks?,
-        adaptive_slice: adaptive?
+        adaptive_slice: adaptive?,
+        max_owned: max_owned!(env.module)
       )
 
     # a yielding kernel's NIF takes the run-queue hint (defk-04y): it is
@@ -374,6 +388,19 @@ defmodule Defk do
   defp kernel_defs(sigs, false, _mode, bits) do
     {wrapped, plain} = Enum.split_with(sigs, &(&1.name in bits or &1.yields))
     render_stubs(plain) ++ native_stubs(wrapped) ++ wrappers(wrapped)
+  end
+
+  # `use Defk, max_owned: n`: a positive integer of bytes that fits in a
+  # uint64 (DEFK_MAX_OWNED), or nil (the runtime's default)
+  defp max_owned!(module) do
+    case Module.get_attribute(module, :defk_max_owned) do
+      n when is_nil(n) or (is_integer(n) and n > 0 and n <= 0xFFFFFFFFFFFFFFFF) ->
+        n
+
+      other ->
+        raise ArgumentError,
+              "use Defk, max_owned: expects a positive integer number of bytes (at most 2^64 - 1), the most a kernel call may hold in arrays it allocates or copies, got: #{inspect(other)}"
+    end
   end
 
   # `__defk_corrupt_tags__/1` deliberately breaks the frame-tag check, so it

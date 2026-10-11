@@ -51,8 +51,9 @@ for {{:dot, 2}, _line, {:bounds, :kept, _} = fact} <- Mod.__defk_report__(),
 inlined call keeps the callee's line and belongs to the kernel it is inlined
 into; `print/1` lists those after the kernel. `fact` is
 `{topic, verdict, text}`; `Defk.Report` lists the topics: `:kernel`,
-`:bounds`, `:branch`, `:loop`, `:nonfinite`, `:inline`, `:copy`, `:alloc`
-and `:vectorize`.
+`:bounds`, `:branch`, `:loop`, `:nonfinite`, `:inline`, `:copy`, `:alloc`,
+`:owned` (an `alloc` or a copy inside a loop, which keeps a buffer per
+iteration until the kernel returns) and `:vectorize`.
 
 defk's own facts are noted while the kernel is lowered. They cost no extra
 compiler pass and nothing at run time.
