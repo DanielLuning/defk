@@ -1336,7 +1336,7 @@ d = rotr(bxor(d, a), 16, 32)                               # one ror
 d = band(bsr(t, 16) + bsl(t, 16), 0xFFFFFFFF)              # lsl + bfxil
 ```
 
-### 6.15 Byte copies: eight bytes per `u64_le`, and call an array-writing helper outside branches
+### 6.15 Byte copies: eight bytes per `u64_le`, and the helper-in-a-branch trap (fixed in `defk-33b`)
 
 A kernel can only store one element at a time, so a byte-copy loop (an LZ
 decoder's literals and matches) pays a bounds check and an overflow check
@@ -1344,10 +1344,15 @@ per byte; clang does not merge eight checked byte stores into one 64-bit
 store. Loading a word with `u64_le` and storing its eight bytes, with a
 7-byte overshoot when the buffers have slack, is the best spelling today;
 a word store or copy builtin (`defk-52v.16`) would remove the per-byte
-checks. Separately, a helper kernel that writes and returns the output must
-be called at the top of the loop body: called in one branch of an `if`
-whose other branch reads the array, it copies the whole buffer on every
-iteration and keeps every copy until the kernel returns (`defk-33b`).
+checks. Separately, a helper kernel that writes and returns the output had
+to be called at the top of the loop body: called in one branch of an `if`
+whose other branch reads the array, it copied the whole buffer on every
+iteration and kept every copy until the kernel returned (`defk-33b`).
+**Fixed in `defk-33b`:** the copy analysis no longer counts a read in
+another branch of an `if`, `cond` or `case` as a read after the call, so the
+helper in a branch writes in place, like the hoisted call. The numbers below
+for the helper in a branch are from before the fix; the decoders keep the
+hoisted calls, which still cost nothing.
 
 - **Numbers:** 4 MB of text, LZ4 / Snappy: byte loops 5.3 / 9.6-10.1 ms,
   byte loops over the destination index 5.7-6.2 / 9.0-9.6 ms, words 4.7-4.8
@@ -1355,6 +1360,9 @@ iteration and keeps every copy until the kernel returns (`defk-33b`).
   optimised liblz4's 2 ns. The helper in a branch: 47-53 ms instead of 0.1
   ms at 64 KB, and the BEAM was SIGKILLed (out of memory) at 4 MB; a 1-byte
   reproduction is quadratic (40k iterations 202 ms against 7 us hoisted).
+  After the fix (`defk-33b`) the 1-byte reproduction has no copy and is
+  linear: 40k iterations 1-2 us, 4M 0.1-0.3 ms (before, on the same
+  machine: 1k 87 us, 10k 10 ms, 40k 135 ms; load average 25).
 - **Conditions:** under load (load averages 13-85).
 - **Source:** [`lz4_snappy_decode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/lz4_snappy_decode.exs) (header), `defk-52v.3`, `defk-33b`, `defk-52v.16`.
 - **Status:** provisional.
@@ -1364,7 +1372,8 @@ iteration and keeps every copy until the kernel returns (`defk-33b`).
 # fast: both helpers on every element, one length 0
 out = copy_lit(out, op, src, s, lit)
 out = copy_back(out, op + lit, off, ln - lit)
-# slow: the helper in one branch, the array read in the other
+# slow before defk-33b, now as fast: the helper in one branch, the array
+# read in the other
 if last, do: {:halt, {out, op}}, else: (out = copy_back(out, op, off, ml); {:cont, {out, op + ml}})
 ```
 
