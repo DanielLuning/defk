@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-6lr"
@@ -11,8 +11,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Experiment: short slices only when the caller's run queue is crowded (spread short parallel kernel calls without slowing lone calls)",
   "type": "task",
-  "updated_at": "2026-10-11T17:26:08Z"
+  "updated_at": "2026-10-11T17:26:09Z"
 }
