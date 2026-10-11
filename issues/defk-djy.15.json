@@ -6,7 +6,7 @@
   "description": "Found by the HexDocs cold test (defk-djy.9, docs/cold-tests/hexdocs-entropy.md, point 7). An alloc inside a loop allocates on every iteration and nothing is freed until the kernel returns (language.md 'Allocating'); for a per-window scratch histogram over a 1 GB input that is 512 MB. defk-djy.9 added it to getting-started 'Things that trip people up' with a checked example (scratch array before the loop, cleared each pass). The report (Defk.Report.print/1, __defk_report__/0) could flag it where the author looks when tuning.\n\nDone when the fast-path report notes each alloc that sits inside a loop body (with the loop and a one-line suggestion to hoist it and clear it per pass), __defk_report__/0 carries it as data, a report test covers it, and docs/fast-path-report.md lists the note.",
   "id": "defk-djy.15",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "parent": "defk-djy",
   "comments": [
