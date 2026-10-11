@@ -1,0 +1,245 @@
+# Cheatsheet
+
+The kernel subset on one page. Each card links to its section of
+[the kernel subset reference](../language.md), which has the exact rules.
+
+## Kernels
+{: .col-2}
+
+### Define and call
+
+```elixir
+defmodule Geo do
+  use Defk
+
+  defk dot(a :: [f64], b :: [f64]) :: f64 do
+    n = min(len(a), len(b))
+
+    for i <- 0..(n - 1)//1, reduce: 0.0 do
+      acc -> acc + a[i] * b[i]
+    end
+  end
+end
+```
+
+```elixir
+iex> a = <<1.0::float-64-native, 2.0::float-64-native>>
+iex> Geo.dot(a, a)
+5.0
+```
+
+[Defining a kernel](../language.md#2-defining-a-kernel)
+
+### Options
+
+| Write | Effect |
+|---|---|
+| `use Defk` | imports `defk` |
+| `use Defk, elixir_mode: true` | adds `__defk_elixir__/2` outside `:test` |
+| `use Defk, report: :full` | adds clang's vectorisation to the fast-path report |
+| `defk f(...) :: t, yield: false do` | no safepoints: only for sub-millisecond kernels |
+
+### Generated per module
+
+| Function | Gives |
+|---|---|
+| `__defk_elixir__(:f, args)` | one call in Elixir mode |
+| `__defk_source__/0` | the generated C |
+| `__defk_report__/0` | the fast-path report as data |
+| `__defk_stats__/0` | `frames_live`, `promotions`, `yields` |
+| `__defk_force_yields__/1` | testing: yield at every safepoint |
+| `__defk_lib__/0` | the native library's path |
+
+[What `use Defk` generates](../language.md#what-use-defk-generates)
+
+## Types
+{: .col-2}
+
+### Scalars and arrays
+
+| Type | In Elixir |
+|---|---|
+| `i64` | integer in -2^63..2^63-1 |
+| `u64` | integer in 0..2^64-1 |
+| `f64` | float (an `i64` argument converts) |
+| `bool` | `true` or `false` |
+| `[f64]` `[f32]` `[i64]` `[i32]` `[i16]` `[u8]` `[u64]` | binary of packed native-endian elements |
+| `{t1, t2}` | tuple, as a result only |
+| `bitstring` | result of a bitstring accumulator |
+
+Narrow element types read as `i64` or `f64`; a write that doesn't fit
+raises. [Types](../language.md#3-types)
+
+### Packing in Elixir
+
+| Element | Build | Read |
+|---|---|---|
+| `f64` | `<<x::float-64-native>>` | `for <<x::float-64-native <- bin>>, do: x` |
+| `i64` | `<<x::signed-64-native>>` | `for <<x::signed-64-native <- bin>>, do: x` |
+| `u64` | `<<x::unsigned-64-native>>` | `for <<x::unsigned-64-native <- bin>>, do: x` |
+| `u8` | `:erlang.list_to_binary(xs)` | `:binary.bin_to_list(bin)` |
+
+Build a whole array with `for x <- xs, into: <<>>, do: <<x::float-64-native>>`.
+
+## Expressions
+{: .col-2}
+
+### Operators
+
+| Kind | Forms |
+|---|---|
+| arithmetic | `+ - * /` `div` `rem` (`/` gives `f64`) |
+| comparison | `== != < > <= >=` |
+| boolean | `and` `or` `not` |
+| bitwise | `band bor bxor bnot bsl bsr`, or `&&& \|\|\| <<< >>>` |
+| arrays | `a[i]`, `out[i] = v`, `len(a)` |
+
+`i64` and `u64` overflow raises `ArithmeticError`; a float that would be inf
+or NaN raises too. [Expressions](../language.md#4-expressions-and-operators)
+
+### Builtins
+
+- `len`, `min`, `max`, `abs`
+- `float`, `trunc`, `round`
+- `sqrt`, `exp`, `log`, `sin`, `cos`, `pow` (also `:math.sqrt/1` ...)
+- `alloc(type, n)`: a new zero-filled array
+- `wrap64`, `mulhi`, `clz`, `ctz`, `popcount`, `rotl`, `rotr`, `rotl64`, `rotr64`
+- `u64_le(bytes, i)`, `u32_le`, `u16_le` and `_be`: word loads
+- `bit_size(acc)`
+
+[Builtins](../language.md#builtins)
+
+### Wrapping arithmetic
+
+```elixir
+defk fnv1a(bytes :: [u8]) :: u64 do
+  for b <- bytes, reduce: 0xCBF29CE484222325 do
+    h -> band(bxor(h, b) * 0x100000001B3, 0xFFFFFFFFFFFFFFFF)
+  end
+end
+```
+
+```elixir
+iex> M.fnv1a("a")
+12638187200555641996
+```
+
+`+ - *` and bit operations inside `band(expr, 2^k - 1)` wrap and give
+Elixir's exact masked result. [Masked arithmetic](../language.md#masked-arithmetic)
+
+### Literals and constants
+
+- A string or `<<1, 2, 3>>` is a read-only `[u8]`.
+- `@name` holding a number or boolean is inlined; one holding a binary is a
+  `[u8]`.
+
+[Module attributes](../language.md#module-attributes)
+
+## Control flow
+{: .col-2}
+
+### Branches
+
+```elixir
+defk sign(x :: i64) :: i64 do
+  cond do
+    x > 0 -> 1
+    x < 0 -> -1
+    true -> 0
+  end
+end
+```
+
+```elixir
+iex> M.sign(-7)
+-1
+```
+
+`if` needs an `else` when used as a value; `case` matches `i64` or `bool`
+against literals, `^pinned`, `_` and variables, with guards.
+[Control flow](../language.md#7-control-flow)
+
+### Loops
+
+| Form | Use |
+|---|---|
+| `for x <- a do ... end` | statement over an array |
+| `for i <- 0..(n - 1)//1 do` | over a range (write the step) |
+| `for x <- a, reduce: acc0 do acc -> ... end` | fold, also with a tuple accumulator |
+| `Enum.reduce_while(a, acc, fn x, acc -> {:cont, acc} end)` | early exit |
+| `Enum.all?(a, fn x -> ... end)`, `Enum.any?/2` | early exit |
+
+### Early exit
+
+```elixir
+defk first_negative(a :: [i64]) :: i64 do
+  Enum.reduce_while(0..(len(a) - 1)//1, -1, fn i, acc ->
+    if a[i] < 0, do: {:halt, i}, else: {:cont, acc}
+  end)
+end
+```
+
+```elixir
+iex> M.first_negative(<<4::signed-64-native, -2::signed-64-native>>)
+1
+```
+
+### Output of unknown length
+
+```elixir
+defk evens(a :: [i64]) :: bitstring do
+  for x <- a, reduce: <<>> do
+    acc -> if rem(x, 2) == 0, do: <<acc::bitstring, x::64>>, else: acc
+  end
+end
+```
+
+```elixir
+iex> M.evens(<<1::signed-64-native, 2::signed-64-native, 4::signed-64-native>>)
+<<2::64, 4::64>>
+```
+
+Or `alloc` the largest size and return `{out, count}`.
+[The bitstring accumulator](../language.md#the-bitstring-accumulator)
+
+## Common rewrites
+{: .col-1}
+
+### Write this instead
+
+| Written first | Write instead | Code |
+|---|---|---|
+| `Enum.sum(a)` | `for x <- a, reduce: 0.0 do acc -> acc + x end` | [`unsupported-call`](../language.md#unsupported-call) |
+| `a \|> f(b)` | `f(a, b)` | [`pipe`](../language.md#pipe) |
+| `for x <- a, do: x * 2` as a value | `out = alloc(f64, len(a))`, write `out[i]`, return `out` | [`for-collect`](../language.md#for-collect) |
+| `[x \| acc]` then `Enum.reverse/1` | a bitstring accumulator, or `{out, count}` | [`unsupported-list`](../language.md#unsupported-list) |
+| `for {x, i} <- Enum.with_index(a)` | `for i <- 0..(len(a) - 1)//1` and `x = a[i]` | [`generator-pattern`](../language.md#generator-pattern) |
+| `<<a, b, rest::binary>> = bin` | `a = bin[0]`, `b = bin[1]` | [`bitstring-match`](../language.md#bitstring-match) |
+| `x ** 2` | `x * x`, or `pow(x, 2)` | [`unsupported-expression`](../language.md#unsupported-expression) |
+| `length(a)`, `byte_size(a)` | `len(a)` | [`unknown-function`](../language.md#unknown-function) |
+| `unless c do` | `if not c do` | [`unsupported-construct`](../language.md#unsupported-construct) |
+| a hash that wraps at 64 bits | `band(expr, 0xFFFFFFFFFFFFFFFF)` | [masked arithmetic](../language.md#masked-arithmetic) |
+| maps, strings, atoms | pack values into binaries in Elixir first | [`unsupported-map`](../language.md#unsupported-map) |
+
+The full table: [Unsupported, write this instead](../language.md#unsupported-write-this-instead).
+
+## Testing
+{: .col-2}
+
+### Agreement
+
+```elixir
+Defk.Test.assert_agrees(Mod, :fun, args)
+Defk.ElixirMode.with_mode(:elixir, fn -> Mod.fun(x) end)
+Mod.__defk_force_yields__(true)
+```
+
+See [Testing kernels](testing.md).
+
+### Explaining speed
+
+```elixir
+Defk.Report.print(Mod)
+```
+
+See [Measuring](measuring.md).
