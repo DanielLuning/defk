@@ -290,15 +290,54 @@ defmodule Defk do
                       :attrs,
                       unquote(Defk.Attributes.capture(kernel.body))
                     )
+                    |> Map.put(:impl, Defk.take_impl(__MODULE__))
     end
   end
 
+  # An `@impl` written before a `defk` is meant for the kernel's function,
+  # not for the first function defk generates (`__defk_load__/0`): take it
+  # off the module here and put it before the kernel's `def` (impl_before/2).
+  @doc false
+  def take_impl(module) do
+    impl = Module.get_attribute(module, :impl)
+    Module.delete_attribute(module, :impl)
+    impl
+  end
+
+  # The `@impl` of each kernel, by {name, arity}
+  defp impls(raw_kernels) do
+    for %{impl: impl} = k <- raw_kernels,
+        impl != nil,
+        key = Defk.Clauses.key(k.head),
+        into: %{},
+        do: {key, impl}
+  end
+
+  # `@impl` ahead of the public `def` of a kernel that had one before its
+  # `defk`; the generated helpers and renamed NIFs never get one
+  defp impl_before(stubs, impls) do
+    Enum.map(stubs, fn
+      {:__block__, meta, exprs} -> {:__block__, meta, Enum.flat_map(exprs, &put_impl(&1, impls))}
+      expr -> put_impl(expr, impls) |> then(&{:__block__, [], &1})
+    end)
+  end
+
+  defp put_impl({:def, _, [{name, _, args}, _]} = expr, impls) when is_list(args) do
+    case Map.fetch(impls, {name, length(args)}) do
+      {:ok, impl} -> [quote(do: @impl(unquote(Macro.escape(impl)))), expr]
+      :error -> [expr]
+    end
+  end
+
+  defp put_impl(expr, _impls), do: [expr]
+
   @doc false
   defmacro __before_compile__(env) do
+    raw_kernels = env.module |> Module.get_attribute(:defk_kernels) |> Enum.reverse()
+    impls = impls(raw_kernels)
+
     kernels =
-      env.module
-      |> Module.get_attribute(:defk_kernels)
-      |> Enum.reverse()
+      raw_kernels
       |> Enum.map(&Defk.Attributes.inline/1)
       |> Defk.Clauses.merge()
 
@@ -350,7 +389,7 @@ defmodule Defk do
     # a helper (a kernel taking a bitstring) is only inlined: no function
     sigs = Enum.reject(all_sigs, &Defk.Bitstring.helper?/1)
 
-    stubs = kernel_defs(sigs, elixir?, mode, bits)
+    stubs = sigs |> kernel_defs(elixir?, mode, bits) |> impl_before(impls)
 
     elixir_mode =
       if elixir?, do: Defk.ElixirMode.definitions(kernels, all_sigs, env.file), else: []
