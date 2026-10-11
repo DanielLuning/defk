@@ -1,6 +1,6 @@
 # defk-04y: the three examples whose parallel kernel chunks stay on few
 # schedulers (defk-8qs), under each slice treatment of bench/adaptive_slice.exs
-# (today / fixed50 / adaptive / gap), interleaved, medians:
+# (today / fixed50 / adaptive / total / gap), interleaved, medians:
 #   batched_levenshtein  234k words, 12 chunks of lev_myers (Task.async_stream)
 #   monte_carlo_rtp      1M spins, 48 chunks of simulate (Task.async_stream)
 #   cosine_topk          100k x 384 f32 rows, 12 chunks of topk (Task.async_stream)
@@ -34,6 +34,12 @@ defmodule SliceEx do
   def call(:today, m, f, a), do: apply(m, nif(m, f), a)
   def call(:fixed50, m, f, a), do: apply(m, Defk.Compiler.sliced_name(nif(m, f)), a ++ [50, 0])
   def call(:gap, m, f, a), do: apply(m, Defk.Compiler.sliced_name(nif(m, f)), a ++ [-50, 1000])
+
+  def call(:total, m, f, a) do
+    if :erlang.statistics(:total_run_queue_lengths) > 0,
+      do: apply(m, Defk.Compiler.sliced_name(nif(m, f)), a ++ [50, 1000]),
+      else: apply(m, nif(m, f), a)
+  end
 
   def call(:adaptive, m, f, a) do
     if crowded?(),
@@ -124,7 +130,7 @@ IO.puts(
     "topk 100k #{one.(fn -> Cosine.Kernels.__defk_native_topk__(:persistent_term.get(:cos), qb, 10, 0) end)} ms"
 )
 
-ts = [:today, :fixed50, :adaptive, :gap]
+ts = [:today, :fixed50, :adaptive, :total, :gap]
 
 # results agree across treatments
 for {name, job} <- [lev: lev, rtp: rtp, cos: cos] do

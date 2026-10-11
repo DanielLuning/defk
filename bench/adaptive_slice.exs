@@ -2,7 +2,10 @@
 # Treatments, interleaved in one VM (medians):
 #   today     plain call, 250 us slice
 #   fixed50   50 us slice for the whole call (= DEFK_SLICE_US 50)
-#   adaptive  run-queue check in Elixir; crowded -> 50 us for the first 1 ms
+#   adaptive  check of the caller's own run queue in Elixir
+#             (statistics(:run_queue_lengths), nth scheduler_id);
+#             crowded -> 50 us for the first 1 ms of the call
+#   total     the same with statistics(:total_run_queue_lengths) > 0
 #   gap       no check; the kernel starts at 250 us and switches to 50 us
 #             (for 1 ms) after a resume that waited > DEFK_GAP_US (C side)
 # Run `ERL_FLAGS_LABEL="+swt very_low" elixir --erl "+swt very_low" -S mix run bench/adaptive_slice.exs spread`
@@ -26,6 +29,12 @@ defmodule Slice do
 
   def call(:adaptive, n) do
     if crowded?(), do: K.__defk_sliced_count_primes__(n, 50, 1000), else: K.count_primes(n)
+  end
+
+  def call(:total, n) do
+    if :erlang.statistics(:total_run_queue_lengths) > 0,
+      do: K.__defk_sliced_count_primes__(n, 50, 1000),
+      else: K.count_primes(n)
   end
 
   def call(:elixir, n), do: ex_count_primes(n)
@@ -59,7 +68,7 @@ IO.puts("# #{mode}  #{System.get_env("ERL_FLAGS_LABEL", "default VM")}  #{Slice.
 {n_short, n_055, n_5ms} = {19_500, 17_500, 78_000}
 
 IO.puts(
-  "# lone today calls, median us: #{for n <- [n_short, n_055, n_5ms], do: Slice.med(for _ <- 1..31, do: Slice.us(fn -> Slice.call(:today, n) end))}"
+  "# lone today calls, median us: #{inspect(for(n <- [n_short, n_055, n_5ms], do: Slice.med(for _ <- 1..31, do: Slice.us(fn -> Slice.call(:today, n) end))), charlists: :as_lists)}"
 )
 
 case mode do
@@ -68,7 +77,7 @@ case mode do
     # every treatment back to back (order rotated per round); median of the
     # per-round ratio to `today` and to yield: false
     rounds = if reps > 0, do: reps, else: 15
-    ts = [:noyield, :today, :adaptive, :gap, :fixed50]
+    ts = [:noyield, :today, :adaptive, :total, :gap, :fixed50]
 
     for online <- [12, 1], {label, n, k} <- [{"0.65 ms", n_short, 200}, {"2M", 2_000_000, 1}] do
       :erlang.system_flag(:schedulers_online, online)
@@ -97,7 +106,7 @@ case mode do
   "tick" ->
     runs = if reps > 0, do: reps, else: 5
     n_tick = 2_000_000
-    ts = [:today, :adaptive, :gap, :fixed50]
+    ts = [:today, :adaptive, :total, :gap, :fixed50]
 
     Defk.Bench.TickGap.with_one_scheduler(fn ->
       # lone kernel vs ticker; then the kernel with 3 other kernel calls queued
@@ -129,7 +138,7 @@ case mode do
 
   "spread" ->
     rounds = if reps > 0, do: reps, else: 9
-    ts = [:today, :fixed50, :adaptive, :gap, :elixir]
+    ts = [:today, :fixed50, :adaptive, :total, :gap, :elixir]
     n_ex = Slice.calibrate(:elixir, 650, 1000, 400_000)
     n_ex55 = Slice.calibrate(:elixir, 550, 1000, 400_000)
     n_ex5 = Slice.calibrate(:elixir, 5000, 1000, 2_000_000)
