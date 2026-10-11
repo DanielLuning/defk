@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-11T16:26:46Z",
   "created": "2026-10-11T15:30:14Z",
   "description": "Found in defk-52v.16: examples/lz4_snappy_decode.exs had a helper kernel copy_back(out :: [u8], op :: i64, off :: i64, ln :: i64) :: [u8]. Once copy_back/4 became a builtin, a call with those types reaches the builtin, not the kernel, in native code and in Elixir mode alike (Compiler.builtin/4 tries the builtin clauses before env.sigs; ElixirMode.fun_call tries builtin/4 before kernel_call), with no warning. Both modes agree, so it is not a divergence, but a new builtin can change what an existing kernel module computes. Options: reject a defk whose name/arity is a builtin's (a compile error with a rename hint), or let the module's kernel win. Same for every builtin added later (log2, crc32c, copy, ...).",
   "id": "defk-pud",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "A kernel named like a builtin is silently replaced by the builtin where the argument types match",
   "type": "bug",
-  "updated_at": "2026-10-11T16:18:46Z"
+  "updated_at": "2026-10-11T16:26:46Z"
 }
