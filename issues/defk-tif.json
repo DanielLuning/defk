@@ -5,10 +5,12 @@
   "created": "2026-10-11T16:06:49Z",
   "description": "Found in defk-52v.15 (examples/cdcl_sat.exs). defk-33b fixed the case where the other branch reads the array (out[0]), but not when the other tail returns the accumulator itself:\n\n  defk h(a :: [i64]) :: [i64] do a[0] = a[0] + 1; a end\n  defk e1(n :: i64) :: [i64] do\n    a0 = alloc(i64, 4)\n    Enum.reduce_while(0..n//1, a0, fn _, a -\u003e\n      if a[1] == 5 do {:halt, a} else a = h(a); {:cont, a} end\n    end)\n  end\n\nThe generated C has v_a = defk_copy_i64(ctx, v_a) before h's write, in both strip paths: a full copy per iteration (two copies in the source). The same happens when the call is not a helper but a nested reduce_while whose init tuple holds the accumulator ({st, -1, head}) inside one branch of an outer reduce_while body. Calling h unconditionally and branching only on the tail (a = h(a); if ..., do: {:halt, a}, else: {:cont, a}) copies nothing. The CDCL kernel was restructured that way: every helper (restart, propagate, analyze, backjump, learn, decide) is called on every iteration with an 'active' flag and empty loop ranges when inactive; before that, the n=100 solve took 1.9 s instead of 1 ms (a copy of the whole solver state per step).\n\nDone when: e1 (and the nested-loop variant) compile with no defk_copy_ in the loop, a test asserts it, and the kernel agrees with Elixir mode.",
   "id": "defk-tif",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "priority": 3,
   "status": "open",
   "title": "A helper call in one Enum.reduce_while branch copies the accumulator array every iteration when another branch's tail returns it",
   "type": "bug",
-  "updated_at": "2026-10-11T16:06:49Z"
+  "updated_at": "2026-10-11T17:06:59Z"
 }
