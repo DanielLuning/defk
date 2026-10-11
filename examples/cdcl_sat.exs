@@ -2,7 +2,7 @@
 # scenario enumeration (Ash authorization), against picosat_elixir and
 # simple_sat
 #
-# Work in progress (defk-52v.15): stage 2, the kernel and one solve.
+# Work in progress (defk-52v.15): stage 3, the batch form.
 #
 #   elixir examples/cdcl_sat.exs
 
@@ -105,8 +105,9 @@ defmodule SatEx.Kernels do
   # the formula (the query plus the rest as unit clauses is UNSAT); append
   # the negated cube as a blocking clause. Returns {status, x, xo, scenarios,
   # solves}: the blocking clauses in CSR (x[xo[k]..xo[k + 1]) is scenario k,
-  # negated); status 1 complete, 2 a limit (the budget of one solve, or the
-  # out_cap / max_scen capacity: the caller retries with more).
+  # negated); status 1 complete, 2 the step budget of one solve ran out (a
+  # declared limit), 3 out_cap or max_scen is too small (the caller retries
+  # with more).
   defk solve_all(
          all :: [i64],
          allo :: [i64],
@@ -215,7 +216,7 @@ defmodule SatEx.Kernels do
             xo[nxc + 1] = xtop + kept
           end
 
-          status2 = if limit or overflow, do: 2, else: 1
+          status2 = if limit, do: 2, else: if(overflow, do: 3, else: 1)
           nscen2 = if stored, do: nscen + 1, else: nscen
           j3 = if finish, do: -1, else: j2
           xtop2 = if stored, do: xtop + kept, else: xtop
@@ -2059,33 +2060,27 @@ defmodule SatEx do
       %Crux.Formula{cnf: [], bindings: b} when map_size(b) == 0 -> [%{}]
       %Crux.Formula{cnf: [[1], [-1]], bindings: %{1 => false}} -> []
       %Crux.Formula{cnf: []} -> Crux.satisfying_scenarios(formula, opts)
-      _ -> formula |> encode() |> cubes_kernel(64) |> finish(formula.bindings, opts)
+      _ -> formula |> encode() |> cubes_kernel() |> finish(formula.bindings, opts)
     end
   end
 
-  def cubes_kernel(e, out_cap) do
+  def batch_args(e, out_cap) do
     {all, allo} = pack(e.cnf ++ e.query)
     prim = for v <- e.prim, into: <<>>, do: <<v::signed-64-native>>
-    max_scen = out_cap
+    [all, allo, length(e.cnf), prim, e.nf, e.nq, batch_cap(e), @budget, out_cap, out_cap]
+  end
 
-    case K.solve_all(
-           all,
-           allo,
-           length(e.cnf),
-           prim,
-           e.nf,
-           e.nq,
-           batch_cap(e),
-           @budget,
-           out_cap,
-           max_scen
-         ) do
+  # the scenario cubes in the order found; out_cap literals of blocking
+  # clauses to start with, four times more on each retry
+  def cubes_kernel(e, out_cap \\ 64) do
+    case apply(K, :solve_all, batch_args(e, out_cap)) do
       {1, x, xo, ns, _solves} -> decode(x, xo, ns)
-      {2, _, _, ns, _} when ns >= max_scen - 1 or true -> cubes_kernel(e, out_cap * 4)
+      {3, _, _, _, _} -> cubes_kernel(e, out_cap * 4)
+      {2, _, _, _, _} -> raise "sat: step budget exhausted"
     end
   end
 
-  defp decode(x, xo, ns) do
+  def decode(x, xo, ns) do
     offs = for <<o::signed-64-native <- xo>>, do: o
     xs = for <<v::signed-64-native <- x>>, do: v
     xt = List.to_tuple(xs)
@@ -2317,3 +2312,92 @@ IO.puts(
 )
 
 one_ok = mode_ok and cdcl_ok and anchor_ok and simple_ok and yield_ok and bad_ok and limit_ok
+
+# ---- agreement: Crux's enumeration in one call (solve_all) ------------------------
+shapes = [{2, 2, 4}, {4, 3, 8}, {8, 3, 12}, {12, 4, 16}]
+
+formulas =
+  for {p, k, pool} <- shapes,
+      seed <- 1..2,
+      f = Gen.ash(p, k, pool, seed),
+      f.cnf != [],
+      do: {{p, k, pool, seed}, f}
+
+with_solver = fn solver, f ->
+  Process.put(Crux.Implementation, solver)
+  f.()
+end
+
+# Is every scenario sufficient (cube and not F is UNSAT, Crux's own
+# implies_formula? query) and do the scenarios cover F (F and no scenario is
+# UNSAT)? Both checked with picosat.
+valid_cover? = fn f, cubes ->
+  e = SatEx.encode(f)
+  blocking = Enum.map(cubes, fn c -> Enum.map(c, &(-&1)) end)
+
+  Enum.all?(cubes, fn c ->
+    Picosat.solve(Enum.map(c, &[&1]) ++ e.query) == {:error, :unsatisfiable}
+  end) and
+    Picosat.solve(f.cnf ++ blocking) == {:error, :unsatisfiable}
+end
+
+# Crux's scenarios as cubes again (bound variable -> literal)
+to_cubes = fn f, scenarios ->
+  ids = Map.new(f.bindings, fn {id, var} -> {var, id} end)
+
+  Enum.map(scenarios, fn s ->
+    Enum.map(s, fn {var, val} -> if val, do: ids[var], else: -ids[var] end)
+  end)
+end
+
+batch =
+  for {shape, f} <- formulas do
+    e = SatEx.encode(f)
+    kcubes = SatEx.cubes_kernel(e)
+    pico = with_solver.(Picosat, fn -> Crux.satisfying_scenarios(f) end)
+    mine = SatEx.satisfying_scenarios(f)
+
+    %{
+      shape: shape,
+      # exact: the Elixir loop with the Elixir CDCL finds the same cubes in the same order
+      same_as_elixir: kcubes == SatEx.Enumerate.cubes(e),
+      # Crux's API shape: the same maps as running Crux on the Elixir loop
+      same_api: mine == SatEx.Enumerate.satisfying_scenarios(f),
+      cover: valid_cover?.(f, kcubes) and valid_cover?.(f, to_cubes.(f, pico)),
+      same_as_picosat: Enum.sort(mine) == Enum.sort(pico),
+      n: length(mine),
+      n_pico: length(pico)
+    }
+  end
+
+# Elixir mode on the small shapes (it rebuilds the state per write)
+batch_mode_ok =
+  Enum.all?(for({{p, _, _, _}, f} <- formulas, p <= 4, do: f), fn f ->
+    args = SatEx.batch_args(SatEx.encode(f), 64)
+    K.__defk_elixir__(:solve_all, args) === apply(K, :solve_all, args)
+  end)
+
+{_, big} = List.last(formulas)
+big_e = SatEx.encode(big)
+big_cubes = SatEx.cubes_kernel(big_e)
+K.__defk_force_yields__(true)
+batch_yield_ok = SatEx.cubes_kernel(big_e) == big_cubes
+K.__defk_force_yields__(false)
+# out_cap 1 overflows, status 3, and the retry gets the same cubes
+retry_ok = SatEx.cubes_kernel(big_e, 1) == big_cubes
+
+for r <- batch do
+  IO.puts(
+    "  #{inspect(r.shape)}: #{r.n} scenarios (Crux + picosat #{r.n_pico}, same set #{r.same_as_picosat}); " <>
+      "=== the Elixir loop #{r.same_as_elixir and r.same_api}; sufficient and covering: #{r.cover}"
+  )
+end
+
+batch_ok =
+  Enum.all?(batch, &(&1.same_as_elixir and &1.same_api and &1.cover)) and batch_mode_ok and
+    batch_yield_ok and retry_ok
+
+IO.puts(
+  "solve_all: Elixir mode === native on the small shapes: #{batch_mode_ok}; forced yields: #{batch_yield_ok}; " <>
+    "capacity retry: #{retry_ok}; all: #{batch_ok}"
+)
