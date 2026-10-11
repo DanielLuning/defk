@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-11T12:47:34Z",
+  "description": "Found by the HexDocs cold test (defk-djy.9, docs/cold-tests/hexdocs-entropy.md, error 2 and point 6). for w \u003c- 0..(n - 1) do ... end used as a value is rejected with for-collect and the hint 'allocate the output array and write it in the loop', with no rewrite, while most first-write errors give one (unknown-function, pipe, Enum.sum). The tester needed the catalogue page for the shape out = alloc(f64, n); for i \u003c- ... do out[i] = ... end; out.\n\nDone when a for without reduce: used as a value, over a range i \u003c- 0..(n - 1)//1 or an array x \u003c- a with a simple body, gets a rewrite built from the author's code (alloc of the length, a for writing out[i] = \u003cbody value\u003e, then out; the element type from the body's type where the compiler knows it, else a placeholder the hint names), the rewrite compiles where it is shown (test in compile_errors_test 'targeted hints'), and the catalogue entry is unchanged or regenerated.",
+  "id": "defk-djy.13",
+  "labels": [],
+  "parent": "defk-djy",
+  "priority": 3,
+  "status": "open",
+  "title": "for-collect: a rewrite from the author's own loop (alloc the output, write out[i])",
+  "type": "task",
+  "updated_at": "2026-10-11T12:47:34Z"
+}
