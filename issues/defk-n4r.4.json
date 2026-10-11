@@ -30,11 +30,15 @@
     {
       "text": "Noted while writing the scope page (defk-djy.5): helper writes look done (a callee writes an array parameter it returns; write-not-returned otherwise; docs/language.md section 8), and the loop form landed with defk-n4r.10. The scope page does not list this as planned. Close if nothing is left.",
       "timestamp": "2026-10-11T11:28:59Z"
+    },
+    {
+      "text": "Closed by the maintainer: helper writes already landed in defk-auo and defk-n4r.10 (docs/language.md §8); noted while writing the scope page (defk-djy.5).",
+      "timestamp": "2026-10-11T11:49:19Z"
     }
   ],
   "priority": 2,
   "status": "open",
   "title": "Helper kernels can write to arrays their caller allocated",
   "type": "task",
-  "updated_at": "2026-10-11T11:28:59Z"
+  "updated_at": "2026-10-11T11:49:19Z"
 }
