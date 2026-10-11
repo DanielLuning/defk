@@ -8,9 +8,15 @@
   "labels": [
     "needs-triage"
   ],
+  "comments": [
+    {
+      "text": "Done: defk-djy.1 moved lib/examples.ex to test/support/examples.ex; elixirc_paths(:dev) now adds that one file so demo.exs and bench/*.exs work again (both ran), and ex_doc filters Examples.Kernels out. Deps compile as :prod, so dependent apps compile no example kernels.",
+      "timestamp": "2026-10-11T11:58:11Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Don't compile defk's example kernels into dependent apps",
   "type": "task",
-  "updated_at": "2026-10-07T13:23:28Z"
+  "updated_at": "2026-10-11T11:58:11Z"
 }
