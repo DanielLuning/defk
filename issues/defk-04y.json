@@ -5,10 +5,12 @@
   "created": "2026-10-11T17:26:07Z",
   "description": "Follows defk-6lr (and defk-8qs). Short kernel calls fanned out from one process (Task.async_stream) stay on 2-4 of 12 schedulers because a kernel charges 4000 reductions per 250 us slice and ERTS wakes idle schedulers by reductions run on a crowded queue. A shorter slice spreads them (DEFK_SLICE_US 50: 12 schedulers) but costs a lone call 11-18%.\n\nExperiment: choose the slice per call from the run queue. Before the call (in the generated Elixir wrapper, or in the NIF if ERTS exposes it), check whether the caller's scheduler run queue has other runnable processes waiting; only then run the kernel with a short slice (e.g. 50 us, or short for the first ~1 ms), else keep 250 us. Candidates for the check: :erlang.statistics(:run_queue_lengths) (per scheduler; cost?), :erlang.statistics(:total_run_queue_lengths), :erlang.system_info(:scheduler_id) plus a per-scheduler counter, or anything cheaper; measure each one's cost per call. The slice must become a runtime parameter of the call (today DEFK_SLICE_US is a compile-time constant in priv/defk_runtime.h).\n\nMeasure on a quiet machine (no other agents; record load): (1) cost of the check per call; (2) single-call speed vs today for short (0.65 ms) and long (2M count_primes) calls; (3) tick gap (bench/tick_gap.exs) with short slices; (4) spread and wall time for 48 x 0.65 ms tasks under Task.async_stream, Task.async + await_many, and 12 x 0.55 ms; (5) the three affected examples (batched_levenshtein, monte_carlo_rtp at 1M, cosine_topk 100k 12 chunks) vs default and +swt very_low. Interleave treatments, medians, as in defk-8qs.\n\nAdopt only if the check costs well under 1% of a 0.65 ms call and most of the spread is recovered; otherwise record the numbers, keep the guidance (examples/README.md rule 7, docs/performance.md 4.1-4.3) as the answer, and leave the code unchanged. Done when the decision is recorded with the measurements in docs/performance.md section 4 and on defk-6lr, and defk-6lr is closed either way.",
   "id": "defk-04y",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "priority": 2,
   "status": "open",
   "title": "Experiment: short slices only when the caller's run queue is crowded (spread short parallel kernel calls without slowing lone calls)",
   "type": "task",
-  "updated_at": "2026-10-11T17:26:07Z"
+  "updated_at": "2026-10-11T17:26:08Z"
 }
