@@ -323,6 +323,10 @@ defmodule Defk.CompileErrorsTest do
       msg
     end
 
+    defp indent(src),
+      do:
+        src |> String.split("\n") |> Enum.map_join("\n", &if(&1 == "", do: "", else: "  " <> &1))
+
     defp rewrite(msg) do
       [_, rw] = Regex.run(~r/^hint: .*:\n\n((?:    .*\n|\n)+)\(defk/m, msg)
 
@@ -371,6 +375,54 @@ defmodule Defk.CompileErrorsTest do
       msg = rejection("for y <- a, into: <<>>, do: <<y::float-64>>", "a :: [f64]", "[f64]")
       assert codes(msg) == ["for-collect"]
       assert whats(msg) == ["for ..., into: is not in the kernel subset"]
+    end
+
+    test "a for over 0..(n - 1) used as a value gets alloc, the author's loop and out" do
+      msg = rejection("for w <- 0..(n - 1) do\n  w * 2.0\nend", "n :: i64", "[f64]")
+      assert codes(msg) == ["for-collect"]
+
+      assert rewrite(msg) ==
+               "out = alloc(f64, n)\n\nfor w <- 0..(n - 1)//1 do\n  out[w] = w * 2.0\nend\n\nout"
+
+      assert compile("defk f(n :: i64) :: [f64] do\n#{indent(rewrite(msg))}\nend", "Rw") == :ok
+    end
+
+    test "a for over a range takes its element type from the body" do
+      msg = rejection("for i <- 0..(n - 1)//1, do: a[i] + 1.0", "a :: [f64], n :: i64", "[f64]")
+      assert rewrite(msg) =~ "out = alloc(f64, n)"
+      msg = rejection("for i <- 0..(n - 1)//1, do: i * 2", "n :: i64", "[i64]")
+      assert rewrite(msg) =~ "out = alloc(i64, n)"
+    end
+
+    test "a for over another range starts the output at its first element" do
+      msg = rejection("for i <- 1..n, do: a[i - 1]", "a :: [f64], n :: i64", "[f64]")
+
+      assert rewrite(msg) ==
+               "out = alloc(f64, n)\n\nfor i <- 1..n//1 do\n  out[i - 1] = a[i - 1]\nend\n\nout"
+
+      msg = rejection("for i <- 2..(n + 5), do: i + 0.5", "n :: i64", "[f64]")
+      assert rewrite(msg) =~ "out = alloc(f64, n + 5 - 2 + 1)"
+      assert rewrite(msg) =~ "out[i - 2] = i + 0.5"
+    end
+
+    test "a for over an array gets the index loop, typed by the element" do
+      msg = rejection("for x <- a, do: x + 1", "a :: [i64]", "[i64]")
+      assert rewrite(msg) =~ "out = alloc(i64, len(a))"
+      assert rewrite(msg) =~ "out[i] = a[i] + 1"
+    end
+
+    test "a for-collect without a rewrite keeps the generic hint" do
+      # a step other than 1, a body of several statements, a nested generator
+      for body <- [
+            "for i <- 0..(n - 1)//2, do: i",
+            "for i <- 0..(n - 1) do\n  y = i * 2\n  y\nend",
+            "for i <- 0..(n - 1), j <- 0..(n - 1), do: i + j"
+          ] do
+        msg = rejection(body, "n :: i64", "[i64]")
+        assert codes(msg) == ["for-collect"]
+        assert msg =~ "hint: allocate the output array and write it in the loop\n"
+        refute msg =~ "alloc(i64"
+      end
     end
 
     test "fixed-field binary matches get indexed reads" do

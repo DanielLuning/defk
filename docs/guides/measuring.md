@@ -36,8 +36,9 @@ time the kernel:
 - try a better data layout or algorithm, and give the kernel the same one;
 - look up the job's kind in
   [Fast Elixir on binaries and numbers](../performance.md#2-fast-elixir-on-binaries-and-numbers):
-  counting bytes or keys, for instance, is "2.12 Dense counters" there
-  (`:atomics` indexed by the key, not a map);
+  counting bytes, for instance, is "2.16 Counting bytes" there (16-bit
+  pairs into `:atomics`, not a map), and counting keys "2.12 Dense
+  counters";
 - time the alternatives instead of assuming which is fastest, and write down
   what you tried.
 
