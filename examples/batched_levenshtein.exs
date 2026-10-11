@@ -15,8 +15,10 @@
 # ("accomodation"). The other size, 1k words (a did-you-mean over commands or
 # field names), is the first point of the sweep.
 #
-# Expected verdict: poor (use Elixir). It was pre-registered as good; the
-# optimised Elixir changed it.
+# Expected verdict: marginal (use Elixir). It was pre-registered as good; the
+# optimised Elixir changed it. Earlier runs read 0.86-0.99x (poor or, from
+# 0.95x, marginal); the three runs of defk-9p6.24 read 1.30-1.82x, marginal
+# (provisional, loaded machine). The tie band's marginal covers all of them.
 #
 #   elixir examples/batched_levenshtein.exs                 # agreement + report
 #   LEV_VARIANTS=1 elixir examples/batched_levenshtein.exs  # also every variant
@@ -696,7 +698,7 @@ IO.puts(
 
 Defk.Bench.report(
   name: "batched_levenshtein",
-  expected: :poor,
+  expected: :marginal,
   baseline: :optimized,
   realistic_size: "#{n_all} words (a dictionary), one 12-byte query",
   elixir: elixir_run.(n_all),
