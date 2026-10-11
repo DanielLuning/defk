@@ -14,11 +14,15 @@
     {
       "text": "The HexDocs cold test (defk-djy.9) hit this from the docs side: getting-started said the runtime needs no compiler without the release caveat, and the workaround lived only in examples/release_debian on GitHub. defk-djy.9 added the caveat to getting-started and put the workaround steps (same absolute path, a sketch Dockerfile, the __defk_lib__/0 check) in docs/guides/deploying.md. When this ticket lands, remove both.",
       "timestamp": "2026-10-11T12:48:01Z"
+    },
+    {
+      "text": "From defk-fr7 (2026-10-11): __defk_lib__/0 (lib/defk.ex ~345) compiles the absolute .so path into the beam, so a moved project with stale beams, or a release run from another path, points at the old .so. Relevant to shipping .so files in releases.",
+      "timestamp": "2026-10-11T15:43:06Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Ship kernel .so files in mix releases",
   "type": "bug",
-  "updated_at": "2026-10-11T12:48:01Z"
+  "updated_at": "2026-10-11T15:43:06Z"
 }
