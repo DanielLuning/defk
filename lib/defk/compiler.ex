@@ -6107,13 +6107,20 @@ defmodule Defk.Compiler do
   # (the open loops are those around the loop statement), so it is not noted.
   defp note_per_iteration(topic, at) when topic in [:alloc, :copy] do
     if Process.get(:defk_loops, []) != [] do
-      what = if topic == :alloc, do: "alloc/2", else: "this copy"
+      text =
+        case topic do
+          :alloc ->
+            "alloc/2 is inside a loop: each iteration keeps a buffer until the kernel returns (max_owned bounds the total). Allocate before the loop and clear each pass."
+
+          :copy ->
+            "this copy is inside a loop: each iteration keeps a buffer until the kernel returns (max_owned bounds the total)"
+        end
 
       note(
         :owned,
         at,
         :per_iteration,
-        "#{what} is inside a loop: each iteration keeps a buffer until the kernel returns (max_owned bounds the total)"
+        text
       )
     end
 

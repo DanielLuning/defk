@@ -174,6 +174,8 @@ defmodule Defk.OwnedBudgetTest do
       assert text =~
                "alloc/2 is inside a loop: each iteration keeps a buffer until the kernel returns"
 
+      assert text =~ "Allocate before the loop and clear each pass"
+
       assert [{_, text}] = owned_notes({:copy_loop, 2})
       assert text =~ "this copy is inside a loop: each iteration keeps a buffer"
       assert Defk.Report.format(K) =~ "each iteration keeps a buffer until the kernel returns"
