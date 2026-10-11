@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [
+    "defk-n7k",
     "defk-pic",
     "defk-siy"
   ],
@@ -15,5 +16,5 @@
   "status": "open",
   "title": "Design: relational range facts for bounds proofs (len(out) == n, base + i \u003c len(b), guard-narrowed facts)",
   "type": "task",
-  "updated_at": "2026-10-11T21:11:35Z"
+  "updated_at": "2026-10-11T21:11:36Z"
 }
