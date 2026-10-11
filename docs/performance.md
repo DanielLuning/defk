@@ -999,6 +999,72 @@ for i <- 0..(n - 1)//1 do
 end
 ```
 
+### 5.8 A returned state costs a full copy per call: noise at 16 KiB, the whole call from 1 MiB
+
+Value semantics (ADR-0001) means a kernel that updates state copies it once
+per call: one `enif_alloc_binary` and one `memcpy`. That is the same cost as
+Elixir's `:binary.copy/1` of that size, plus ~0.1 us.
+
+- **Numbers** (us per call, the state chained through the kernel; share =
+  copy / call):
+  - **Copy cost:** 0.35-0.39 us at 16 KiB, 14-15 us at 1 MiB, 260-300 us
+    at 16 MiB and 2.2-2.5 ms at 128 MiB. That is 55-75 GB/s from 1 MiB up.
+  - **HLL, 16 KiB, p = 14:** the copy is 75-83% of the call at 100 hashes,
+    30-33% at 1k and 4-5% at 10k. Even at 100 the call is 0.47 us, against
+    0.019 ms for the best Elixir.
+  - **Bloom filter, 1 MiB, k = 7:** the copy is ~100% at 1 and at 100
+    inserts, and 20-25% at 10k.
+  - **Bloom filter, 16 MiB:** ~100% at 1 and at 100 inserts, and 87-89% at
+    10k. Copying 16 MiB evicts the state from the caches, so the writes
+    after it run 4x slower than the same probes on a warm buffer (70-79 us).
+  - **Streaming window, 128 MiB, one byte touched:** 100%, and the copy has
+    no safepoint (`defk-oed`).
+  - **An Elixir `:atomics` Bloom filter** is updated in place. One insert
+    takes 0.08 us, against 15 us (1 MiB) and 260-280 us (16 MiB) for the
+    kernel. 100 inserts take 8-9 us, against the kernel's 15 us and
+    250-310 us. At 10k inserts the kernel wins: 12-15x at 1 MiB and
+    1.6-2.2x at 16 MiB.
+- **Conditions:** best of 7, interleaved, two runs, load average 28-37. The
+  shares are ratios of numbers taken back to back and held within a few
+  points across five runs.
+- **Source:** [`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md), [`bench/state_copy_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/state_copy_cost.exs), `defk-sve.1`.
+- **Status:** provisional.
+
+<!-- defk-example run: import Bitwise; bytes = 1024; b = 77; bits = <<0>>; hashes = <<>> | defs: defmodule Bloom.Kernels do def add(bits, _hashes, _k), do: bits end -->
+```elixir
+# fast for a filter of 1 MiB or more and small batches: :atomics, set in place
+a = :atomics.new(div(bytes, 8), signed: false)
+w = (b >>> 6) + 1
+:atomics.put(a, w, :atomics.get(a, w) ||| 1 <<< (b &&& 63))
+# slow there: a kernel that returns the new bits copies every byte per call
+bits = Bloom.Kernels.add(bits, hashes, 7)
+```
+
+### 5.9 A big state chained through a kernel: one GC per call keeps binary memory at one or two states
+
+- **Numbers:**
+  - **One process**, a 16 MiB state chained through a kernel: it collects
+    once per call. Binary memory peaks at 32 MiB (once 48 MiB) above the
+    base and is freed when the process exits. It reaches 3.7-3.8k calls/s
+    (62-64 GB/s), so 10k calls/s of 16 MiB (168 GB/s) is out of reach.
+    Twelve processes together reach 5.0-6.4k calls/s (85-107 GB/s), with
+    128-320 MiB of binaries live at the peak.
+  - **A 1 MiB state** keeps up 10k calls/s with 1 MiB live, and reaches
+    64.7k calls/s flat out.
+  - **A process that also holds 256 MiB of other live binaries** collects
+    only every 4-5 calls. The dead outputs pile up in between, and each copy
+    lands in cold memory: 1 MiB 14-15 -> 24-27 us, 16 MiB 260-289 ->
+    460-587 us (1.6-2.2x). 16 KiB is unaffected. Measured in the benchmark
+    script's own process, the 1 MiB copy was 46-60 us.
+- **Conditions:** 3 s per row, `:erlang.memory(:binary)` sampled every
+  5 ms, under load (load average 28-37).
+- **Source:** [`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md#gc-and-binary-memory), [`bench/state_copy_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/state_copy_cost.exs), `defk-sve.1`.
+- **Status:** provisional.
+
+The same rule holds for any benchmark of a kernel that returns a large
+binary: time it in a fresh process, not in a process that holds the other
+inputs.
+
 ---
 
 ## 6. Making a defk kernel fast
@@ -1650,8 +1716,8 @@ Process.exit(pid, :kill)                       # pid is inside a long dirty NIF
 - **Not tried or not profiled yet:** Elixir on a one-scheduler VM is slower
   per spin than one process on 12 (185 vs 109 ns, `monte_carlo_rtp`); why
   Gorilla's middle block sizes gain most; parallel Elixir sorting
-  (`sort_u64_keys`); 64-bit hashes in 16-bit limbs in Elixir (`hashes`); the
-  per-call state copy of value semantics (`defk-sve.1`); EXLA for matmul
+  (`sort_u64_keys`); 64-bit hashes in 16-bit limbs in Elixir (`hashes`);
+  EXLA for matmul
   (`defk-7tk`); libvips for the image jobs; x86-64 timings at the target
   levels (`defk-ulk.1`, remarks only so far); Linux (every number here is macOS
   on arm64).
@@ -1690,4 +1756,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-t11.5`, `defk-6g6`, `defk-j5n`, `defk-qx3`, `defk-z69`, `defk-t11.2`,
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
-  `defk-sve`, `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`.
+  `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`.
