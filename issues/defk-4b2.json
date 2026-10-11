@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-11T13:22:37Z",
+  "description": "Split from defk-33b. Every alloc/2 and every value-semantics copy (defk_copy_*) is a slot in ctx-\u003eowned (priv/defk_runtime.h defk_own_raw) and lives until the kernel returns. A copy or alloc inside a loop therefore keeps one buffer per iteration: defk-33b (a helper call in a branch copied a 4 MB output per element) held ~1.6 GB at 40k iterations and got the BEAM SIGKILLed (exit 137, OOM) at 4 MB, although enif_alloc_binary failures already raise \"out of memory\". The OS kills the node before the allocator fails, so the runtime contract (a kernel never takes the node down) is not kept by the existing check. defk-33b removed that copy, but the class remains: a genuine per-iteration copy (an alias read in a later iteration, docs/language.md Copies: `b = a` in a loop body copies every iteration) or an alloc/2 in a loop body grows the same way, and Elixir would garbage-collect the old binaries.\n\nOptions to weigh (design, not decided):\n1. A per-kernel byte budget for owned buffers (sum of live owned bytes in ctx), raising ArgumentError \"out of memory\" past it, configurable per module (use Defk, max_owned: ...) with a default tied to something sane (e.g. a fraction of system memory, or a fixed GB). Elixir mode must apply the same limit to agree (it is a limit, like DEFK_ALLOC_MAX_BYTES), which is hard: Elixir mode does not know which binaries native would still hold. Probably a documented limit/divergence of the \"raises where Elixir succeeds\" kind, counted natively only.\n2. Free dead owned buffers early: a copy that replaces an owned binding in place (`v = defk_copy(v)`) could release the old slot when no other binding sees it; needs the liveness the compiler already has, and care with returned/aliased buffers and resume.\n3. Report: a fast-path report note when a copy or alloc sits inside a loop (\"each iteration keeps a buffer until return\"), so the trap is visible (defk-33b was only found by the OOM).\n\nDone when: a kernel that copies or allocates in a long loop raises (or no longer accumulates) instead of exhausting memory, agreement/limit semantics written down in docs/language.md Limits, tests with a small budget.",
+  "id": "defk-4b2",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Bound the memory a kernel's owned buffers may hold, so copies or allocs in a loop raise instead of exhausting the node",
+  "type": "task",
+  "updated_at": "2026-10-11T13:22:37Z"
+}
