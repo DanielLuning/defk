@@ -141,6 +141,18 @@ defmodule Defk.Errors do
       rewrite: "defk f(x :: i64) :: i64 do\n  x + 1\nend"
     },
     %{
+      code: "builtin-name",
+      kind: :error,
+      summary:
+        "A kernel cannot take the name and arity of a builtin: the builtin would answer its calls.",
+      why:
+        "`copy_back/4` is a builtin, so calls to it would reach the builtin, not this kernel; a builtin added later would change what a module computes without a warning",
+      hint:
+        "rename the kernel and its calls (my_copy_back/4, say); the same name at another arity is fine",
+      example: "defk abs(x :: i64) :: i64 do\n  if x < 0, do: -x, else: x\nend",
+      rewrite: "defk my_abs(x :: i64) :: i64 do\n  if x < 0, do: -x, else: x\nend"
+    },
+    %{
       code: "clause-head",
       kind: :error,
       summary: "A multi-clause kernel starts with a bodiless typed head, before its clauses.",

@@ -66,17 +66,24 @@ defmodule Defk.Compiler do
       Enum.flat_map_reduce(kernels, MapSet.new(), fn k, seen ->
         key = {k.name, k.arity}
 
-        if key in seen do
-          attempt_err!(
-            key,
-            k.head,
-            "duplicate-kernel",
-            "#{k.name}/#{k.arity} is defined more than once"
-          )
+        cond do
+          Defk.Builtins.builtin?(k.name, k.arity) ->
+            builtin_name!(key, k)
+            broken(key)
+            {[], seen}
 
-          {[], seen}
-        else
-          {[k], MapSet.put(seen, key)}
+          key in seen ->
+            attempt_err!(
+              key,
+              k.head,
+              "duplicate-kernel",
+              "#{k.name}/#{k.arity} is defined more than once"
+            )
+
+            {[], seen}
+
+          true ->
+            {[k], MapSet.put(seen, key)}
         end
       end)
 
@@ -343,6 +350,29 @@ defmodule Defk.Compiler do
     Process.put(:defk_broken, MapSet.put(Process.get(:defk_broken), key))
     []
   end
+
+  # a kernel named like a builtin at the builtin's arity: calls to it would
+  # reach the builtin (see Defk.Builtins), so the definition is rejected
+  defp builtin_name!(key, k) do
+    renamed = :"my_#{k.name}"
+    name = "#{k.name}/#{k.arity}"
+
+    attempt_err!(
+      key,
+      k.head,
+      "builtin-name",
+      "#{name} is a builtin, so a kernel of that name and arity is rejected",
+      why:
+        "`#{name}` is a builtin, so calls to it would reach the builtin, not this kernel; a new builtin would silently change what a module computes",
+      hint: "rename the kernel and its calls, for example to #{renamed}/#{k.arity}",
+      rewrite: "defk " <> Macro.to_string(rename_head(k.head, renamed))
+    )
+  end
+
+  defp rename_head({op, m, [call | rest]}, to) when op in [:"::", :when],
+    do: {op, m, [rename_head(call, to) | rest]}
+
+  defp rename_head({_name, m, args}, to), do: {to, m, args}
 
   defp head_name(head) do
     call =
@@ -2558,7 +2588,8 @@ defmodule Defk.Compiler do
     {[s, sz], Map.merge(arr, %{len_lo: v[:lo], len_lb: lb(v)})}
   end
 
-  defp lower_call(:alloc, args, m, _) do
+  # a kernel named alloc at another arity is an ordinary call
+  defp lower_call(:alloc, args, m, env) when not is_map_key(env.sigs, {:alloc, length(args)}) do
     node = {:alloc, m, args}
 
     what =
