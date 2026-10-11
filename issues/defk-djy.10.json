@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-djy",
+  "comments": [
+    {
+      "text": "Landed docs/performance.md on branch defk-djy.10/performance-guide (commit edbe705), not merged. 64 entries in 8 sections (measuring 8, fast Elixir 13 incl. an 11-row variants table, native BIFs 8, parallelism 8, NIF boundary 7, kernels 13, wrapper/NIF 4, myths table + open questions). Harvest covered: every examples/*.exs header (run_all/_template have no findings), fuzzy_search/, one_brc/, release_debian/, examples/README.md (rows, Measuring correctly, verdicts, wrapper table), README Results/design decisions/Known limitations, beam-nifs.md, research/* (predictable-subsets has no perf findings; nx-boundary is inferred, unmeasured), verdict.md (no numbers yet), fast-path-report.md, adr/, cold-tests/ (no perf content), bench/, language.md perf parts; tickets: all children of defk-9p6 and defk-52v, plus 8qs, 6lr, 6tt, hki, agp, 88q, 5s3, nua, j3h, jaj, jp3, 7q5, id9, zep, w8l, ktw, i5r, oed, upc, siy, n7k, pic, fun, cao, jlk, t11.5, 6g6, j5n, qx3, z69, t11.2, wnu, 9p6.24, 9p6.27, m4b, klw, l2g, yzw, dtw.2, dtw.20, dtw.21, sve, ulk. Nothing re-measured; loaded runs marked provisional. Process: examples/README.md 'Adding an example' step 8 added. The evidence-bar template lives only in ticket descriptions (defk-9p6.11-.16, all closed) and as a verbatim pre-registered quote in docs/verdict.md (left unchanged); no open ticket carries it. Proposed AGENTS.md line left for the maintainer. Contradictions recorded in the guide's 8.2: per-call cost (10 ns / 12 ns / 35 ns over a NIF / 0.1-0.2 us / 0.12-0.13 us), fuzzy_search yield cost (nua 0.99-1.02x vs klw 27 vs 21 ms), geohash batch break-even (10 vs ~100 points), mean_std check cost across sessions, yield:false gap 867 vs 500-570 ms.",
+      "timestamp": "2026-10-11T11:33:22Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Living guide: what is fast on the BEAM, what isn't, and how to fix it (for future us)",
   "type": "task",
-  "updated_at": "2026-10-11T11:17:19Z"
+  "updated_at": "2026-10-11T11:33:22Z"
 }
