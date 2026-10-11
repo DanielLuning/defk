@@ -1,15 +1,21 @@
 defmodule Defk.LanguageDocExamplesTest do
-  # Every example in docs/language.md runs (Defk.LanguageDoc has the
-  # conventions): kernels with iex> lines run in native code and Elixir mode,
-  # agree, and give the documented results; rejected examples fail with their
-  # error code; an unannotated kernel block fails.
+  # Every example in docs/language.md and docs/scope.md runs (Defk.LanguageDoc
+  # has the conventions): kernels with iex> lines run in native code and Elixir
+  # mode, agree, and give the documented results; rejected examples fail with
+  # their error code; an unannotated kernel block fails.
   use ExUnit.Case, async: true
 
   alias Defk.LanguageDoc
 
-  @doc_path "docs/language.md"
-  @external_resource @doc_path
-  @examples LanguageDoc.extract(File.read!(@doc_path))
+  @doc_paths ["docs/language.md", "docs/scope.md"]
+  for path <- @doc_paths, do: @external_resource(path)
+
+  # {doc path, example}; examples of different pages are told apart by path,
+  # and their modules by source (Defk.LanguageDoc names them)
+  @examples for path <- @doc_paths,
+                ex <- LanguageDoc.extract(File.read!(path)),
+                do: {path, ex}
+
   @dir Path.join(System.tmp_dir!(), "defk_language_doc_examples_test")
 
   # every example's module, compiled concurrently: %{line => compile result}
@@ -18,8 +24,8 @@ defmodule Defk.LanguageDocExamplesTest do
 
     compiled =
       @examples
-      |> Enum.filter(&compiled?/1)
-      |> Task.async_stream(&{&1.line, LanguageDoc.compile(&1, @dir)},
+      |> Enum.filter(fn {_, ex} -> compiled?(ex) end)
+      |> Task.async_stream(fn {path, ex} -> {{path, ex.line}, LanguageDoc.compile(ex, @dir)} end,
         timeout: :infinity,
         ordered: false
       )
@@ -31,10 +37,11 @@ defmodule Defk.LanguageDocExamplesTest do
   defp compiled?(%{check: check}),
     do: check == :run or match?({kind, _} when kind in [:compiles, :error], check)
 
-  for %{check: check} = ex <- @examples, not match?({:skip, _}, check) do
+  for {path, %{check: check} = ex} <- @examples, not match?({:skip, _}, check) do
+    @path path
     @ex ex
-    test "#{@doc_path}:#{ex.line} #{LanguageDoc.label(ex)}", %{compiled: compiled} do
-      LanguageDoc.verify!(@ex, Map.get(compiled, @ex.line))
+    test "#{path}:#{ex.line} #{LanguageDoc.label(ex)}", %{compiled: compiled} do
+      LanguageDoc.verify!(@ex, Map.get(compiled, {@path, @ex.line}))
     end
   end
 

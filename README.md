@@ -54,6 +54,8 @@ So far:
 
 The full reference for kernel authors (every construct, its exact semantics, the limits, and every compile error code) is [`docs/language.md`](docs/language.md); this section is the overview.
 
+When to use defk and when Elixir or a wrapper NIF is the better choice, what is planned (with its ticket) and what stays out by design is on the scope page, [`docs/scope.md`](docs/scope.md).
+
 ```elixir
 defmodule Stats do
   use Defk

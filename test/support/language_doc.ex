@@ -1,7 +1,8 @@
 defmodule Defk.LanguageDoc do
   @moduledoc false
-  # The examples of docs/language.md, extracted doctest-style
-  # (test/language_doc_examples_test.exs runs them).
+  # The examples of docs/language.md and docs/scope.md, extracted
+  # doctest-style (test/language_doc_examples_test.exs runs them), and the
+  # heading anchors the doc tests check links against.
   #
   # A fenced block with a kernel in it (a line starting with `defk name`) is an
   # example. What is checked is said by the block itself or by an annotation,
@@ -298,6 +299,56 @@ defmodule Defk.LanguageDoc do
 
     known = if ex.known_failure, do: " (known failure #{ex.known_failure})", else: ""
     "#{check}: #{kernel}#{known}"
+  end
+
+  # --------------------------------------------------------------- anchors --
+
+  @doc """
+  `{level, text}` of every Markdown heading outside fenced code blocks.
+  """
+  def headings(doc) do
+    {hs, _} =
+      doc
+      |> String.split("\n")
+      |> Enum.reduce({[], false}, fn line, {acc, fenced?} ->
+        cond do
+          String.starts_with?(line, "```") ->
+            {acc, not fenced?}
+
+          fenced? ->
+            {acc, fenced?}
+
+          m = Regex.run(~r/^(#+) (.*)$/, line) ->
+            {[{String.length(Enum.at(m, 1)), Enum.at(m, 2)} | acc], fenced?}
+
+          true ->
+            {acc, fenced?}
+        end
+      end)
+
+    Enum.reverse(hs)
+  end
+
+  @doc """
+  The anchor of every heading, as GitHub makes it: lowercase, punctuation
+  dropped, spaces to hyphens, and -1, -2, ... appended to repeats.
+  """
+  def anchors(doc) do
+    {as, _} =
+      doc
+      |> headings()
+      |> Enum.map_reduce(%{}, fn {_, text}, seen ->
+        slug =
+          text
+          |> String.downcase()
+          |> String.replace(~r/[^a-z0-9 _-]/u, "")
+          |> String.replace(" ", "-")
+
+        n = Map.get(seen, slug, 0)
+        {if(n == 0, do: slug, else: "#{slug}-#{n}"), Map.put(seen, slug, n + 1)}
+      end)
+
+    as
   end
 
   # ------------------------------------------------------------- compiling --
