@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Done on branch defk-9p6.28/byte-histogram (commits c177321, 15e6642): examples/byte_histogram.exs, two DEFK_RESULT lines (byte_histogram, windowed_entropy), both expected and measured good, baseline optimised. PROVISIONAL, under load (load 12-31, seven runs). Realistic size 16 MB (half random, half text), 4 KiB windows. Histogram parallel vs parallel (12 chunks each, Task.async per chunk): Elixir 8.7-10.9 ms vs defk 1.40-1.71 ms = 5.5-6.6x; one process vs one call 11.4-12.7x (43-47 vs 3.6-3.8 ms, 0.39 vs 4.6 GB/s); sweep 4 KB 24-28x, 64 KB 19-23x, 1 MB 17.7-19.4x. Entropy parallel vs parallel 12.5-18.6 vs 1.83-2.0 ms = 6.7-10.2x; one process vs one call 82-89 vs 4.7-5.2 ms = 17.0-17.9x. Elixir variants at 16 MB, ms: Enum.frequencies ~2200-2700 (136-169 at 1 MB), Map.update ~3300, 256-tuple setelement ~1000-1300, :binary.matches per value ~400, :counters 1B 112-115, :counters 8B 101-103, :counters comprehension 116-123, :atomics 1B 91-92, :atomics 8B 75-77, 16-bit pairs into a 65,536-slot :atomics 43-44 (best; E9 wins below 512 KB, the baseline is the hybrid), in 12 chunks: :counters 8B 16-18, shared write_concurrency :counters 23-26, :atomics 8B 12-13, pairs 8.7-9.9 (baseline). Entropy: :counters get+put 121-123, :atomics exchange 90-91, + term table 84 (one process), 12 chunks 13.4-14.4 (baseline). Kernel: four interleaved tables 1.6x over one table; window bounds written max/min to drop per-byte bounds checks (7.0 -\u003e 4.7 ms). Correctness: histograms exact, entropies bit for bit (log2 on both sides since defk-ngj landed mid-ticket; same order, term table on both sides), native vs Elixir mode on edge cases and odd windows, forced yields on 1 MB, w = 0 raises in both modes. Docs: examples/README.md row (Where defk helps), performance.md 2.16 'Counting bytes' (runnable sketch), 6.18 'Counting into a table' (after main's 6.16/6.17), a pointer from 2.12 to 2.16, measuring.md now points counting bytes at 2.16 and keys at 2.12.",
+      "timestamp": "2026-10-11T13:12:28Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Catalog: byte histogram and windowed entropy, with optimised Elixir baselines",
   "type": "task",
-  "updated_at": "2026-10-11T12:49:30Z"
+  "updated_at": "2026-10-11T13:12:28Z"
 }
