@@ -15,11 +15,15 @@
     {
       "text": "Proposed ADR for review: docs/adr/0006-public-api-surface.md on branch defk-djy.2/api-audit (c2b186a). Tiers every module/function/option/generated function as public, unstable or hidden; 10 naming items and 10 open questions with recommendations. Needs a human decision; no code visibility changed, no rename tickets created, ticket left open.",
       "timestamp": "2026-10-11T11:49:05Z"
+    },
+    {
+      "text": "Maintainer accepted all ten recommendations (2026-10-11). ADR-0006 is accepted and merged into main. The code changes are in defk-djy.11.",
+      "timestamp": "2026-10-11T11:54:08Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Audit and decide the public API surface",
   "type": "task",
-  "updated_at": "2026-10-11T11:49:05Z"
+  "updated_at": "2026-10-11T11:54:08Z"
 }
