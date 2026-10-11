@@ -1,7 +1,47 @@
 defmodule Defk.Test do
-  @moduledoc false
+  @moduledoc """
+  Agreement checks for tests: does a kernel give what its Elixir mode gives?
+
+  A kernel and its Elixir mode **agree** on an input when both return
+  identical values (`===`, so floats must be bit-exact), or both raise the
+  same exception module for the same reason (`agreement_reason/1`). Elixir
+  mode is the oracle: it defines what the same code gives in Elixir, with the
+  kernel subset's limits applied. `assert_agrees/3` runs one call both ways
+  and fails the test when they disagree.
+
+      iex> defmodule MyApp.Bytes do
+      ...>   use Defk, elixir_mode: true
+      ...>
+      ...>   defk count_below(bytes :: [u8], limit :: i64) :: i64 do
+      ...>     for b <- bytes, reduce: 0 do
+      ...>       n -> if b < limit, do: n + 1, else: n
+      ...>     end
+      ...>   end
+      ...> end
+      iex> Defk.Test.assert_agrees(MyApp.Bytes, :count_below, ["hello", 105])
+      {:ok, 2}
+
+  It needs ExUnit (its failures are ExUnit assertion errors) and a module
+  compiled with Elixir mode: every kernel module in the `:test`
+  environment, or one with `use Defk, elixir_mode: true`.
+
+  [Testing kernels](testing.md) shows it in a test file, with property tests
+  over generated inputs and forced yields.
+  """
 
   import ExUnit.Assertions
+
+  @typedoc """
+  What a call did: `{:ok, value}` or `{:raise, exception}`.
+  """
+  @type outcome :: {:ok, term()} | {:raise, Exception.t()}
+
+  @typedoc """
+  The cause of a kernel or Elixir mode exception, without its message: an
+  atom such as `:overflow`, `:zero_divisor`, `:non_finite`, `:index` or
+  `:badarg`, or `{:other, message}` for an exception no rule covers.
+  """
+  @type reason :: atom() | {:other, String.t()}
 
   defp outcome(f) do
     {:ok, f.()}
@@ -10,11 +50,32 @@ defmodule Defk.Test do
   end
 
   @doc """
-  Runs `Mod.fun/arity` (via apply with args) in both native and Elixir mode
-  and asserts they agree: both return identical values with === (bit-exact
-  floats), or both raise the same exception module for the same `agreement_reason/1`.
-  Returns the native outcome, `{:ok, value}` or `{:raise, exception}`.
+  Calls `mod.fun(args...)` natively and in Elixir mode, and asserts that the
+  two agree. Returns the native outcome.
+
+  Both return identical values (`===`, bit-exact floats), or both raise the
+  same exception module with the same `agreement_reason/1`; otherwise the
+  assertion fails with both outcomes in its message. It also fails when
+  `mod.fun/arity` is not exported. `mod` must be compiled with Elixir mode
+  (see the module docs).
+
+      iex> defmodule MyApp.Sum do
+      ...>   use Defk, elixir_mode: true
+      ...>
+      ...>   defk sum(a :: [i64]) :: i64 do
+      ...>     for x <- a, reduce: 0 do
+      ...>       acc -> acc + x
+      ...>     end
+      ...>   end
+      ...> end
+      iex> pack = fn xs -> for x <- xs, into: <<>>, do: <<x::signed-64-native>> end
+      iex> Defk.Test.assert_agrees(MyApp.Sum, :sum, [pack.([1, 2, 3])])
+      {:ok, 6}
+      iex> {:raise, e} = Defk.Test.assert_agrees(MyApp.Sum, :sum, [pack.([2 ** 62, 2 ** 62])])
+      iex> {e.__struct__, Defk.Test.agreement_reason(e)}
+      {ArithmeticError, :overflow}
   """
+  @spec assert_agrees(module(), atom(), [term()]) :: outcome()
   def assert_agrees(mod, fun, args) do
     arity = length(args)
     Code.ensure_loaded(mod)
@@ -91,12 +152,24 @@ defmodule Defk.Test do
   ]
 
   @doc """
-  The normalised reason of a kernel or Elixir mode exception: what went
-  wrong, without the message text, which differs between the two (`%g`
-  against `inspect/1`, Elixir's own messages for float arithmetic). An
-  exception no rule covers gives `{:other, message}`, so it agrees only with
-  the identical message.
+  The reason of a kernel or Elixir mode exception, as agreement compares it:
+  what went wrong, without the message text, which may differ between the two
+  (a kernel prints floats as C does, Elixir mode with `inspect/1`, and
+  Elixir's own float errors say "bad argument in arithmetic expression").
+
+  An exception no rule covers gives `{:other, message}`, so it agrees only
+  with the identical message. Use it to assert why a kernel raised.
+
+      iex> Defk.Test.agreement_reason(%ArithmeticError{message: "i64 overflow in 1 + 2"})
+      :overflow
+      iex> Defk.Test.agreement_reason(%ArithmeticError{message: "bad argument in arithmetic expression"})
+      :non_finite
+      iex> Defk.Test.agreement_reason(%Enum.OutOfBoundsError{})
+      :index
+      iex> Defk.Test.agreement_reason(%RuntimeError{message: "boom"})
+      {:other, "boom"}
   """
+  @spec agreement_reason(Exception.t()) :: reason()
   def agreement_reason(%ArithmeticError{message: m}), do: match_reason(m, @arith)
   def agreement_reason(%ArgumentError{message: m}), do: match_reason(m, @arg)
   def agreement_reason(%Enum.OutOfBoundsError{}), do: :index

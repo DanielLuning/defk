@@ -8,7 +8,18 @@ defmodule Defk.Bits do
   and Elixir mode calls these functions, whose bodies are what the kernel
   computes. `clz/2`, `ctz/2`, `rotl/3` and `rotr/3` take a width, so a
   32-bit hash rotates as 32 bits; `clz/1`, `ctz/1`, `popcount/1`, `rotl64/2`
-  and `rotr64/2` work on the 64-bit pattern of any integer.
+  and `rotr64/2` work on the 64-bit pattern of any integer. The names are
+  the kernel builtins' names too, so renaming one would change the kernel
+  subset.
+
+      iex> Defk.Bits.rotl(0x80000001, 1, 32)
+      3
+      iex> Defk.Bits.popcount(0xFF)
+      8
+
+  How a kernel uses them, and the errors their arguments can raise:
+  [Bit builtins](language.md#bit-builtins) and
+  [Masked arithmetic](language.md#masked-arithmetic) (for `wrap64/1`).
   """
 
   @doc """

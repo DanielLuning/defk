@@ -129,12 +129,50 @@ defmodule Defk.DocsChecksTest do
     end
   end
 
+  # --------------------------------------------------- generated functions --
+
+  describe "generated functions" do
+    # the `__defk_*__/n` names in the first column of the Markdown table that
+    # follows `heading` in `text`
+    defp table_names(text, heading) do
+      [_, after_heading] = String.split(text, heading, parts: 2)
+
+      after_heading
+      |> String.split("\n")
+      |> Enum.drop_while(&(not String.starts_with?(String.trim(&1), "|")))
+      |> Enum.take_while(&String.starts_with?(String.trim(&1), "|"))
+      |> Enum.flat_map(&Regex.scan(~r/^\s*\| `(__defk_\w+__\/\d)`/, &1, capture: :all_but_first))
+      |> List.flatten()
+      |> Enum.sort()
+    end
+
+    # what a kernel module with Elixir mode exports, less the hidden ones
+    # (ADR-0006: the loader, the native entry points, the test-only fault hook)
+    defp exported do
+      for {name, arity} <- Examples.Kernels.__info__(:functions),
+          s = Atom.to_string(name),
+          String.starts_with?(s, "__defk_"),
+          not String.starts_with?(s, "__defk_native_"),
+          name not in [:__defk_load__, :__defk_corrupt_tags__],
+          do: "#{name}/#{arity}"
+    end
+
+    test "the Defk moduledoc and the language reference list every generated function" do
+      {:docs_v1, _, _, _, %{"en" => moduledoc}, _, _} = Code.fetch_docs(Defk)
+      in_moduledoc = table_names(moduledoc, "## Generated functions")
+      in_language = table_names(File.read!("docs/language.md"), "### What `use Defk` generates")
+
+      assert in_moduledoc == Enum.sort(exported())
+      assert in_language == in_moduledoc
+    end
+  end
+
   # ------------------------------------------------------ public function docs --
 
   describe "public API docs" do
-    # To be emptied by defk-djy.3 (the API docs), after defk-djy.2 decides what
-    # is public. A new undocumented function is not on this list, so it fails.
-    @known_gaps [{Defk, :defk, 1}, {Defk, :defk, 3}]
+    # Functions still waiting for a @doc. A new undocumented function is not
+    # on this list, so it fails.
+    @known_gaps []
 
     defp undocumented do
       for mod <- lib_modules(),

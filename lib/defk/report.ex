@@ -39,20 +39,85 @@ defmodule Defk.Report do
   A note inside an inlined call is on the callee's line and belongs to the
   kernel the call is inlined into. `print/1` shows the report as margin
   notes on the kernel source.
+
+  ## Stability
+
+  `print/1`, `format/1` and the `report: :full` option are public. The facts
+  are not: their topics, verdicts and texts grow with the compiler, so
+  `__defk_report__/0`, the types below and the printed text may change in
+  any version. Read the report to explain a measurement; don't make a test
+  or a tool depend on its exact text.
+
+  ## Example
+
+      iex> defmodule MyApp.Dot do
+      ...>   use Defk
+      ...>
+      ...>   defk dot(a :: [f64], b :: [f64]) :: f64 do
+      ...>     n = min(len(a), len(b))
+      ...>
+      ...>     for i <- 0..(n - 1)//1, reduce: 0.0 do
+      ...>       acc -> acc + a[i] * b[i]
+      ...>     end
+      ...>   end
+      ...> end
+      iex> for {{:dot, 2}, _line, {topic, verdict, _text}} <- MyApp.Dot.__defk_report__(),
+      ...>   do: {topic, verdict}
+      [kernel: :yield, loop: :strips, nonfinite: :flagged, bounds: :dropped, bounds: :dropped]
+
+  The loop runs in strips with one safepoint each, its float checks are
+  flagged, and both array reads lost their bounds checks, because `i` stays
+  below `len(a)` and `len(b)`. `Defk.Report.print(MyApp.Dot)` shows the
+  same notes beside the source lines. When a kernel is slower than you
+  expect, [Measuring](measuring.md#5-explain-the-number) and
+  [Making a defk kernel fast](performance.md#6-making-a-defk-kernel-fast)
+  say what to do with them.
   """
 
+  @typedoc "A kernel called from Elixir, as `{name, arity}`. Unstable."
   @type kernel :: {atom(), arity()}
+
+  @typedoc "A note, `{topic, verdict, text}` (see the module docs). Unstable."
   @type fact :: {atom(), atom(), String.t()}
+
+  @typedoc """
+  The value of `__defk_report__/0`: `{kernel, line, fact}` for each note,
+  where `line` is a line of the module's source file. Unstable.
+  """
   @type t :: [{kernel(), pos_integer() | nil, fact()}]
 
   @doc """
-  Prints each kernel of `module` with its report as margin notes; notes in
-  inlined code follow the kernel.
+  Prints each kernel of `module` with its report as margin notes beside its
+  source lines; notes in inlined code follow the kernel.
+
+  `module` is a module that uses `Defk`, and its source file must be
+  readable for the source lines to show. The text is `format/1`'s.
   """
   @spec print(module()) :: :ok
   def print(module), do: IO.write(format(module))
 
-  @doc "The text `print/1` prints."
+  @doc """
+  The text `print/1` prints, as a string.
+
+      iex> defmodule MyApp.Scale do
+      ...>   use Defk
+      ...>
+      ...>   defk scale(a :: [f64], k :: f64) :: [f64] do
+      ...>     out = alloc(f64, len(a))
+      ...>
+      ...>     for i <- 0..(len(a) - 1)//1 do
+      ...>       out[i] = a[i] * k
+      ...>     end
+      ...>
+      ...>     out
+      ...>   end
+      ...> end
+      iex> text = Defk.Report.format(MyApp.Scale)
+      iex> text =~ "scale/2"
+      true
+      iex> text =~ "out[i]: no bounds check"
+      true
+  """
   @spec format(module()) :: String.t()
   def format(module) do
     report = module.__defk_report__()
