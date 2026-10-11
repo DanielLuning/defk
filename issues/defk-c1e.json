@@ -5,10 +5,12 @@
   "created": "2026-10-11T20:24:58Z",
   "description": "Follow-up to defk-4b2 (which bounds owned bytes per call with max_owned but does not free early). The ticket's case v = copy(v) never frees: the old buffer is either still seen by another binding or not owned. The buffers that die are earlier per-iteration copies (b = a; a[i] = x; ... b[0]: the previous iteration's copy dies when b is rebound). Needs: (1) a must-not-alias/ownership analysis proving a buffer has no live binding, is not an accumulator's or returned value and is not held across a branch join, across iterations (the compiler today tracks only may-share via carried/2 and shared?); (2) a runtime defk_disown(ctx, slot) releasing the binary, NULLing the slot and subtracting owned_bytes, with array values carrying their slot index (defk_make_arr scans linearly today); (3) resume safety for spilled locals; (4) forced-yield and property tests on the freed paths.",
   "id": "defk-c1e",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 3,
   "status": "open",
   "title": "Free dead owned buffers early, so a per-iteration copy or alloc no longer accumulates until return",
   "type": "task",
-  "updated_at": "2026-10-11T20:24:58Z"
+  "updated_at": "2026-10-11T20:25:19Z"
 }
