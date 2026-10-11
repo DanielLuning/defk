@@ -16,9 +16,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-52v",
+  "comments": [
+    {
+      "text": "Done in 348541d (branch defk-52v.2/blake2b-blake3, not merged). examples/blake.exs, three DEFK_RESULT lines. All numbers provisional (load 13-135 on 12 cores).\n\nVerdicts (pre-registered expectations all held):\n- blake (BLAKE2b-512, 64 KB): good, 31.8-32.7x over the optimised Elixir (1.37-1.43 ms vs 0.042-0.049 ms); 64 MB 32.5-33.3x; 1 KB 21-22x. blake2_elixir (reference C NIF) 1.02x: parity.\n- blake_crypto: marginal, 1.16-1.19x over :crypto.hash(:blake2b) (1.0x at 1 KB). Use :crypto.\n- blake3 (64 KB): good, 10.6-10.9x over the optimised Elixir; 64 MB 10.1x. Level with BLAKE3 portable C measured outside the BEAM (52 us / 55 ms vs kernel 54-59 us / 55-60 ms); 0.6x of the blake3 NIF (NEON). Tick gaps at 64 MB: NIFs block 34-49 ms, kernels 2.1-2.7 ms.\n\nCorrection to the ticket: b3 0.2.1 is pure Elixir (already tuned), not Rustler; the Rust NIF is blake3 1.0.2 (needs rustler 0.30 pinned). blake2 1.0.4 is pure Elixir, blake2_elixir 0.9.0 is the C NIF; the two clash on Blake2/Blake2.Mixfile, so blake2 is fetched with compile: false and compiled as HexBlake2.\n\nElixir tried (BLAKE2b, 64 KB): blake2 package 31-67 ms, 64-bit words unrolled 14.4 ms (first pass), 32-bit halves unrolled 1.37-1.43 ms (baseline). BLAKE3: b3 0.60-0.63 ms, struct-free rewrite 0.56-0.58 ms (baseline). Not tried: parallel BLAKE3 subtrees (same trick on both sides), lazy masking in halves.\n\nKernel: SIGMA round loop from a binary attribute 48-49 us vs unrolled 43 us. BLAKE3 masked rotate 79-80 us; rotr(x,n,32) 95-98 us before, 54-55 us after a tiny runtime fix in this ticket (defk_rot_w rotates w=32 as uint32_t -\u003e one ror; test added in u64_test). No language gaps found: tuple-returning helper kernels, ctz for the merge count, array in a tuple accumulator all worked. Still kept: 16 bounds checks per block on u32_le/u64_le from a helper's src/off (not costly here).\n\nDocs: examples/README rows (helps table + blake_crypto in Elixir table), performance.md 2.14, 3.9, 6.14, 7.5.",
+      "timestamp": "2026-10-11T12:37:43Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "BLAKE2b and BLAKE3 from scratch vs blake2_elixir and b3 NIFs",
   "type": "task",
-  "updated_at": "2026-10-11T12:14:22Z"
+  "updated_at": "2026-10-11T12:37:43Z"
 }
