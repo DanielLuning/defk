@@ -10,11 +10,13 @@ defmodule Defk.Builtins do
   @bitwise_ops %{&&&: :band, |||: :bor, "^^^": :bxor, "~~~": :bnot, <<<: :bsl, >>>: :bsr}
   # [u8], i64 -> i64 word loads: unsigned w-byte integers at a byte offset
   @loads [:u64_le, :u64_be, :u32_le, :u32_be, :u16_le, :u16_be]
+  # range copies into an array: copy/5 (memmove) and copy_back/4 (an LZ match)
+  @copies [:copy, :copy_back]
   # bit builtins with a plain Elixir meaning in Defk.Bits (clz and ctz also
   # take a width: clz/2, ctz/2)
   @bits [:mulhi, :clz, :ctz, :popcount, :rotl64, :rotr64, :rotl, :rotr, :f64_to_u64, :crc32c]
   @all [:len, :bit_size, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
-         @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ [:alloc] ++ @bits
+         @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ @copies ++ [:alloc] ++ @bits
 
   @doc "Every builtin name."
   def all, do: @all
@@ -42,6 +44,9 @@ defmodule Defk.Builtins do
   def load_width(f) when f in [:u64_le, :u64_be], do: 8
   def load_width(f) when f in [:u32_le, :u32_be], do: 4
   def load_width(f) when f in [:u16_le, :u16_be], do: 2
+
+  @doc "The range copies into an array (copy/5, copy_back/4)."
+  def copies, do: @copies
 
   @doc """
   The bit builtins (mulhi/2, clz/1,2, ctz/1,2, popcount/1, rotl64/2,

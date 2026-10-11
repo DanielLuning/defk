@@ -625,6 +625,20 @@ defmodule Defk.ElixirMode do
   defp builtin(:bit_size, [a], [_], m), do: {remote(Kernel, :bit_size, [a], m), :i64}
   defp builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: {call(f, [a, i], m), :i64}
 
+  # copy/5 and copy_back/4 (defk-52v.16): a new binary with the range
+  # replaced, checked as the kernel checks it
+  defp builtin(:copy, [a, at, s, from, n], [{:arr, e}, ta, {:arr, e}, tf, tn], m)
+       when ta in @ints and tf in @ints and tn in @ints do
+    args = [a, coerce(at, ta, :i64), s, coerce(from, tf, :i64), coerce(n, tn, :i64), esize(e)]
+    {call(:copy, args, m), {:arr, e}}
+  end
+
+  defp builtin(:copy_back, [a, at, off, n], [{:arr, e}, ta, to, tn], m)
+       when ta in @ints and to in @ints and tn in @ints do
+    args = [a, coerce(at, ta, :i64), coerce(off, to, :i64), coerce(n, tn, :i64), esize(e)]
+    {call(:copy_back, args, m), {:arr, e}}
+  end
+
   defp builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl64, :rotr64],
     do: {remote(Defk.Bits, f, [a, b], m), :i64}
 

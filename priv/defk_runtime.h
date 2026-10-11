@@ -300,6 +300,174 @@ DEFK_COPY_FN(i16, int16_t)
 DEFK_COPY_FN(i32, int32_t)
 DEFK_COPY_FN(f32, float)
 
+/*
+ * Range copies (defk-52v.16, defk_rcopy_T and defk_rcopy_back_T):
+ * copy(out, at, src, from, n) and
+ * copy_back(out, at, off, n), checked once for the whole range. The
+ * compiler has made `out` the kernel's own buffer (copied first where value
+ * semantics need it, as for out[i] = v), so these write it in place.
+ *
+ *   copy      out[at..at+n) = src[from..from+n) as src was before the call:
+ *             memmove, so src may be out itself or share its buffer.
+ *   copy_back out[at+j] = out[at+j-off] for j = 0, 1, ..., n-1 in order:
+ *             an LZ match. When off < n this repeats the off elements before
+ *             `at` (a run), which memmove does not do.
+ *
+ * Up to DEFK_COPY_STRIP bytes are copied at once and their bytes charged to
+ * the safepoint budget (DEFK_ZERO_TICKS); the caller then reads the clock at
+ * its next safepoint at the usual rate. A longer copy returns -1 and the
+ * compiler's loop copies it in strips (defk_move_strip, defk_back_strip) with
+ * a safepoint after each, like alloc/2's zeroing. A yielding kernel passes
+ * once = 0; a yield: false kernel or a length known to be short, once = 1.
+ */
+#ifndef DEFK_COPY_STRIP
+#define DEFK_COPY_STRIP DEFK_ZERO_STRIP
+#endif
+
+__attribute__((noreturn, cold, unused)) static void defk_copy_negative(defk_ctx *ctx,
+                                                                     const char *f, int64_t n) {
+  defk_fail(ctx, DEFK_E_ARG, "%s: negative length %lld", f, (long long)n);
+}
+__attribute__((noreturn, cold, unused)) static void defk_copy_oob(defk_ctx *ctx, const char *f,
+                                                                int64_t n, const char *where,
+                                                                int64_t i, const char *what,
+                                                                int64_t len) {
+  ctx->err_index = i;
+  defk_fail(ctx, DEFK_E_OOB, "%s: %lld elements %s index %lld out of bounds for %s of length %lld",
+            f, (long long)n, where, (long long)i, what, (long long)len);
+}
+__attribute__((noreturn, cold, unused)) static void defk_copy_back_off(defk_ctx *ctx, int64_t off,
+                                                                     int64_t at) {
+  if (off < 1)
+    defk_fail(ctx, DEFK_E_ARG, "copy_back/4: offset %lld is not positive", (long long)off);
+  ctx->err_index = at - off;
+  defk_fail(ctx, DEFK_E_OOB, "copy_back/4: offset %lld from index %lld is before the start of the array",
+            (long long)off, (long long)at);
+}
+
+/* n <= 32 bytes, every load before any store: memmove-safe */
+static inline __attribute__((unused)) void defk_move_small(uint8_t *d, const uint8_t *s, size_t n) {
+  if (n >= 16) {
+    uint64_t a, b, c, e;
+    __builtin_memcpy(&a, s, 8);
+    __builtin_memcpy(&b, s + 8, 8);
+    __builtin_memcpy(&c, s + n - 16, 8);
+    __builtin_memcpy(&e, s + n - 8, 8);
+    __builtin_memcpy(d, &a, 8);
+    __builtin_memcpy(d + 8, &b, 8);
+    __builtin_memcpy(d + n - 16, &c, 8);
+    __builtin_memcpy(d + n - 8, &e, 8);
+  } else if (n >= 8) {
+    uint64_t a, b;
+    __builtin_memcpy(&a, s, 8);
+    __builtin_memcpy(&b, s + n - 8, 8);
+    __builtin_memcpy(d, &a, 8);
+    __builtin_memcpy(d + n - 8, &b, 8);
+  } else if (n >= 4) {
+    uint32_t a, b;
+    __builtin_memcpy(&a, s, 4);
+    __builtin_memcpy(&b, s + n - 4, 4);
+    __builtin_memcpy(d, &a, 4);
+    __builtin_memcpy(d + n - 4, &b, 4);
+  } else if (n >= 2) {
+    uint16_t a, b;
+    __builtin_memcpy(&a, s, 2);
+    __builtin_memcpy(&b, s + n - 2, 2);
+    __builtin_memcpy(d, &a, 2);
+    __builtin_memcpy(d + n - 2, &b, 2);
+  } else if (n) {
+    d[0] = s[0];
+  }
+}
+static inline __attribute__((unused)) void defk_move_bytes(uint8_t *d, const uint8_t *s, size_t n) {
+  if (DEFK_LIKELY(n <= 32)) defk_move_small(d, s, n);
+  else memmove(d, s, n);
+}
+
+/* d[j] = d[j - off] for j in 0..n-1 in order, in bytes; off >= 1 */
+static inline __attribute__((unused)) void defk_back_bytes(uint8_t *d, size_t off, size_t n) {
+  const uint8_t *s = d - off;
+  if (DEFK_LIKELY(off >= n)) { /* no overlap: a plain copy */
+    defk_move_bytes(d, s, n);
+    return;
+  }
+  if (n < 16) {
+    for (size_t j = 0; j < n; j++) d[j] = s[j];
+    return;
+  }
+  /* d[j] = d[j - m] for any multiple m of off; take m >= 8 so a word reads
+   * only bytes already final, after the first m - off (< 8) bytes one by
+   * one (a pattern fill when off < 8) */
+  size_t m = off >= 8 ? off : off * ((8 + off - 1) / off), j = 0;
+  for (; j < m - off; j++) d[j] = s[j];
+  const uint8_t *t = d - m;
+  for (; j + 8 <= n; j += 8) {
+    uint64_t w;
+    __builtin_memcpy(&w, t + j, 8);
+    __builtin_memcpy(d + j, &w, 8);
+  }
+  if (j < n) { /* the last word ends at n; its first bytes are final already */
+    uint64_t w;
+    __builtin_memcpy(&w, t + n - 8, 8);
+    __builtin_memcpy(d + n - 8, &w, 8);
+  }
+}
+
+/* one strip of a long copy: `done` bytes moved so far, returns the new
+ * count; from the end when the destination overlaps the source from above */
+static inline __attribute__((unused)) uint64_t defk_move_strip(uint8_t *d, const uint8_t *s,
+                                                               uint64_t bytes, uint64_t done) {
+  uint64_t c = bytes - done < DEFK_COPY_STRIP ? bytes - done : DEFK_COPY_STRIP;
+  if (d > s && d < s + bytes) memmove(d + bytes - done - c, s + bytes - done - c, (size_t)c);
+  else memmove(d + done, s + done, (size_t)c);
+  return done + c;
+}
+/* one strip of a long copy_back: the bytes before d + done are final, so
+ * d[done..done+c) is the copy of d[done-m..done-m+c) for the multiple m of
+ * off with done - m >= -off, which does not overlap it for c <= m */
+static inline __attribute__((unused)) uint64_t defk_back_strip(uint8_t *d, uint64_t off,
+                                                               uint64_t n, uint64_t done) {
+  uint64_t m = off * (done / off + 1), c = n - done;
+  if (c > m) c = m;
+  if (c > DEFK_COPY_STRIP) c = DEFK_COPY_STRIP;
+  memcpy(d + done, d + done - m, (size_t)c);
+  return done + c;
+}
+
+#define DEFK_RANGE_COPY_FN(T, CT)                                                          \
+  static inline __attribute__((unused)) int64_t defk_rcopy_##T(                             \
+      defk_ctx *ctx, defk_arr_##T a, int64_t at, defk_arr_##T s, int64_t from, int64_t n,  \
+      int once) {                                                                          \
+    if (DEFK_UNLIKELY(n < 0)) defk_copy_negative(ctx, "copy/5", n);                        \
+    if (DEFK_UNLIKELY(at < 0 || at > a.len - n))                                          \
+      defk_copy_oob(ctx, "copy/5", n, "at", at, "array", a.len);                           \
+    if (DEFK_UNLIKELY(from < 0 || from > s.len - n))                                      \
+      defk_copy_oob(ctx, "copy/5", n, "from", from, "source array", s.len);               \
+    uint64_t bytes = (uint64_t)n * sizeof(CT);                                             \
+    if (!once && DEFK_UNLIKELY(bytes > DEFK_COPY_STRIP)) return -1;                        \
+    defk_move_bytes((uint8_t *)(a.data + at), (const uint8_t *)(s.data + from), bytes);   \
+    return (int64_t)bytes;                                                                 \
+  }                                                                                        \
+  static inline __attribute__((unused)) int64_t defk_rcopy_back_##T(                        \
+      defk_ctx *ctx, defk_arr_##T a, int64_t at, int64_t off, int64_t n, int once) {       \
+    if (DEFK_UNLIKELY(n < 0)) defk_copy_negative(ctx, "copy_back/4", n);                   \
+    if (DEFK_UNLIKELY(at < 0 || at > a.len - n))                                          \
+      defk_copy_oob(ctx, "copy_back/4", n, "at", at, "array", a.len);                      \
+    if (n == 0) return 0;                                                                  \
+    if (DEFK_UNLIKELY(off < 1 || at < off)) defk_copy_back_off(ctx, off, at);              \
+    uint64_t bytes = (uint64_t)n * sizeof(CT);                                             \
+    if (!once && DEFK_UNLIKELY(bytes > DEFK_COPY_STRIP)) return -1;                        \
+    defk_back_bytes((uint8_t *)(a.data + at), (size_t)off * sizeof(CT), (size_t)bytes);    \
+    return (int64_t)bytes;                                                                 \
+  }
+DEFK_RANGE_COPY_FN(f64, double)
+DEFK_RANGE_COPY_FN(i64, int64_t)
+DEFK_RANGE_COPY_FN(u8, uint8_t)
+DEFK_RANGE_COPY_FN(u64, uint64_t)
+DEFK_RANGE_COPY_FN(i16, int16_t)
+DEFK_RANGE_COPY_FN(i32, int32_t)
+DEFK_RANGE_COPY_FN(f32, float)
+
 /* Hand an owned array back to the BEAM as a binary (ownership transfers). */
 static ERL_NIF_TERM defk_make_arr(ErlNifEnv *env, defk_ctx *ctx, void *data) {
   for (int i = 0; i < ctx->nowned; i++) {
