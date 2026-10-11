@@ -281,45 +281,60 @@ defmodule Defk.ScaledFactsTest do
   defp shown(size, last),
     do: "alloc(u8, #{Macro.to_string(size)}), i <- 0..#{Macro.to_string(last)}"
 
+  # Each case compiles a kernel (C codegen) and walks ~100 lengths, about
+  # 0.5 ms (bounds) to 1 ms (overflow) of pure CPU. The default suite runs
+  # @runs cases; the :deep twins run @deep_runs (defk-o4n: 4_000 cases took
+  # 60 s under load and hit ExUnit's per-test timeout).
+  @runs 500
+  @deep_runs 4_000
+
   property "a dropped bounds check is never wrong" do
-    check all(
-            {{size, size_v}, {last, last_v}, {idx, idx_v}, base} <- probe(),
-            max_runs: 4_000
-          ) do
-      # an index past i64 raises in its checked arithmetic (and the overflow
-      # property covers an unchecked one)
-      if not (c_of(kernel(size, last, idx)) =~ "defk_put_u8") do
-        for {l, n, k, ops} <- reached(size_v, last_v, idx_v, base), fits?(ops) do
-          assert List.last(ops) in 0..(n - 1)//1,
-                 "out[#{Macro.to_string(idx)}] is unchecked, but for len(a) = #{l}, " <>
-                   "i = #{k} it is #{List.last(ops)}, outside 0..#{n - 1} (#{shown(size, last)})"
-        end
+    check(all(case <- probe(), max_runs: @runs, do: bounds_sound(case)))
+  end
+
+  @tag deep: true, timeout: 600_000
+  property "a dropped bounds check is never wrong (deep)" do
+    check(all(case <- probe(), max_runs: @deep_runs, do: bounds_sound(case)))
+  end
+
+  property "a dropped overflow check is never wrong" do
+    check(all(case <- probe(), max_runs: @runs, do: overflow_sound(case)))
+  end
+
+  @tag deep: true, timeout: 600_000
+  property "a dropped overflow check is never wrong (deep)" do
+    check(all(case <- probe(), max_runs: @deep_runs, do: overflow_sound(case)))
+  end
+
+  defp bounds_sound({{size, size_v}, {last, last_v}, {idx, idx_v}, base}) do
+    # an index past i64 raises in its checked arithmetic (and the overflow
+    # property covers an unchecked one)
+    if not (c_of(kernel(size, last, idx)) =~ "defk_put_u8") do
+      for {l, n, k, ops} <- reached(size_v, last_v, idx_v, base), fits?(ops) do
+        assert List.last(ops) in 0..(n - 1)//1,
+               "out[#{Macro.to_string(idx)}] is unchecked, but for len(a) = #{l}, " <>
+                 "i = #{k} it is #{List.last(ops)}, outside 0..#{n - 1} (#{shown(size, last)})"
       end
     end
   end
 
-  property "a dropped overflow check is never wrong" do
-    check all(
-            {{size, size_v}, {last, last_v}, {idx, idx_v}, base} <- probe(),
-            max_runs: 4_000
-          ) do
-      c = c_of(kernel(size, last, idx))
+  defp overflow_sound({{size, size_v}, {last, last_v}, {idx, idx_v}, base}) do
+    c = c_of(kernel(size, last, idx))
 
-      # none checked: the length expressions never overflow
-      if not (c =~ ~r/defk_(mul|add)_i64\(/) do
-        for l <- @lengths, n = List.last(size_v.(l)), n in 0..@len_max//1 do
-          assert fits?(size_v.(l)) and fits?(last_v.(if base == :a, do: l, else: n)),
-                 "#{shown(size, last)} has no overflow check, but overflows for len(a) = #{l}"
-        end
+    # none checked: the length expressions never overflow
+    if not (c =~ ~r/defk_(mul|add)_i64\(/) do
+      for l <- @lengths, n = List.last(size_v.(l)), n in 0..@len_max//1 do
+        assert fits?(size_v.(l)) and fits?(last_v.(if base == :a, do: l, else: n)),
+               "#{shown(size, last)} has no overflow check, but overflows for len(a) = #{l}"
       end
+    end
 
-      # the index's multiply and add unchecked: they never overflow
-      if not (c =~ ~r/defk_(mul|add)_i64\(ctx, [^;]*v_i_\d+/) do
-        for {l, _n, k, ops} <- reached(size_v, last_v, idx_v, base) do
-          assert fits?(ops),
-                 "#{Macro.to_string(idx)} has no overflow check, but overflows for " <>
-                   "len(a) = #{l}, i = #{k} (#{shown(size, last)})"
-        end
+    # the index's multiply and add unchecked: they never overflow
+    if not (c =~ ~r/defk_(mul|add)_i64\(ctx, [^;]*v_i_\d+/) do
+      for {l, _n, k, ops} <- reached(size_v, last_v, idx_v, base) do
+        assert fits?(ops),
+               "#{Macro.to_string(idx)} has no overflow check, but overflows for " <>
+                 "len(a) = #{l}, i = #{k} (#{shown(size, last)})"
       end
     end
   end
