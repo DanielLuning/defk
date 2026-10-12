@@ -380,6 +380,8 @@ defmodule Defk do
     # renamed, and the kernel's function passes the hint
     all_sigs = Enum.map(all_sigs, &Map.update!(&1, :yields, fn y -> adaptive? and y end))
 
+    if dump = System.get_env("DEFK_DUMP_C"), do: dump_c!(dump, env.module, c_src)
+
     lib = Defk.Build.build!(env.module, c_src, env.file)
 
     # the fast-path report: defk's own notes, and clang's vectorisation under
@@ -463,6 +465,15 @@ defmodule Defk do
   defp kernel_defs(sigs, false, _mode, bits) do
     {wrapped, plain} = Enum.split_with(sigs, &(&1.name in bits or &1.yields))
     render_stubs(plain) ++ native_stubs(wrapped) ++ wrappers(wrapped)
+  end
+
+  # DEFK_DUMP_C=<dir>: every module compiled while it is set writes its
+  # generated C to <dir>/<Module>.c — the byte-identical gate for compiler
+  # refactors (scripts/dump_c.exs, defk-mif). A pure side channel: the build
+  # and the module are unchanged.
+  defp dump_c!(dir, module, c_src) do
+    File.mkdir_p!(dir)
+    File.write!(Path.join(dir, "#{inspect(module)}.c"), c_src)
   end
 
   # `use Defk, max_owned: n`: a positive integer of bytes that fits in a
