@@ -8,6 +8,7 @@
     "defk-pic",
     "defk-siy"
   ],
+  "closed_at": "2026-10-12T10:59:10Z",
   "created": "2026-10-11T21:11:30Z",
   "description": "Opened in triage (2026-10-11) for defk-pic, defk-siy, defk-n7k and defk-9za, which each need a relation between values that the range-fact machinery cannot express: it tracks constant bounds (lo/hi) and bounds relative to an array length (len_lo, len_lb and defk-upc's scaled facts), not relations between symbols. Missing facts: len(out) == n for out = alloc(e, n) with n = min(...) or div(...) (pic, n7k's out[r]); base + i \u003c len(b) from i \u003c= len(b) - base - 1, and a range start as a lower bound of the loop variable (siy); r * dim + j \u003c len(m) for a runtime dim (n7k, a product, not a sum); i \u003e= w and w \u003e= 1 inside an if branch or after a raising guard (9za). Adding each as its own fact kind would multiply special cases in in_bounds?/3, add_facts/sub_facts, with_acc_facts and the report's 'nothing proves' text.\n\nDeliverable: a design write-up (docs/research/relational-facts.md, and a draft ADR in docs/adr/ if it changes the compiler's fact model), not an implementation:\n1. How facts are represented and used today (where they are created, merged at joins and loops, invalidated, carried into accumulators, reported).\n2. A proposal for one representation that covers the four tickets, e.g. difference bounds x \u003c= y + c between symbols (and lengths), with how comparisons in if/cond/guards and raising guards narrow them, how loops and joins merge them, and what stays out (products like r * dim + j: state whether and how n7k's index is covered, e.g. by a row-stride pattern, or leave it out).\n3. Soundness argument (i64 overflow of the symbolic expressions, aliasing/rebinding, resume after yield), and the compile-time cost: measured on the test suite and examples, or estimated with a prototype.\n4. Each of the repros in pic, siy (both loops), n7k and 9za walked through the proposal: which checks drop, which stay and why; and how the 'nothing proves ...' report text would name the missing fact.\n5. An implementation plan split into tickets, with an order; note interactions with defk-fun (len_lb in reduce accumulators), defk-i5r and defk-5qk.\n\nA throwaway prototype in a branch is allowed to measure cost or check feasibility; it is not merged. The maintainer decides on the design before pic/siy/n7k/9za are briefed.",
   "id": "defk-2mz",
@@ -15,8 +16,8 @@
     "ready-for-agent"
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Design: relational range facts for bounds proofs (len(out) == n, base + i \u003c len(b), guard-narrowed facts)",
   "type": "task",
-  "updated_at": "2026-10-12T10:12:07Z"
+  "updated_at": "2026-10-12T10:59:10Z"
 }
