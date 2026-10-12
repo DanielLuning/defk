@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-k4x",
     "defk-z8y"
@@ -30,8 +30,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Compiler context: one :defk_ctx struct instead of process-dictionary globals",
   "type": "task",
-  "updated_at": "2026-10-12T14:51:35Z"
+  "updated_at": "2026-10-12T18:55:20Z"
 }
