@@ -60,6 +60,22 @@ defmodule Defk.Compiler do
     old
   end
 
+  # A rejection's literal code is checked against the registry while the
+  # compiler itself compiles (defk-vlf): a typo'd code fails mix compile
+  # here instead of a test later. A code built at run time passes through.
+  defmacrop err!(node, code, what, opts \\ []) do
+    Defk.Errors.validate_code!(code)
+    quote do: reject!(unquote(node), unquote(code), unquote(what), unquote(opts))
+  end
+
+  defmacrop attempt_err!(key, head, code, what, opts \\ []) do
+    Defk.Errors.validate_code!(code)
+
+    quote do
+      attempt_reject!(unquote(key), unquote(head), unquote(code), unquote(what), unquote(opts))
+    end
+  end
+
   @max_u64 0xFFFFFFFFFFFFFFFF
   @max_i64 0x7FFFFFFFFFFFFFFF
   @float_ops %{+: "fadd", -: "fsub", *: "fmul"}
@@ -153,7 +169,7 @@ defmodule Defk.Compiler do
 
     case ctx(:diags) do
       [] -> :ok
-      diags -> raise Defk.Errors.compile_error(module, file, diags)
+      diags -> raise Defk.Errors.Diagnostics.compile_error(module, file, diags)
     end
 
     entries_c = Enum.map(lowered, &IO.iodata_to_binary(emit_entry(&1)))
@@ -267,11 +283,10 @@ defmodule Defk.Compiler do
   # place (an inlined kernel repeats its callee's) is dropped.
 
   # no_return(): err! always throws, which is how a rejection is recorded.
-  @spec err!(term(), term(), term()) :: no_return()
-  @spec err!(term(), term(), term(), keyword()) :: no_return()
-  defp err!(node, code, what, opts \\ []) do
+  @spec reject!(term(), term(), term(), keyword()) :: no_return()
+  defp reject!(node, code, what, opts) do
     {line, col, width, text} =
-      Defk.Errors.locate(node, ctx(:where), ctx(:lines))
+      Defk.Errors.Diagnostics.locate(node, ctx(:where), ctx(:lines))
 
     d =
       Map.merge(Map.new(opts), %{
@@ -316,7 +331,7 @@ defmodule Defk.Compiler do
   # returns nil. The throwing call is written inline rather than in a fun,
   # which Dialyzer would flag as a no-return anonymous function.
   # opts: `at:` the node to report at (default: the head), and err!/4's
-  defp attempt_err!(key, head, code, what, opts \\ []) do
+  defp attempt_reject!(key, head, code, what, opts) do
     ctx_put(:fun, key)
     ctx_put(:where, head)
     {at, opts} = Keyword.pop(opts, :at)
@@ -949,7 +964,7 @@ defmodule Defk.Compiler do
   # raise Module, "literal" / raise Module / raise "literal": the exception
   # Elixir would raise, its message a C string literal (see "raise")
   defp lower_stmt({:raise, _, args} = node, env) when is_list(args) do
-    {mod, msg} = Defk.Raise.parse!(node, &err!/4)
+    {mod, msg} = Defk.Raise.parse!(node, &reject!/4)
     msg = Defk.Raise.message(mod, msg)
     kind = Defk.Raise.kind(mod)
     {"defk_user_raise(ctx, #{kind}, #{Defk.Raise.c_string(msg)}, #{byte_size(msg)});\n", env}
@@ -1720,7 +1735,7 @@ defmodule Defk.Compiler do
 
     if bitwise_module?(mod) and length(args) == arity,
       do: lower_bitwise(f, "#{Macro.to_string(mod)}.#{f}/#{arity}", args, node, env),
-      else: unsupported!(node, Defk.Errors.unsupported(node, &type_in(&1, env)), env)
+      else: unsupported!(node, Defk.Errors.Rewrites.unsupported(node, &type_in(&1, env)), env)
   end
 
   # wrap64(expr): the masked-arithmetic tree of expr wrapped to the low 64
@@ -1749,7 +1764,7 @@ defmodule Defk.Compiler do
 
   # anything else (a map, a string, a remote call, ...) is outside the subset
   defp lower_expr(other, env),
-    do: unsupported!(other, Defk.Errors.unsupported(other, &type_in(&1, env)), env)
+    do: unsupported!(other, Defk.Errors.Rewrites.unsupported(other, &type_in(&1, env)), env)
 
   # + - * / one operation at a time: i64 checked for overflow, f64 for a
   # result that is inf or NaN (defk-i00); see float_tree for the common case
@@ -2606,7 +2621,7 @@ defmodule Defk.Compiler do
   end
 
   # a raise is a statement: it has no value to give
-  defp lower_call(:raise, args, m, _env), do: Defk.Raise.value!({:raise, m, args}, &err!/4)
+  defp lower_call(:raise, args, m, _env), do: Defk.Raise.value!({:raise, m, args}, &reject!/4)
 
   defp lower_call(name, args, m, env) do
     node = {name, m, args}
@@ -2614,7 +2629,7 @@ defmodule Defk.Compiler do
     # a construct outside the subset (a map, |>, unless, ...) is reported
     # before its arguments are compiled
     with false <- Defk.Builtins.builtin?(name) or Map.has_key?(env.sigs, {name, length(args)}),
-         {_, _, _} = r <- Defk.Errors.unsupported_local(node, &type_in(&1, env)) do
+         {_, _, _} = r <- Defk.Errors.Rewrites.unsupported_local(node, &type_in(&1, env)) do
       unsupported!(node, r, env)
     end
 
@@ -4772,7 +4787,7 @@ defmodule Defk.Compiler do
   end
 
   defp tail_expr({:raise, m, args}, _env, _leaf) when is_list(args),
-    do: Defk.Raise.value!({:raise, m, args}, &err!/4)
+    do: Defk.Raise.value!({:raise, m, args}, &reject!/4)
 
   defp tail_expr(other, _env, _leaf) do
     err!(
@@ -5758,7 +5773,7 @@ defmodule Defk.Compiler do
     rewrite =
       case quals do
         [{:<-, _, [x, src]}] when body != nil ->
-          Defk.Errors.collect_rewrites(src, x, body, into, returned_type(node, env))
+          Defk.Errors.Rewrites.collect_rewrites(src, x, body, into, returned_type(node, env))
 
         _ ->
           nil
