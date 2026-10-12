@@ -26,6 +26,90 @@ defmodule Defk.BenchTest do
     {r, out, JSON.decode!(String.replace_prefix(json, "DEFK_RESULT ", ""))}
   end
 
+  # The timed fun allocates enough garbage to force minor GCs.
+  defp churn, do: Enum.each(1..100_000, fn i -> {i, i, i} end)
+
+  defp old_heap do
+    :erlang.process_info(self(), :garbage_collection_info)
+    |> elem(1)
+    |> Keyword.fetch!(:old_heap_size)
+  end
+
+  defp u64_list(n),
+    do: Enum.map(1..n, &((&1 * 0x9E3779B97F4A7C15) |> Bitwise.band(0xFFFFFFFFFFFFFFFF)))
+
+  defp in_fresh_process(fun) do
+    parent = self()
+    {pid, ref} = spawn_monitor(fn -> send(parent, {:done, self(), fun.()}) end)
+
+    receive do
+      {:done, ^pid, r} -> r
+      {:DOWN, ^ref, _, _, reason} -> flunk("process died: #{inspect(reason)}")
+    end
+  end
+
+  test "settle puts the caller's live list in the old heap; a full sweep alone does not" do
+    {size, full_only, settled} =
+      in_fresh_process(fn ->
+        list = u64_list(50_000)
+        size = :erts_debug.flat_size(list)
+
+        # the old behaviour: the next minor GC copies the list into the old heap
+        :erlang.garbage_collect()
+        before_full = old_heap()
+        churn()
+        after_full = old_heap()
+
+        # settle: the list is already old, and GCs in the timed run leave it
+        Bench.settle()
+        {c0, _, _} = :erlang.statistics(:garbage_collection)
+        before_settled = old_heap()
+        churn()
+        {c1, _, _} = :erlang.statistics(:garbage_collection)
+        after_settled = old_heap()
+        # keep the list live through both
+        true = :erts_debug.flat_size(list) == size
+
+        {size, {before_full, after_full}, {before_settled, after_settled, c1 - c0}}
+      end)
+
+    {before_full, after_full} = full_only
+    assert before_full < size / 2
+    assert after_full >= size * 0.9
+
+    {before, after_, gcs} = settled
+    assert before >= size * 0.9
+    assert gcs > 0
+    assert after_ - before < size / 100
+  end
+
+  test "report starts each timed run from the settled heap" do
+    {size, seen} =
+      in_fresh_process(fn ->
+        list = u64_list(20_000)
+        {:ok, agent} = Agent.start_link(fn -> [] end)
+
+        capture_io(fn ->
+          Bench.report(
+            name: "t",
+            expected: :poor,
+            elixir: fn ->
+              old = old_heap()
+              Agent.update(agent, &[old | &1])
+              length(list)
+            end,
+            runs: 3
+          )
+        end)
+
+        {:erts_debug.flat_size(list), Agent.get(agent, & &1)}
+      end)
+
+    # seen is newest first: the three timed runs, then the warm-up call
+    assert [_, _, _, _] = seen
+    assert Enum.all?(Enum.take(seen, 3), &(&1 >= size * 0.9))
+  end
+
   test "verdict thresholds" do
     assert Bench.verdict(2.0) == :good
     assert Bench.verdict(1.99) == :good
