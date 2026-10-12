@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-12T11:24:24Z",
+  "description": "Add the usage_rules dev dependency (1.2.x) and configure it in mix.exs so `mix usage_rules.sync` writes a managed section (between usage-rules-start/end markers) into AGENTS.md. Contents (maintainer's choice): usage_rules' own rules (how to use `mix usage_rules.docs` and `mix usage_rules.search_docs`), plus the built-in :elixir and :otp rules. Of current deps only igniter ships usage-rules.md, and defk writes no Igniter code, so it is left out. Keep the hand-written part of AGENTS.md as the source of project rules and say that it wins where the generic rules disagree (e.g. macros are the product here; measure before choosing Stream over Enum). Add `usage_rules.sync --check` to the ci alias so the section can't drift from the deps.\n\nDone when: mix.exs has the dep and config, AGENTS.md carries the generated section, AGENTS.md explains how to regenerate and which rules win, and mix ci passes.",
+  "id": "defk-mob",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Add usage_rules: sync dependency usage rules and doc-lookup tasks into AGENTS.md",
+  "type": "task",
+  "updated_at": "2026-10-12T11:24:24Z"
+}
