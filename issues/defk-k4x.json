@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-mif"
   ],
@@ -12,8 +12,8 @@
   "id": "defk-k4x",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Extract Defk.Facts: the range-facts lattice, byte-identical",
   "type": "task",
-  "updated_at": "2026-10-12T13:49:59Z"
+  "updated_at": "2026-10-12T17:30:30Z"
 }
