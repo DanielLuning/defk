@@ -6055,6 +6055,8 @@ defmodule Defk.Compiler do
   # a for that would collect values (`into` is its into:, or nil): `what` says how
   @spec for_collect!(term(), term(), term(), term(), term(), term()) :: no_return()
   defp for_collect!(node, quals, body, into, env, what) do
+    if into == nil, do: recover_for(node, quals, body, env)
+
     rewrite =
       case quals do
         [{:<-, _, [x, src]}] when body != nil ->
@@ -6065,6 +6067,58 @@ defmodule Defk.Compiler do
       end
 
     err!(node, "for-collect", what, checked_rewrite([rewrite: rewrite], env))
+  end
+
+  # Recovery inside a rejected for: its generators, filters and body are
+  # lowered as if the for ran for effect, so their own rejections are recorded
+  # in the same compile. Nothing about the for's value is checked (the body's
+  # last expression is lowered as a statement, and a rejected statement poisons
+  # what it binds), and an abandoned statement stays silent, so a rejection
+  # that only follows from this one is not reported. Not done for
+  # `into:`, whose body is the element of another collection (`<<y::float-64>>`),
+  # not a statement, so what it rejects would be an artefact of the rejection.
+  defp recover_for(_node, _quals, nil, _env), do: :ok
+
+  defp recover_for(node, quals, body, env) do
+    entered = make_ref()
+
+    try do
+      lower_quals(quals, loop_env(env, node), fn env ->
+        Process.put(entered, true)
+        elem(lower_stmts(body, env), 0)
+      end)
+    catch
+      {:defk_reject, d} -> record(d)
+      :defk_poison -> :ok
+    end
+
+    # a generator or filter that was rejected (or reads a poisoned variable)
+    # never reached the body: lower it with the generator's variables bound
+    # to what is certain (a range's i64), else poisoned
+    unless Process.delete(entered) do
+      poisoned =
+        Enum.reduce(quals, loop_env(env, node), fn
+          # a range generator's variable is an i64 whatever its bounds
+          {:<-, _, [{n, _, ctx}, {op, _, _}]}, env
+          when is_atom(n) and is_atom(ctx) and op in [:.., :..//] ->
+            put_var(env, n, val(fresh(n, :i64), :i64))
+
+          {:<-, _, [pat, _]}, env ->
+            poison({:=, [], [pat, nil]}, env)
+
+          _filter, env ->
+            env
+        end)
+
+      try do
+        lower_stmts(body, poisoned)
+      catch
+        {:defk_reject, d} -> record(d)
+        :defk_poison -> :ok
+      end
+    end
+
+    :ok
   end
 
   # The body's type function for a for's rewrite: the element type of the
