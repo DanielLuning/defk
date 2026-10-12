@@ -15,7 +15,32 @@ defmodule Defk.Compiler.Ctx do
             broken: MapSet.new(),
             statics: %{},
             report: [],
+            bits_names: %{},
             lowering: nil
+
+  defmodule Lowering do
+    # what one kernel's lowering changes, replaced wholesale per kernel:
+    # fresh-name and loop counters, declarations, safepoints, halt labels
+    # ({id => true}, once {:defk_halted, id} keys), the fast-path report's
+    # current kernel and loop, the strip record, and the accumulator-carry
+    # fix sets (per with_acc_facts retry ref, once {:defk_acc_facts, ref})
+    @moduledoc false
+
+    defstruct n: 0,
+              decls: [],
+              decl_loop: %{},
+              sp: 0,
+              sps: [],
+              loops: [],
+              nloops: 0,
+              nhalts: 0,
+              halts_emitted: 0,
+              halted: %{},
+              report_kernel: nil,
+              report_loop: nil,
+              acc_fix: %{},
+              strip: %{seq: 0, path: [], cond: false, rows: []}
+  end
 
   def new(file, module, lines), do: %__MODULE__{file: file, module: module, lines: lines}
 

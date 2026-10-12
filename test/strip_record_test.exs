@@ -7,8 +7,12 @@
 defmodule Defk.StripRecordTest do
   use ExUnit.Case, async: false
 
-  # the classifier reads the kernel's C declarations for variable types
-  defp with_types(types), do: Process.put(:defk_decls, types)
+  # the classifier reads the kernel's C declarations for variable types,
+  # from the compiler's one ctx key (defk-euu)
+  defp with_types(types) do
+    lowering = %Defk.Compiler.Ctx.Lowering{decls: types}
+    Process.put(:defk_ctx, %Defk.Compiler.Ctx{lowering: lowering})
+  end
 
   defp rows(specs) do
     specs
