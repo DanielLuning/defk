@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-k4x",
@@ -10,8 +10,8 @@
   "id": "defk-mif",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Dump-all-C script: byte-identical gate for compiler refactors",
   "type": "task",
-  "updated_at": "2026-10-12T13:49:58Z"
+  "updated_at": "2026-10-12T16:32:25Z"
 }
