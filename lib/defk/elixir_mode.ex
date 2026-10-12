@@ -621,70 +621,82 @@ defmodule Defk.ElixirMode do
     {with_pre(pre, q), t}
   end
 
-  defp builtin(:len, [a], [{:arr, e}], m), do: {call(:"len_#{e}", [a], m), :i64}
+  # The signature table decides acceptance, the result type and the
+  # coercions (Defk.Builtins.typing/2, ADR-0008), the same one the C
+  # lowering consumes, so the two emitters cannot drift on typing. The
+  # emission below stays written by hand: Elixir mode is the oracle.
+  # bit_size of a bitstring accumulator: the accumulator's Elixir-mode type
+  # is not always visible here, as before the table (the compiler gates the
+  # native side through the table's :bitstring row)
   defp builtin(:bit_size, [a], [_], m), do: {remote(Kernel, :bit_size, [a], m), :i64}
-  defp builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: {call(f, [a, i], m), :i64}
+
+  defp builtin(name, args, types, m) do
+    case Defk.Builtins.typing(name, types) do
+      {:ok, result, coerce} ->
+        args =
+          Enum.reduce(coerce, args, fn {i, to, _label}, args ->
+            List.update_at(args, i, &coerce(&1, Enum.at(types, i), to))
+          end)
+
+        {em_builtin(name, args, types, m), result}
+
+      _bespoke_or_no_row ->
+        nil
+    end
+  end
+
+  defp em_builtin(:len, [a], [{:arr, e}], m), do: call(:"len_#{e}", [a], m)
+  defp em_builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: call(f, [a, i], m)
 
   # copy/5 and copy_back/4 (defk-52v.16): a new binary with the range
   # replaced, checked as the kernel checks it
-  defp builtin(:copy, [a, at, s, from, n], [{:arr, e}, ta, {:arr, e}, tf, tn], m)
-       when ta in @ints and tf in @ints and tn in @ints do
-    args = [a, coerce(at, ta, :i64), s, coerce(from, tf, :i64), coerce(n, tn, :i64), esize(e)]
-    {call(:copy, args, m), {:arr, e}}
-  end
+  defp em_builtin(:copy, [a, at, s, from, n], [{:arr, e} | _], m),
+    do: call(:copy, [a, at, s, from, n, esize(e)], m)
 
-  defp builtin(:copy_back, [a, at, off, n], [{:arr, e}, ta, to, tn], m)
-       when ta in @ints and to in @ints and tn in @ints do
-    args = [a, coerce(at, ta, :i64), coerce(off, to, :i64), coerce(n, tn, :i64), esize(e)]
-    {call(:copy_back, args, m), {:arr, e}}
-  end
+  defp em_builtin(:copy_back, [a, at, off, n], [{:arr, e} | _], m),
+    do: call(:copy_back, [a, at, off, n, esize(e)], m)
 
-  defp builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl64, :rotr64],
-    do: {remote(Defk.Bits, f, [a, b], m), :i64}
+  defp em_builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl64, :rotr64],
+    do: remote(Defk.Bits, f, [a, b], m)
 
   # clz/2, ctz/2, rotl/3, rotr/3, f64_to_u64/1 (defk-wlu): Defk.Bits as it
   # is; rotl/rotr of an i64 give an i64, checked
-  defp builtin(f, [x, w], [_, tw], m) when f in [:clz, :ctz],
-    do: {remote(Defk.Bits, f, [x, coerce(w, tw, :i64)], m), :i64}
+  defp em_builtin(f, [x, w], [_, _], m) when f in [:clz, :ctz],
+    do: remote(Defk.Bits, f, [x, w], m)
 
-  defp builtin(f, [x, n, w], [tx, tn, tw], m) when f in [:rotl, :rotr] do
-    q = remote(Defk.Bits, f, [x, coerce(n, tn, :i64), coerce(w, tw, :i64)], m)
-    {coerce(q, :u64, tx), tx}
+  defp em_builtin(f, [x, n, w], [tx, _, _], m) when f in [:rotl, :rotr] do
+    q = remote(Defk.Bits, f, [x, n, w], m)
+    coerce(q, :u64, tx)
   end
 
-  defp builtin(:crc32c, [c, x, w], [_, _, tw], m),
-    do: {remote(Defk.Bits, :crc32c, [c, x, coerce(w, tw, :i64)], m), :i64}
+  defp em_builtin(:crc32c, [c, x, w], [_, _, _], m),
+    do: remote(Defk.Bits, :crc32c, [c, x, w], m)
 
-  defp builtin(:f64_to_u64, [x], [tx], m),
-    do: {remote(Defk.Bits, :f64_to_u64, [coerce(x, tx, :f64)], m), :u64}
+  defp em_builtin(:f64_to_u64, [x], [_], m), do: remote(Defk.Bits, :f64_to_u64, [x], m)
 
-  defp builtin(f, [a], [t], m) when f in @bits and t in @ints,
-    do: {remote(Defk.Bits, f, [a], m), :i64}
+  defp em_builtin(f, [a], [t], m) when f in @bits and t in @ints,
+    do: remote(Defk.Bits, f, [a], m)
 
-  defp builtin(f, [a, b], [:i64, :i64], m) when f in [:div, :rem], do: {call(f, [a, b], m), :i64}
+  defp em_builtin(f, [a, b], [:i64, :i64], m) when f in [:div, :rem], do: call(f, [a, b], m)
 
-  defp builtin(f, [a, b], [ta, tb], m) when f in [:div, :rem] and ta in @ints and tb in @ints,
-    do: {call(:"#{f}_u64", [a, b], m), :u64}
+  defp em_builtin(f, [a, b], [_, _], m) when f in [:div, :rem],
+    do: call(:"#{f}_u64", [a, b], m)
 
-  defp builtin(:float, [a], [t], m) when t in @ints,
-    do: {{{:., gm(m), [:erlang, :float]}, gm(m), [a]}, :f64}
+  defp em_builtin(:float, [a], [t], m) when t in @ints,
+    do: {{:., gm(m), [:erlang, :float]}, gm(m), [a]}
 
-  defp builtin(:float, [a], [:f64], _m), do: {a, :f64}
-  defp builtin(f, [a], [t], _m) when f in [:trunc, :round] and t in @ints, do: {a, t}
-  defp builtin(f, [a], [:f64], m) when f in [:trunc, :round], do: {call(f, [a], m), :i64}
-  defp builtin(:abs, [a], [:i64], m), do: {call(:abs, [a], m), :i64}
-  defp builtin(:abs, [a], [:u64], _m), do: {a, :u64}
-  defp builtin(:abs, [a], [:f64], m), do: {remote(Kernel, :abs, [a], m), :f64}
+  defp em_builtin(:float, [a], [:f64], _m), do: a
+  defp em_builtin(f, [a], [t], _m) when f in [:trunc, :round] and t in @ints, do: a
+  defp em_builtin(f, [a], [:f64], m) when f in [:trunc, :round], do: call(f, [a], m)
+  defp em_builtin(:abs, [a], [:i64], m), do: call(:abs, [a], m)
+  defp em_builtin(:abs, [a], [:u64], _m), do: a
+  defp em_builtin(:abs, [a], [:f64], m), do: remote(Kernel, :abs, [a], m)
 
-  defp builtin(f, [a, b], [t, t], m) when f in [:min, :max] and t in [:i64, :u64, :f64],
-    do: {remote(Kernel, f, [a, b], m), t}
+  defp em_builtin(f, [a, b], [_, _], m) when f in [:min, :max],
+    do: remote(Kernel, f, [a, b], m)
 
-  defp builtin(f, [a, b], [ta, tb], m) when f in [:min, :max] and ta in @ints and tb in @ints,
-    do: {remote(Kernel, f, [a, b], m), :u64}
-
-  defp builtin(f, [a], [_], m) when f in @math1, do: {remote(:math, f, [a], m), :f64}
-  defp builtin(:pow, [a, b], [_, _], m), do: {remote(:math, :pow, [a, b], m), :f64}
-  defp builtin(_, _, _, _), do: nil
+  defp em_builtin(f, [a], [_], m) when f in @math1, do: remote(:math, f, [a], m)
+  defp em_builtin(:pow, [a, b], [_, _], m), do: remote(:math, :pow, [a, b], m)
 
   # a call to another kernel: arguments coerced to its parameter types, as
   # when the kernel inlines it; the callee coerces its own return value
