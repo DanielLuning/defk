@@ -6,9 +6,15 @@
   "description": "Step 1 (grilling 2026-10-12): assert_agrees gains forced_yields: true (runs the native side plain and under __defk_force_yields__, both against the oracle; default false) and message: :exact. Defk.Properties.agreement/2 defaults forced_yields: true for kernels that can yield - resume coverage stops depending on hand-written ceremony at the 78 call sites (sites testing yielding itself keep explicit control). Delete test/elixir_mode_test.exs Agree.agree/4 (replaced by message: :exact) and Defk.Case.in_both_modes (4 call sites inline with_mode; already demoted by ADR-0006). Step 2: single-source the runtime error messages between priv/defk_runtime.h and ElixirMode.Ops (generate both from one definition) so both modes raise byte-identical text and the hand-synced @arith/@arg taxonomy in test.ex dies (the defk-euu finding, what crc32c tripped over). CONTEXT 'Agreement' definition unchanged (same module, same reason); identical messages are an implementation strengthening.",
   "id": "defk-0ha",
   "labels": [],
+  "comments": [
+    {
+      "text": "Landed as step 1 only, with two deviations from the grilled plan, both from evidence that moved: (1) Defk.Case.in_both_modes is KEPT - it now has 14 call sites whose blocks assert against reference values under both modes (the 'runs twice, compares nothing' deletion-test verdict described the macro, not its uses); deleting would scatter two-mode ceremony, the exact thing this ticket removes for forced yields. (2) The 78 legacy __defk_force_yields__ sites stay as the e2e net - the new default on agreement properties is what buys resume coverage everywhere; converting old sites is cleanup with regression risk and no new coverage. Step 2 (message fragments) split to defk-27w with its payoff corrected: the taxonomy stops being hand-synced, it does not die.",
+      "timestamp": "2026-10-12T20:07:26Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Deepen assert_agrees: forced_yields and message options; single-source runtime messages",
   "type": "task",
-  "updated_at": "2026-10-12T19:59:25Z"
+  "updated_at": "2026-10-12T20:07:26Z"
 }
