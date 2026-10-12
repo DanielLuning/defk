@@ -197,17 +197,6 @@ defmodule Defk.Errors do
       rewrite: "defk f(x :: i64, y :: f64) :: i64 do\n  trunc(x + y)\nend"
     },
     %{
-      code: "return-input-array",
-      kind: :planned,
-      summary:
-        "A returned array is one the kernel created with alloc/2 or wrote; returning an unwritten input array is planned.",
-      why:
-        "a kernel returns arrays it owns: one from alloc/2, or an input array it wrote, which is a copy; handing an unwritten input array back to the caller is planned",
-      hint: "return the input itself from the Elixir caller, which already holds it",
-      example: "defk f(a :: [f64]) :: [f64] do\n  a\nend",
-      rewrite: "defk f(a :: [f64]) :: f64 do\n  a[0]\nend"
-    },
-    %{
       code: "empty-block",
       kind: :error,
       summary: "Every block in a kernel has a value, its last expression.",
@@ -272,19 +261,6 @@ defmodule Defk.Errors do
         "defk f(x :: i64) :: i64 do\n  {a, b} = if x > 0, do: {x, 1}, else: x\n  a + b\nend",
       rewrite:
         "defk f(x :: i64) :: i64 do\n  {a, b} = if x > 0, do: {x, 1}, else: {x, 0}\n  a + b\nend"
-    },
-    %{
-      code: "array-in-branch",
-      kind: :planned,
-      summary:
-        "An if, cond or case used as a value gives no array, alone or in a tuple; arrays through branches are planned.",
-      why: "an if/cond/case may give numbers, booleans or tuples of them, not arrays yet",
-      hint:
-        "do the array work inside each branch, so that each branch gives a number: read the element there (if p, do: a[i], else: b[i]), or write the output array in each branch",
-      example:
-        "defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do\n  c = if p, do: a, else: b\n  c[0]\nend",
-      rewrite:
-        "defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do\n  if p, do: a[0], else: b[0]\nend"
     },
 
     # -- variables and patterns

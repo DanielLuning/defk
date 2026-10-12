@@ -104,6 +104,11 @@ defmodule Defk.AttributesTest.K do
   defk lim_after(x :: i64) :: i64 do
     x + @lim
   end
+
+  # returned unwritten: a new binary of its bytes (defk-gqk)
+  defk alphabet_or(c :: bool, b :: [u8]) :: [u8] do
+    if c, do: @alphabet, else: b
+  end
 end
 
 defmodule Defk.AttributesTest do
@@ -212,8 +217,16 @@ defmodule Defk.AttributesTest do
     byte_sum: [],
     table_rounds: [args: StreamData.fixed_list([G.i64(0..2_000)])],
     lim_before: [],
-    lim_after: []
+    lim_after: [],
+    alphabet_or: []
   )
+
+  test "a binary attribute is returned unwritten, also from a branch" do
+    assert K.alphabet_or(true, "x") == @alphabet
+    b = :binary.copy("x", 100)
+    assert :erts_debug.same(K.alphabet_or(false, b), b)
+    agrees(:alphabet_or, [true, "x"])
+  end
 
   describe "compile errors" do
     @dir Path.join(System.tmp_dir!(), "defk_attributes_test")
@@ -295,12 +308,6 @@ defmodule Defk.AttributesTest do
 
       msg = rejected(kernel("@k \"ab\"", "case i do\n    @k -> 1\n    _ -> 0\n  end"))
       assert codes(msg) == ["case-pattern"]
-    end
-
-    # a write copies it first (test/value_semantics_test.exs)
-    test "a binary attribute is not returnable unwritten" do
-      msg = rejected(kernel("@t <<1, 2>>", "@t", "i :: i64", "[u8]"))
-      assert codes(msg) == ["return-input-array"]
     end
 
     test "a bitstring that is not a binary" do

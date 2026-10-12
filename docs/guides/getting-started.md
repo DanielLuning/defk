@@ -217,9 +217,10 @@ both, with the reason or the ticket. Other wordings, such as "is not a
 kernel builtin" or "is not a kernel type", are mistakes to fix with the hint.
 
 Every rejection in a module is reported at once (the first 10 are shown),
-but the compiler does not look inside a construct it has rejected: errors in
-the body of a rejected `for`, say, show up on the next compile, once you have
-rewritten it. Expect a first kernel to take a few rounds.
+and a `for` rejected for its shape (used as a value) is checked inside too.
+The compiler does not look inside other rejected constructs, a pipe or an
+unsupported call, say: errors in them show up on the next compile, once you
+have rewritten them. Expect a first kernel to take a few rounds.
 
 If the error instead says `defk: C compilation failed`, the C compiler ran
 and failed: that is a defk bug or a broken toolchain, not a mistake in your
@@ -281,9 +282,6 @@ From people writing their first kernels:
   `exp`, `log`, `log2`, `log10`, `sin`, `cos` and `pow`, each also as
   `:math.log2/1` and so on, and each giving the same bits as `:math`. Others
   (`:math.tan/1`, say) are written from these or computed in Elixir.
-- **Arrays can't come out of an `if`.** Write to the array inside each
-  branch instead of returning it from the branch (planned:
-  [`array-in-branch`](../compile-errors.md#array-in-branch)).
 - **Elixir mode in a script.** In a `Mix.install` script, add
   `use Defk, elixir_mode: true` to get the plain Elixir version of each
   kernel for checking (see [Testing kernels](testing.md)). In a Mix

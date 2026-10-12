@@ -336,8 +336,8 @@ defmodule Defk.ValueSemanticsTest.K do
     s + out[0]
   end
 
-  # for ..., reduce: cannot give an array from a branch (array-in-branch), so
-  # its helper call is in the body; the read is in a branch after it
+  # for ..., reduce: with its helper call in the body and the read in a
+  # branch after it
   defk for_reduce(n :: i64) :: i64 do
     out = alloc(u8, n)
 

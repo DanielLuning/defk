@@ -170,7 +170,7 @@ defmodule Defk.CompileErrorsTest do
             if x == 0, do: 0, else: f(x - 1)
           end
 
-          defk branch(p :: bool, a :: [f64], b :: [f64]) :: f64 do
+          defk branch(p :: bool, a :: [f64], b :: [i64]) :: f64 do
             c = if p, do: a, else: b
             c[0]
           end
@@ -190,13 +190,13 @@ defmodule Defk.CompileErrorsTest do
       assert msg =~ ~r/^\S+: cannot compile \S+: 6 kernel compile errors\n/
 
       assert codes(msg) ==
-               ~w(unsupported-map unsupported-string recursion array-in-branch unsupported-call return-type)
+               ~w(unsupported-map unsupported-string recursion branch-types unsupported-call return-type)
 
       assert whats(msg) == [
                "maps are not in the kernel subset",
                "string concatenation with <> is not in the kernel subset",
                "f/1 calls itself, and recursion is not in the kernel subset",
-               "this if gives an array ([f64]); arrays from if branches are not supported yet",
+               "the branches of this if have different types: [f64], [i64]",
                "Enum.map/2 is not in the kernel subset",
                "add/2 returns f64 but is declared :: i64"
              ]
@@ -216,10 +216,6 @@ defmodule Defk.CompileErrorsTest do
       assert msg =~ "29 │    x + y\n   │    ^^^^^\n"
 
       # rewrites from the developer's own code
-      # no guessed rewrite for array-in-branch: it depends on how the array is used
-      assert msg =~
-               "hint: do the array work inside each branch, so that each branch gives a number: read the element there (if p, do: a[i], else: b[i]), or write the output array in each branch\n"
-
       assert msg =~ "    for i <- 0..(len(a) - 1)//1 do\n      out[i] = a[i] * 2.0\n    end\n"
       assert msg =~ "    trunc(x + y)    # or declare :: f64\n"
       refute msg =~ ~r/defk-[a-z0-9]{3}/
@@ -278,6 +274,48 @@ defmodule Defk.CompileErrorsTest do
                ~w(unsupported-string unsupported-map unknown-function unsupported-atom untyped-parameter)
 
       assert msg =~ ": 5 kernel compile errors\n"
+    end
+
+    test "the body of a for rejected for its shape is checked too (HexDocs attempt 1)" do
+      src = File.read!("docs/cold-tests/hexdocs-entropy/attempt1.ex.txt")
+      body = src |> String.split("\n") |> Enum.slice(4..-3//1) |> Enum.join("\n")
+      msg = compile(body, "Attempt1")
+
+      # n is poisoned by the byte_size rejection, so the for's range is
+      # abandoned and its body is still lowered; the inner reduce's init is
+      # rejected and the pipe is one error, nothing in them is looked into
+      assert codes(msg) == ~w(unknown-function for-collect unsupported-map pipe)
+      assert msg =~ ": 4 kernel compile errors\n"
+    end
+
+    test "errors in a rejected for's body are reported once, next to for-collect" do
+      msg =
+        compile(
+          "defk f(a :: [f64], n :: i64) :: [f64] do\n  for i <- 0..(n - 1) do\n    m = %{a: i}\n    m + a[i]\n  end\nend",
+          "ForBody"
+        )
+
+      assert codes(msg) == ~w(for-collect unsupported-map)
+    end
+
+    test "a for rejected for its shape whose body is valid reports only for-collect" do
+      msg =
+        compile(
+          "defk f(a :: [f64], n :: i64) :: [f64] do\n  for i <- 0..(n - 1) do\n    y = a[i] * 2.0\n    y + 1.0\n  end\nend",
+          "ForValid"
+        )
+
+      assert codes(msg) == ["for-collect"]
+    end
+
+    test "a for rejected over a poisoned generator source only reports for-collect besides the poisoning error" do
+      msg =
+        compile(
+          "defk f(n :: i64) :: i64 do\n  m = %{a: n}\n  r = for x <- m do\n    x + 1\n  end\n  0\nend",
+          "ForPoison"
+        )
+
+      assert codes(msg) == ~w(unsupported-map for-collect)
     end
 
     test "at most 10 are shown" do

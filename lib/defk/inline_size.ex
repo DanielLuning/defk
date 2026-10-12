@@ -17,7 +17,7 @@ defmodule Defk.InlineSize do
   # minutes. The chains the warning names come from the call graph: how many
   # copies of each kernel the entry inlines, weighted by the AST nodes of the
   # kernel's own body. Measured against every kernel in test/support and
-  # examples, and argon2's first draft: docs/performance.md 6.26.
+  # examples, and argon2's first draft: docs/performance.md 6.27.
 
   # well above the largest kernel in test/support and examples (argon2's
   # entries, ~29k lines), well below argon2's first draft (224k-296k)
