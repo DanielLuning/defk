@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-12T09:51:26Z",
+  "description": "Why: the scope page now says defk works beside Nx (and that overlap with Nx is fine), but the only interop guidance is one sentence in docs/language.md: 'Nx.to_binary/1 of an {:f, 32}, {:s, 16}, ... tensor is the same layout.' Explorer has none at all; examples/README.md's wrapper table says 'Interop, not rewriting: zero-copy views over their packed buffers' and that an interop ticket should be filed when a workload asks. Using a kernel beside Nx or Explorer is only cheap if moving data in and out is documented and checked.\n\nScope (docs and tests only; defk takes no dependency on Nx or Explorer, they are test-only deps if needed):\n1. Nx: Nx.to_binary/1 into a kernel and Nx.from_binary/2 back, both directions, for every defk element type that has an Nx type (f64 {:f,64}, f32 {:f,32}, i64 {:s,64}, i32 {:s,32}, i16 {:s,16}, u8 {:u,8}, u64 {:u,64}), plus the Nx types with no defk element type (f16, bf16, u16, u32, s8...) and what to do with them. Endianness (Nx binaries are native-endian; confirm). When the conversion copies: BinaryBackend (is the binary the tensor's own?) vs EXLA/EMLX (device-to-host transfer). Empty input: Nx cannot build an empty tensor (nx.ex L2057), a kernel can take \u003c\u003c\u003e\u003e.\n2. Explorer: check whether Explorer.Series.to_binary/1 and from_binary/3 (or an equivalent) exist in the current version, their layout per dtype, null handling (a validity bitmap is not in the binary: what does a kernel see for nulls?), and whether the conversion copies.\n3. A short guide section (docs/guides/, or a new 'Using kernels beside Nx and Explorer' guide) with a worked example each: a tensor in, a kernel loop with early exit or a data-dependent step, a tensor out.\n4. Tests that pin the layouts: round-trip agreement for each type pair, so a change in Nx or Explorer layout fails here rather than in a user's app.\n\nDone when: the guide section exists and is checked by the docs example test (or marked skip with a test that runs the same steps), round-trip tests pass for every supported type pair, the copy/no-copy facts and null handling are written down with sources, and docs/language.md's sentence links to the guide.",
+  "id": "defk-djy.17",
+  "labels": [],
+  "parent": "defk-djy",
+  "priority": 3,
+  "status": "open",
+  "title": "Guide and tests: moving data between Nx/Explorer and kernels",
+  "type": "task",
+  "updated_at": "2026-10-12T09:51:26Z"
+}
