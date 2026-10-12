@@ -561,6 +561,7 @@ defmodule Defk.Compiler do
     Process.put(:defk_halts_emitted, 0)
     Process.put(:defk_writes, [])
     Process.put(:defk_from, %{})
+    Process.put(:defk_alias, %{})
     Process.put(:defk_report_kernel, {{k.name, k.arity}, k.yield})
     note(:kernel, k.head, if(k.yield, do: :yield, else: :no_yield), "#{k.name}/#{k.arity}")
 
@@ -585,9 +586,18 @@ defmodule Defk.Compiler do
     {stmts, val} = lower_block(k.body, env)
     {ret_stmts, ret_vals} = coerce_return(val, k)
 
+    # a returned array the kernel may not own (an input, a binary literal or
+    # attribute, or a branch giving one of them) is resolved when it returns
+    # (emit_result/1)
+    views =
+      Enum.zip_with(Map.get(val, :elems, [val]), ret_vals, fn v, {_, t} ->
+        match?({:arr, _}, t) and v.owned == false
+      end)
+
     Map.merge(k, %{
       stmts: [stmts, ret_stmts],
       ret_vals: ret_vals,
+      ret_views: views,
       decls: Enum.reverse(Process.get(:defk_decls)),
       decl_loop: Process.get(:defk_decl_loop),
       sp_count: Process.get(:defk_sp),
@@ -624,28 +634,17 @@ defmodule Defk.Compiler do
 
         vals =
           Enum.zip_with([elems, rts, items], fn [v, rt, item] ->
-            (match?({:arr, _}, rt) and not v.owned) && return_input_array!(item, k)
             coerce!(v, rt, item, "#{k.name}/#{k.arity} returns", k.ret).c
           end)
 
         {[], Enum.zip(vals, rts)}
 
       {%{t: {:arr, _} = t}, t} ->
-        v.owned || return_input_array!(at, k)
         {[], [{v.c, t}]}
 
       _ ->
         {[], [{coerce!(v, k.ret, at, "#{k.name}/#{k.arity} returns", k.ret).c, k.ret}]}
     end
-  end
-
-  @spec return_input_array!(term(), term()) :: no_return()
-  defp return_input_array!(at, k) do
-    err!(
-      at,
-      "return-input-array",
-      "#{k.name}/#{k.arity} returns #{Macro.to_string(at)}, an input array it never writes; returning an unwritten input array is not supported yet"
-    )
   end
 
   # `v` as type `t` (an i64 widens to f64). `what` names the position, e.g.
@@ -1108,7 +1107,11 @@ defmodule Defk.Compiler do
   # copying it in place (`v = defk_copy(v)`) changes that variable only, and
   # the copy is seen after the branch or loop the write is in. An input array
   # bound to a variable stays the parameter's C local, which is re-bound after
-  # every resume, until it is copied into a new local.
+  # every resume, until it is copied into a new local. An if, cond or case
+  # that gives an array (branch_val/3), or a callee returning its argument
+  # unwritten, leaves an input's view in a temporary instead: that local is
+  # re-bound at a resume too (resume_block/3), and the arms' buffers are one
+  # alias class (merge_bufs/1).
   #
   # Liveness is per block, by name: a binding is live after a statement if
   # its name is read later in the block before being bound again (live_after/1),
@@ -1283,8 +1286,30 @@ defmodule Defk.Compiler do
 
   # another live binding may see array a's buffer
   defp shared?(a, live) do
-    buf = a[:buf]
-    buf != nil and Enum.any?(live, fn {id, b} -> b == buf and id != a[:id] end)
+    buf = alias_class(a[:buf])
+    buf != nil and Enum.any?(live, fn {id, b} -> alias_class(b) == buf and id != a[:id] end)
+  end
+
+  # Buffers that may be one buffer (defk-gqk). The array an if, cond or case
+  # gives is one of its arms' arrays, which the compiler can't tell apart, so
+  # their buffers are merged into one alias class, and bindings of any of
+  # them may share a buffer from then on (flow-insensitively, for the rest of
+  # the kernel: conservative, it may copy where it need not). :defk_alias
+  # maps a merged buffer to its class; a buffer not in it is its own class.
+  defp alias_class(nil), do: nil
+  defp alias_class(buf), do: Map.get(Process.get(:defk_alias, %{}), buf, buf)
+
+  defp same_buf?(a, b), do: a != nil and alias_class(a) == alias_class(b)
+
+  # one alias class for buffers `bufs` (nil for an array of no binding's,
+  # such as alloc/2's): returns it, a new buffer for the merged value
+  defp merge_bufs(bufs) do
+    new = make_ref()
+    classes = for b <- bufs, b != nil, uniq: true, do: alias_class(b)
+    m = Process.get(:defk_alias, %{})
+    m = Map.new(m, fn {b, c} -> {b, if(c in classes, do: new, else: c)} end)
+    Process.put(:defk_alias, Enum.reduce(classes, m, &Map.put(&2, &1, new)))
+    new
   end
 
   # Before statement `e` of a block, `live` the names read after it: copy
@@ -1467,20 +1492,18 @@ defmodule Defk.Compiler do
     |> writes_in(MapSet.new())
     |> Enum.uniq()
     |> Enum.reduce({[], env}, fn n, {acc, env} ->
-      case env.vars do
-        %{^n => %{buf: ^buf} = b} ->
-          note(
-            :copy,
-            loop,
-            :copied,
-            "#{n} is copied before the loop, which walks its buffer while writing it"
-          )
+      with %{^n => %{buf: b_buf} = b} <- env.vars, true <- same_buf?(b_buf, buf) do
+        note(
+          :copy,
+          loop,
+          :copied,
+          "#{n} is copied before the loop, which walks its buffer while writing it"
+        )
 
-          {s, env} = copy_var(n, b, env)
-          {[acc, s], env}
-
-        _ ->
-          {acc, env}
+        {s, env} = copy_var(n, b, env)
+        {[acc, s], env}
+      else
+        _ -> {acc, env}
       end
     end)
   end
@@ -2160,17 +2183,7 @@ defmodule Defk.Compiler do
   end
 
   defp branch_type1!(vals, name, node, pos) do
-    of = if pos, do: " as element #{pos} of its tuples", else: ""
-
     case Enum.uniq_by(vals, & &1.t) do
-      [%{t: {:arr, _} = t} | _] ->
-        # no rewrite: what to do instead depends on how the array is used
-        err!(
-          node,
-          "array-in-branch",
-          "this #{name} gives an array (#{fmt(t)})#{of}; arrays from #{name} branches are not supported yet"
-        )
-
       [%{t: t}] ->
         t
 
@@ -2221,9 +2234,10 @@ defmodule Defk.Compiler do
       tuple_arms(arms, vals, name, node, env)
     else
       arms = bits_arms(arms)
-      t = branch_type!(for({_, _, _, _, v} <- arms, v, do: v), name, node)
+      vals = for({_, _, _, _, v} <- arms, v, do: v)
+      t = branch_type!(vals, name, node)
       tmp = fresh(name, t)
-      {lower_branch(arms, [t], [tmp], env, node), val(tmp, t, tmp)}
+      {lower_branch(arms, [t], [tmp], env, node), branch_val(tmp, t, vals)}
     end
   end
 
@@ -2261,9 +2275,43 @@ defmodule Defk.Compiler do
       end)
 
     tmps = Enum.map(ts, &fresh(name, &1))
-    elems = Enum.zip_with(tmps, ts, &val(&1, &2, &1))
+
+    elems =
+      Enum.with_index(Enum.zip(tmps, ts), fn {tmp, t}, i ->
+        branch_val(tmp, t, for({_, _, _, _, v} <- arms, v, do: Enum.at(v.elems, i)))
+      end)
+
     {lower_branch(arms, ts, tmps, env, node), %{t: {:tuple, ts}, elems: elems}}
   end
+
+  # The value of an if, cond or case in temporary `tmp` of type `t`, its arms
+  # giving `vals`. An array (defk-gqk) is any of the arms' arrays: owned when
+  # every arm's is, its buffer may be any of theirs (merge_bufs/1), and it
+  # keeps the facts all of them have. An input array is not copied: the
+  # temporary holds the caller's view, re-bound after a resume like a
+  # parameter (resume_block/3), and a write to it copies it first.
+  defp branch_val(tmp, {:arr, _} = t, vals) do
+    bufs = for v <- vals, do: v[:buf]
+    buf = merge_bufs(bufs)
+
+    # a buffer every arm's array holds is carried into the value's (for
+    # write-not-returned); one only some arms hold may be lost
+    for b <- Enum.uniq(bufs), b != nil, Enum.all?(bufs, &carries?(&1, b)), do: carried(buf, b)
+
+    lens = for v <- vals, do: v[:len_lo]
+
+    # every arm `<<>>`: still a bitstring accumulator's start (bits_init/2)
+    bits0 = if Enum.all?(vals, &(&1[:bits0] == true)), do: %{bits0: true}, else: %{}
+
+    Map.merge(%{val(tmp, t, tmp) | owned: Enum.all?(vals, & &1.owned)}, %{
+      buf: buf,
+      fin: Enum.all?(vals, &(&1[:fin] == true)),
+      len_lo: if(Enum.all?(lens, &is_integer/1), do: Enum.min(lens))
+    })
+    |> Map.merge(bits0)
+  end
+
+  defp branch_val(tmp, t, _vals), do: val(tmp, t, tmp)
 
   # the code that assigns each of `tmps` (of types `ts`) its element of the
   # value of the arm taken; `node` is the if, cond or case
@@ -3026,7 +3074,8 @@ defmodule Defk.Compiler do
     {ss, results} =
       Enum.map(rets, fn {{c, t}, v} ->
         tmp = fresh("#{k.name}_ret", t)
-        r = %{val(tmp, t, tmp) | owned: true}
+        # an array the callee returns unwritten is still the argument's
+        r = %{val(tmp, t, tmp) | owned: not match?({:arr, _}, t) or v.owned}
 
         r =
           if match?({:arr, _}, t),
@@ -4621,7 +4670,7 @@ defmodule Defk.Compiler do
   # earlier accumulators') may share its buffer
   defp loop_owned(v, seen) do
     {:arr, e} = v.t
-    copy? = not v.owned or (v[:buf] != nil and v.buf in seen)
+    copy? = not v.owned or Enum.any?(seen, &same_buf?(v[:buf], &1))
     c = if copy?, do: "defk_copy_#{e}(ctx, #{v.c})", else: v.c
     {c, if(v[:buf], do: MapSet.put(seen, v.buf), else: seen)}
   end
@@ -5498,7 +5547,7 @@ defmodule Defk.Compiler do
       bind_params(k, arrays),
       resume_block(yields?, k, saves),
       decode_params(scalars),
-      sp_macro(yields?, saves),
+      sp_macro(yields?, k, saves),
       stmts,
       "*result = #{emit_result(k)};\nreturn DEFK_DONE;\n",
       @undef_macros,
@@ -5590,13 +5639,22 @@ defmodule Defk.Compiler do
     end)
   end
 
-  # each safepoint restores what it spilled
+  # Each safepoint restores what it spilled. An array local may hold an input
+  # array's view (an array from a branch, an unwritten array a callee
+  # returns, a loop's walk over an input; defk-gqk), and the binary may have
+  # moved in a GC since the yield: a local whose data was an input's at the
+  # yield (the input as the safepoint saved it, F->p_x) takes that input's
+  # new data, bound above. A view of no input (an owned buffer, a binary
+  # literal) never moves. Inputs, owned buffers and literals are distinct
+  # memory while the kernel runs, so a non-empty view is one of them; an
+  # empty one is never read.
   defp resume_block(yields?, k, saves) do
     if yields? do
       [
         "if (defk_rs) {\nswitch (defk_rs) {\n",
         Enum.map(saves, fn {n, saved} ->
-          ["case #{n}:\n", Enum.map(saved, &"#{&1} = F->#{&1};\n"), "break;\n"]
+          rebinds = Enum.map(input_aliases(k, saved), &rebind_view/1)
+          ["case #{n}:\n", Enum.map(saved, &"#{&1} = F->#{&1};\n"), rebinds, "break;\n"]
         end),
         "}\nswitch (defk_rs) {\n",
         resume_cases(k.sps, []),
@@ -5613,10 +5671,34 @@ defmodule Defk.Compiler do
     end)
   end
 
-  defp sp_macro(yields?, saves) do
+  # local `c` that was a view of one of inputs `ps` at the yield takes its
+  # new data (else-if: a new address may equal another input's old one)
+  defp rebind_view({c, ps}) do
+    Enum.map_join(ps, "else ", fn p ->
+      "if (F->#{p}.len > 0 && #{c}.data == F->#{p}.data) #{c}.data = #{p}.data;\n"
+    end)
+  end
+
+  # [{local, input parameters}] for the array locals among `saved` and the
+  # array parameters of their type, which they may be a view of at a yield
+  defp input_aliases(k, saved) do
+    types = Map.new(k.decls)
+
+    inputs =
+      for {p, {:arr, _} = t} <- k.params, do: {"p_#{sanitize(p)}", ctype(t)}
+
+    for c <- saved,
+        t = types[c],
+        ps = for({p, ^t} <- inputs, do: p),
+        ps != [],
+        do: {c, ps}
+  end
+
+  defp sp_macro(yields?, k, saves) do
     if yields? do
       Enum.map_join(saves, fn {n, saved} ->
-        "#define DEFK_SAVE#{n} #{Enum.map(saved, &"F->#{&1} = #{&1}; ")}\n"
+        inputs = k |> input_aliases(saved) |> Enum.flat_map(&elem(&1, 1)) |> Enum.uniq()
+        "#define DEFK_SAVE#{n} #{Enum.map(saved ++ inputs, &"F->#{&1} = #{&1}; ")}\n"
       end) <>
         "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { if (DEFK_UNLIKELY(F->resume)) { defk_lost_resume(ctx, F->resume, N); return DEFK_ERR; } DEFK_SAVE##N F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
         "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n#define DEFK_RESUMING DEFK_UNLIKELY(defk_rs)\n"
@@ -5625,21 +5707,44 @@ defmodule Defk.Compiler do
     end
   end
 
+  # the kernel's result term; each element is {c, type, term}
   defp emit_result(k) do
-    case k.ret_vals do
-      [{c, t}] ->
-        to_term(c, t)
+    views = Map.get(k, :ret_views, Enum.map(k.ret_vals, fn _ -> false end))
+
+    terms =
+      Enum.zip_with(k.ret_vals, views, fn {c, t}, view? ->
+        {c, t, if(view?, do: view_term(c, t, k), else: to_term(c, t))}
+      end)
+
+    case terms do
+      [{_, _, term}] ->
+        term
 
       many ->
-        if Enum.count(many, &match?({_, {:arr, _}}, &1)) < 2,
+        if Enum.count(many, &match?({_, {:arr, _}, _}, &1)) < 2,
           do: plain_tuple(many),
           else: shared_tuple(many)
     end
   end
 
+  # An array the kernel may not own (defk-gqk): the caller's own binary when
+  # it is an input array of the same type, the same data and length (so an
+  # unwritten input is returned as it came, no copy); else an owned buffer
+  # handed over, or a binary literal's bytes in a new binary
+  # (defk_make_arr_view).
+  defp view_term(c, {:arr, _} = t, k) do
+    inputs =
+      for {{p, ^t}, i} <- Enum.with_index(k.params) do
+        sp = "p_#{sanitize(p)}"
+        "(#{c}).data == #{sp}.data && (#{c}).len == #{sp}.len ? argv[#{i}] : "
+      end
+
+    "(#{inputs}defk_make_arr_view(env, ctx, (#{c}).data, (size_t)(#{c}).len * sizeof(*(#{c}).data)))"
+  end
+
   defp plain_tuple(many),
     do:
-      "enif_make_tuple(env, #{length(many)}#{Enum.map(many, fn {c, t} -> ", " <> to_term(c, t) end)})"
+      "enif_make_tuple(env, #{length(many)}#{Enum.map(many, fn {_, _, term} -> ", " <> term end)})"
 
   defp shared_tuple(many) do
     # two elements may be one buffer (`{a, b}` after `b = a`): its binary
@@ -5647,18 +5752,18 @@ defmodule Defk.Compiler do
     {decls, _} =
       many
       |> Enum.with_index()
-      |> Enum.map_reduce([], fn {{c, t}, i}, arrays ->
+      |> Enum.map_reduce([], fn {{c, t, term}, i}, arrays ->
         r = "defk_r#{i}"
 
         if match?({:arr, _}, t) do
           term =
-            Enum.reduce(arrays, to_term(c, t), fn {pc, pr}, rest ->
-              "(#{c}).data == (#{pc}).data ? #{pr} : #{rest}"
+            Enum.reduce(arrays, term, fn {pc, pr}, rest ->
+              "(#{c}).data == (#{pc}).data && (#{c}).len == (#{pc}).len ? #{pr} : #{rest}"
             end)
 
           {"ERL_NIF_TERM #{r} = #{term}; ", [{c, r} | arrays]}
         else
-          {"ERL_NIF_TERM #{r} = #{to_term(c, t)}; ", arrays}
+          {"ERL_NIF_TERM #{r} = #{term}; ", arrays}
         end
       end)
 
