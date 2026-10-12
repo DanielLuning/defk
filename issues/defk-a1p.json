@@ -5,10 +5,12 @@
   "created": "2026-10-12T09:52:02Z",
   "description": "Why: every number in docs/performance.md is macOS on arm64 ('Linux (every number here is macOS on arm64)'), and the test suite has only been run there: the repo has no CI. Linux has been exercised once, by defk-ds0 (a mix release build in a stock Debian image). defk-dtw.11's resolution puts 'cross-compiling and untested architectures unverified' under the verdict's Limitations; that is honest, but a Linux run would shrink the limitation for the platform most Elixir apps deploy to. Things that could differ: gcc vs clang (the build allows CC), glibc libm vs Apple libm (the one rule needs bit-exact float results; see defk-6g6, sincos fusion), x86-64 vectorisation and the fast-path report's clang remarks (gcc has none), sigsetjmp, and dlopen/library reloading in the hot-upgrade tests.\n\nScope:\n1. Run mix ci (or mix test plus the docs checks) on Linux x86-64 and aarch64 with clang, and on x86-64 with gcc; fix or ticket each failure. Decide where it runs (GitHub Actions on the repo, or a documented local Docker recipe); this choice is the maintainer's.\n2. One examples/run_all.exs run on Linux x86-64, recorded in docs/performance.md as its own conditions block (provisional if not a quiet machine), with verdicts that differ from macOS called out.\n3. Note in the guides what is supported (compilers, OSes) and what is untested.\n\nDone when: the suite passes on the listed Linux targets (or each failure has a ticket), the run is repeatable from a recipe in the repo, the Linux run_all results are recorded, and the verdict's Limitations line can name what was and wasn't checked.",
   "id": "defk-a1p",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 3,
   "status": "open",
   "title": "Run the test suite on Linux (x86-64 and aarch64) and record one Linux measurement run",
   "type": "task",
-  "updated_at": "2026-10-12T09:52:02Z"
+  "updated_at": "2026-10-12T09:52:04Z"
 }
