@@ -13,9 +13,15 @@
     "needs-triage"
   ],
   "parent": "defk-n4r",
+  "comments": [
+    {
+      "text": "Note from defk-gqk (merged 2026-10-12): an array local that holds an input view (from a branch) is re-bound on resume by exact data-pointer match against the inputs as saved at the yield (resume_block/3, priv/defk_runtime.h). That relies on there being no sub-array views: a slice must be re-bound by offset from its input (store input index + offset, or match by range), and returning a slice must not be mistaken for returning the input (view_term/3 matches data and length).",
+      "timestamp": "2026-10-12T10:13:34Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Sub-array views: slice(a, start, len) as a zero-copy [T] value",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:54Z"
+  "updated_at": "2026-10-12T10:13:34Z"
 }
