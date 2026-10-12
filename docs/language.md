@@ -2084,8 +2084,9 @@ compile error when the module compiles. Every rejection in the module is
 reported in one `CompileError` (up to 10 shown, the rest counted), without
 the errors an earlier one causes. A `for` rejected for being used as a
 value is still checked inside: errors in its generators and body are reported
-with it. Other rejected constructs (a `for` with `into:` too) are not looked into, so errors inside them appear on the next
-compile, once they are rewritten. Each is printed in Elixir's diagnostic
+with it. Other rejected constructs (a `for` with `into:` too) are not looked
+into, so errors inside them appear on the next compile, once they are
+rewritten. Each is printed in Elixir's diagnostic
 frame, then why it is rejected, a hint (with a rewrite from your own code
 where the compiler has one, which compiles where it is shown), and its stable
 code, with a link to the code's entry in the [compile errors](compile-errors.md)
