@@ -128,54 +128,53 @@ defmodule Defk.CopiesTest do
   end
 
   describe "the tracking state (alias classes, carrying, the writes log)" do
-    setup do
-      Copies.reset()
-      :ok
-    end
+    # Defk.Copies is pure: state in, state out (the compiler keeps the
+    # current state as one field of its lowering ctx)
 
     test "merge_bufs makes the arms' buffers one class, transitively" do
       [b1, b2, b3] = [make_ref(), make_ref(), make_ref()]
-      merged = Copies.merge_bufs([b1, b2])
+      {merged, st} = Copies.merge_bufs(Copies.new(), [b1, b2])
 
-      assert Copies.same_buf?(b1, b2)
-      assert Copies.same_buf?(b1, merged)
-      refute Copies.same_buf?(b1, b3)
+      assert Copies.same_buf?(st, b1, b2)
+      assert Copies.same_buf?(st, b1, merged)
+      refute Copies.same_buf?(st, b1, b3)
 
       # merging a class with a third buffer carries the earlier members along
-      Copies.merge_bufs([b2, b3])
-      assert Copies.same_buf?(b1, b3)
+      {_, st} = Copies.merge_bufs(st, [b2, b3])
+      assert Copies.same_buf?(st, b1, b3)
     end
 
     test "shared?: another live binding of the same class, and only another" do
       [buf, id, other] = [make_ref(), make_ref(), make_ref()]
       a = %{buf: buf, id: id}
+      st = Copies.new()
 
-      refute Copies.shared?(a, MapSet.new([{id, buf}]))
-      assert Copies.shared?(a, MapSet.new([{other, buf}]))
-      refute Copies.shared?(a, MapSet.new([{other, make_ref()}]))
+      refute Copies.shared?(st, a, MapSet.new([{id, buf}]))
+      assert Copies.shared?(st, a, MapSet.new([{other, buf}]))
+      refute Copies.shared?(st, a, MapSet.new([{other, make_ref()}]))
     end
 
     test "carried buffers carry transitively until cut" do
       [b1, b2, b3] = [make_ref(), make_ref(), make_ref()]
-      assert Copies.carried(b2, b1) == b2
-      Copies.carried(b3, b2)
+      {^b2, st} = Copies.carried(Copies.new(), b2, b1)
+      {^b3, st} = Copies.carried(st, b3, b2)
 
-      assert Copies.carries?(b3, b1)
-      Copies.cut_carry(b3)
-      refute Copies.carries?(b3, b1)
-      assert Copies.carries?(b2, b1)
+      assert Copies.carries?(st, b3, b1)
+      st = Copies.cut_carry(st, b3)
+      refute Copies.carries?(st, b3, b1)
+      assert Copies.carries?(st, b2, b1)
     end
 
     test "the writes log swaps around an inlined callee" do
       [id, buf] = [make_ref(), make_ref()]
-      Copies.record_write(id, buf, :w1)
+      st = Copies.record_write(Copies.new(), id, buf, :w1)
 
-      outer = Copies.swap_writes([])
-      Copies.record_write(id, buf, :w2)
-      assert [{^id, ^buf, :w2}] = Copies.writes()
+      {outer, st} = Copies.swap_writes(st, [])
+      st = Copies.record_write(st, id, buf, :w2)
+      assert [{^id, ^buf, :w2}] = Copies.writes(st)
 
-      Copies.swap_writes(outer)
-      assert [{^id, ^buf, :w1}] = Copies.writes()
+      {_, st} = Copies.swap_writes(st, outer)
+      assert [{^id, ^buf, :w1}] = Copies.writes(st)
     end
   end
 end
