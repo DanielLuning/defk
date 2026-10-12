@@ -2,13 +2,14 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-12T19:32:40Z",
   "created": "2026-10-12T13:49:40Z",
   "description": "The Errors half of defk-euu, split out per grilling 2026-10-12. Three-way cut along the call-graph evidence (not the ticket's original two-way cut): Defk.Errors keeps the registry + public facade (codes/explain!/reference/scope, ADR-0006 surface unchanged); extract Defk.Errors.Diagnostics (locate/span/render/compile_error, L1044-1264 - shares only footer/1 with the registry) and Defk.Errors.Rewrites (unsupported/unsupported_local, the call_rejection table, fill/collect_rewrites, L1268-1879). Both hidden. Pure file moves - the six-function consumed interface already exists. Codes stay strings (user-visible currency in docs/explain!/footers) but err! validates the code against the registry at compile time, so a typo fails mix compile. Tests: locate/span units on pathological source; rewrite property (every suggestion parses and uses only kernel-subset forms); compile_rewrites_test stays as e2e net. Generated-docs flow untouched (registry does not move). Can land opportunistically - no dependency on the ctx work.",
   "id": "defk-vlf",
   "labels": [],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Split Defk.Errors three ways: registry, diagnostics, rewrites (defk-euu part 2)",
   "type": "task",
-  "updated_at": "2026-10-12T19:17:08Z"
+  "updated_at": "2026-10-12T19:32:40Z"
 }
