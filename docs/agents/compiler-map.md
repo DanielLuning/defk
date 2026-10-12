@@ -2,13 +2,12 @@
 
 Where things live, so you open the right file at the right place instead of
 reading 9,000 lines. Function names are stable; line numbers are not, so
-navigate by grep. `sb map/digest/show/implements` work on Elixir (if `sb map
+navigate by grep. `sb map/digest/show/implements/search/deps/reverse-deps`
+work on Elixir, and kernels defined with `defk` appear in maps (if `sb map
 lib/defk.ex` says "0 parseable file(s)", the machine has the upstream
-ast-bro without the Elixir adapter: fall back to grep). `sb` does not see
-call graphs or macro-generated definitions — kernels defined with `defk` are
-invisible to it — so for callers/deps questions use
-`mix xref callers <Module>` (module granularity) and
-`mix xref graph --sink <file>`, and grep for kernels.
+ast-bro without the Elixir adapter: fall back to grep and `mix xref`).
+`sb callers`/`callees` do not work for Elixir: for call questions use
+`mix xref callers <Module>` (module granularity).
 
 ## The flow of one kernel
 
