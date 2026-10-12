@@ -15,7 +15,15 @@ defmodule Defk.BenchTest do
   defp spin(ms), do: fn -> Process.sleep(ms) end
 
   defp report(opts) do
-    base = [name: "t", expected: :good, elixir: spin(8), defk: spin(1), runs: 1]
+    base = [
+      name: "t",
+      expected: :good,
+      elixir: spin(8),
+      defk: spin(1),
+      check: fn -> true end,
+      runs: 1
+    ]
+
     parent = self()
 
     out =
@@ -155,6 +163,55 @@ defmodule Defk.BenchTest do
     assert r.verdict in [:good, :marginal, :poor]
     assert json["verdict"] == Atom.to_string(r.verdict)
     assert is_number(json["speedup"]) and is_number(json["elixir_ms"])
+  end
+
+  test ":check is required when :defk is given, before anything is timed" do
+    assert_raise ArgumentError, ~r/:check is required when :defk is given/, fn ->
+      Bench.report(name: "t", expected: :good, elixir: spin(1), defk: spin(1), runs: 1)
+    end
+  end
+
+  test ":check must be a zero-arity fun or :none" do
+    assert_raise ArgumentError, ~r/zero-arity fun or :none/, fn -> report(check: true) end
+  end
+
+  test "check: :none needs a :reason" do
+    assert_raise ArgumentError, ~r/needs a :reason/, fn -> report(check: :none) end
+  end
+
+  test "check: :none with a reason reports correct as skipped" do
+    {r, out, json} = report(check: :none, reason: "no independent oracle for this output")
+    assert r.correct == :skipped
+    assert json["correct"] == "skipped"
+    assert json["reason"] == "no independent oracle for this output"
+    assert out =~ "correct    skipped (no independent oracle for this output)"
+    # the reason sits on the correct line, not on a second why line
+    refute out =~ "why"
+  end
+
+  test "a failing check reports correct: false" do
+    {r, out, json} = report(check: fn -> false end)
+    assert r.correct == false
+    assert json["correct"] == false
+    assert out =~ "correct    false"
+  end
+
+  test "an example without :defk needs no :check" do
+    out =
+      capture_io(fn ->
+        r =
+          Bench.report(
+            name: "t",
+            expected: :out_of_scope,
+            elixir: spin(1),
+            reason: "no kernel",
+            runs: 1
+          )
+
+        assert r.verdict == :out_of_scope and r.correct == true
+      end)
+
+    assert out =~ "correct    true"
   end
 
   test "compare is the arithmetic on fixed times" do

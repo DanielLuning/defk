@@ -11,6 +11,8 @@
 # Exits 1 if any example is incorrect, crashes, or measures a verdict that
 # differs from the one it claims. A `good` verdict whose Elixir baseline is
 # not yet optimised is reported as provisional (it does not fail the run).
+# An example that opted out of its agreement check (`check: :none`) does not
+# fail the run either, but every skipped entry is listed with its reason.
 
 dir = __DIR__
 snapshot? = "--snapshot" in System.argv()
@@ -126,7 +128,7 @@ IO.puts(
 bad =
   for r <- results, reduce: 0 do
     acc ->
-      ok = r["correct"] == true and r["verdict"] == r["expected"]
+      ok = r["correct"] in [true, "skipped"] and r["verdict"] == r["expected"]
 
       IO.puts(
         pad.(r["example"], 26) <>
@@ -153,6 +155,15 @@ if provisional != [] do
   IO.puts(
     "#{length(provisional)} 'good' claim(s) are provisional: the Elixir baseline is not optimised yet " <>
       "(#{Enum.map_join(provisional, ", ", & &1["example"])})"
+  )
+end
+
+skipped = Enum.filter(results, &(&1["correct"] == "skipped"))
+
+if skipped != [] do
+  IO.puts(
+    "#{length(skipped)} example(s) skip the agreement check:\n" <>
+      Enum.map_join(skipped, "\n", &"  #{&1["example"]}: #{&1["reason"]}")
   )
 end
 
