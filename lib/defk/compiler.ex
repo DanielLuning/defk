@@ -19,8 +19,24 @@ defmodule Defk.Compiler do
   @elems [:f64, :i64, :u64, :u8, :i16, :i32, :f32]
   @elems_text "f64, f32, i64, i32, i16, u8 and u64"
   @ints [:i64, :u64]
+  alias Defk.Compiler.Ctx
   alias Defk.Copies
   alias Defk.Facts
+
+  # the one process-dictionary key (defk-euu): see Defk.Compiler.Ctx
+  @ctx :defk_ctx
+
+  defp ctx, do: Process.get(@ctx)
+  defp ctx(key), do: Map.fetch!(ctx(), key)
+  defp ctx_put(key, value), do: Process.put(@ctx, Map.put(ctx(), key, value))
+  defp ctx_update(key, fun), do: Process.put(@ctx, Map.update!(ctx(), key, fun))
+
+  # the whole-ctx snapshot: probing and backtracking restore one value
+  defp ctx_swap(new) do
+    old = ctx()
+    Process.put(@ctx, new)
+    old
+  end
 
   @max_u64 0xFFFFFFFFFFFFFFFF
   @max_i64 0x7FFFFFFFFFFFFFFF
@@ -50,13 +66,7 @@ defmodule Defk.Compiler do
   #       max_owned - the byte budget of a call's owned buffers (DEFK_MAX_OWNED
   #         in priv/defk_runtime.h; default nil: half of physical memory)
   def compile(module, raw_kernels, file, opts \\ []) do
-    Process.put(:defk_file, file)
-    Process.put(:defk_module, module)
-    Process.put(:defk_lines, source_lines(file))
-    Process.put(:defk_diags, [])
-    Process.put(:defk_broken, MapSet.new())
-    Process.put(:defk_statics, %{})
-    Process.put(:defk_report, [])
+    Process.put(@ctx, Ctx.new(file, module, source_lines(file)))
 
     kernels =
       raw_kernels
@@ -119,7 +129,7 @@ defmodule Defk.Compiler do
         end
       end)
 
-    case Process.get(:defk_diags) do
+    case ctx(:diags) do
       [] -> :ok
       diags -> raise Defk.Errors.compile_error(module, file, diags)
     end
@@ -239,15 +249,15 @@ defmodule Defk.Compiler do
   @spec err!(term(), term(), term(), keyword()) :: no_return()
   defp err!(node, code, what, opts \\ []) do
     {line, col, width, text} =
-      Defk.Errors.locate(node, Process.get(:defk_ctx), Process.get(:defk_lines))
+      Defk.Errors.locate(node, ctx(:where), ctx(:lines))
 
     d =
       Map.merge(Map.new(opts), %{
         code: code,
         what: what,
-        file: Process.get(:defk_file),
-        module: Process.get(:defk_module),
-        fun: Process.get(:defk_fun),
+        file: ctx(:file),
+        module: ctx(:module),
+        fun: ctx(:fun),
         line: line,
         col: col,
         width: width,
@@ -258,8 +268,8 @@ defmodule Defk.Compiler do
   end
 
   defp record(d) do
-    diags = Process.get(:defk_diags)
-    unless Enum.any?(diags, &(&1.key == d.key)), do: Process.put(:defk_diags, [d | diags])
+    diags = ctx(:diags)
+    unless Enum.any?(diags, &(&1.key == d.key)), do: ctx_put(:diags, [d | diags])
   end
 
   # Run `fun` as kernel `key` ({name, arity}, or nil for a head that has
@@ -268,8 +278,8 @@ defmodule Defk.Compiler do
   # rejections are caught; any other exception is a compiler bug and
   # propagates with its stacktrace, whatever was rejected before it.
   defp attempt(key, head, fun) do
-    Process.put(:defk_fun, key)
-    Process.put(:defk_ctx, head)
+    ctx_put(:fun, key)
+    ctx_put(:where, head)
     {:ok, fun.()}
   catch
     {:defk_reject, d} ->
@@ -285,8 +295,8 @@ defmodule Defk.Compiler do
   # which Dialyzer would flag as a no-return anonymous function.
   # opts: `at:` the node to report at (default: the head), and err!/4's
   defp attempt_err!(key, head, code, what, opts \\ []) do
-    Process.put(:defk_fun, key)
-    Process.put(:defk_ctx, head)
+    ctx_put(:fun, key)
+    ctx_put(:where, head)
     {at, opts} = Keyword.pop(opts, :at)
 
     try do
@@ -334,16 +344,16 @@ defmodule Defk.Compiler do
   # {:ok, result} of `fun`, or :error if it rejected anything; its rejections
   # are not recorded.
   defp probe(fun) do
-    diags = Process.put(:defk_diags, [])
+    snap = ctx_swap(%{ctx() | diags: []})
 
     try do
       result = fun.()
-      if Process.get(:defk_diags) == [], do: {:ok, result}, else: :error
+      if ctx(:diags) == [], do: {:ok, result}, else: :error
     catch
       {:defk_reject, _} -> :error
       :defk_poison -> :error
     after
-      Process.put(:defk_diags, diags)
+      ctx_swap(snap)
     end
   end
 
@@ -378,7 +388,7 @@ defmodule Defk.Compiler do
   defp broken(nil), do: []
 
   defp broken(key) do
-    Process.put(:defk_broken, MapSet.put(Process.get(:defk_broken), key))
+    ctx_update(:broken, &MapSet.put(&1, key))
     []
   end
 
@@ -733,7 +743,7 @@ defmodule Defk.Compiler do
 
   defp exprs({:__block__, _, []} = b) do
     err!(
-      if(positioned?(b), do: b, else: Process.get(:defk_ctx)),
+      if(positioned?(b), do: b, else: ctx(:where)),
       "empty-block",
       "this block is empty"
     )
@@ -833,12 +843,13 @@ defmodule Defk.Compiler do
   # run `fun` with `e` as the statement that literals inside it are located in
   defp in_ctx(e, fun) do
     if positioned?(e) do
-      prev = Process.put(:defk_ctx, e)
+      prev = ctx(:where)
+      ctx_put(:where, e)
 
       try do
         fun.()
       after
-        Process.put(:defk_ctx, prev)
+        ctx_put(:where, prev)
       end
     else
       fun.()
@@ -2785,7 +2796,7 @@ defmodule Defk.Compiler do
 
       nil ->
         cond do
-          {name, arity} in Process.get(:defk_broken) -> throw(:defk_poison)
+          {name, arity} in ctx(:broken) -> throw(:defk_poison)
           Defk.Builtins.builtin?(name) -> builtin_arguments!(name, vals, node)
           true -> unknown_function!(name, vals, node, env)
         end
@@ -3004,16 +3015,16 @@ defmodule Defk.Compiler do
   end
 
   defp in_kernel(k, fun) do
-    prev = {Process.get(:defk_fun), Process.get(:defk_ctx)}
-    Process.put(:defk_fun, {k.name, k.arity})
-    Process.put(:defk_ctx, k.head)
+    prev = {ctx(:fun), ctx(:where)}
+    ctx_put(:fun, {k.name, k.arity})
+    ctx_put(:where, k.head)
 
     try do
       fun.()
     after
       {f, c} = prev
-      Process.put(:defk_fun, f)
-      Process.put(:defk_ctx, c)
+      ctx_put(:fun, f)
+      ctx_put(:where, c)
     end
   end
 
@@ -3441,7 +3452,7 @@ defmodule Defk.Compiler do
 
   # the names the current kernel appends to (Defk.Bitstring.accumulator_names/1)
   defp bits_names,
-    do: Map.get(Process.get(:defk_bits_names, %{}), Process.get(:defk_fun), MapSet.new())
+    do: Map.get(Process.get(:defk_bits_names, %{}), ctx(:fun), MapSet.new())
 
   # the initial value `v` of accumulator pattern `p`
   defp bits_init({n, _, ctx}, %{bits0: true} = v) when is_atom(n) and is_atom(ctx),
@@ -4850,7 +4861,7 @@ defmodule Defk.Compiler do
   defp no_clause({:case, m, _}, t, c) do
     case m[:defk_clauses] do
       {name, arity} ->
-        mod = Atom.to_string(Process.get(:defk_module))
+        mod = Atom.to_string(ctx(:module))
         str = Defk.Raise.c_string(mod <> <<0>> <> Atom.to_string(name))
         "defk_no_fun_clause(ctx, #{str}, #{byte_size(mod)}, #{arity});\n"
 
@@ -5594,7 +5605,7 @@ defmodule Defk.Compiler do
   # of the contents (defk-qx3), however often a use site is inlined.
   defp static_u8(b) do
     name = "defk_lit_" <> Base.encode16(binary_part(:crypto.hash(:sha256, b), 0, 8), case: :lower)
-    Process.put(:defk_statics, Map.put(Process.get(:defk_statics), name, b))
+    ctx_update(:statics, &Map.put(&1, name, b))
     view = "((defk_arr_u8){(uint8_t *)#{name}, #{byte_size(b)}})"
     Facts.assert(Map.merge(val(view, {:arr, :u8}), %{buf: make_ref()}), len_lo: byte_size(b))
   end
@@ -5602,7 +5613,7 @@ defmodule Defk.Compiler do
   # The declarations of the static arrays `body` uses (a speculative lowering
   # may have registered others), in name order, ahead of every function.
   defp emit_statics(body) do
-    for {name, b} <- Enum.sort(Process.get(:defk_statics)), String.contains?(body, name) do
+    for {name, b} <- Enum.sort(ctx(:statics)), String.contains?(body, name) do
       "static const uint8_t #{name}[] =\n#{c_bytes(b)};\n\n"
     end
   end
@@ -5922,7 +5933,7 @@ defmodule Defk.Compiler do
   # the fast-path report: one of compile/4's results, never read back by
   # the lowering (a note cannot change a kernel)
   defp report do
-    notes = :defk_report |> Process.get([]) |> Enum.reverse() |> Enum.uniq()
+    notes = ctx(:report) |> Enum.reverse() |> Enum.uniq()
     order = notes |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
     groups = Enum.group_by(notes, &elem(&1, 0))
     Enum.flat_map(order, fn k -> Enum.sort_by(groups[k], &(elem(&1, 1) || 0)) end)
@@ -5931,7 +5942,7 @@ defmodule Defk.Compiler do
   defp note(topic, at, verdict, text) do
     {kernel, _yield?} = Process.get(:defk_report_kernel)
     n = {kernel, note_line(at), {topic, verdict, text}}
-    Process.put(:defk_report, [n | Process.get(:defk_report, [])])
+    ctx_update(:report, &[n | &1])
     note_per_iteration(topic, at)
   end
 
