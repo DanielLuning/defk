@@ -104,7 +104,9 @@ defmodule Defk.Properties do
     quote do
       property unquote(name) do
         check all(args <- unquote(args), max_runs: unquote(Keyword.get(opts, :max_runs, @runs))) do
-          Defk.Test.assert_agrees(unquote(mod), unquote(fun), args)
+          # forced yields by default: every agreement property covers every
+          # resume path, instead of only where someone wrote the ceremony
+          Defk.Test.assert_agrees(unquote(mod), unquote(fun), args, forced_yields: true)
         end
       end
 
@@ -114,7 +116,7 @@ defmodule Defk.Properties do
                 args <- unquote(Keyword.get(deep, :args, args)),
                 max_runs: unquote(Keyword.get(deep, :max_runs, @deep_runs))
               ) do
-          Defk.Test.assert_agrees(unquote(mod), unquote(fun), args)
+          Defk.Test.assert_agrees(unquote(mod), unquote(fun), args, forced_yields: true)
         end
       end
 
