@@ -30,7 +30,7 @@ defmodule Defk.MixProject do
 
   def cli do
     [
-      preferred_envs: [ci: :test]
+      preferred_envs: [ci: :test, dump_c: :test]
     ]
   end
 
@@ -187,6 +187,8 @@ defmodule Defk.MixProject do
   defp aliases() do
     [
       docs: ["docs", &docs_links/1],
+      # the byte-identical gate (defk-mif): DEFK_DUMP_C=<dir> mix dump_c
+      dump_c: ["compile --force", "run scripts/dump_c.exs"],
       ci: [
         "compile --warnings-as-errors",
         "format --check-formatted",
