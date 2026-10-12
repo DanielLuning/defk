@@ -1965,7 +1965,22 @@ iex> M.count_primes(100)
 
 - The call is inlined: the callee's body is compiled into the caller, so its
   loops yield like the caller's own. Code size grows with the number of call
-  sites along each call chain.
+  sites along each call chain: a helper called from two sites of a helper
+  called from three sites is compiled six times, and each kernel called from
+  Elixir has its own copy. A kernel called from Elixir whose generated C
+  passes 80,000 lines gets a compile warning (not an error) at its head,
+  naming the size and the kernels inlined most, each with the chain that
+  copies it most:
+
+  ```text
+  warning: argon2id/6 compiles to 295,722 lines of C (16.0 MB), past the 80,000 at which defk warns: ...
+    * b2b_compress/12 is inlined 14 times (78,148 AST nodes), 12 of them via argon2id/6 -> argon2/9 (1 call site) -> hprime/3 (2 call sites) -> blake2b/3 (3 call sites) -> b2b_compress/12 (2 call sites)
+  ```
+
+  Give each helper one call site: call it from one loop over its inputs, or
+  copy the inputs into a buffer and call it once. The largest kernels in the
+  examples are under 30,000 lines; the threshold and the measurements behind
+  it are [Performance notes](performance.md) 6.26.
 - Arguments are converted like a result: an `i64` widens to an `f64`
   parameter, anything else must match ([`type-mismatch`](compile-errors.md#type-mismatch)).
 - An array argument is passed without a copy. A callee that writes an array
@@ -2151,7 +2166,7 @@ bug.
 | `&&`, `\|\|`, `!` on non-boolean values | truthiness | compile error [`operand-type`](compile-errors.md#operand-type) |
 | recursion, direct or mutual | runs | compile error [`recursion`](compile-errors.md#recursion) |
 | every construct in [What is not an expression](#what-is-not-an-expression) | runs | a compile error with its code |
-| code size: each call to a kernel is inlined | one function | the generated code grows with the number of call sites along each call chain (no error) |
+| code size: each call to a kernel is inlined | one function | the generated code grows with the number of call sites along each call chain; past 80,000 lines of C a kernel called from Elixir gets a compile warning naming the chain (no error) |
 | an array variable bound again inside a loop body and read after the loop | the binding is gone after the loop | compile error [`array-rebind-in-loop`](compile-errors.md#array-rebind-in-loop) |
 | a called kernel writing an array parameter it does not return | the write is lost | compile error [`write-not-returned`](compile-errors.md#write-not-returned) |
 | memory of arrays written in a loop while another variable still reads them | the old binaries are garbage collected | each copy (see [Copies](#copies)) lives until the kernel returns |
