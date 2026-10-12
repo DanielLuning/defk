@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-12T11:32:26Z",
+  "description": "On main (after the defk-6ag merge), MIX_ENV=test mix dialyzer reports 1 error: lib/defk/inline_size.ex:83:17 call_without_opaque. Defk.InlineSize.visit/4 is called with {%MapSet{map: %{}}, []}, a MapSet built from its internals rather than through MapSet.new(), so dialyzer breaks MapSet's opaque type. mix ci stops there, so ex_dna, reach.check and usage_rules.sync --check never run. Found while landing defk-mob.\n\nDone when: MIX_ENV=test mix dialyzer reports 0 errors and mix ci passes on main.",
+  "id": "defk-c9h",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "mix ci fails at dialyzer: call_without_opaque in lib/defk/inline_size.ex:83",
+  "type": "bug",
+  "updated_at": "2026-10-12T11:32:26Z"
+}
