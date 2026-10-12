@@ -1,7 +1,7 @@
 # ADR-0007: Range facts are symbolic bounds over ranked atoms
 
 - Date: 2026-10-12
-- Status: proposed
+- Status: accepted (2026-10-12, maintainer, grilling of defk-2mz)
 - Source: `bw show defk-2mz` (design); the research and walk-throughs are in
   [`docs/research/relational-facts.md`](../research/relational-facts.md).
   Unblocks `defk-pic`, `defk-siy`, `defk-n7k`, `defk-9za`.
@@ -20,7 +20,7 @@ A fact kind per ticket would multiply cases in every place facts are made,
 merged, carried and reported, and difference bounds (`x <= y + c`) leave
 siy and n7k out.
 
-## Decision (proposed)
+## Decision
 
 Replace the fact model with one representation:
 
@@ -39,7 +39,18 @@ Replace the fact model with one representation:
   bounds and non-emptiness, alloc and copy lengths, and conditions: `if`,
   `cond`, `for` filters, `and`, and raising guards (`if c, do: raise ...`).
 - Today's facts are special cases and are migrated, not kept beside the new
-  ones.
+  ones. **Migrate first:** the first step changes no generated C (byte-identical
+  for every test kernel and example) before any new source is added.
+- **Degree 2 is in**, as the last step (n7k, `pcm_mix`), so it can be
+  dropped without touching the linear steps.
+- **Raising guards are the recommended way to state preconditions** on a
+  kernel's arguments (docs/language.md, with the step that adds them as a
+  source); `decode16`'s `alloc(u8, -1)` trick is rewritten as one.
+- **The report names the missing fact** when it is small ("it would follow
+  from w >= 0").
+- **Budgets are measured, not guessed:** the first step sets the prover's
+  step budget and bounds-per-atom cap from the suite and examples, within
+  5% more compiler time (clang not included), on a quiet machine.
 
 ## Consequences
 
