@@ -23,6 +23,12 @@
     "ready-for-human"
   ],
   "parent": "defk-sgw",
+  "comments": [
+    {
+      "text": "Run defk-yzw (README and demo numbers) in the same quiet-machine session; defk-klw (fuzzy_search re-measure) and defk-aok (uncommitted DEFK_EXP instrumentation) now block this ticket.",
+      "timestamp": "2026-10-12T10:12:07Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Freeze the workload-results snapshot on a quiet machine",
