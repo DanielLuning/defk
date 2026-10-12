@@ -81,37 +81,65 @@ defmodule Defk.Facts do
   end
 
   # ------------------------------------------------------------- proving --
+  # The only functions whose answers may drop a check. A proof carries its
+  # support: the C variables of the arrays whose length facts it used, which
+  # the flagged-strip classifier must see (ADR-0007, defk-ch4).
 
   # a value within lo..hi needs no i64 overflow check
-  def in_i64?(lo, hi),
+  def prove_i64(lo, hi),
     do: is_integer(lo) and is_integer(hi) and lo >= @i64_min and hi <= @i64_max
 
   # 0 <= i < len(a); with a width w (a word load), 0 <= i and i + w <= len(a)
-  def in_bounds?(a, i, w \\ 1) do
+  def in_bounds?(a, i, w \\ 1), do: prove_in_bounds(a, i, w) != :unproven
+
+  def prove_in_bounds(a, i, w \\ 1) do
     fa = facts(a)
     fi = facts(i)
     lo = lo_of_f(fi)
     fi = if w == 1, do: fi, else: %{fi | hi: add(fi.hi, w - 1), ub: shift(fi.ub, w - 1)}
     hi = hi_of_f(fi)
 
-    below? =
-      (is_integer(fa.len_lo) and is_integer(hi) and hi < fa.len_lo) or
-        Enum.any?(fi.ub, &below_len?(&1, a.c, fa.len_lb))
+    below =
+      if is_integer(fa.len_lo) and is_integer(hi) and hi < fa.len_lo,
+        do: [a.c],
+        else: Enum.find_value(fi.ub, &below_via(&1, a.c, fa.len_lb))
 
-    is_integer(lo) and lo >= 0 and below?
+    if is_integer(lo) and lo >= 0 and below != nil,
+      do: {:proven, Enum.uniq(below)},
+      else: :unproven
+  end
+
+  # the fact that would drop the check `0 <= i` / `i + w <= len(a)` when
+  # nothing does: the report names it (the perturbations stay in here, where
+  # the representation is)
+  def missing(a, i, w \\ 1) do
+    cond do
+      in_bounds?(a, i, w) -> :none
+      in_bounds?(a, assert(i, lo: max(lo(i) || 0, 0)), w) -> :low
+      in_bounds?(a, assert(i, ub: Map.put(ub(i), a.c, -w)), w) -> :high
+      true -> :both
+    end
   end
 
   # q * i <= p * len(y) + o proves i < len(a): y is a with p <= q and o < 0,
   # or len(a) has a lower bound q1 * len(a) >= p1 * len(y) + d with
-  # p / q <= p1 / q1 and o / q < d / q1
-  defp below_len?({key, o}, arr, len_lb) do
+  # p / q <= p1 / q1 and o / q < d / q1. Gives the proof's support, or nil.
+  defp below_via({key, o}, arr, len_lb) do
     {y, p, q} = scale(key)
 
-    (y == arr and p <= q and o < 0) or
-      Enum.any?(len_lb, fn {key1, d} ->
+    if y == arr and p <= q and o < 0 do
+      [y]
+    else
+      len_lb
+      |> Enum.find(fn {key1, d} ->
         {y1, p1, q1} = scale(key1)
         y1 == y and p * q1 <= p1 * q and o * q1 < d * q
       end)
+      |> case do
+        nil -> nil
+        {_key1, _d} -> [y, arr]
+      end
+    end
   end
 
   # ------------------------------------------------- the accumulator carry --

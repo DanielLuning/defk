@@ -1938,7 +1938,7 @@ defmodule Defk.Compiler do
       end
 
     c =
-      if Facts.in_i64?(lo, hi),
+      if Facts.prove_i64(lo, hi),
         do: "(#{va.c} #{op} #{vb.c})",
         else: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"
 
@@ -6094,14 +6094,12 @@ defmodule Defk.Compiler do
       {arr, idx} = {src_text(arr), src_text(idx)}
       low = "0 <= #{idx}"
       high = if w == 1, do: "#{idx} < len(#{arr})", else: "#{idx} + #{w} <= len(#{arr})"
-      with_low = Facts.assert(i, lo: max(Facts.lo(i) || 0, 0))
-      with_high = Facts.assert(i, ub: Map.put(Facts.ub(i), a.c, -w))
 
       missing =
-        cond do
-          Facts.in_bounds?(a, with_low, w) -> low
-          Facts.in_bounds?(a, with_high, w) -> high
-          true -> "#{low} and #{high}"
+        case Facts.missing(a, i, w) do
+          :low -> low
+          :high -> high
+          :both -> "#{low} and #{high}"
         end
 
       note(:bounds, node, :kept, "#{text}: bounds check kept; nothing proves #{missing}")
