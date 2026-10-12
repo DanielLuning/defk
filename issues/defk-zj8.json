@@ -5,7 +5,9 @@
   "created": "2026-10-12T18:55:19Z",
   "description": "Found by defk-ch4's classifier cross-check and mirrored bug-for-bug (sr_reaches?'s own-tree case, see the comment there): in a flagged strip, a float tree whose variable is one of its own sticky leaves (acc = acc + y * y) sees ITSELF as a later checked use - the old text scan found the expression just after its statement's start - so its DEFK_FCHECK is suppressed even when the statement sits inside an if arm. The sticky end-of-strip test only covers trees at the strip's top level, so for an arm-conditional accumulator the suppression leaves NO check anywhere: fl.test is empty (seen in the {{:f, 1}} fixture during the cross-check). Suspected consequence: finite operands that overflow to inf (1.0e308 * 1.0e308) return inf natively where Elixir mode raises ArithmeticError - a divergence under the one rule, not a limit. Could also be sound for a reason not visible here (defk-hki's design may argue the inf always reaches a later checked read or result). First step: a repro kernel - flat loop with the accumulator updated only inside an if arm - compiled flagged, assert_agrees with huge finite inputs; if it diverges, tag the property :divergence naming this ticket and fix the suppression rule (likely: self-use only counts when the tree is at the strip's top level, where the sticky test covers it); re-run the dump gate expecting a C change confined to such kernels.",
   "id": "defk-zj8",
-  "labels": [],
+  "labels": [
+    "needs-triage"
+  ],
   "priority": 2,
   "status": "open",
   "title": "Flagged strips: a conditionally updated float accumulator's check may be suppressed with no strip-end test (possible divergence)",
