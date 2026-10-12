@@ -217,9 +217,10 @@ both, with the reason or the ticket. Other wordings, such as "is not a
 kernel builtin" or "is not a kernel type", are mistakes to fix with the hint.
 
 Every rejection in a module is reported at once (the first 10 are shown),
-but the compiler does not look inside a construct it has rejected: errors in
-the body of a rejected `for`, say, show up on the next compile, once you have
-rewritten it. Expect a first kernel to take a few rounds.
+and a `for` rejected for its shape (used as a value) is checked inside too.
+The compiler does not look inside other rejected constructs, a pipe or an
+unsupported call, say: errors in them show up on the next compile, once you
+have rewritten them. Expect a first kernel to take a few rounds.
 
 If the error instead says `defk: C compilation failed`, the C compiler ran
 and failed: that is a defk bug or a broken toolchain, not a mistake in your
