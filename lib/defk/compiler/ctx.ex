@@ -39,6 +39,7 @@ defmodule Defk.Compiler.Ctx do
               report_kernel: nil,
               report_loop: nil,
               acc_fix: %{},
+              copies: %Defk.Copies{},
               strip: %{seq: 0, path: [], cond: false, rows: []}
   end
 
