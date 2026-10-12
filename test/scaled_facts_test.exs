@@ -203,7 +203,7 @@ defmodule Defk.ScaledFactsTest do
   end
 
   defp c_of(kernel) do
-    {c, _} = Defk.Compiler.compile(Defk.ScaledFactsTest.Probe, [kernel], nil)
+    {c, _, _} = Defk.Compiler.compile(Defk.ScaledFactsTest.Probe, [kernel], nil)
     c
   end
 

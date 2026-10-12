@@ -368,7 +368,7 @@ defmodule Defk do
     fault_hooks? = fault_hooks?()
     adaptive? = Module.get_attribute(env.module, :defk_adaptive_slice)
 
-    {c_src, all_sigs} =
+    {c_src, all_sigs, report} =
       Defk.Compiler.compile(env.module, kernels, env.file,
         nif_name: nif_name,
         fault_hooks: fault_hooks?,
@@ -388,8 +388,8 @@ defmodule Defk do
     # `report: :full` (an extra compiler pass, Defk.Report.full/3)
     report =
       if Module.get_attribute(env.module, :defk_report) == :full,
-        do: Defk.Report.full(Defk.Compiler.report(), c_src, lib),
-        else: Defk.Compiler.report()
+        do: Defk.Report.full(report, c_src, lib),
+        else: report
 
     # a helper (a kernel taking a bitstring) is only inlined: no function
     sigs = Enum.reject(all_sigs, &Defk.Bitstring.helper?/1)
