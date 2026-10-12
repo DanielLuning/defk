@@ -158,13 +158,15 @@ defmodule Defk.Compiler do
     # too); `yields`: its NIF yields (so it takes the run-queue hint)
     yielding = for k <- lowered, yields?(k), into: MapSet.new(), do: {k.name, k.arity}
 
-    {c,
-     Enum.map(
-       kernels,
-       &(&1
-         |> Map.take([:name, :arity, :params, :ret])
-         |> Map.put(:yields, MapSet.member?(yielding, {&1.name, &1.arity})))
-     )}
+    sigs =
+      Enum.map(
+        kernels,
+        &(&1
+          |> Map.take([:name, :arity, :params, :ret])
+          |> Map.put(:yields, MapSet.member?(yielding, {&1.name, &1.arity})))
+      )
+
+    {c, sigs, report()}
   end
 
   defp max_owned_define(nil), do: ""
@@ -5917,7 +5919,9 @@ defmodule Defk.Compiler do
 
   @doc false
   # The notes of the last compile/4, each kernel's in line order.
-  def report do
+  # the fast-path report: one of compile/4's results, never read back by
+  # the lowering (a note cannot change a kernel)
+  defp report do
     notes = :defk_report |> Process.get([]) |> Enum.reverse() |> Enum.uniq()
     order = notes |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
     groups = Enum.group_by(notes, &elem(&1, 0))
