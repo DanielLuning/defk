@@ -24,15 +24,7 @@ defmodule Defk.BuiltinsTableKernelsTest do
         for t <- [:i64, :u64, :f64], do: Enum.map(pats, fn :t -> t end)
 
       {:arr, :e} in pats ->
-        for e <- @arr_elems do
-          for p <- pats do
-            case p do
-              {:arr, :e} -> {:arr, e}
-              :int -> :i64
-              other -> other
-            end
-          end
-        end
+        for e <- @arr_elems, do: Enum.map(pats, &arr_pat(&1, e))
 
       :int in pats or :number in pats ->
         base = fn fill ->
@@ -51,6 +43,10 @@ defmodule Defk.BuiltinsTableKernelsTest do
         [pats]
     end
   end
+
+  defp arr_pat({:arr, :e}, e), do: {:arr, e}
+  defp arr_pat(:int, _e), do: :i64
+  defp arr_pat(p, _e), do: p
 
   defp mix_first(types, pats) do
     case Enum.find_index(pats, &(&1 in [:int, :number])) do
