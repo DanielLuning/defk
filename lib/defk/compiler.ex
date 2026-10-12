@@ -19,6 +19,7 @@ defmodule Defk.Compiler do
   @elems [:f64, :i64, :u64, :u8, :i16, :i32, :f32]
   @elems_text "f64, f32, i64, i32, i16, u8 and u64"
   @ints [:i64, :u64]
+  alias Defk.Copies
   alias Defk.Facts
 
   @max_u64 0xFFFFFFFFFFFFFFFF
@@ -312,8 +313,11 @@ defmodule Defk.Compiler do
   defp compiles?(src, env) do
     case Code.string_to_quoted(src) do
       # the statements are lowered in the block of the statement env is at
-      {:ok, ast} -> probe(fn -> stmt_list(exprs(ast), live_after(exprs(ast)), env) end) != :error
-      _ -> false
+      {:ok, ast} ->
+        probe(fn -> stmt_list(exprs(ast), Copies.live_after(exprs(ast)), env) end) != :error
+
+      _ ->
+        false
     end
   end
 
@@ -749,7 +753,7 @@ defmodule Defk.Compiler do
   defp lower_block_env(ast, env) do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
-    lives = live_after(es)
+    lives = Copies.live_after(es)
     {s1, env} = stmt_list(init, lives, nested(env, ast))
 
     {s2, v, env} =
@@ -808,7 +812,7 @@ defmodule Defk.Compiler do
   # A block evaluated only for effect, nested like lower_block's.
   defp lower_stmts(ast, env) do
     es = exprs(ast)
-    stmt_list(es, live_after(es), nested(env, ast))
+    stmt_list(es, Copies.live_after(es), nested(env, ast))
   end
 
   # statements `es` of one block; `lives` has the names read after each
@@ -1172,119 +1176,20 @@ defmodule Defk.Compiler do
   # block (a loop or fn body, run again) keeps env.nest.
   defp nested(env, ast) do
     out =
-      if arm?(env.stmt, ast),
-        do: MapSet.union(env.live, pairs(env, reads_outside(taken(env.stmt, ast), ast))),
+      if Copies.arm?(env.stmt, ast),
+        do:
+          MapSet.union(
+            env.live,
+            pairs(env, Copies.reads_outside(Copies.taken(env.stmt, ast), ast))
+          ),
         else: env.nest
 
     %{env | out: out, depth: env.depth + 1}
   end
 
-  # `ast` is one arm of an if, cond or case in `stmt`, and nowhere else in it
-  defp arm?(nil, _ast), do: false
-
-  defp arm?(stmt, ast) do
-    occurrences(stmt, ast) == 1 and
-      elem(Macro.prewalk(stmt, false, &{&1, &2 or ast in arms(&1)}), 1)
-  end
-
-  defp occurrences(ast, node) do
-    {_, n} = Macro.prewalk(ast, 0, fn x, n -> {x, if(x == node, do: n + 1, else: n)} end)
-    n
-  end
-
-  # Statement `stmt` as it runs when `node` does, from the arm holding it on:
-  # every if, cond and case arm that is an alternative to that arm is left
-  # out, and so are the conditions, subjects and clause heads that chose it
-  # (evaluated before it, in the same run of the statement; a later iteration
-  # reads the arm's new bindings, not the buffers it had). `stmt` whole when
-  # `node` is not exactly once in it.
-  defp taken(stmt, node) do
-    if occurrences(stmt, node) == 1,
-      do: Macro.prewalk(stmt, &if(holds_arm?(&1, node), do: other_arms_out(&1, node), else: &1)),
-      else: stmt
-  end
-
-  # `x` is an if, cond or case with `node` in one of its arms
-  defp holds_arm?(x, node), do: Enum.any?(arms(x), &(occurrences(&1, node) > 0))
-
-  # the arm bodies of an if, cond or case node
-  defp arms({:if, _, [_c, kw]}) when is_list(kw), do: for({k, b} <- kw, k in [:do, :else], do: b)
-
-  defp arms({:cond, _, [[do: clauses]]}) when is_list(clauses),
-    do: for({:->, _, [_, body]} <- clauses, do: body)
-
-  defp arms({:case, _, [_subject, [do: clauses]]}) when is_list(clauses),
-    do: for({:->, _, [_, body]} <- clauses, do: body)
-
-  defp arms(_ast), do: []
-
-  defp other_arms_out({:if, m, [_c, kw]}, node),
-    do: {:if, m, [nil, for({k, b} <- kw, do: {k, arm_or_nil(b, node)})]}
-
-  defp other_arms_out({:cond, m, [[do: clauses]]}, node),
-    do: {:cond, m, [[do: clauses_out(clauses, node)]]}
-
-  defp other_arms_out({:case, m, [_subject, [do: clauses]]}, node),
-    do: {:case, m, [nil, [do: clauses_out(clauses, node)]]}
-
-  defp clauses_out(clauses, node) do
-    for {:->, cm, [_head, body]} <- clauses, do: {:->, cm, [[nil], arm_or_nil(body, node)]}
-  end
-
-  defp arm_or_nil(body, node), do: if(occurrences(body, node) == 0, do: nil, else: body)
-
   # a parameter is bound in the kernel's body block (depth 1)
   defp array_ids({:arr, _}), do: %{id: make_ref(), buf: make_ref(), fin: false, depth: 1}
   defp array_ids(_t), do: %{}
-
-  # The names read in `ast`, over-approximated: every variable in it, in any
-  # branch or loop body, except the ones a match binds.
-  defp reads(ast), do: ast |> read_counts() |> Map.keys() |> MapSet.new()
-
-  defp read_counts(ast) do
-    {_, counts} =
-      Macro.prewalk(ast, %{}, fn
-        # the variables a match binds are not read
-        {:=, m, [_lhs, rhs]} = e, acc ->
-          {if(write?(e), do: e, else: {:__block__, m, [rhs]}), acc}
-
-        {n, _, ctx} = v, acc when is_atom(n) and is_atom(ctx) ->
-          {v, Map.update(acc, n, 1, &(&1 + 1))}
-
-        other, acc ->
-          {other, acc}
-      end)
-
-    counts
-  end
-
-  # names read in statement `stmt` outside `node`, a part of it
-  defp reads_outside(nil, _node), do: MapSet.new()
-
-  defp reads_outside(stmt, node) do
-    inner = read_counts(node)
-    for {n, c} <- read_counts(stmt), c > Map.get(inner, n, 0), into: MapSet.new(), do: n
-  end
-
-  defp write?({:=, _, [{{:., _, [Access, :get]}, _, _}, _]}), do: true
-  defp write?(_), do: false
-
-  # the names statement `e` binds in its block
-  defp binds({:=, _, [lhs, _]} = e), do: if(write?(e), do: MapSet.new(), else: reads(lhs))
-  defp binds(_e), do: MapSet.new()
-
-  defp stmt_reads({:=, _, [_, rhs]} = e), do: if(write?(e), do: reads(e), else: reads(rhs))
-  defp stmt_reads(e), do: reads(e)
-
-  # for each statement of a block, the names read after it in the block
-  defp live_after(es) do
-    {lives, _} =
-      List.foldr(es, {[], MapSet.new()}, fn e, {acc, live} ->
-        {[live | acc], live |> MapSet.difference(binds(e)) |> MapSet.union(stmt_reads(e))}
-      end)
-
-    lives
-  end
 
   # {id, buf} of the array bindings of `names` in env
   defp pairs(env, names) do
@@ -1322,10 +1227,10 @@ defmodule Defk.Compiler do
   # Before statement `e` of a block, `live` the names read after it: copy
   # what its nested writes need (hoist/3), then note what is live.
   defp enter(e, live, env) do
-    names = MapSet.difference(live, binds(e))
+    names = MapSet.difference(live, Copies.binds(e))
     {sh, env} = hoist(e, names, env)
     live = MapSet.union(pairs(env, names), env.out)
-    nest = MapSet.union(live, pairs(env, reads(e)))
+    nest = MapSet.union(live, pairs(env, Copies.reads(e)))
     {sh, %{env | stmt: e, live: live, live_names: names, nest: nest}}
   end
 
@@ -1336,9 +1241,9 @@ defmodule Defk.Compiler do
   # copies once. An input array written in a branch is copied even when the
   # branch is not taken.
   defp hoist(e, names, env) do
-    seen = MapSet.union(names, reads(e))
+    seen = MapSet.union(names, Copies.reads(e))
 
-    Enum.reduce(nested_writes(e), {[], env}, fn n, {acc, env} ->
+    Enum.reduce(Copies.nested_writes(e), {[], env}, fn n, {acc, env} ->
       case env.vars do
         %{^n => %{buf: _} = b} ->
           if not b.owned or shared?(b, MapSet.union(pairs(env, seen), env.out)) do
@@ -1360,40 +1265,6 @@ defmodule Defk.Compiler do
       end
     end)
   end
-
-  # the names of the arrays written inside statement `e`, not by `e` itself,
-  # leaving out a name bound again inside before the write
-  defp nested_writes(e) do
-    if write?(e), do: [], else: e |> writes_in(MapSet.new()) |> Enum.uniq()
-  end
-
-  defp writes_in({:__block__, _, es}, shadow) when is_list(es) do
-    {ws, _} =
-      Enum.flat_map_reduce(es, shadow, fn e, sh ->
-        ws = writes_in(e, sh)
-        {ws, if(match?({:=, _, _}, e), do: MapSet.union(sh, binds(e)), else: sh)}
-      end)
-
-    ws
-  end
-
-  defp writes_in({:=, _, [{{:., _, [Access, :get]}, _, [arr, idx]}, rhs]}, shadow) do
-    own =
-      case arr do
-        {n, _, ctx} when is_atom(n) and is_atom(ctx) -> if n in shadow, do: [], else: [n]
-        _ -> []
-      end
-
-    own ++ writes_in([arr, idx, rhs], shadow)
-  end
-
-  defp writes_in({:->, _, [pats, body]}, shadow),
-    do: writes_in(body, MapSet.union(shadow, reads(pats)))
-
-  defp writes_in({a, b}, shadow), do: writes_in(a, shadow) ++ writes_in(b, shadow)
-  defp writes_in(l, shadow) when is_list(l), do: Enum.flat_map(l, &writes_in(&1, shadow))
-  defp writes_in({h, _, args}, shadow) when is_list(args), do: writes_in([h | args], shadow)
-  defp writes_in(_ast, _shadow), do: []
 
   defp copy_var(name, b, env) do
     {s, nb} = copied(b, name)
@@ -1494,7 +1365,7 @@ defmodule Defk.Compiler do
   # buffer: that variable is copied first (in place: it is owned).
   defp snapshot_writes(%{owned: true, buf: buf}, %{loop: loop} = env) when loop != nil do
     loop
-    |> writes_in(MapSet.new())
+    |> Copies.writes_in(MapSet.new())
     |> Enum.uniq()
     |> Enum.reduce({[], env}, fn n, {acc, env} ->
       with %{^n => %{buf: b_buf} = b} <- env.vars, true <- same_buf?(b_buf, buf) do
@@ -3058,7 +2929,7 @@ defmodule Defk.Compiler do
       |> Enum.unzip()
 
     # the bindings the caller still reads after the call stay live in the callee
-    outer = MapSet.union(env.live, pairs(env, reads_outside(env.stmt, node)))
+    outer = MapSet.union(env.live, pairs(env, Copies.reads_outside(env.stmt, node)))
 
     # scope/1 takes the empty set at both call sites (dialyzer treats a
     # MapSet built by union as opaque and the literal as structural); the
@@ -3291,7 +3162,7 @@ defmodule Defk.Compiler do
   # the array a range copy writes: `a`'s buffer, or a copy of it when another
   # binding may see that buffer after the call or it is not the kernel's own
   defp range_dest(a, {name, _, args} = node, env) do
-    outer = MapSet.union(env.live, pairs(env, reads_outside(env.stmt, node)))
+    outer = MapSet.union(env.live, pairs(env, Copies.reads_outside(env.stmt, node)))
 
     if a.owned and not shared?(Map.put(a, :id, make_ref()), outer) do
       {[], a}
@@ -4455,7 +4326,12 @@ defmodule Defk.Compiler do
     # the outer names the loop reads while it runs: its generators and
     # filters (quals_reads/1), and its body where the accumulator does not
     # shadow them
-    loop_reads = MapSet.union(quals_reads(quals), MapSet.difference(reads(body), reads(pat)))
+    loop_reads =
+      MapSet.union(
+        Copies.quals_reads(quals),
+        MapSet.difference(Copies.reads(body), Copies.reads(pat))
+      )
+
     lenv = loop_env(env, node)
 
     u64_accs(fn u64s ->
@@ -4514,8 +4390,8 @@ defmodule Defk.Compiler do
   defp reduce_while_loop({src, init_ast, x, acc_pat, body}, env, m, node, u64s) do
     loop_reads =
       MapSet.union(
-        quals_reads([{:<-, m, [x, src]}]),
-        MapSet.difference(reads(body), reads([x, acc_pat]))
+        Copies.quals_reads([{:<-, m, [x, src]}]),
+        MapSet.difference(Copies.reads(body), Copies.reads([x, acc_pat]))
       )
 
     {si, accs} =
@@ -4549,18 +4425,6 @@ defmodule Defk.Compiler do
     {[si, loops, halt], acc_result(accs)}
   end
 
-  # The outer names a loop's generators and filters read while it runs. The
-  # first generator's range (start, end and step) is evaluated once, before
-  # the first iteration and so before the body writes anything (defk-8tw):
-  # `for k <- 0..(st[0] - 1)//1, reduce: st` reads st's buffer before the
-  # accumulator takes it, and later iterations read the accumulator. An array
-  # the first generator walks, later generators (evaluated again for each
-  # value of the ones before) and filters are read during the loop.
-  defp quals_reads([{:<-, _, [_pat, {op, _, [_ | _]}]} | rest]) when op in [:.., :..//],
-    do: reads(rest)
-
-  defp quals_reads(quals), do: reads(quals)
-
   # Accumulators [{name, cvar, acc}] from `acc` or `{a, b, ...}` and the
   # initial value, where acc is what the body sees: %{t: type}, and for an
   # array also its facts (owned, fin, len_lo).
@@ -4591,7 +4455,10 @@ defmodule Defk.Compiler do
       )
 
     live =
-      MapSet.union(env.live, pairs(env, MapSet.union(loop_reads, reads_outside(env.stmt, node))))
+      MapSet.union(
+        env.live,
+        pairs(env, MapSet.union(loop_reads, Copies.reads_outside(env.stmt, node)))
+      )
 
     {accs, _} =
       Enum.zip(pats, inits)
@@ -4808,7 +4675,7 @@ defmodule Defk.Compiler do
   defp lower_tail(ast, env, leaf) do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
-    lives = live_after(es)
+    lives = Copies.live_after(es)
     {s, env} = stmt_list(init, lives, nested(env, ast))
 
     [
