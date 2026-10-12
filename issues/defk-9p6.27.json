@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-10T12:15:40Z",
@@ -16,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Defk.Bench forced full GC leaves the caller's input list in the young heap: a minor GC copying it lands in some timed runs",
   "type": "task",
-  "updated_at": "2026-10-11T21:08:25Z"
+  "updated_at": "2026-10-12T09:39:06Z"
 }
