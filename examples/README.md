@@ -124,7 +124,9 @@ The verdict's Limitations (`defk-sgw.5`) will cite this table.
 
 Every script ends with `Defk.Bench.report/1`, which:
 
-- checks that the Elixir and defk results agree,
+- checks that the Elixir and defk results agree (`:check` is required with
+  `:defk`; opting out is explicit — `check: :none, reason: "..."` — reports
+  `correct: skipped (<reason>)`, and `run_all.exs` lists every skipped entry),
 - takes the best of several timed runs for each side, measured end to end,
 - prints a `DEFK_RESULT` JSON line, including the baseline status.
 
@@ -155,7 +157,8 @@ section of `docs/verdict.md`.
 
 Each example also declares the verdict it **expects**. `run_all.exs` fails if an
 example is incorrect, crashes, or measures a different verdict than it claims,
-and it lists every `good` claim whose baseline is still provisional.
+and it lists every `good` claim whose baseline is still provisional and every
+example that skipped its agreement check, with the reason.
 
 Both directions of change are progress:
 

@@ -81,8 +81,13 @@ defmodule Defk.Bench do
     * `:elixir` (required) - zero-arity fun running the pure Elixir version
     * `:defk` - zero-arity fun running the defk version, end to end
       (include any conversion the caller would really pay for)
-    * `:check` - zero-arity fun returning true when both versions agree
-    * `:reason` - one sentence explaining the outcome (required for `:out_of_scope`)
+    * `:check` (required with `:defk`) - zero-arity fun returning true when
+      both versions agree, or `:none` to skip the check explicitly. `:none`
+      requires a `:reason`; the report prints `correct    skipped (<reason>)`,
+      records `"correct": "skipped"`, and `examples/run_all.exs` lists every
+      skipped entry
+    * `:reason` - one sentence explaining the outcome (required for
+      `:out_of_scope` and for `check: :none`)
     * `:baseline` - `:first_pass` (default) or `:optimized`. Use `:optimized`
       only after a real attempt to make the Elixir version as fast as it can
       be (stdlib, Erlang BIFs, established libraries, better data layout);
@@ -120,12 +125,13 @@ defmodule Defk.Bench do
       raise ArgumentError, "baseline must be :first_pass or :optimized"
 
     runs = Keyword.get(opts, :runs, 5)
+    check = check_fun(opts)
     elixir_us = best(Keyword.fetch!(opts, :elixir), runs)
 
     result =
       case Keyword.fetch(opts, :defk) do
         {:ok, defk} ->
-          correct = Keyword.get(opts, :check, fn -> true end).()
+          correct = if check == :skipped, do: :skipped, else: check.()
           defk_us = best(defk, runs)
           Map.put(compare(elixir_us, defk_us), :correct, correct)
 
@@ -156,6 +162,35 @@ defmodule Defk.Bench do
 
     print(result)
     result
+  end
+
+  # `:check` is required whenever `:defk` is given (defk-k95): an unchecked
+  # example must opt out visibly (`check: :none` plus a `:reason`), never
+  # report `correct: true` by omission. Validated before anything is timed,
+  # so a bad call fails before the measurement, not after it.
+  defp check_fun(opts) do
+    case {Keyword.has_key?(opts, :defk), Keyword.fetch(opts, :check)} do
+      {false, _} ->
+        nil
+
+      {true, {:ok, :none}} ->
+        Keyword.get(opts, :reason) ||
+          raise ArgumentError,
+                "check: :none needs a :reason saying why agreement is not checked"
+
+        :skipped
+
+      {true, {:ok, fun}} when is_function(fun, 0) ->
+        fun
+
+      {true, {:ok, other}} ->
+        raise ArgumentError, ":check must be a zero-arity fun or :none, got: #{inspect(other)}"
+
+      {true, :error} ->
+        raise ArgumentError,
+              ":check is required when :defk is given: pass a zero-arity fun returning true " <>
+                "when both versions agree, or opt out with check: :none, reason: \"...\""
+    end
   end
 
   @doc false
@@ -313,7 +348,12 @@ defmodule Defk.Bench do
     IO.puts("  elixir     #{r.elixir_ms} ms")
     if r.defk_ms, do: IO.puts("  defk       #{r.defk_ms} ms   (#{r.speedup}x)")
     if r[:native_ms], do: IO.puts(native_line(r))
-    IO.puts("  correct    #{r.correct}")
+
+    case r.correct do
+      :skipped -> IO.puts("  correct    skipped (#{r.reason})")
+      correct -> IO.puts("  correct    #{correct}")
+    end
+
     if r[:realistic_size], do: IO.puts("  realistic  #{r.realistic_size}")
 
     IO.puts(
@@ -324,7 +364,8 @@ defmodule Defk.Bench do
       "  verdict    #{r.verdict}#{if r.verdict != r.expected, do: "   (expected #{r.expected}!)", else: ""}"
     )
 
-    if r.reason, do: IO.puts("  why        #{r.reason}")
+    # the skipped line above already carries the reason
+    if r.reason && r.correct != :skipped, do: IO.puts("  why        #{r.reason}")
     print_gaps(r)
     print_sweep(r)
     IO.puts("\nDEFK_RESULT " <> JSON.encode!(r))
