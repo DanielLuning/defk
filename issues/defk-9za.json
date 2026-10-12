@@ -1,7 +1,8 @@
 {
   "assignee": "",
   "blocked_by": [
-    "defk-2mz"
+    "defk-2mz",
+    "defk-b38"
   ],
   "blocks": [],
   "created": "2026-10-10T11:24:32Z",
@@ -28,5 +29,5 @@
   "status": "open",
   "title": "Carry conditional facts from a guarding if into its branches (i \u003e= w makes i - w \u003e= 0)",
   "type": "task",
-  "updated_at": "2026-10-12T10:58:00Z"
+  "updated_at": "2026-10-12T10:58:06Z"
 }

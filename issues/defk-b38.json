@@ -4,6 +4,7 @@
     "defk-qdz"
   ],
   "blocks": [
+    "defk-9za",
     "defk-pvt"
   ],
   "created": "2026-10-12T10:57:50Z",
@@ -16,5 +17,5 @@
   "status": "open",
   "title": "Symbolic bounds: facts from conditions and raising guards, and the report's missing-fact hint",
   "type": "task",
-  "updated_at": "2026-10-12T10:58:05Z"
+  "updated_at": "2026-10-12T10:58:06Z"
 }
