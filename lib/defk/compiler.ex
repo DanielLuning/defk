@@ -2096,17 +2096,17 @@ defmodule Defk.Compiler do
     vals = for {_, _, _, _, v} <- arms, v, do: v
 
     if Enum.any?(vals, &Map.has_key?(&1, :elems)) do
-      tuple_arms(arms, vals, name, node, env)
+      tuple_arms(arms, vals, name, node, env, ref)
     else
       arms = bits_arms(arms)
       vals = for({_, _, _, _, v} <- arms, v, do: v)
       t = branch_type!(vals, name, node)
       tmp = fresh(name, t)
-      {lower_branch(arms, [t], [tmp], env, node), branch_val(tmp, t, vals)}
+      {lower_branch(arms, [t], [tmp], env, node, ref), branch_val(tmp, t, vals)}
     end
   end
 
-  defp tuple_arms(arms, vals, name, node, env) do
+  defp tuple_arms(arms, vals, name, node, env, ref) do
     sizes = Enum.map(vals, &length(Map.get(&1, :elems, [nil])))
 
     if not Enum.all?(vals, &Map.has_key?(&1, :elems)) or not match?([_], Enum.uniq(sizes)) do
@@ -2146,7 +2146,7 @@ defmodule Defk.Compiler do
         branch_val(tmp, t, for({_, _, _, _, v} <- arms, v, do: Enum.at(v.elems, i)))
       end)
 
-    {lower_branch(arms, ts, tmps, env, node), %{t: {:tuple, ts}, elems: elems}}
+    {lower_branch(arms, ts, tmps, env, node, ref), %{t: {:tuple, ts}, elems: elems}}
   end
 
   # The value of an if, cond or case in temporary `tmp` of type `t`, its arms
@@ -2183,8 +2183,28 @@ defmodule Defk.Compiler do
 
   # the code that assigns each of `tmps` (of types `ts`) its element of the
   # value of the arm taken; `node` is the if, cond or case
-  defp lower_branch(arms, ts, tmps, env, node) do
-    code = if(select?(arms), do: select(arms, ts, tmps, env), else: chain(arms, tmps))
+  defp lower_branch(arms, ts, tmps, env, node, ref) do
+    sel = select?(arms)
+
+    # a select's arms run inline in the assigned statement; a chain assigns
+    # each arm's value to the temporaries inside that arm's block
+    if sel do
+      srec_drop_frame(ref)
+    else
+      arms
+      |> Enum.with_index()
+      |> Enum.each(fn
+        {{_, _, _, _, nil}, _k} ->
+          :ok
+
+        {{_, _, _, _, v}, k} ->
+          srec_arm(ref, k, fn ->
+            Enum.zip_with(tmps, parts(v), fn t, c -> srec_assign(t, c) end)
+          end)
+      end)
+    end
+
+    code = if(sel, do: select(arms, ts, tmps, env), else: chain(arms, tmps))
     note_branch(node, arms, code, tmps)
     code
   end
@@ -3724,6 +3744,7 @@ defmodule Defk.Compiler do
 
       {rows, {body, flat?}} =
         srec_rows(fn ->
+          srec_access(:index, arr, k, [])
           srec_assign(x, read)
           res = lower_quals_tracked(rest, env, inner)
           srec_assign(k, "#{k} + 1")
@@ -3789,11 +3810,18 @@ defmodule Defk.Compiler do
     Process.put(:defk_strip, %{st | seq: seq + 1, rows: [row | rows]})
   end
 
-  # the rows recorded while `fun` ran (oldest first), beside its result
+  # the rows recorded while `fun` ran (oldest first), beside its result;
+  # paths are relative to where `fun` started (the strip body's own arms)
   defp srec_rows(fun) do
-    first = srec_get().seq
+    %{seq: first, path: entry} = srec_get()
     res = fun.()
-    rows = for r <- srec_get().rows, r.seq >= first, do: r
+    base = length(entry)
+
+    rows =
+      for r <- srec_get().rows, r.seq >= first do
+        %{r | path: Enum.take(r.path, length(r.path) - base)}
+      end
+
     {Enum.reverse(rows), res}
   end
 
@@ -4030,9 +4058,227 @@ defmodule Defk.Compiler do
   #     the snapshot when it is assigned whole, as array accumulators are);
   #   * an array it writes is not otherwise mentioned (no read of it, so the
   #     replay recomputes the values it wrote) and no input array is written.
-  defp flag_strip(id, body, var, _rows) do
+  defp flag_strip(id, body, var, rows) do
     text = IO.iodata_to_binary(body)
+    old = flag_strip_text(id, text, var)
+    new = flag_strip_rows(id, text, var, rows)
 
+    if sr_norm(old) != sr_norm(new) do
+      raise "defk bug (defk-ch4): strip classifiers disagree in " <>
+              "#{inspect(Process.get(:defk_report_kernel))}, loop #{id}:\n" <>
+              "text: #{inspect(sr_norm(old), limit: 50)}\n" <>
+              "rows: #{inspect(sr_norm(new), limit: 50)}"
+    end
+
+    old
+  end
+
+  defp sr_norm(nil), do: nil
+
+  defp sr_norm(fl) do
+    Map.new(fl, fn {k, v} ->
+      {k, if(k in [:decls, :snap, :restore, :body, :test], do: IO.iodata_to_binary([v]), else: v)}
+    end)
+  end
+
+  # ----------------------------------------------- the record classifier ---
+  # Decisions from the strip record, each mirroring its text analysis
+  # exactly (bug-for-bug: the gate demands byte-identical C). Token-presence
+  # scans over the body text stay (@nf_call, ctx-in-rest, the [vp]_ variable
+  # roster): they reconstruct no structure and fail safe. What moved to rows
+  # is everything that used to re-derive structure from the text: writes,
+  # element writes, index composition with proof support, float reads and
+  # trees with their sticky leaves, scalar copies, and branch positions.
+
+  defp sr_writes(rows, v), do: Enum.count(rows, &(&1.k in [:assign, :addr] and &1.var == v))
+
+  defp sr_written?(rows, v), do: sr_writes(rows, v) > 0
+
+  defp sr_array_writes(rows, a), do: Enum.count(rows, &(&1.k == :elem_write and &1.arr == a))
+
+  # an i64 + - * of such values in an index computes the checked value: the
+  # bounds proof bounds the result, so it cannot overflow
+  @index_words ~w(INT64_C UINT64_C int64_t uint64_t len ctx defk_add_i64 defk_sub_i64 defk_mul_i64)
+
+  defp sr_fixed_indices?(rows, var) do
+    Enum.all?(rows, fn
+      %{k: :access, access: :index, idx: idx} -> sr_fixed_index?(idx, rows, var)
+      %{k: :access} -> false
+      _ -> true
+    end)
+  end
+
+  defp sr_fixed_index?(idx, rows, var) do
+    Regex.scan(~r/[A-Za-z_]\w*/, idx)
+    |> List.flatten()
+    |> Enum.all?(fn w ->
+      w in @index_words or w == var or
+        (Regex.match?(~r/^[vp]_\w+$/, w) and not sr_written?(rows, w))
+    end)
+  end
+
+  defp sr_replayable?(text, rows, arrays) do
+    counts = Enum.map(arrays, fn a -> {length(mentions(text, a)), sr_array_writes(rows, a)} end)
+    Enum.all?(counts, fn {_, w} -> w == 0 end) or Enum.all?(counts, fn {m, w} -> m == w end)
+  end
+
+  defp sr_fread(rhs) do
+    cond do
+      String.starts_with?(rhs, "defk_in_f64(ctx, ") -> "defk_in_f64"
+      String.starts_with?(rhs, "defk_get_in_f64(ctx, ") -> "defk_get_in_f64"
+      true -> nil
+    end
+  end
+
+  defp sr_ftree_f(rhs) do
+    case Regex.run(~r/^\(\{ double (f_\d+) = /, rhs) do
+      [_, f] -> f
+      _ -> nil
+    end
+  end
+
+  defp sr_sticky(rows) do
+    leaves = Map.new(for %{k: :ftree, f: f, leaves: ls} <- rows, ls != nil, do: {f, ls})
+
+    tops =
+      for %{k: :assign, var: x, rhs: rhs, path: [], cond: false} <- rows,
+          f = sr_ftree_f(rhs),
+          do: {x, f}
+
+    copies =
+      for %{k: :assign, var: d, rhs: r, path: [], cond: false} <- rows,
+          Regex.match?(~r/^v_\w+$/, r),
+          do: [d, r]
+
+    once? = fn v -> sr_writes(rows, v) == 1 end
+
+    for {x, f} <- tops,
+        ls = leaves[f],
+        ls != nil,
+        sticky_path?(x, ls, copies, once?, []),
+        do: {x, f}
+  end
+
+  defp sr_seen_later(text, rows) do
+    freads = for %{k: :assign, var: y, rhs: rhs} = r <- rows, h = sr_fread(rhs), do: {r, y, h}
+    trees = for %{k: :assign, var: y, rhs: rhs} = r <- rows, f = sr_ftree_f(rhs), do: {r, y, f}
+
+    text =
+      Enum.reduce(freads, text, fn {r, y, h}, t ->
+        if sr_reaches?(rows, y, r) do
+          later = if h == "defk_in_f64", do: "defk_in_f64_later", else: "defk_get_f64"
+          String.replace(t, "#{y} = #{h}(ctx, ", "#{y} = #{later}(ctx, ")
+        else
+          t
+        end
+      end)
+
+    Enum.reduce(trees, text, fn {r, y, f}, t ->
+      if sr_reaches?(rows, y, r),
+        do: String.replace(t, "DEFK_FCHECK(DEFK_NONFIN(#{f}))", "if (0)"),
+        else: t
+    end)
+  end
+
+  defp sr_reaches?(rows, y, from) do
+    # a tree whose own variable is one of its leaves (acc = acc + ...) sees
+    # itself as a later use: the text scan finds the expression just after
+    # its statement's start, in the same statement, with nothing in between
+    own = from.k == :assign and sr_ftree_f(from.rhs)
+
+    uses =
+      for %{k: :ftree, leaves: ls, seq: t, f: f} = u <- rows,
+          ls != nil,
+          y in ls,
+          t > from.seq or f == own,
+          do: u
+
+    copies = for %{k: :assign, rhs: rhs, seq: t} = c <- rows, t > from.seq, rhs == y, do: c
+
+    reached? = fn to ->
+      to.f == own or (sr_runs_after?(from, to) and sr_unchanged?(rows, y, from, to))
+    end
+
+    Enum.any?(uses, reached?) or
+      Enum.any?(copies, fn c ->
+        sr_runs_after?(from, c) and sr_unchanged?(rows, y, from, c) and
+          sr_reaches?(rows, c.var, c)
+      end)
+  end
+
+  defp sr_suffix?(inner, outer), do: inner == Enum.drop(outer, length(outer) - length(inner))
+
+  defp sr_runs_after?(from, to) do
+    to.seq > from.seq and length(to.path) <= length(from.path) and
+      sr_suffix?(to.path, from.path) and to.cond == false
+  end
+
+  defp sr_unchanged?(rows, y, from, to) do
+    writes =
+      for %{k: k, var: v, seq: w} = r <- rows,
+          k in [:assign, :addr],
+          v == y,
+          w > from.seq,
+          w < to.seq,
+          do: r
+
+    case from.path do
+      [{ref, arm} | _] ->
+        Enum.all?(writes, fn w ->
+          Enum.any?(w.path, fn {r2, a2} -> r2 == ref and a2 != arm end)
+        end)
+
+      [] ->
+        writes == []
+    end
+  end
+
+  defp flag_strip_rows(id, text, var, rows) do
+    rest = unflagged_rest(text)
+    joined = Regex.match?(@nf_join_call, text)
+    types = Map.new(Process.get(:defk_decls))
+
+    vars =
+      Regex.scan(~r/\b[vp]_\w+/, text)
+      |> List.flatten()
+      |> Enum.uniq()
+
+    {arrays, others} =
+      Enum.split_with(vars, &String.starts_with?(types[&1] || "", "defk_arr_"))
+
+    {params, locals} = Enum.split_with(others, &String.starts_with?(&1, "p_"))
+
+    with true <- Regex.match?(@nf_call, text) or String.contains?(text, "DEFK_FCHECK("),
+         false <- Regex.match?(~r/\bctx\b/, rest),
+         true <- not joined or sr_fixed_indices?(rows, var),
+         true <- Enum.all?(locals, &(types[&1] in @nf_scalars)),
+         false <- Enum.any?(params, &(sr_written?(rows, &1) or sr_array_writes(rows, &1) > 0)),
+         true <- sr_replayable?(text, rows, arrays) do
+      saved = locals ++ Enum.filter(arrays, &sr_written?(rows, &1))
+      named = Enum.with_index(saved, fn v, n -> {v, "defk_s#{id}_#{n}", types[v]} end)
+      sticky = sr_sticky(rows)
+
+      flagged =
+        Enum.reduce(sticky, text, fn {_, f}, t ->
+          String.replace(t, "DEFK_FCHECK(DEFK_NONFIN(#{f}))", "if (0)")
+        end)
+        |> sr_seen_later(rows)
+
+      %{
+        decls: Enum.map(named, fn {_, s2, t} -> "#{t} #{s2};\n" end),
+        snap: Enum.map(named, fn {v, s2, _} -> "#{s2} = #{v};\n" end),
+        restore: Enum.map(named, fn {v, s2, _} -> "#{v} = #{s2};\n" end),
+        body: flagged,
+        test: Enum.map(sticky, fn {x, _} -> " | DEFK_NONFIN(#{x})" end),
+        joined: joined,
+        helpers: Enum.filter(@nf_all, &String.contains?(flagged, "defk_#{&1}(ctx,"))
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  defp flag_strip_text(id, text, var) do
     rest = unflagged_rest(text)
     joined = Regex.match?(@nf_join_call, text)
     types = Map.new(Process.get(:defk_decls))
@@ -4247,10 +4493,6 @@ defmodule Defk.Compiler do
   defp index_text("[" <> rest, n, acc), do: index_text(rest, n + 1, ["[" | acc])
   defp index_text("]" <> rest, n, acc), do: index_text(rest, n - 1, ["]" | acc])
   defp index_text(<<c, rest::binary>>, n, acc), do: index_text(rest, n, [<<c>> | acc])
-
-  # an i64 + - * of such values in an index computes the checked value: the
-  # bounds proof bounds the result, so it cannot overflow
-  @index_words ~w(INT64_C UINT64_C int64_t uint64_t len ctx defk_add_i64 defk_sub_i64 defk_mul_i64)
 
   defp fixed_index?(nil, _text, _var), do: false
 
@@ -4599,8 +4841,13 @@ defmodule Defk.Compiler do
         end
       end)
 
-    {[si, Enum.map(accs, fn {{_, c, _}, ic} -> "#{c} = #{ic};\n" end)],
-     Enum.map(accs, &elem(&1, 0))}
+    {[
+       si,
+       Enum.map(accs, fn {{_, c, _}, ic} ->
+         srec_assign(c, ic)
+         "#{c} = #{ic};\n"
+       end)
+     ], Enum.map(accs, &elem(&1, 0))}
   end
 
   # an i64 literal >= 0 may become a u64 accumulator (u64_accs/2): marked
@@ -4740,6 +4987,7 @@ defmodule Defk.Compiler do
 
     case accs do
       [{_, c, _}] ->
+        srec_assign(c, hd(outs).c)
         "#{c} = #{hd(outs).c};\n"
 
       _ ->
@@ -4747,8 +4995,14 @@ defmodule Defk.Compiler do
         tmps = Enum.map(accs, fn {name, _, a} -> fresh("#{name}_next", a.t) end)
 
         [
-          Enum.zip_with(tmps, outs, &"#{&1} = #{&2.c};\n"),
-          Enum.zip_with(accs, tmps, fn {_, c, _}, t -> "#{c} = #{t};\n" end)
+          Enum.zip_with(tmps, outs, fn t, o ->
+            srec_assign(t, o.c)
+            "#{t} = #{o.c};\n"
+          end),
+          Enum.zip_with(accs, tmps, fn {_, c, _}, t ->
+            srec_assign(c, t)
+            "#{c} = #{t};\n"
+          end)
         ]
     end
   end
