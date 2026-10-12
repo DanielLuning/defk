@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-12T13:49:38Z",
+  "description": "One module owning both layers of the copy analysis: the pure name-level liveness rules (reads/live_after/taken/nested/other_arms_out AND the loop-side quals_reads/reduce_accs, today 3,300 lines apart - the defk-33b/tif/8tw family) and the write/alias tracking (:defk_writes/:defk_from/:defk_alias fold into a struct it owns, threaded; failed speculative lowering drops the copy instead of leaking pdict state). Decisions (grilling 2026-10-12): decisions-out interface (copy before this write? hoist before this statement?) - C emission of copies stays in lowering; query-shaped (on-demand, precompute stays a private option); resume/rebind survival stays an emission concern (alias-class bookkeeping in, frame rebinding out). New copies_test.exs: one unit test per rule, the three regression tickets restated as one-assertion cases; value_semantics_test.exs stays as e2e net and stops growing. Gate: dump-all-C byte-identical. CONTEXT.md 'Copy analysis' added.",
+  "id": "defk-z8y",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Extract Defk.Copies: one home for the copy analysis",
+  "type": "task",
+  "updated_at": "2026-10-12T13:49:38Z"
+}
