@@ -124,7 +124,7 @@ defmodule Defk.ElixirMode do
   defp found(env), do: "the #{inspect(env)} environment"
 
   defp mix_env do
-    if Code.ensure_loaded?(Mix.Project) and Mix.Project.get(), do: Mix.env()
+    if Defk.Build.mix_project?(), do: Mix.env()
   end
 
   @doc false

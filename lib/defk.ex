@@ -482,7 +482,7 @@ defmodule Defk do
   # is generated only when the user's module compiles under MIX_ENV=test
   # (scripts without Mix never get it).
   defp fault_hooks? do
-    Code.ensure_loaded?(Mix.Project) and Mix.Project.get() != nil and Mix.env() == :test
+    Defk.Build.mix_project?() and Mix.env() == :test
   end
 
   defp corrupt_tags_def(false), do: nil
