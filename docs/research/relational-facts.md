@@ -682,6 +682,12 @@ Interactions:
 
 ## 9. Open questions for the maintainer
 
+Answered 2026-10-12 (grilling of defk-2mz; recorded in ADR-0007): migrate
+first; degree 2 in, as step 4; raising guards recommended, with the docs and
+the `decode16` rewrite in step 3; the report hint wanted; budgets measured in
+step 1 within 5% more compiler time. defk-fun lands before step 1. Step 5
+is not filed until a workload needs it.
+
 1. **Migrate first or add beside?** Ticket 1 moves today's facts onto the
    new representation before adding anything, with a byte-identical C
    check. The alternative adds forms beside `lb`/`ub` (prover as a
