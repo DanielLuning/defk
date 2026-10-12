@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-k4x"
+  ],
   "created": "2026-10-12T13:49:38Z",
   "description": "Committed script (scripts/dump_c.exs or similar): dump the generated C of every test kernel and example, diff byte-identical before/after a change. Chosen over a baseline-committing ExUnit test (baselines would churn with every intentional codegen change) and over throwaway scripts (the Facts extraction, the ADR-0007 migration steps, Defk.Copies and the strip record all need it). Decided: /improve-codebase-architecture grilling 2026-10-12.",
   "id": "defk-mif",
@@ -10,5 +12,5 @@
   "status": "open",
   "title": "Dump-all-C script: byte-identical gate for compiler refactors",
   "type": "task",
-  "updated_at": "2026-10-12T13:49:38Z"
+  "updated_at": "2026-10-12T13:49:58Z"
 }
