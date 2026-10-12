@@ -5,6 +5,7 @@
     "defk-z8y"
   ],
   "blocks": [],
+  "closed_at": "2026-10-12T19:14:41Z",
   "created": "2026-10-07T14:46:54Z",
   "description": "Narrowed to the context half of the original ticket; the Defk.Errors split is defk-vlf. Decisions (/improve-codebase-architecture grilling 2026-10-12): mechanism is one pdict key :defk_ctx holding a single struct (not full explicit threading - that would churn most of the compiler's 347 function signatures and collide with every queued compiler ticket; threading can follow cluster-by-cluster). Struct shape: compile-wide fields (file, module, lines, fun, diags, report, ...) plus a lowering sub-struct replaced wholesale per kernel - lower_kernel's 15-key reset becomes 'put a fresh sub-struct', probe and with_acc_facts backtracking become get/put of one value, and the lowering_key?/1 name-prefix predicate dies. Defk.Copies' struct (defk-z8y) becomes one field of lowering. ElixirMode's shared :defk_file read becomes an explicit argument; the runtime mode key in with_mode is runtime dispatch, out of scope. First slice, landable alone: compile/4 returns {c_src, sigs, report}, killing report/0 and :defk_report (lib/defk.ex 387-390). Tests gained: lowering fragments initialise one key; a failed probe provably changes nothing; per-compile report assertions. Sequenced after defk-k4x and defk-z8y absorb their keys, in a quiet compiler-queue window per triage.",
   "id": "defk-euu",
@@ -34,8 +35,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Compiler context: one :defk_ctx struct instead of process-dictionary globals",
   "type": "task",
-  "updated_at": "2026-10-12T18:56:33Z"
+  "updated_at": "2026-10-12T19:14:41Z"
 }
