@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-12T13:49:39Z",
+  "description": "Bench's :check currently defaults to fn -\u003e true end, so unchecked examples report correct: true while CONTEXT.md promises the catalog is 'checked for agreement'. Decision (grilling 2026-10-12): :check becomes required; opting out is explicit (check: :none, reason: \"...\") and prints correct: skipped (\u003creason\u003e); run_all.exs lists every skipped entry. Bench stays off the two-modes machinery by design (baseline is never Elixir mode).",
+  "id": "defk-k95",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Defk.Bench.report: require :check or an explicit check: :none with reason",
+  "type": "task",
+  "updated_at": "2026-10-12T13:49:39Z"
+}
