@@ -48,9 +48,25 @@ _Avoid_: array type, dtype
 A kernel local built only by appending integer segments, `acc = <<acc::bitstring, v::size(n)>>`, starting from `<<>>`, and returned to the caller as a bitstring. It is how a kernel produces output whose length depends on the data. Like an array write, a segment value that doesn't fit its width raises.
 _Avoid_: bit buffer, bit writer, growable output
 
+**Builtin**:
+A function the kernel subset ships (`len/1`, `clz/1`, `copy/5`, …), callable in a kernel without being defined there. Its typing and meaning are part of the kernel subset.
+_Avoid_: intrinsic, stdlib function
+
 **Raising guard**:
 An `if` at the top of a kernel whose only arm raises (`if w < 1, do: raise ArgumentError, "..."`). It checks a precondition on the arguments at run time, the same in Elixir mode, and the kernel may rely on it for everything after it, such as an index being in bounds.
 _Avoid_: assertion, precondition check, assume
+
+**Copy analysis**:
+How the compiler decides whether a kernel's array write reuses the buffer or copies it first: a write is in place when no other binding that may see that buffer is read later. It never changes a kernel's meaning, only where copies happen; the fast-path report names its decisions.
+_Avoid_: copy-on-write (names a different mechanism), escape analysis
+
+**Range fact**:
+Something the compiler knows a kernel value satisfies, such as bounds on an integer or on an array's length, used to drop bounds and overflow checks. A range fact never changes a kernel's meaning: with every fact forgotten, the kernel returns and raises the same.
+_Avoid_: bound (alone), constraint, invariant
+
+**Strip**:
+The trips a flat kernel loop runs between safepoints. A flagged strip defers its checks to one test at the strip's end so the body can vectorise; a failed test replays the strip from a snapshot with checking forms, raising where Elixir would.
+_Avoid_: chunk, tile, block (of iterations)
 
 **Elixir mode**:
 A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir, with the kernel subset's limits applied (a value that doesn't fit its type raises there too). It is never a fallback in production and never a baseline.
