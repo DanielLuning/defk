@@ -2,7 +2,7 @@
 
 Research note. Nothing here was benchmarked: every claim cites a primary source
 (Elixir and Erlang/OTP source and docs, Nx/EXLA, Zigler, NimbleParsec, Ecto,
-Rustler, LFE, ElixirLS and Expert source, elixir-lang/elixir issues,
+Rustler, LFE, tv-labs/lua, ElixirLS and Expert source, elixir-lang/elixir issues,
 elixir-lang.org and Dashbit posts, the archived Ericsson programming rules,
 publisher pages for books). The defk facts marked "reproduced" were run on
 2026-10-12, along with the `mix xref` and `.beam`-size figures in the
@@ -31,6 +31,8 @@ Versions read (2026-10-12):
   [`7436cac`](https://github.com/rusterlium/rustler/tree/7436cac727ecf2fc626361200c3731adc97c83a6),
   LFE master [`0aa820e`](https://github.com/lfe/lfe/tree/0aa820e93bb592a821fe0a50b1db7e8926e56b30).
 - Credo **1.7.19** (defk's locked version, `deps/credo`).
+- tv-labs/lua [`3f2aead`](https://github.com/tv-labs/lua/tree/3f2aead2596dfabe0c58415235d766cd70574f53)
+  (2026-07-29, `mix.exs` version 1.0.2).
 - Editors: ElixirLS master [`68df44b`](https://github.com/elixir-lsp/elixir-ls/tree/68df44b681ee0dbef91b8008b0354003a9a451fa),
   Expert main [`439328e`](https://github.com/expert-lsp/expert/tree/439328e0c631845400e8688bd42f7e843c448227).
 - Ericsson *Programming Rules and Conventions*: Internet Archive capture
@@ -49,8 +51,13 @@ Versions read (2026-10-12):
    (`of_expr(..., stack, context)`), Nx's `defn` normaliser
    (`normalize(ast, state) -> {ast, state}`), EXLA's lowering
    (`recur_operator(expr, state, cache) -> {res, cache}`) and Ecto's query
-   builder (`escape(expr, type, {params, acc}, vars, env)`) all do this.
+   builder (`escape(expr, type, {params, acc}, vars, env)`) all do this. So
+   does tv-labs/lua, a complete hand-written Lua 5.3 compiler and VM in
+   Elixir. Its scope pass threads a `%State{}` struct, its codegen a `ctx`
+   map, and it has no process dictionary in any compiler pass.
    `Macro.prewalk/postwalk/traverse` are the library form of the same idea.
+   Even a project that ships a generic AST walker (tv-labs/lua's
+   `Lua.AST.Walker`) writes its passes as explicit clauses.
 2. **The process dictionary is used by these compilers, but only for a few
    compile-wide side channels, always saved and restored around a dynamic
    extent.** Elixir keeps its diagnostics sink, compiler PID, current file and
@@ -458,6 +465,214 @@ no runtime values at compile time, so it must infer them from the AST, which
 is why its compiler looks more like Elixir's expander and type checker than
 like Nx.
 
+### tv-labs/lua: a hand-written compiler and VM in pure Elixir
+
+The closest worked example of a full compiler written in Elixir: lexer,
+parser, AST, compiler passes and VM. Read at
+[`3f2aead`](https://github.com/tv-labs/lua/tree/3f2aead2596dfabe0c58415235d766cd70574f53)
+(2026-07-29, `mix.exs` version 1.0.2). Paths below are relative to that
+commit (prefix `https://github.com/tv-labs/lua/blob/3f2aead2596dfabe0c58415235d766cd70574f53/`).
+
+**Why it exists.** Up to 0.4.0 the library was "an ergonomic Elixir wrapper
+around Robert Virding's Luerl". "As of `1.0.0` it is a full Elixir-native
+reimplementation of the Lua 5.3 lexer, parser, and virtual machine". Against
+Luerl it claims "pure Elixir with no shared mutable state (each `Lua` value is
+plain immutable state you thread explicitly), ... richer error messages with
+source and line attribution" (`README.md` L256-L266). The changelog says
+1.0.0 "replaces the Luerl backend with an Elixir-native Lua 5.3 VM"
+(`CHANGELOG.md` L13-L16). The roadmap calls the 1.0.0 milestone a freeze of
+"the public API around the completed Luerl → Elixir-native rewrite"
+(`ROADMAP.md` L25-L37).
+
+**1. The pipeline.**
+- *Front end.* `Lua.Lexer` is a "hand-written lexer ... using Elixir binary
+  pattern matching". It threads the position "as three bare integers instead
+  of a map" and builds a position map only when it emits a token or an error
+  (`lib/lua/lexer.ex` L1-L12). `Lua.Parser` is a "hand-written recursive
+  descent parser" that uses Pratt parsing for operator precedence
+  (`lib/lua/parser.ex` L1-L6, `lib/lua/parser/pratt.ex`).
+- *Compiler.* `Lua.Compiler.compile/2` composes the passes with `with` and a
+  pipe (`lib/lua/compiler.ex` L41-L69):
+  1. `Ids.assign` stamps every node.
+  2. `GotoValidation.validate`, `Scope.resolve` and `Codegen.generate`,
+     each returning `:ok`/`{:ok, _}`/`{:error, _}`.
+  3. `Peephole.optimize` (skippable with `peephole: false`), then
+     `Bytecode.compile`, then `GotoResolution.resolve`.
+- *IR at each step:*
+  - AST structs (`Lua.AST.*`).
+  - A `Scope.State` side table keyed by node id.
+  - A `%Prototype{}` holding a list of tagged-tuple instructions built by
+    `Lua.Compiler.Instruction` constructors ("Each instruction is a tagged
+    tuple", `lib/lua/compiler/instruction.ex` L1-L7) and nested prototypes
+    (`lib/lua/compiler/prototype.ex`).
+  - Optionally, a dense "tuple-of-tuples encoding" with integer opcode tags
+    in `prototype.bytecode` (`lib/lua/compiler/bytecode.ex` L1-L25).
+- *Fallback.* `Bytecode.compile` returns `:fallback` on the first opcode the
+  dispatcher does not cover, and that prototype stays on the list
+  interpreter. Both forms are kept "so error reporting and tooling continue to
+  work unchanged" (`compiler.ex` L26-L39).
+- *Errors.* `compile!/2` re-raises `{:error, message}` as
+  `Lua.CompilerException`. Codegen "surfaces unsupported constructs by
+  raising directly" (L77-L91).
+
+**2. IR design.**
+- *Nodes.* AST nodes are one struct per node kind (`defmodule Nil do
+  defstruct [:meta]`, `BinOp`, `Var`, ...), each with a `meta` field
+  (`lib/lua/ast/expr.ex` L1-L45, `statement.ex`, `block.ex`).
+- *Metadata.* `%Lua.AST.Meta{start, end, metadata, id}` holds positions
+  (`line`, `column`, `byte_offset`), comments and an id
+  (`lib/lua/ast/meta.ex` L1-L44).
+- *Node ids.* `Lua.AST.Ids.assign/1` exists because "keying those tables by
+  the node term makes every read and write hash the node's whole subtree". It
+  writes "a distinct integer into each node's `meta.id`" in one post-order
+  walk, threading the counter as `{node, next}` (`lib/lua/ast/ids.ex`
+  L1-L60). The compiler gives the correctness reason too: "without ids,
+  structurally identical nodes (e.g. two empty loop bodies) would share one
+  table entry and miscompile", which is why stamping happens once, in
+  `compile/2` (`compiler.ex` L43-L50). `Scope.node_key/1` falls back to the
+  node term only when there is no id (`lib/lua/compiler/scope.ex` L68-L81).
+- *Walker.* `Lua.AST.Walker` offers `walk/3` (pre or post order), `map/2`
+  (post-order) and `reduce/3` (pre-order accumulator)
+  (`lib/lua/ast/walker.ex` L1-L110). No compiler pass uses it: a grep of
+  `lib/` finds `Walker.` only in its own file. Every pass (Ids, Scope,
+  Codegen, GotoValidation) is hand-written recursion with one clause per
+  node struct. *Inference:* the generic walker serves users and tests; passes
+  that thread rich state want explicit clauses, the same choice Elixir's own
+  passes make.
+
+**3. Pass state.**
+- `Scope.resolve/2` threads a `%Scope.State{}` struct through
+  `resolve_*(node, state)` clauses. Its fields are `var_map`, `functions`,
+  `current_function`, `next_register`, `locals`, `parent_scopes`,
+  `captured_locals`, `block_path` and `block_counter`; per-function data
+  lives in a nested `%FunctionScope{}` (`scope.ex` L25-L67, L96-L125,
+  L455-L490).
+- Codegen threads a plain map `ctx` (`next_reg`, `source`, `scope`,
+  `prototypes`, `current_function`, plus `:peak_reg` added with
+  `Map.put`). Each generator returns `{instructions, ctx}` or
+  `{instructions, reg, ctx}`, and `gen_block/2` saves and restores
+  `next_reg` around each statement (`lib/lua/compiler/codegen.ex` L16-L93).
+- Scope's result is passed to codegen as an argument (`Codegen.generate(chunk,
+  scope_state, opts)`).
+- No process dictionary, ETS or `persistent_term` in the lexer, parser, AST
+  or compiler (grep of those directories).
+- The one process-dictionary use in the project is in the VM. The executor
+  "stashes the calling line and source in the process dictionary" at each
+  native-function call so stdlib callbacks can attach positions to errors,
+  "and the previous values are restored so nested invocations don't see
+  each other's positions". It costs "one `Process.put` and one
+  `Process.delete` per native function invocation — far less than per
+  `:source_line` opcode" (`lib/lua/vm/executor.ex` L29-L46, L87-L114).
+  Separately, the VM (not the compiler) memoizes boot-time templates in
+  `:persistent_term`, noting that it "has no eviction" so keys must be
+  bounded (`lib/lua/vm/bootstrap.ex` L1-L13, L62-L103).
+  Its own `AGENTS.md` carries the same generated usage rule as defk's,
+  "Using the process dictionary is typically a sign of unidiomatic code"
+  (L81).
+
+*Inference, compared with defk:* this is the Elixir compiler's pattern again.
+Pass state is explicit (a struct for scope, a map for codegen, a side table
+handed from one pass to the next), and the pdict holds one bracketed
+cross-cutting value. defk's `:defk_ctx` puts both kinds in the pdict.
+
+**4. Diagnostics.**
+- *Single error.* The parser returns one structured error.
+  `parse_structured/1` "returns the `t:Lua.Parser.Error.t/0` structs directly
+  so consumers can render errors in their own UI (editors, LSPs, web
+  frontends)", but "the error list always holds a single error today; the
+  list shape leaves room for multi-error recovery without a breaking change"
+  (`parser.ex` L44-L71).
+- *Recovery is not wired in.* `Lua.Parser.Recovery` ("collecting multiple
+  errors in a single parse pass": sync on statement boundaries, closing
+  delimiters, keywords; `lib/lua/parser/recovery.ex` L1-L60) is called only
+  from `test/lua/parser/recovery_test.exs`. A grep of `lib/` finds no caller,
+  and `Error.format_multiple/2` and `:multiple_errors` are likewise unused
+  outside `error.ex`.
+- *Error shape.* `%Lua.Parser.Error{type, message, position, suggestion,
+  source_lines, related}`, with `to_map/2` giving a "wire-safe
+  representation" shared with runtime errors (`lib/lua/parser/error.ex`
+  L20-L75).
+- *Exception.* `Lua.CompilerException` is `defexception errors: [],
+  diagnostics: nil, source: nil`. It keeps the structured errors and the
+  source, and renders the report lazily in `message/1` so "the ANSI gate is
+  evaluated when the message is written" (`lib/lua/compiler_exception.ex`
+  L1-L50).
+- *Codegen invariants.* Codegen failures are plain `raise "codegen: missing
+  var_map entry ..."` (`codegen.ex` L790, L937, L974), i.e. compiler bugs,
+  not user errors.
+
+**5. Compile-time use: `~LUA`.**
+- `sigil_LUA/2` is a macro. It rejects non-literal strings, then calls
+  `Lua.Parser.parse/1` and `Lua.Compiler.compile!/1` **at Elixir compile
+  time**, raising `Lua.CompilerException` on a parse error (`lib/lua.ex`
+  L219-L255).
+- Without a modifier it returns the source string, so the code is parsed
+  twice: once to validate, once at run time. With `c` it returns the compiled
+  chunk as a literal (`Macro.escape(chunk)`, L252).
+- It does nothing special for positions. *Inference:* the exception is
+  raised during macro expansion. `Kernel.ParallelCompiler.get_snippet_info/3`
+  handles exactly that case: a stack whose top frame is `expanding macro`
+  takes the file and line of the next frame
+  (`elixir:lib/elixir/lib/kernel/parallel_compiler.ex` L1170-L1173). So the
+  diagnostic lands on the Elixir line of the sigil, and the Lua line only
+  appears in the message.
+
+**6. Executor and dispatch (their measurements, not ours).**
+- *Interpreter.* `Lua.VM.Executor` is a "fully tail-recursive CPS dispatch
+  loop". Hot values (`line`, `instruction_count`) are "threaded as a
+  parameter (not stored in `%State{}`) ... it would otherwise force a struct
+  rebuild on the hot path", and the instruction budget is counted "only at
+  loop back-edges and call boundaries — never per opcode"
+  (`executor.ex` L1-L16).
+- *Dispatcher.* `Lua.VM.Dispatcher` exists "to test the hypothesis that
+  integer-tagged opcode dispatch over a tuple-encoded instruction stream
+  measurably outperforms the existing list-of-tagged-tuples interpreter".
+  Opcodes are small integer module attributes so "each case branch match[es]
+  a constant integer, which the BEAM collapses to a jump table"
+  (`lib/lua/vm/dispatcher.ex` L1-L47).
+- *Peephole pass.* It exists because "codegen is deliberately naive". It
+  does seven local rewrites: move elision, constant folding into `_k`
+  opcodes, upvalue-field fusion ("halves" global-access instruction count),
+  unreachable code, upvalue round-trips, redundant `close_upvalues`, and
+  self-call fusion (`lib/lua/compiler/peephole.ex` L1-L38).
+- *Their numbers* (`CHANGELOG.md` L262-L272; `bench_results/versions-2026-07-28.md`
+  L40-L92, Apple M4, OTP 29, medians, Luerl 1.5.1 as a same-run control):
+  - Right-sizing register tuples made the interpreter "~26% faster on
+    `fib(25)` (closing the dispatcher–interpreter gap to ~1.02×)".
+  - `fib(30)` went from 1.09× Luerl at 1.0.0 to 0.59× at 1.0.2 (434 ms vs
+    742 ms), after the static-arity call convention and one-allocation
+    register file (#405).
+  - *Inference:* by their own account the integer-tag dispatcher ended up
+    about equal to the list interpreter once allocation was fixed. The
+    wins came from allocation and call-convention work, not from dispatch
+    encoding.
+
+*Relevance to defk's Elixir mode (inference):* little. Elixir mode
+translates each kernel into Elixir functions that the BEAM compiles
+(`Defk.ElixirMode` moduledoc), so it has no dispatch loop to tune. The
+transferable points are general ones the Lua project measured: allocation
+dominates, and hot values belong in arguments rather than in a struct that
+is rebuilt.
+
+**7. Testing.**
+- *Official suite.* The Lua 5.3 test suite is vendored in
+  `test/lua53_tests/`. Test cases are generated per `.lua` file, with a skip
+  map that is itself an `@external_resource` (`test/lua53_suite_test.exs`
+  L1-L30). Status as they report it: "20/29 files passing" with nine
+  documented exclusions (`ROADMAP.md` L9-L18).
+- *Differential test of an optimisation.* The peephole tests compile each
+  program "twice, once with `peephole: false` and once with it on, evaluate[]
+  both, and compare[] results, printed output, and ... the rendered exception
+  byte for byte"; the rewritten stream must also "never need a wider register
+  file" (`test/lua/compiler/peephole_test.exs` L1-L15, L104-L135).
+- *Properties.* StreamData properties run in six test files, e.g. table
+  borders against "an independent key=>value oracle"
+  (`test/lua/vm/table_border_test.exs` L433-L460).
+- *Benchmarks.* Each release's benchmark output is kept in `bench_results/`,
+  with a same-run Luerl control and a stated "measurement discipline"
+  ("serially ... on an otherwise quiet machine"; medians as primary)
+  (`bench_results/README.md`, `versions-2026-07-28.md` L53-L65).
+
 ### Other compiler-ish projects
 
 - **Zigler** (inline Zig NIFs). `use Zig` registers `@before_compile
@@ -495,14 +710,14 @@ like Nx.
 
 ### Passes in Elixir: what the sources do, summarised
 
-| Concern | Elixir compiler | Module.Types | Nx defn | EXLA lowering | Ecto builder | Zigler |
-|---|---|---|---|---|---|---|
-| Node dispatch | clause heads per AST shape | clause heads | clause heads | clause heads per `op` | clause heads | struct pipeline |
-| Working state | records `S`/`E`, threaded | `stack` (read-only) + `context` (threaded) | map, threaded | `state` + `cache` map, threaded | `{params, acc}`, threaded | one struct through `|>` |
-| Module-wide store | ETS tables per module | n/a | module attribute | n/a | n/a | module attributes |
-| Process dictionary | diagnostics sink, compiler PID/file, binaries; save/restore | none | trace flag, backend; save/restore | none | none | none |
-| Errors | taint + raise at checkpoints, many per file | accumulate; `failed` stops cascade | raise first | raise | raise first | raise first |
-| IR nodes | quoted AST, Erlang forms | type descriptors | `%Expr{}` structs, ref ids | MLIR values | `%QueryExpr{}` etc. | `%Zig.Nif{}` etc. |
+| Concern | Elixir compiler | Module.Types | Nx defn | EXLA lowering | Ecto builder | Zigler | tv-labs/lua |
+|---|---|---|---|---|---|---|---|
+| Node dispatch | clause heads per AST shape | clause heads | clause heads | clause heads per `op` | clause heads | struct pipeline | clause heads per node struct |
+| Working state | records `S`/`E`, threaded | `stack` (read-only) + `context` (threaded) | map, threaded | `state` + `cache` map, threaded | `{params, acc}`, threaded | one struct through `|>` | `%Scope.State{}` struct, codegen `ctx` map, threaded; scope result passed to codegen |
+| Module-wide store | ETS tables per module | n/a | module attribute | n/a | n/a | module attributes | n/a (compiles one chunk) |
+| Process dictionary | diagnostics sink, compiler PID/file, binaries; save/restore | none | trace flag, backend; save/restore | none | none | none | none in the compiler; VM: native-call position, save/restore |
+| Errors | taint + raise at checkpoints, many per file | accumulate; `failed` stops cascade | raise first | raise | raise first | raise first | parser: one structured error (recovery module unused); codegen: raise |
+| IR nodes | quoted AST, Erlang forms | type descriptors | `%Expr{}` structs, ref ids | MLIR values | `%QueryExpr{}` etc. | `%Zig.Nif{}` etc. | AST structs with `meta.id` → tagged-tuple instructions → integer-tag bytecode |
 
 ## Part 2: sources for idiomatic Elixir, ranked by trust
 
@@ -806,6 +1021,23 @@ after it reads `lib/defk.ex` at `f78bf4c` (unchanged in the working tree).
    `Nx.Defn.Compiler` behaviour (Evaluator vs EXLA) parallels defk's native
    vs Elixir mode. Nx's tracing front end does not transfer: it needs runtime
    values, and defk compiles before any exist.
+8. **tv-labs/lua is the nearest existence proof for item 2, and a model for
+   testing optimisations.**
+   - It is a ~30k-line compiler and VM written by hand in Elixir.
+     Scope resolution threads a `%State{}`, codegen threads a `ctx` map, and
+     scope's result reaches codegen as an argument. The only
+     process-dictionary key is a bracketed VM-side position for native
+     callbacks: the same split item 2 suggests for `:defk_ctx`.
+   - Its peephole pass can be switched off (`peephole: false`). The tests
+     compile every program both ways and compare results, output and
+     exception text byte for byte, and check that the optimised form never
+     needs more registers.
+   - defk's `DEFK_DUMP_C` gate checks that a refactor leaves the C
+     byte-identical. Agreement checks native code against Elixir mode. The
+     analogue for defk's optimisations (copy analysis, flagged strips,
+     bounds proofs) would be an off switch per optimisation plus a
+     differential test that the result does not change. That checks the
+     optimisation itself, not a refactor of it.
 
 ## defk against the meta-programming anti-patterns
 
@@ -841,6 +1073,9 @@ is `lib/defk/compiler.ex` → `lib/defk/errors.ex (compile)`, from the
 
 ## Gaps and open questions
 
+- **tv-labs/lua's `~LUA` error position:** the claim that the diagnostic
+  lands on the sigil's Elixir line is read from `get_snippet_info/3`, not
+  observed.
 - **Books:** not read; their entries rest on publisher listings. Reading
   them is out of scope for a source-code note.
 - **Elixir core team on the process dictionary:** beyond #11335 (internal
