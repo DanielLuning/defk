@@ -1,7 +1,8 @@
 {
   "assignee": "",
   "blocked_by": [
-    "defk-2mz"
+    "defk-2mz",
+    "defk-pvt"
   ],
   "blocks": [],
   "created": "2026-10-10T12:10:45Z",
@@ -28,5 +29,5 @@
   "status": "open",
   "title": "Row-major m[r * dim + j] with a runtime dim keeps its bounds checks; out[r] too when out = alloc(f64, div(len(m), dim))",
   "type": "task",
-  "updated_at": "2026-10-12T10:57:59Z"
+  "updated_at": "2026-10-12T10:58:06Z"
 }
