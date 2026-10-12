@@ -10,41 +10,13 @@ Code.require_file("../examples/fuzzy_search/lib/fuzzy_search/kernels.ex", __DIR_
 # loaded by test_helper.exs (Defk.Catalog).
 
 defmodule Defk.ElixirModeTest.Agree do
-  import ExUnit.Assertions
-
-  def outcome(f) do
-    {:ok, f.()}
-  rescue
-    e -> {:raise, e}
-  end
-
-  @doc "Native and Elixir mode agree on `fun(args)`; returns the outcome."
+  # This file's agreement default: exact message equality, through
+  # Defk.Test.assert_agrees (defk-0ha; the near-verbatim second
+  # implementation that lived here is gone). `message: false` falls back to
+  # the reason taxonomy, for raises whose messages carry formatted values.
   def agree(mod, fun, args, opts \\ []) do
-    native =
-      outcome(fn -> Defk.ElixirMode.with_mode(:native, fn -> apply(mod, fun, args) end) end)
-
-    elixir = outcome(fn -> mod.__defk_elixir__(fun, args) end)
-    call = "#{inspect(mod)}.#{fun}(#{Enum.map_join(args, ", ", &inspect(&1, limit: 5))})"
-
-    case {native, elixir} do
-      {{:ok, a}, {:ok, b}} ->
-        assert a === b,
-               "#{call}: native #{inspect(a, limit: 8)}, Elixir mode #{inspect(b, limit: 8)}"
-
-      {{:raise, a}, {:raise, b}} ->
-        assert a.__struct__ == b.__struct__,
-               "#{call}: native raised #{inspect(a)}, Elixir mode #{inspect(b)}"
-
-        if opts[:message] != false,
-          do: assert(a == b, "#{call}: native raised #{inspect(a)}, Elixir mode #{inspect(b)}")
-
-      _ ->
-        flunk(
-          "#{call}: native #{inspect(native, limit: 8)}, Elixir mode #{inspect(elixir, limit: 8)}"
-        )
-    end
-
-    native
+    opts = if opts[:message] == false, do: [], else: [message: :exact]
+    Defk.Test.assert_agrees(mod, fun, args, opts)
   end
 
   def i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
