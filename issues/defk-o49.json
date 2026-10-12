@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-12T13:49:39Z",
+  "description": "Single-source builtin TYPING as data: name x operand type patterns -\u003e result type + coercions, consumed by both Compiler.builtin/4 and ElixirMode.builtin/4, which keep only emission. Decisions (grilling 2026-10-12, recorded as ADR-0008): builtins only, constructs stay code; row vocabulary capped at the regular majority (type variables, type classes, result = constant or operand reference, coercion spec), irregular builtins keep bespoke clauses but get a typing: :bespoke row so the table stays total; enforcement by table-generated agreement kernels (one tiny kernel per concrete type combination, both modes, assert_agrees) - a missing clause, wrong coercion and semantic drift all fail the same test. SEMANTICS stay written twice on purpose (Elixir mode is the oracle) - see ADR-0008 before deduplicating further. CONTEXT.md 'Builtin' added.",
+  "id": "defk-o49",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Grow Defk.Builtins into the builtin signature table (ADR-0008)",
+  "type": "task",
+  "updated_at": "2026-10-12T13:49:39Z"
+}
