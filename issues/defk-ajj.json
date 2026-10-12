@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-12T09:47:59Z",
+  "description": "\u003e *Follow-up from defk-uw9 (agent report, 2026-10-12).*\n\ndefk-uw9 made a `for` rejected as for-collect report the errors in its body. The cold test kernel (docs/cold-tests/hexdocs-entropy/attempt1.ex.txt) still hides four errors until a second compile:\n- Map.update: inside `for ..., reduce: %{}`, whose init is rejected (unsupported-map), so the reduce body is never lowered.\n- Map.values, Enum.reduce and :math.log2: inside a `|\u003e` pipe, which is rejected as one error (pipe) and not looked into.\n\nOption: recovery in those two constructs as in recover_for/4 (lower the reduce body with the accumulator poisoned; check each call of a pipe as if it were written nested), suppressing anything that only follows from the rejection.",
+  "id": "defk-ajj",
+  "labels": [],
+  "priority": 4,
+  "status": "open",
+  "title": "Report errors inside a rejected pipe and a reduce with a rejected init",
+  "type": "task",
+  "updated_at": "2026-10-12T09:47:59Z"
+}
