@@ -152,7 +152,7 @@ defmodule Defk.Build do
       File.rm(base <> ".so")
 
       if e.original == :enoent,
-        do: reraise(Defk.Errors.no_compiler(module, file, cc), __STACKTRACE__),
+        do: reraise(Defk.Errors.Diagnostics.no_compiler(module, file, cc), __STACKTRACE__),
         else: reraise(e, __STACKTRACE__)
   end
 
