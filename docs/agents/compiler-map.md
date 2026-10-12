@@ -55,9 +55,12 @@ lowering declares as it emits; defk-ch4), not from the C text.
   `adaptive_slice`), `@impl` handling, `lib_defs/1`.
 - `lib/defk/build.ex`: C compiler invocation, cache key, where the `.so`
   lives (`placement!/3`: app ebin vs absolute path), `mix_project?/0`.
-- `lib/defk/errors.ex`: the error registry (code, why, fix), `reference/0`
+- `lib/defk/errors.ex`: the error registry (code, why, fix); `reference/0`
   and `scope/1` feed the generated docs — after changing it, follow
-  `docs/agents/generated-docs.md`.
+  `docs/agents/generated-docs.md`. Rendering and location live in
+  `Defk.Errors.Diagnostics`, the rewrite-suggestion engine in
+  `Defk.Errors.Rewrites` (defk-vlf); a literal code passed to `err!` is
+  checked against the registry when the compiler compiles.
 - `lib/defk/facts.ex`: the range-facts lattice (one opaque value under
   `v.facts`; assert/derive in, `prove_in_bounds`/`prove_i64` with support
   out). ADR-0007's representation migration happens here.
