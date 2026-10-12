@@ -564,6 +564,7 @@ defmodule Defk.Compiler do
     Process.put(:defk_decls, [])
     Process.put(:defk_decl_loop, %{})
     Process.put(:defk_fsticky, %{})
+    srec_reset()
     Process.put(:defk_sp, 0)
     Process.put(:defk_sps, [])
     Process.put(:defk_loops, [])
@@ -865,9 +866,16 @@ defmodule Defk.Compiler do
     a[:id] && Copies.record_write(a.id, a[:buf], target)
 
     store =
-      if Facts.in_bounds?(a, i),
-        do: "(#{a.c}).data[#{i.c}] = #{vc};\n",
-        else: "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
+      case Facts.prove_in_bounds(a, i) do
+        {:proven, _} = proven ->
+          srec_proven(:index, a, i, proven)
+          srec(%{k: :elem_write, arr: a.c, checked: false})
+          "(#{a.c}).data[#{i.c}] = #{vc};\n"
+
+        :unproven ->
+          srec(%{k: :elem_write, arr: a.c, checked: true})
+          "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
+      end
 
     note_bounds(target, a, i)
     {[sa, si, sv, sc, store], env}
@@ -882,12 +890,13 @@ defmodule Defk.Compiler do
 
   defp lower_stmt({:if, _, [cond, kw]} = node, env) when is_list(kw) do
     note_branch_stmt(node, "a statement, and a select is for a value")
+    ref = make_ref()
     {sc, c} = lower_cond(cond, env)
-    {sa, _} = lower_stmts(Keyword.fetch!(kw, :do), env)
+    {sa, _} = srec_arm(ref, 0, fn -> lower_stmts(Keyword.fetch!(kw, :do), env) end)
 
     case Keyword.fetch(kw, :else) do
       {:ok, e} ->
-        {sb, _} = lower_stmts(e, env)
+        {sb, _} = srec_arm(ref, 1, fn -> lower_stmts(e, env) end)
         {[sc, "if (#{c}) {\n", sa, "} else {\n", sb, "}\n"], env}
 
       :error ->
@@ -967,6 +976,7 @@ defmodule Defk.Compiler do
       true ->
         c = fresh(name, v.t)
         b = %{c: c, t: v.t, owned: v[:owned] || false, var: c, facts: Facts.facts(v)}
+        srec_assign(c, v.c)
         {"#{c} = #{v.c};\n", put_var(env, name, b)}
     end
   end
@@ -1250,6 +1260,7 @@ defmodule Defk.Compiler do
     buf = Copies.carried(make_ref(), a[:buf])
 
     if a.owned and a[:var] != nil do
+      srec_assign(a.c, "defk_copy_#{e}(ctx, #{a.c})")
       {"#{a.c} = defk_copy_#{e}(ctx, #{a.c});\n", Map.put(a, :buf, buf)}
     else
       c = fresh(base, a.t)
@@ -1261,6 +1272,7 @@ defmodule Defk.Compiler do
 
       b = if a[:var], do: Facts.assert(b, len_lb: Map.put(Facts.len_lb(a), a.c, 0)), else: b
 
+      srec_assign(c, "defk_copy_#{e}(ctx, #{a.c})")
       {"#{c} = defk_copy_#{e}(ctx, #{a.c});\n", b}
     end
   end
@@ -1318,6 +1330,7 @@ defmodule Defk.Compiler do
 
         b = if v[:var], do: Facts.assert(b, len_lb: Map.put(Facts.len_lb(v), v.c, 0)), else: b
 
+        srec_assign(c, v.c)
         {"#{c} = #{v.c};\n", b}
     end
   end
@@ -1486,13 +1499,15 @@ defmodule Defk.Compiler do
     i = coerce!(i, :i64, idx, "array index")
     {:arr, e} = a.t
     raw = widen("(#{a.c}).data[#{i.c}]", e)
+    proven = Facts.prove_in_bounds(a, i)
 
     get =
       cond do
         # an f64 or f32 from an input array may hold inf or NaN bits: the read
         # raises (defk-i00); an alloc/2 array holds only what the kernel wrote
         # (fin), a copy of an input array still holds the input's bits
-        e in [:f64, :f32] and not a[:fin] and Facts.in_bounds?(a, i) ->
+        e in [:f64, :f32] and not a[:fin] and proven != :unproven ->
+          srec_proven(:index, a, i, proven)
           "defk_in_f64(ctx, #{raw}, #{i.c})"
 
         e == :f64 and not a[:fin] ->
@@ -1501,7 +1516,8 @@ defmodule Defk.Compiler do
         e == :f32 and not a[:fin] ->
           "defk_in_f64(ctx, (double)defk_get_f32(ctx, #{a.c}, #{i.c}), #{i.c})"
 
-        Facts.in_bounds?(a, i) ->
+        proven != :unproven ->
+          srec_proven(:index, a, i, proven)
           raw
 
         true ->
@@ -1594,18 +1610,23 @@ defmodule Defk.Compiler do
   end
 
   defp lower_expr({op, _, [a, b]}, env) when op in [:and, :or, :&&, :||] do
+    ref = make_ref()
     {sa, va} = lower_expr(a, env)
-    {sb, vb} = lower_expr(b, env)
+    {sb, vb} = srec_arm(ref, 0, fn -> lower_expr(b, env) end)
     bool!(va, a, op)
     bool!(vb, b, op)
     cop = if op in [:and, :&&], do: "&&", else: "||"
 
     if IO.iodata_length(sb) == 0 do
+      # inline right side: its rows run with the statement after all
+      srec_drop_frame(ref)
       {sa, val("(#{va.c} #{cop} #{vb.c})", :bool)}
     else
       # right side needs statements: keep short-circuit semantics explicitly
       tmp = fresh("sc", :bool)
       test = if cop == "&&", do: tmp, else: "!#{tmp}"
+
+      srec_arm(ref, 0, fn -> srec_assign(tmp, vb.c) end)
 
       {[sa, "#{tmp} = #{va.c};\nif (#{test}) {\n", sb, "#{tmp} = #{vb.c};\n}\n"],
        val(tmp, :bool, tmp)}
@@ -1764,12 +1785,16 @@ defmodule Defk.Compiler do
   defp int_div(f, a, b, node, env) do
     case {int_pair!(a, b, node), env} do
       {{:i64, a, b}, %{bad: bad, ovf: ovf}} when f == :div ->
+        srec_addr(bad)
+        srec_addr(ovf)
         val("defk_div_i64_g(&#{bad}, &#{ovf}, #{a.c}, #{b.c})", :i64)
 
       {{:i64, a, b}, %{bad: bad}} ->
+        srec_addr(bad)
         val("defk_rem_i64_g(&#{bad}, #{a.c}, #{b.c})", :i64)
 
       {{:u64, a, b}, %{bad: bad}} ->
+        srec_addr(bad)
         val("defk_#{f}_u64_g(&#{bad}, #{a.c}, #{b.c})", :u64)
 
       {{:i64, a, b}, _} ->
@@ -1852,9 +1877,13 @@ defmodule Defk.Compiler do
       "({ double #{f} = #{fast}; DEFK_FCHECK(#{bad}) { #{replay}(void)#{r}; " <>
         "defk_nonfinite_lost(ctx); } #{f}; })"
 
-    if divisors == [] do
-      Process.put(:defk_fsticky, Map.put(Process.get(:defk_fsticky), f, sticky_leaves(node, env)))
+    leaves = if divisors == [], do: sticky_leaves(node, env)
+
+    if leaves do
+      Process.put(:defk_fsticky, Map.put(Process.get(:defk_fsticky), f, leaves))
     end
+
+    srec_ftree(f, "DEFK_FCHECK(#{bad})", leaves)
 
     {[], val(c, :f64)}
   catch
@@ -2040,14 +2069,27 @@ defmodule Defk.Compiler do
   # chain (so every condition runs once), or a select per element when the
   # arms are pure. The value is a tuple of the element temporaries.
   defp lower_arms(clauses, name, node, env) do
+    ref = make_ref()
+
     arms =
-      Enum.map(clauses, fn
-        {:nomatch, s} ->
+      clauses
+      |> Enum.with_index()
+      |> Enum.map(fn
+        {{:nomatch, s}, _k} ->
           {nil, nil, :nomatch, s, nil}
 
-        {c, body} ->
-          cond = if c == true, do: :else, else: lower_cond(c, env)
-          {sb, v} = lower_block(body, env)
+        {{c, body}, k} ->
+          # the first arm's condition runs unconditionally; a later arm's
+          # runs only when the arms before it did not take (it sits in their
+          # else blocks), like the arm's own body
+          cond =
+            cond do
+              c == true -> :else
+              k == 0 -> lower_cond(c, env)
+              true -> srec_arm(ref, k, fn -> lower_cond(c, env) end)
+            end
+
+          {sb, v} = srec_arm(ref, k, fn -> lower_block(body, env) end)
           {c, body, cond, sb, v}
       end)
 
@@ -2243,12 +2285,20 @@ defmodule Defk.Compiler do
     end)
   end
 
-  defp checked(%{ovf: flag}), do: "_s(&#{flag}"
+  defp checked(%{ovf: flag}) do
+    srec_addr(flag)
+    "_s(&#{flag}"
+  end
+
   defp checked(_env), do: "(ctx"
 
   # a float operation in a case guard flags a non-finite result as a failed
   # guard (an Elixir error), not as an overflow
-  defp checked_float(%{bad: flag}), do: "_s(&#{flag}"
+  defp checked_float(%{bad: flag}) do
+    srec_addr(flag)
+    "_s(&#{flag}"
+  end
+
   defp checked_float(env), do: checked(env)
 
   # pure expressions that can only fail by i64 overflow or a non-finite float
@@ -2572,9 +2622,14 @@ defmodule Defk.Compiler do
     note_bounds(node, a, i, w)
 
     c =
-      if Facts.in_bounds?(a, i, w),
-        do: "defk_#{f}_at((#{a.c}).data + #{i.c})",
-        else: "defk_#{f}(ctx, #{a.c}, #{i.c})"
+      case Facts.prove_in_bounds(a, i, w) do
+        {:proven, _} = proven ->
+          srec_proven(:load, a, i, proven)
+          "defk_#{f}_at((#{a.c}).data + #{i.c})"
+
+        :unproven ->
+          "defk_#{f}(ctx, #{a.c}, #{i.c})"
+      end
 
     v = val(c, :i64)
     if w < 8, do: Facts.assert(v, lo: 0, hi: Bitwise.bsl(1, 8 * w) - 1), else: v
@@ -2869,6 +2924,7 @@ defmodule Defk.Compiler do
         else
           c = fresh(p, t)
 
+          srec_assign(c, v.c)
           {"#{c} = #{v.c};\n", {p, %{c: c, t: t, owned: false, var: c, facts: Facts.facts(v)}}}
         end
       end)
@@ -2919,6 +2975,7 @@ defmodule Defk.Compiler do
               |> Facts.assert(len_lo: Facts.len_lo(v)),
             else: r
 
+        srec_assign(tmp, c)
         {"#{tmp} = #{c};\n", r}
       end)
       |> Enum.unzip()
@@ -3102,6 +3159,7 @@ defmodule Defk.Compiler do
   # after a yield)
   defp bind_tmp(v, acc) do
     c = fresh("arg", v.t)
+    srec_assign(c, v.c)
     {"#{c} = #{v.c};\n", acc ++ [c]}
   end
 
@@ -3505,7 +3563,8 @@ defmodule Defk.Compiler do
 
   defp lower_quals([filter | rest], env, inner) do
     {sc, c} = lower_cond(filter, env)
-    [sc, "if (#{c}) {\n", lower_quals(rest, env, inner), "}\n"]
+    inner = srec_arm(make_ref(), 0, fn -> lower_quals(rest, env, inner) end)
+    [sc, "if (#{c}) {\n", inner, "}\n"]
   end
 
   # `range` is the range expression
@@ -3578,10 +3637,16 @@ defmodule Defk.Compiler do
     env = put_var(env, name, iv)
 
     in_loop(fn id ->
-      {body, flat?} = lower_quals_tracked(rest, env, inner)
+      {rows, {body, flat?}} =
+        srec_rows(fn ->
+          res = lower_quals_tracked(rest, env, inner)
+          srec_assign(i, "#{i} + step")
+          res
+        end)
+
       strip = strip && Map.merge(strip, %{var: i, stop: e})
       loop_at(range)
-      [setup, loop(id, done, strip, flat?, [body, incr])]
+      [setup, loop(id, done, strip, flat?, [body, incr], rows)]
     end)
   end
 
@@ -3652,11 +3717,18 @@ defmodule Defk.Compiler do
 
     # index is in range by construction: no bounds check
     in_loop(fn id ->
-      {body, flat?} = lower_quals_tracked(rest, env, inner)
       read = widen("#{arr}.data[#{k}]", e)
 
       read =
         if e in [:f64, :f32] and not a[:fin], do: "defk_in_f64(ctx, #{read}, #{k})", else: read
+
+      {rows, {body, flat?}} =
+        srec_rows(fn ->
+          srec_assign(x, read)
+          res = lower_quals_tracked(rest, env, inner)
+          srec_assign(k, "#{k} + 1")
+          res
+        end)
 
       body = ["#{x} = #{read};\n", body, "#{k} += 1;\n"]
 
@@ -3669,7 +3741,7 @@ defmodule Defk.Compiler do
       }
 
       loop_at(src)
-      [s, "#{k} = 0;\n", loop(id, "#{k} >= #{arr}.len", strip, flat?, body)]
+      [s, "#{k} = 0;\n", loop(id, "#{k} >= #{arr}.len", strip, flat?, body, rows)]
     end)
   end
 
@@ -3694,6 +3766,78 @@ defmodule Defk.Compiler do
   # The checked helpers a flagged strip turns into flags (DEFK_NF_ forms):
   # the float checks, which make a strip worth flagging, and the other checks
   # that may join them (defk-hki): i64/u64 overflow, element access, narrow
+  # ------------------------------------------------------- strip record ---
+  # What the lowering declares, as it emits, about the statements that may
+  # end up inside a flat loop's strip (defk-ch4): whole-variable assignments
+  # with their right-hand side's C (so a float read, a float tree or a
+  # scalar copy is recognisable from its row), addresses taken, raw element
+  # accesses with their bounds proof's support (Defk.Facts.prove_in_bounds),
+  # and float trees with their sticky leaves. Each row carries its position
+  # (seq), the branch arms it sits under (path, outermost last) and whether
+  # it sits in a conditional expression (cond). flag_strip/3 classifies from
+  # these rows instead of re-parsing the C text it was handed. One
+  # process-dictionary key: the defk_ prefix keeps with_acc_facts'
+  # backtracking snapshot covering it; defk-euu folds it into the context.
+
+  defp srec_reset, do: Process.put(:defk_strip, %{seq: 0, path: [], cond: false, rows: []})
+
+  defp srec_get, do: Process.get(:defk_strip)
+
+  defp srec(row) do
+    %{seq: seq, path: path, cond: cond?, rows: rows} = st = srec_get()
+    row = Map.merge(row, %{seq: seq, path: path, cond: cond?})
+    Process.put(:defk_strip, %{st | seq: seq + 1, rows: [row | rows]})
+  end
+
+  # the rows recorded while `fun` ran (oldest first), beside its result
+  defp srec_rows(fun) do
+    first = srec_get().seq
+    res = fun.()
+    rows = for r <- srec_get().rows, r.seq >= first, do: r
+    {Enum.reverse(rows), res}
+  end
+
+  # run `fun` as arm `arm` of the branch `ref`: its rows run only when that
+  # arm does
+  defp srec_arm(ref, arm, fun) do
+    st = srec_get()
+    Process.put(:defk_strip, %{st | path: [{ref, arm} | st.path]})
+    res = fun.()
+    Process.put(:defk_strip, %{srec_get() | path: st.path})
+    res
+  end
+
+  # drop branch frame `ref` from every row: a short-circuit right side that
+  # turned out inline runs with its statement after all
+  defp srec_drop_frame(ref) do
+    st = srec_get()
+
+    rows =
+      Enum.map(st.rows, fn row ->
+        %{row | path: Enum.reject(row.path, &match?({^ref, _}, &1))}
+      end)
+
+    Process.put(:defk_strip, %{st | rows: rows})
+  end
+
+  defp srec_assign(var, rhs) do
+    srec(%{k: :assign, var: var, rhs: IO.iodata_to_binary([rhs])})
+    :ok
+  end
+
+  defp srec_addr(var), do: srec(%{k: :addr, var: var})
+
+  # a raw (proof-dropped) element access, read or write; kind :index for
+  # (a).data[i], :load for a word load's (a).data + i
+  defp srec_access(kind, arr, idx, support),
+    do: srec(%{k: :access, access: kind, arr: arr, idx: idx, support: support})
+
+  defp srec_proven(kind, a, i, {:proven, support}),
+    do: srec_access(kind, a.c, i.c, support)
+
+  defp srec_ftree(f, anchor, leaves),
+    do: srec(%{k: :ftree, f: f, anchor: anchor, leaves: leaves})
+
   # write ranges and float-to-integer conversions.
   @nf_helpers ~w(fadd fsub fmul fdiv in_f64 sqrt log log2 log10 exp pow to_f32)
   @nf_joins ~w(add_i64 sub_i64 mul_i64 neg_i64 abs_i64 add_u64 sub_u64 mul_u64 trunc round
@@ -3726,8 +3870,8 @@ defmodule Defk.Compiler do
   # runs flagged (flagged_loop/5).
   # Each form is noted for the fast-path report (note_loop/2) and marked in
   # the C for clang's remarks (Defk.Report).
-  defp loop(id, done, strip, :plain = flat, body) when is_map(strip) do
-    case flag_strip(id, body, strip.var) do
+  defp loop(id, done, strip, :plain = flat, body, rows) when is_map(strip) do
+    case flag_strip(id, body, strip.var, rows) do
       nil ->
         mark = note_loop(:strips, @strips)
         note_unflagged(body, strip.var)
@@ -3752,7 +3896,7 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp loop(id, done, strip, flat, body) when is_map(strip) and flat == :exits do
+  defp loop(id, done, strip, flat, body, _rows) when is_map(strip) and flat == :exits do
     mark =
       note_loop(
         :strips,
@@ -3762,7 +3906,7 @@ defmodule Defk.Compiler do
     [mark, strip_loop(id, done, strip, flat, body), @loop_end]
   end
 
-  defp loop(id, done, strip, flat?, body) do
+  defp loop(id, done, strip, flat?, body, _rows) do
     why =
       [
         strip == nil && "the range step is not a literal, so the trip count is not known on entry",
@@ -3886,7 +4030,7 @@ defmodule Defk.Compiler do
   #     the snapshot when it is assigned whole, as array accumulators are);
   #   * an array it writes is not otherwise mentioned (no read of it, so the
   #     replay recomputes the values it wrote) and no input array is written.
-  defp flag_strip(id, body, var) do
+  defp flag_strip(id, body, var, _rows) do
     text = IO.iodata_to_binary(body)
 
     rest = unflagged_rest(text)
