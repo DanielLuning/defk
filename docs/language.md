@@ -851,9 +851,8 @@ false
 ```
 
 A write to a literal bound to a variable copies it first, like an input
-array's ([Copies](#copies)); a literal cannot be returned unwritten
-([`return-input-array`](compile-errors.md#return-input-array)), and it is not a `case`
-pattern.
+array's ([Copies](#copies)); returned unwritten, it reaches the caller as a
+new binary of its bytes. It is not a `case` pattern.
 
 **Unsupported:** interpolation, charlists (`'abc'`, `~c"abc"`; write
 `"abc"`), a segment that is a float, a variable, a string, a value outside
@@ -1030,9 +1029,9 @@ iex> M.ones(10)
 A binary attribute is an array like an input array: it can be indexed (a
 read out of range raises `Enum.OutOfBoundsError`), measured with `len/1`,
 iterated with `for c <- @table`, bound to a variable and passed to a kernel.
-A write copies it first, like an input array's ([Copies](#copies)); it
-cannot be returned unwritten ([`return-input-array`](compile-errors.md#return-input-array)),
-and it is not a `case` pattern. Its bytes are compiled into the NIF, so a large table makes the
+A write copies it first, like an input array's ([Copies](#copies));
+returned unwritten, it reaches the caller as a new binary of its bytes. It
+is not a `case` pattern. Its bytes are compiled into the NIF, so a large table makes the
 library larger, not the call slower.
 
 **Unsupported:** an attribute that is not defined above the kernel
@@ -1575,17 +1574,30 @@ fails, which would break the [runtime contract](guides/runtime-contract.md).
 
 ### Returning
 
-**Supported with restrictions:** a kernel may return an array it created
-or wrote (alone or in a result tuple); it reaches the caller as a binary
-without a copy. Returning an input array it never writes is
-[`return-input-array`](compile-errors.md#return-input-array) (not supported yet); the caller
-already has it.
+**Supported:** a kernel may return any array, alone or in a result tuple,
+also from an `if`, `cond` or `case` (see [Arrays from branches](#arrays-from-branches)).
+An array it created or wrote reaches the caller as a binary without a copy.
+An input array it never writes is the caller's own binary, returned as it
+came (the same term, no copy), also when a called kernel returns it. A
+binary literal or attribute returned unwritten is a new binary of its bytes.
 
-Arrays cannot be the value of an `if`, `cond` or `case`
-([`array-in-branch`](compile-errors.md#array-in-branch), not supported yet). They can be a
-`reduce:` or `Enum.reduce_while` accumulator, alone or in a tuple, which is
-how an array rebound in a loop body is carried out of the loop (see
-[Array accumulators](#array-accumulators)).
+```elixir
+defk first_nonempty(a :: [i64], b :: [i64]) :: [i64] do
+  if len(a) > 0, do: a, else: b
+end
+```
+
+```elixir
+iex> a = <<1::64-signed-native, 2::64-signed-native>>
+iex> :erts_debug.same(M.first_nonempty(a, <<>>), a)
+true
+iex> M.first_nonempty(<<>>, <<3::64-signed-native>>)
+<<3, 0, 0, 0, 0, 0, 0, 0>>
+```
+
+Arrays can also be a `reduce:` or `Enum.reduce_while` accumulator, alone or
+in a tuple, which is how an array rebound in a loop body is carried out of
+the loop (see [Array accumulators](#array-accumulators)).
 
 ### Inputs
 
@@ -1739,13 +1751,56 @@ iex> M.split(7, 3.0)
   returned, or is the next accumulator of a `for ..., reduce:` (a variable
   cannot hold it, [`tuple-binding`](compile-errors.md#tuple-binding)).
 - An element may be a bitstring accumulator, as a whole branch may: `{acc, n}`
-  beside `{<<acc::bitstring, 1::1>>, n + 1}`. An array element is
-  [`array-in-branch`](compile-errors.md#array-in-branch), as an array branch is.
+  beside `{<<acc::bitstring, 1::1>>, n + 1}`, or an array, as a whole
+  branch may (see [Arrays from branches](#arrays-from-branches)).
 - Natively each condition runs once and each element gets its own branch
   value; arms of plain arithmetic become one select per element, as a
   number branch does. Elixir mode runs the branch as written.
 
 (defk-uew)
+
+### Arrays from branches
+
+**Supported:** an `if`, `cond` or `case` may give an array, alone or as an
+element of its tuples, when every arm gives an array of one element type:
+input arrays, arrays the kernel allocated or wrote, binary literals and
+attributes, in any mix.
+
+```elixir
+defk pick_sum(c :: bool, a :: [i64], b :: [i64]) :: {[i64], i64} do
+  x = if c, do: a, else: b
+  x[0] = x[0] + 1
+
+  s =
+    for v <- x, reduce: 0 do
+      acc -> acc + v
+    end
+
+  {x, s}
+end
+```
+
+```elixir
+iex> a = <<1::64-signed-native, 2::64-signed-native>>
+iex> {x, s} = M.pick_sum(true, a, <<>>)
+iex> {x, s, a}
+{<<2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0>>, 4, <<1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0>>}
+```
+
+- No elements are copied to take the branch: `x` is the array the arm gave.
+  An input array stays the caller's binary, read in place (and re-bound
+  after a yield, like the parameter, since a GC may move the binary).
+- The value semantics of [Copies](#copies) hold: a write to `x` is never
+  seen through `a` or `b` or by the caller. The compiler can't tell which
+  arm ran, so it treats `x` as possibly any arm's array: a write to `x`
+  copies it first when any arm may be an input array, or when an arm's
+  array is read after the write (`a[0]` later); a write to `a` copies it
+  first while `x` is read after it. It is conservative: it may copy where
+  the arm taken would not need it.
+- Returned unwritten, the array is the caller's binary when the arm taken
+  gave an input (see [Returning](#returning)).
+
+(defk-gqk)
 
 ### `for`
 
@@ -1877,12 +1932,13 @@ iex> {:binary.part(counts, 8, 16), n}
   change (see [Copies](#copies)): `tally(keys)` with
   `reduce: {slots0, ...}` copies `slots0` once, before the loop, if
   `slots0` is read after it.
-- An array cannot be the value of an `if`, `cond` or `case`
-  ([`array-in-branch`](compile-errors.md#array-in-branch)), so a body that changes the array
-  only sometimes writes its elements in a branch, or calls the kernel that
-  writes it on every iteration. In `Enum.reduce_while/3` each tail is its
-  own value, so `if done, do: {:halt, {slots, n}}, else: {:cont, {slots, n + 1}}`
-  works.
+- The body's new array may come from an `if`, `cond` or `case`
+  (`if c, do: acc, else: other`, see [Arrays from branches](#arrays-from-branches)).
+  It is copied on the same test as any new value, so a branch that may give
+  an input array copies it every iteration that takes that branch; one that
+  gives `acc` or an array the body allocated does not. In
+  `Enum.reduce_while/3` each tail is its own value, so
+  `if done, do: {:halt, {slots, n}}, else: {:cont, {slots, n + 1}}` works.
 - Elixir mode runs the same `for ..., reduce:` or `Enum.reduce_while/3`,
   with the arrays as binaries.
 

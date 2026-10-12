@@ -1896,6 +1896,32 @@ for w <- 0..(n - 1)//1 do
 end
 ```
 
+### 6.26 An array from a branch, and a returned input, cost nothing measurable
+
+Since `defk-gqk` an `if`, `cond` or `case` may give an array and a kernel may
+return an input array unwritten. Neither copies: the branch's temporary
+holds the arm's view, an input view in it is re-bound after each resume (a
+few compares per local at a resume, a store per input at a yield), and an
+unwritten input is returned as the caller's own term (two compares at the
+return). Only a write to the branch's array copies, as a write to an input
+always did.
+
+- **Numbers** (best 3 of 5 rounds, per call): `x = if c, do: a, else: b`
+  then a sum over `x` against the old workaround `if c, do: total(a), else:
+  total(b)`: 75.4 against 76.0 ns at 64 elements, 2.15 against 2.17 us at
+  4096, 498.0 against 498.4 us at 10^6. Returning an unwritten 4096-element
+  input: 24.7 ns, against 24.1 ns for a kernel returning `len(a)`. Under
+  forced yields (a yield at every safepoint, 194-1785 per call), walking an
+  input through a branch's local against walking the parameter: 0.35 against
+  0.37 ms (7-element heap binary), 0.22 against 0.23 ms (4096-element refc
+  binary). Every difference is inside the run-to-run spread.
+- **Conditions:** M-series Mac, Apple clang, `MIX_ENV=dev`; other agents'
+  work on the machine, so provisional.
+- **Source:** `defk-gqk`, a scratch benchmark of the kernels in
+  [`test/array_branch_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/array_branch_test.exs);
+  `resume_block/3` and `view_term/3` in `lib/defk/compiler.ex`.
+- **Status:** provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -2169,4 +2195,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
-  `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`.
+  `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`.
