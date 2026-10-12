@@ -127,19 +127,17 @@ defmodule Defk.Builtins do
   # {:ok, result_type, coercions} with classes and variables resolved,
   # :bespoke for a name typed outside the table, or :error (no row).
   def typing(name, types) do
-    cond do
-      name in @bespoke_typing ->
-        :bespoke
-
-      true ->
-        @typing
-        |> Enum.filter(fn {n, pats, _, _} -> n == name and length(pats) == length(types) end)
-        |> Enum.find_value(:error, fn {_, pats, result, coerce} ->
-          case binds(pats, types, %{}) do
-            :error -> nil
-            binds -> {:ok, resolve(result, binds, types, coerce), coerce}
-          end
-        end)
+    if name in @bespoke_typing do
+      :bespoke
+    else
+      @typing
+      |> Enum.filter(fn {n, pats, _, _} -> n == name and length(pats) == length(types) end)
+      |> Enum.find_value(:error, fn {_, pats, result, coerce} ->
+        case binds(pats, types, %{}) do
+          :error -> nil
+          binds -> {:ok, resolve(result, binds, types, coerce), coerce}
+        end
+      end)
     end
   end
 
