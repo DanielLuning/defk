@@ -2708,8 +2708,9 @@ defmodule Defk.Compiler do
   defp emit_builtin(f, [%{t: t} = a], _, _) when f in [:clz, :ctz, :popcount] and t in @ints,
     do: Facts.assert(val("defk_#{f}(#{a.c})", :i64), lo: 0, hi: 64)
 
-  defp emit_builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:mulhi, :rotl64, :rotr64],
-    do: val("defk_#{f}(#{a.c}, #{b.c})", :i64)
+  defp emit_builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _)
+       when f in [:mulhi, :rotl64, :rotr64],
+       do: val("defk_#{f}(#{a.c}, #{b.c})", :i64)
 
   # clz/2, ctz/2, rotl/3, rotr/3 (defk-wlu): x is a w-bit value, checked as
   # Defk.Bits checks it; an i64 x passes its sign. rotl/rotr give x's type.
@@ -3176,7 +3177,6 @@ defmodule Defk.Compiler do
   # one runs in strips with a safepoint after each, as alloc/2's zeroing does,
   # unless the kernel has yield: false or the length is known to be short.
   @copy_at_once 1024 * 1024
-
 
   defp range_copy(f, a, s, ints, node, env) do
     {:arr, e} = a.t
