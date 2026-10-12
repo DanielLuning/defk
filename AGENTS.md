@@ -36,6 +36,12 @@ The five default triage labels (`needs-triage`, `needs-info`, `ready-for-agent`,
 
 Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Compiler map
+
+Orientation before reading code: where each concern lives in the compiler,
+the runtime header and the tests, and how to navigate (AST tools don't parse
+Elixir; use grep and `mix xref`). See `docs/agents/compiler-map.md`.
+
 ### Generated docs
 
 After changing the `Defk.Errors` registry, regenerate `docs/compile-errors.md` and parts of `docs/scope.md`. See `docs/agents/generated-docs.md`.
