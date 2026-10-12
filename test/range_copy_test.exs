@@ -373,8 +373,12 @@ defmodule Defk.RangeCopyTest do
     assert msg =~ "(defk builtin-arguments"
     assert msg =~ "copy/5 takes an array, an i64 index, a source array of the same element type"
 
+    # a float position fails the signature table like any other wrong type
+    # (defk-o49; it used to fail one step later, as a type-mismatch on the
+    # coercion)
     msg = rejection("a = copy_back(a, x, 1, 1)\nlen(a)", "a :: [u8], x :: f64")
-    assert msg =~ "(defk type-mismatch"
+    assert msg =~ "(defk builtin-arguments"
+    assert msg =~ "called here with ([u8], f64, i64, i64)"
 
     msg = rejection("a = copy_back(1, 1, 1, 1)\nlen(a)", "a :: [u8]")
     assert msg =~ "(defk builtin-arguments"
