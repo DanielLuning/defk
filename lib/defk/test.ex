@@ -74,9 +74,20 @@ defmodule Defk.Test do
       iex> {:raise, e} = Defk.Test.assert_agrees(MyApp.Sum, :sum, [pack.([2 ** 62, 2 ** 62])])
       iex> {e.__struct__, Defk.Test.agreement_reason(e)}
       {ArithmeticError, :overflow}
+
+  Options:
+
+    * `:forced_yields` - `true` also runs the native side under
+      `__defk_force_yields__/1` (every safepoint yields), asserting the same
+      agreement, so every resume path is covered by the one call. The flag
+      is module-wide while the forced run executes: in `async: true` tests
+      only use it on modules no other test file calls.
+    * `:message` - `:exact` compares raised exceptions whole (module and
+      message text), instead of module plus `agreement_reason/1`. For
+      kernels whose messages carry no C-formatted values.
   """
-  @spec assert_agrees(module(), atom(), [term()]) :: outcome()
-  def assert_agrees(mod, fun, args) do
+  @spec assert_agrees(module(), atom(), [term()], keyword()) :: outcome()
+  def assert_agrees(mod, fun, args, opts \\ []) do
     arity = length(args)
     Code.ensure_loaded(mod)
 
@@ -84,30 +95,48 @@ defmodule Defk.Test do
       flunk("#{inspect(mod)}.#{fun}/#{arity} is not exported")
     end
 
-    native =
-      outcome(fn -> Defk.ElixirMode.with_mode(:native, fn -> apply(mod, fun, args) end) end)
-
+    run_native = fn -> Defk.ElixirMode.with_mode(:native, fn -> apply(mod, fun, args) end) end
+    native = outcome(run_native)
     elixir = outcome(fn -> mod.__defk_elixir__(fun, args) end)
 
     call = "#{inspect(mod)}.#{fun}(#{Enum.map_join(args, ", ", &inspect(&1, limit: 5))})"
+    assert_outcomes(call, native, elixir, opts)
 
+    if opts[:forced_yields] do
+      forced =
+        try do
+          mod.__defk_force_yields__(true)
+          outcome(run_native)
+        after
+          mod.__defk_force_yields__(false)
+        end
+
+      assert_outcomes("#{call} under forced yields", forced, elixir, opts)
+    end
+
+    native
+  end
+
+  defp assert_outcomes(call, native, elixir, opts) do
     case {native, elixir} do
       {{:ok, a}, {:ok, b}} ->
         assert a === b,
                "#{call}: native #{inspect(a, limit: 8)}, Elixir mode #{inspect(b, limit: 8)}"
 
       {{:raise, a}, {:raise, b}} ->
-        assert {a.__struct__, agreement_reason(a)} == {b.__struct__, agreement_reason(b)},
-               "#{call}: native raised #{inspect(a)} (#{inspect(agreement_reason(a))}), " <>
-                 "Elixir mode raised #{inspect(b)} (#{inspect(agreement_reason(b))})"
+        assert {a.__struct__, raise_key(a, opts)} == {b.__struct__, raise_key(b, opts)},
+               "#{call}: native raised #{inspect(a)} (#{inspect(raise_key(a, opts))}), " <>
+                 "Elixir mode raised #{inspect(b)} (#{inspect(raise_key(b, opts))})"
 
       _ ->
         flunk(
           "#{call}: native #{inspect(native, limit: 8)}, Elixir mode #{inspect(elixir, limit: 8)}"
         )
     end
+  end
 
-    native
+  defp raise_key(e, opts) do
+    if opts[:message] == :exact, do: Exception.message(e), else: agreement_reason(e)
   end
 
   # message fragments -> reason, first match wins; messages of the kernel
