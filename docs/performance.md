@@ -1684,7 +1684,7 @@ x = mulhi(wrap64(bsl(j1, 32)), j1)                                 # j1 * j1 >>>
 
 ### 6.20 Give each helper kernel one call site: inlining multiplies code per site
 
-Every kernel call is inlined (`defk-6ag`), so a helper called from two
+Every kernel call is inlined, so a helper called from two
 sites of a helper called from three sites is compiled six times. In
 argon2.exs, BLAKE2b's compression called at 2 sites per BLAKE2b, BLAKE2b at
 3 sites per H', and H' at 2 sites per entry kernel gave 26.6 MB of C that
@@ -1693,7 +1693,8 @@ each BLAKE2b block into a padded 128-byte buffer and compress it in one
 loop; H' as one loop over V_1 .. V_(r+1)) gave 3.6 MB of C and a 1.1 MB
 `.so` in about 2.5 minutes, with no measurable run-time cost (H' hashes at
 most 1 KiB at a time). Each entry kernel is its own copy: the second entry
-(`argon2id` calling `argon2`) is half of the C.
+(`argon2id` calling `argon2`) is half of the C. An entry kernel past
+80,000 lines of C now gets a compile warning naming the chain (6.27).
 
 - **Conditions:** under load; Apple clang 21.
 - **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (header), `defk-52v.9`, `defk-6ag`.
@@ -1945,6 +1946,62 @@ always did.
   [`test/array_branch_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/array_branch_test.exs);
   `resume_block/3` and `view_term/3` in `lib/defk/compiler.ex`.
 - **Status:** provisional.
+
+### 6.27 Inlining warns past 80,000 lines of C per entry kernel
+
+Since `defk-6ag` an entry kernel (one called from Elixir) whose generated C
+passes 80,000 lines gets a compile warning at its head. It names the size,
+the kernels it inlines most (copies times the AST nodes of their own body)
+with the call chain that gives the most copies, and suggests one call site
+per helper (6.20). It is a warning, not an error. The measure is lines of C
+per entry kernel, counted after lowering and before the C compiler runs.
+
+- **Numbers** (171 entry kernels in `test/support` and `examples`; lines of C
+  of each entry's frame, function and NIF; AST nodes with every call inlined
+  once per call site):
+
+  | Entry kernel | Lines of C | MB | AST nodes |
+  |---|---:|---:|---:|
+  | argon2's first draft, reconstructed: `argon2id/6` | 295,722 | 16.0 | 89,757 |
+  | a diamond 7 levels deep (`test/inline_size_test.exs`): `d0/1` | ~120,600 | 6.2 | |
+  | **the threshold** | **80,000** | | |
+  | `argon2id/6`, `argon2/9` (`argon2.exs`) | 29,288, 28,825 | 1.4 | 27,187 |
+  | `solve_all/10` (`cdcl_sat.exs`) | 19,775 | 1.0 | 7,428 |
+  | `hmac_sha256_rounds/4` (`hash_chain.exs`) | 17,965 | 1.4 | 38,845 |
+  | `blake3_keyed/2` (`blake.exs`) | 17,512 | 0.9 | 23,041 |
+  | `blake2b/2` (`blake.exs`) | 13,330 | 0.7 | 17,293 |
+  | `solve/5` (`cdcl_sat.exs`) | 13,044 | 0.6 | 6,781 |
+  | `sha3_256/1` (`keccak.exs`) | 10,767 | 0.5 | 3,340 |
+  | `decode58/2` (`codecs.exs`), the largest of the rest | 1,081 | 0.04 | 537 |
+  | `mean_var/1`, the largest in `test/support` | 277 | 0.01 | 61 |
+
+  The median entry is 327 lines, the 90th percentile 3,986. The largest
+  (argon2) is 2.7x below the threshold; argon2's first draft as recorded
+  (224k lines per entry, 6.20) is 2.8x above it, the reconstruction (6.20's
+  call sites: compression at 2 sites per BLAKE2b, BLAKE2b at 3 per H', H' at
+  2 per entry) 3.7x. No kernel in the suite or the examples warns.
+- **Why lines of C, not AST nodes:** nodes per line differ 7-fold between
+  kernels (`sha3_256` 0.3, `hmac_sha256_rounds` 2.2: one unrolled kernel with
+  nothing repeated has the most nodes), so a node threshold separates
+  `hmac_sha256_rounds` (38,845) from the draft (89,757) by 2.3x, lines by 10x.
+  The C grows faster than the copies: a diamond of kernels that each call
+  the next twice, with a loop at the bottom, gives 1,571 / 4,168 / 12,877 /
+  44,562 / 165,207 / 635,804 lines (whole module) at 3 to 8 levels, about
+  3.7x per doubling, because each safepoint saves and restores the frame
+  variables live there, and those grow with the copies too. A node count
+  misses that; the lines do not.
+- **Compile-time cost:** counting the lines of argon2's 3.6 MB of C takes
+  1.3-1.9 ms, against 240-340 ms to lower it and ~2.5 min of clang; three
+  interleaved compiles of argon2, blake, cdcl_sat, keccak and hash_chain with
+  and without the check differ by less than their run-to-run spread. The
+  call graph and the message are built only when a kernel warns. Lowering
+  grows with the C as well: 3.7 s for the argon2 draft, 2 s for the 8-level
+  diamond (34 MB), so the warning comes seconds, not minutes, in.
+- **Conditions:** M-series Mac, Elixir 1.20.2, OTP 29; other work on the
+  machine (load 6-8) for the timings, so provisional. Lines are counted from
+  the generated C, without running the C compiler.
+- **Source:** `defk-6ag`, [`lib/defk/inline_size.ex`](https://github.com/DanielLuning/defk/blob/main/lib/defk/inline_size.ex), [`test/inline_size_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/inline_size_test.exs), [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (the draft reconstructed from its header and 6.20).
+- **Status:** sizes measured; timings provisional.
 
 ---
 
@@ -2219,4 +2276,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
-  `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`.
+  `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`.
