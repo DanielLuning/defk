@@ -27,11 +27,15 @@
     {
       "text": "Re-check before starting (flagged in the 2026-10-12 review wrap-up): the one-key :defk_ctx cell was chosen over explicit threading on a churn estimate made BEFORE defk-k4x (Facts) and defk-z8y (Copies) land. First step of this ticket: survey what pdict state actually remains after those merges. If the surviving hot state concentrates in a small lower_* family, re-ask whether threading the survivors beats the cell - the cell fixes probe leaks and snapshot-by-prefix either way, but its 'fragments testable in isolation' win is weaker than it sounds (every function can still read/write every ctx field invisibly; the interface is narrower, still ambient).",
       "timestamp": "2026-10-12T14:51:35Z"
+    },
+    {
+      "text": "Re-check done (first step, 2026-10-12): post-k4x/z8y/ch4 census shows ~22 static pdict keys plus three dynamic families ({:defk_halted, id}, {:defk_acc_facts, ref}, entered-markers) still spread across entry, rejections, parsing, safepoints, report and emission - the state did NOT concentrate into a small lower_* family, so the one-key cell decision stands over explicit threading. Adjustments the census forces: (1) a key named :defk_ctx already exists (the error-location context swapped around inlining) - it becomes a  field of the struct and the struct takes the :defk_ctx key name; (2) the dynamic key families become map/set fields of the lowering sub-struct, or the single-value snapshot would miss them; (3) Defk.Copies' :defk_copies key must fold in for the same reason - its state API goes pure (state in, state out) and the compiler owns the storage shim, which also makes copies_test fully pure; (4) elixir_mode's :defk_em_* keys are its own expansion-time state, out of scope here (noted for a follow-up). New invariant worth testing at the end: after compile/4 returns, exactly one defk_-prefixed pdict key exists.",
+      "timestamp": "2026-10-12T18:56:33Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Compiler context: one :defk_ctx struct instead of process-dictionary globals",
   "type": "task",
-  "updated_at": "2026-10-12T18:55:20Z"
+  "updated_at": "2026-10-12T18:56:33Z"
 }
