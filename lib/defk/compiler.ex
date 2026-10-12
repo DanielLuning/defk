@@ -19,6 +19,8 @@ defmodule Defk.Compiler do
   @elems [:f64, :i64, :u64, :u8, :i16, :i32, :f32]
   @elems_text "f64, f32, i64, i32, i16, u8 and u64"
   @ints [:i64, :u64]
+  alias Defk.Facts
+
   @max_u64 0xFFFFFFFFFFFFFFFF
   @max_i64 0x7FFFFFFFFFFFFFFF
   @float_ops %{+: "fadd", -: "fsub", *: "fmul"}
@@ -31,7 +33,6 @@ defmodule Defk.Compiler do
   # clz, rotl, ... with a plain Elixir meaning in Defk.Bits
   @bits Defk.Builtins.bits()
   # range facts carried by values (see "range facts" below)
-  @facts [:lo, :hi, :lb, :ub, :len_lo, :len_lb]
 
   # forms that never yield: safepoints vanish and resume dispatch is dead code
   @no_yield_macros "#define DEFK_SP(N, W)\n#define DEFK_SHORT(R) ((void)(R), 1)\n#define DEFK_TICKS(W)\n#define DEFK_RESUMING 0\nint defk_rs = 0;\n"
@@ -862,7 +863,7 @@ defmodule Defk.Compiler do
     a[:id] && Process.put(:defk_writes, [{a.id, a[:buf], target} | Process.get(:defk_writes)])
 
     store =
-      if in_bounds?(a, i),
+      if Facts.in_bounds?(a, i),
         do: "(#{a.c}).data[#{i.c}] = #{vc};\n",
         else: "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
 
@@ -963,7 +964,7 @@ defmodule Defk.Compiler do
 
       true ->
         c = fresh(name, v.t)
-        b = Map.merge(Map.take(v, @facts), %{c: c, t: v.t, owned: v[:owned] || false, var: c})
+        b = %{c: c, t: v.t, owned: v[:owned] || false, var: c, facts: Facts.facts(v)}
         {"#{c} = #{v.c};\n", put_var(env, name, b)}
     end
   end
@@ -1411,13 +1412,13 @@ defmodule Defk.Compiler do
       {"#{a.c} = defk_copy_#{e}(ctx, #{a.c});\n", Map.put(a, :buf, buf)}
     else
       c = fresh(base, a.t)
-      len = if a[:var], do: %{len_lb: Map.put(len_lb(a), a.c, 0)}, else: %{}
 
       b =
         a
         |> Map.drop([:pure_read])
         |> Map.merge(%{c: c, var: c, owned: true, buf: buf})
-        |> Map.merge(len)
+
+      b = if a[:var], do: Facts.assert(b, len_lb: Map.put(Facts.len_lb(a), a.c, 0)), else: b
 
       {"#{c} = defk_copy_#{e}(ctx, #{a.c});\n", b}
     end
@@ -1469,14 +1470,12 @@ defmodule Defk.Compiler do
       # a C local of its own (two words, no elements copied)
       true ->
         c = fresh(name, v.t)
-        len = if v[:var], do: %{len_lb: Map.put(len_lb(v), v.c, 0)}, else: %{}
 
         b =
-          v
-          |> Map.take(@facts)
-          |> Map.merge(%{c: c, t: v.t, owned: v.owned, var: c})
+          %{c: c, t: v.t, owned: v.owned, var: c, facts: Facts.facts(v)}
           |> Map.merge(ids)
-          |> Map.merge(len)
+
+        b = if v[:var], do: Facts.assert(b, len_lb: Map.put(Facts.len_lb(v), v.c, 0)), else: b
 
         {"#{c} = #{v.c};\n", b}
     end
@@ -1612,7 +1611,7 @@ defmodule Defk.Compiler do
       )
 
     v = if n > @max_i64, do: val("UINT64_C(#{n})", :u64), else: val("INT64_C(#{n})", :i64)
-    {[], Map.merge(v, %{lo: n, hi: n})}
+    {[], Facts.assert(v, lo: n, hi: n)}
   end
 
   # nonneg: the float is never below 0.0 (sqrt/1 of one needs no check)
@@ -1679,7 +1678,7 @@ defmodule Defk.Compiler do
         # an f64 or f32 from an input array may hold inf or NaN bits: the read
         # raises (defk-i00); an alloc/2 array holds only what the kernel wrote
         # (fin), a copy of an input array still holds the input's bits
-        e in [:f64, :f32] and not a[:fin] and in_bounds?(a, i) ->
+        e in [:f64, :f32] and not a[:fin] and Facts.in_bounds?(a, i) ->
           "defk_in_f64(ctx, #{raw}, #{i.c})"
 
         e == :f64 and not a[:fin] ->
@@ -1688,7 +1687,7 @@ defmodule Defk.Compiler do
         e == :f32 and not a[:fin] ->
           "defk_in_f64(ctx, (double)defk_get_f32(ctx, #{a.c}, #{i.c}), #{i.c})"
 
-        in_bounds?(a, i) ->
+        Facts.in_bounds?(a, i) ->
           raw
 
         true ->
@@ -1699,7 +1698,7 @@ defmodule Defk.Compiler do
 
     # an in-range read cannot fail but by its inf/NaN check, which a float
     # expression may defer to its own check (float_tree)
-    v = if in_bounds?(a, i), do: Map.put(v, :pure_read, raw), else: v
+    v = if Facts.in_bounds?(a, i), do: Map.put(v, :pure_read, raw), else: v
     note_bounds(node, a, i)
     {[sa, si], v}
   end
@@ -1817,12 +1816,13 @@ defmodule Defk.Compiler do
 
     cond do
       # a negative literal (-32_768) is a constant, with its facts
-      v.t == :i64 and v.c == "INT64_C(#{v[:lo]})" and v[:lo] > -0x8000000000000000 ->
-        {s, Map.merge(val("INT64_C(#{-v[:lo]})", :i64), %{lo: -v[:lo], hi: -v[:lo]})}
+      v.t == :i64 and v.c == "INT64_C(#{Facts.lo(v)})" and Facts.lo(v) > -0x8000000000000000 ->
+        k = -Facts.lo(v)
+        {s, Facts.assert(val("INT64_C(#{k})", :i64), lo: k, hi: k)}
 
       v.t == :i64 ->
         c = "defk_neg_i64#{checked(env)}, #{v.c})"
-        {s, Map.merge(val(c, :i64), %{lo: neg(v[:hi]), hi: neg(v[:lo])})}
+        {s, Facts.assert(val(c, :i64), lo: Facts.neg(Facts.hi(v)), hi: Facts.neg(Facts.lo(v)))}
 
       true ->
         {s, val("(-#{v.c})", v.t)}
@@ -1924,22 +1924,25 @@ defmodule Defk.Compiler do
     {fun, facts, {lo, hi}} =
       case op do
         :+ ->
-          {"add", add_facts(va, vb), {add(lo_of(va), lo_of(vb)), add(hi_of(va), hi_of(vb))}}
+          {"add", Facts.add_facts(va, vb),
+           {Facts.add(Facts.lo_of(va), Facts.lo_of(vb)),
+            Facts.add(Facts.hi_of(va), Facts.hi_of(vb))}}
 
         :- ->
-          {"sub", sub_facts(va, vb),
-           {add(lo_of(va), neg(hi_of(vb))), add(hi_of(va), neg(lo_of(vb)))}}
+          {"sub", Facts.sub_facts(va, vb),
+           {Facts.add(Facts.lo_of(va), Facts.neg(Facts.hi_of(vb))),
+            Facts.add(Facts.hi_of(va), Facts.neg(Facts.lo_of(vb)))}}
 
         :* ->
-          {"mul", mul_facts(va, vb), mul_range(va, vb)}
+          {"mul", Facts.mul_facts(va, vb), Facts.mul_range(va, vb)}
       end
 
     c =
-      if in_i64?(lo, hi),
+      if Facts.prove_i64(lo, hi),
         do: "(#{va.c} #{op} #{vb.c})",
         else: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"
 
-    Map.merge(val(c, :i64), facts)
+    Facts.put(val(c, :i64), facts)
   end
 
   # div or rem of two integers, checked for a zero divisor (and i64 div for
@@ -1971,8 +1974,8 @@ defmodule Defk.Compiler do
   defp int_pair!(va, vb, node) do
     case {va.t, vb.t} do
       {t, t} -> {t, va, vb}
-      {:u64, :i64} -> if nonneg?(vb), do: {:u64, va, as_u64(vb)}, else: u64_mix!(node, vb)
-      {:i64, :u64} -> if nonneg?(va), do: {:u64, as_u64(va), vb}, else: u64_mix!(node, va)
+      {:u64, :i64} -> if Facts.nonneg?(vb), do: {:u64, va, as_u64(vb)}, else: u64_mix!(node, vb)
+      {:i64, :u64} -> if Facts.nonneg?(va), do: {:u64, as_u64(va), vb}, else: u64_mix!(node, va)
     end
   end
 
@@ -1999,14 +2002,14 @@ defmodule Defk.Compiler do
   # a u64 where an i64 is expected: the same integer, or ArithmeticError
   # when it is above 2^63 - 1 (no check when its range facts rule that out)
   defp u64_to_i64(v) do
-    if is_integer(v[:hi]) and v[:hi] <= @max_i64,
+    if is_integer(Facts.hi(v)) and Facts.hi(v) <= @max_i64,
       do: %{v | c: "((int64_t)#{v.c})", t: :i64},
       else: %{v | c: "defk_u64_to_i64(ctx, #{v.c})", t: :i64}
   end
 
   # an i64 where a u64 is expected: ArithmeticError when it is negative
   defp i64_to_u64(v) do
-    if nonneg?(v),
+    if Facts.nonneg?(v),
       do: as_u64(v),
       else: %{v | c: "defk_i64_to_u64(ctx, #{v.c})", t: :u64}
   end
@@ -2183,7 +2186,7 @@ defmodule Defk.Compiler do
     # a u64 branch and i64 branches known to be >= 0 (a literal ...) give a u64
     u64? =
       Enum.any?(vals, &(&1.t == :u64)) and
-        Enum.all?(vals, &(&1.t == :u64 or (&1.t == :i64 and nonneg?(&1))))
+        Enum.all?(vals, &(&1.t == :u64 or (&1.t == :i64 and Facts.nonneg?(&1))))
 
     if u64?, do: :u64, else: branch_type1!(vals, name, node, pos)
   end
@@ -2304,16 +2307,16 @@ defmodule Defk.Compiler do
     # write-not-returned); one only some arms hold may be lost
     for b <- Enum.uniq(bufs), b != nil, Enum.all?(bufs, &carries?(&1, b)), do: carried(buf, b)
 
-    lens = for v <- vals, do: v[:len_lo]
+    lens = for v <- vals, do: Facts.len_lo(v)
 
     # every arm `<<>>`: still a bitstring accumulator's start (bits_init/2)
     bits0 = if Enum.all?(vals, &(&1[:bits0] == true)), do: %{bits0: true}, else: %{}
 
     Map.merge(%{val(tmp, t, tmp) | owned: Enum.all?(vals, & &1.owned)}, %{
       buf: buf,
-      fin: Enum.all?(vals, &(&1[:fin] == true)),
-      len_lo: if(Enum.all?(lens, &is_integer/1), do: Enum.min(lens))
+      fin: Enum.all?(vals, &(&1[:fin] == true))
     })
+    |> Facts.assert(len_lo: if(Enum.all?(lens, &is_integer/1), do: Enum.min(lens)))
     |> Map.merge(bits0)
   end
 
@@ -2517,8 +2520,8 @@ defmodule Defk.Compiler do
     v =
       cond do
         mask == -1 -> val("((int64_t)#{c})", :i64)
-        mask == @max_u64 -> Map.merge(val(c, :u64), %{lo: 0})
-        true -> Map.merge(val("((int64_t)(#{c} & UINT64_C(#{mask})))", :i64), %{lo: 0, hi: mask})
+        mask == @max_u64 -> Facts.assert(val(c, :u64), lo: 0)
+        true -> Facts.assert(val("((int64_t)(#{c} & UINT64_C(#{mask})))", :i64), lo: 0, hi: mask)
       end
 
     {s, v}
@@ -2594,13 +2597,17 @@ defmodule Defk.Compiler do
   end
 
   defp bitwise_val(:bnot, [a], _args, _node, _env),
-    do: Map.merge(val("(~#{a.c})", :i64), %{lo: bnot(a[:hi]), hi: bnot(a[:lo])})
+    do:
+      Facts.assert(val("(~#{a.c})", :i64),
+        lo: Facts.bnot(Facts.hi(a)),
+        hi: Facts.bnot(Facts.lo(a))
+      )
 
   defp bitwise_val(f, [a, b], _args, node, _env) when f in [:band, :bor, :bxor] do
     cop = %{band: "&", bor: "|", bxor: "^"}[f]
 
     case int_pair!(a, b, node) do
-      {:i64, a, b} -> Map.merge(val("(#{a.c} #{cop} #{b.c})", :i64), bit_facts(f, a, b))
+      {:i64, a, b} -> Facts.put(val("(#{a.c} #{cop} #{b.c})", :i64), Facts.bit_facts(f, a, b))
       {:u64, a, b} -> val("(#{a.c} #{cop} #{b.c})", :u64)
     end
   end
@@ -2612,7 +2619,10 @@ defmodule Defk.Compiler do
 
     case int_literal(n) do
       k when f == :bsr and is_integer(k) and k in 0..63 ->
-        Map.merge(val("(#{a.c} >> #{k})", :u64), %{lo: 0, hi: Bitwise.bsr(a[:hi] || @max_u64, k)})
+        Facts.assert(val("(#{a.c} >> #{k})", :u64),
+          lo: 0,
+          hi: Bitwise.bsr(Facts.hi(a) || @max_u64, k)
+        )
 
       _ ->
         val("defk_#{f}_u64#{checked(env)}, #{a.c}, #{b.c})", :u64)
@@ -2631,11 +2641,11 @@ defmodule Defk.Compiler do
       )
 
     c =
-      if f == :bsr and nonneg?(b),
+      if f == :bsr and Facts.nonneg?(b),
         do: "defk_bsr_nn(#{a.c}, #{b.c})",
         else: "defk_#{f}_i64#{checked(env)}, #{a.c}, #{b.c})"
 
-    Map.merge(val(c, :i64), if(f == :bsr, do: bsr_facts(a, b), else: %{}))
+    Facts.put(val(c, :i64), if(f == :bsr, do: Facts.bsr_facts(a, b), else: Facts.none()))
   end
 
   # the value of an integer literal, also a negative one (-63 is -(63))
@@ -2661,7 +2671,7 @@ defmodule Defk.Compiler do
     v = coerce!(v, :i64, n, "alloc/2 length")
     {sz, c} = alloc_zeroed(e, v, {:alloc, m, args})
     arr = %{c: c, t: {:arr, e}, owned: true, var: nil, fin: true}
-    {[s, sz], Map.merge(arr, %{len_lo: v[:lo], len_lb: lb(v)})}
+    {[s, sz], Facts.assert(arr, len_lo: Facts.lo(v), len_lb: Facts.lb(v))}
   end
 
   # a kernel named alloc at another arity is an ordinary call
@@ -2724,13 +2734,17 @@ defmodule Defk.Compiler do
   defp builtin(:len, [%{t: :bitstring}], node, _), do: bits_read!(node, arg(node, 0))
 
   defp builtin(:bit_size, [%{t: :bitstring} = a], _node, _),
-    do: Map.merge(val("(#{a.c}).nbits", :i64), %{lo: 0})
+    do: Facts.assert(val("(#{a.c}).nbits", :i64), lo: 0)
 
   defp builtin(:len, [%{t: {:arr, _}} = a], _node, _) do
     # a view that is not a variable (e.g. a kernel call) is a new array each time it is evaluated
     own = if a.var, do: %{a.c => 0}, else: %{}
-    facts = %{lo: max(a[:len_lo] || 0, 0), lb: Map.merge(len_lb(a), own), ub: own}
-    Map.merge(val("(#{a.c}).len", :i64), facts)
+
+    Facts.assert(val("(#{a.c}).len", :i64),
+      lo: max(Facts.len_lo(a) || 0, 0),
+      lb: Map.merge(Facts.len_lb(a), own),
+      ub: own
+    )
   end
 
   # u64_le(bytes, i) and the other word loads (Defk.Builtins.loads/0): an
@@ -2741,12 +2755,12 @@ defmodule Defk.Compiler do
     note_bounds(node, a, i, w)
 
     c =
-      if in_bounds?(a, i, w),
+      if Facts.in_bounds?(a, i, w),
         do: "defk_#{f}_at((#{a.c}).data + #{i.c})",
         else: "defk_#{f}(ctx, #{a.c}, #{i.c})"
 
-    facts = if w < 8, do: %{lo: 0, hi: Bitwise.bsl(1, 8 * w) - 1}, else: %{}
-    Map.merge(val(c, :i64), facts)
+    v = val(c, :i64)
+    if w < 8, do: Facts.assert(v, lo: 0, hi: Bitwise.bsl(1, 8 * w) - 1), else: v
   end
 
   # copy(out, at, src, from, n) and copy_back(out, at, off, n) (defk-52v.16):
@@ -2766,7 +2780,7 @@ defmodule Defk.Compiler do
   # Defk.Bits functions on the u64 bit patterns; the helpers are in
   # defk_runtime.h. The counts are in 0..64.
   defp builtin(f, [%{t: t} = a], _, _) when f in [:clz, :ctz, :popcount] and t in @ints,
-    do: Map.merge(val("defk_#{f}(#{a.c})", :i64), %{lo: 0, hi: 64})
+    do: Facts.assert(val("defk_#{f}(#{a.c})", :i64), lo: 0, hi: 64)
 
   defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:mulhi, :rotl64, :rotr64],
     do: val("defk_#{f}(#{a.c}, #{b.c})", :i64)
@@ -2776,7 +2790,7 @@ defmodule Defk.Compiler do
   defp builtin(f, [%{t: t} = x, w], node, _) when f in [:clz, :ctz] and t in @ints do
     w = coerce!(w, :i64, arg(node, 1), "#{f}/2 width")
     c = "defk_#{f}_#{if t == :i64, do: "i", else: "u"}(ctx, #{x.c}, #{w.c})"
-    Map.merge(val(c, :i64), %{lo: 0, hi: 64})
+    Facts.assert(val(c, :i64), lo: 0, hi: 64)
   end
 
   defp builtin(f, [%{t: t} = x, n, w], node, _) when f in [:rotl, :rotr] and t in @ints do
@@ -2794,10 +2808,10 @@ defmodule Defk.Compiler do
     w = coerce!(w, :i64, arg(node, 2), "crc32c/3 width")
     sfx = Enum.map_join([tc, tx], &if(&1 == :i64, do: "i", else: "u"))
 
-    Map.merge(val("defk_crc32c_#{sfx}(ctx, #{c.c}, #{x.c}, #{w.c})", :i64), %{
+    Facts.assert(val("defk_crc32c_#{sfx}(ctx, #{c.c}, #{x.c}, #{w.c})", :i64),
       lo: 0,
       hi: 0xFFFFFFFF
-    })
+    )
   end
 
   defp builtin(:f64_to_u64, [x], node, _) do
@@ -2809,13 +2823,11 @@ defmodule Defk.Compiler do
        when f in [:div, :rem] and ta in @ints and tb in @ints do
     v = int_div(f, a, b, node, env)
 
-    case {f, v, b} do
-      {:div, %{t: :i64}, %{lo: k, hi: k}} when is_integer(k) and k > 0 ->
-        Map.merge(v, div_facts_of(a, k))
+    k = Facts.const(b)
 
-      _ ->
-        v
-    end
+    if f == :div and v.t == :i64 and is_integer(k) and k > 0,
+      do: Facts.put(v, Facts.div_facts_of(a, k)),
+      else: v
   end
 
   defp builtin(:float, [a], node, _),
@@ -2842,7 +2854,7 @@ defmodule Defk.Compiler do
        when f in [:min, :max] and ta in @ints and tb in @ints do
     case int_pair!(a, b, node) do
       {:i64, a, b} ->
-        Map.merge(val("defk_#{f}_i64(#{a.c}, #{b.c})", :i64), minmax_facts(f, a, b))
+        Facts.put(val("defk_#{f}_i64(#{a.c}, #{b.c})", :i64), Facts.minmax_facts(f, a, b))
 
       {:u64, a, b} ->
         val("defk_#{f}_u64(#{a.c}, #{b.c})", :u64)
@@ -3040,8 +3052,7 @@ defmodule Defk.Compiler do
         else
           c = fresh(p, t)
 
-          {"#{c} = #{v.c};\n",
-           {p, Map.merge(Map.take(v, @facts), %{c: c, t: t, owned: false, var: c})}}
+          {"#{c} = #{v.c};\n", {p, %{c: c, t: t, owned: false, var: c, facts: Facts.facts(v)}}}
         end
       end)
       |> Enum.unzip()
@@ -3086,11 +3097,9 @@ defmodule Defk.Compiler do
         r =
           if match?({:arr, _}, t),
             do:
-              Map.merge(r, %{
-                buf: v[:buf] || make_ref(),
-                fin: v[:fin] || false,
-                len_lo: v[:len_lo]
-              }),
+              r
+              |> Map.merge(%{buf: v[:buf] || make_ref(), fin: v[:fin] || false})
+              |> Facts.assert(len_lo: Facts.len_lo(v)),
             else: r
 
         {"#{tmp} = #{c};\n", r}
@@ -3152,7 +3161,7 @@ defmodule Defk.Compiler do
 
   defp alloc_zeroed(e, v, {:alloc, m, _} = node) do
     {{_, _}, yield?} = Process.get(:defk_report_kernel)
-    hi = v[:hi]
+    hi = Facts.hi(v)
 
     cond do
       line = m[:defk_unzeroed] ->
@@ -3233,7 +3242,7 @@ defmodule Defk.Compiler do
       end
 
     {{_, _}, yield?} = Process.get(:defk_report_kernel)
-    hi = Enum.at(ints, 2)[:hi]
+    hi = Facts.hi(Enum.at(ints, 2))
     once? = not yield? or (is_integer(hi) and hi * @elem_bytes[e] <= @copy_at_once)
     k = fresh("copied", {:c, "int64_t"})
     args = if f == :copy, do: "#{at}, #{src}, #{x}, #{n}", else: "#{at}, #{x}, #{n}"
@@ -3269,7 +3278,7 @@ defmodule Defk.Compiler do
     r = %{val(dst, a.t, dst) | owned: true}
 
     {[sv, ss, sd, "#{dst} = #{d.c};\n", run],
-     Map.merge(r, %{buf: d[:buf] || make_ref(), fin: fin, len_lo: a[:len_lo]})}
+     Facts.assert(Map.merge(r, %{buf: d[:buf] || make_ref(), fin: fin}), len_lo: Facts.len_lo(a))}
   end
 
   # a value in a fresh local of its own (an argument the strip loop reads
@@ -3696,8 +3705,13 @@ defmodule Defk.Compiler do
       case literal_int(step) do
         k when is_integer(k) and k > 0 ->
           # counting up from a to b: in the body a <= i <= b
-          facts = %{lo: va[:lo], hi: vb[:hi], lb: lb(va), ub: ub(vb)}
-          iv = Map.merge(val(i, :i64), facts)
+          iv =
+            Facts.assert(val(i, :i64),
+              lo: Facts.lo(va),
+              hi: Facts.hi(vb),
+              lb: Facts.lb(va),
+              ub: Facts.ub(vb)
+            )
 
           strip = %{
             done_at: &"#{i} > #{&1}",
@@ -3768,11 +3782,11 @@ defmodule Defk.Compiler do
     near_limit =
       cond do
         is_integer(k) and k > 0 ->
-          hi = hi_of(vb)
+          hi = Facts.hi_of(vb)
           if !(is_integer(hi) and hi <= @i64_max - k), do: "#{e} > INT64_C(#{@i64_max - k})"
 
         is_integer(k) ->
-          lo = lo_of(vb)
+          lo = Facts.lo_of(vb)
           if !(is_integer(lo) and lo >= @i64_min - k), do: "#{e} < INT64_C(#{@i64_min - k})"
 
         true ->
@@ -4610,13 +4624,11 @@ defmodule Defk.Compiler do
               "the initial value of #{name} is copied: the accumulator's buffer is the loop's alone"
             )
 
-            acc = %{
-              t: v.t,
-              owned: true,
-              fin: v[:fin] || false,
-              len_lo: v[:len_lo],
-              buf: carried(make_ref(), v[:buf])
-            }
+            acc =
+              Facts.assert(
+                %{t: v.t, owned: true, fin: v[:fin] || false, buf: carried(make_ref(), v[:buf])},
+                len_lo: Facts.len_lo(v)
+              )
 
             {{{name, c, acc}, ic}, seen}
 
@@ -4669,7 +4681,7 @@ defmodule Defk.Compiler do
   end
 
   defp drop_facts({name, c, a} = acc, weak),
-    do: if(c in weak, do: {name, c, %{a | fin: false, len_lo: nil}}, else: acc)
+    do: if(c in weak, do: {name, c, Facts.weaken(%{a | fin: false})}, else: acc)
 
   # {C expression, seen}: array value `v` as an accumulator's, copied unless
   # it is owned and no binding whose buffer is in `seen` (the live ones and
@@ -4683,12 +4695,11 @@ defmodule Defk.Compiler do
 
   # a new value `r` of array accumulator `a` without a fact the body assumed
   defp lost_facts?(%{t: {:arr, e}} = a, r) do
-    (e in [:f64, :f32] and a.fin and not r[:fin]) or
-      (is_integer(a.len_lo) and not (is_integer(r[:len_lo]) and r.len_lo >= a.len_lo))
+    (e in [:f64, :f32] and a.fin and not r[:fin]) or not Facts.covers?(a, r)
   end
 
   # an array accumulator with facts a new value may not have
-  defp facts?(%{t: {:arr, e}} = a), do: (e in [:f64, :f32] and a.fin) or is_integer(a.len_lo)
+  defp facts?(%{t: {:arr, e}} = a), do: (e in [:f64, :f32] and a.fin) or Facts.carries?(a)
   defp facts?(_a), do: false
 
   # the compiler state a lowering changes (decls, safepoints, loop ids, ...)
@@ -4894,7 +4905,7 @@ defmodule Defk.Compiler do
     name = :"defk case #{c}"
 
     env =
-      put_var(env, name, Map.merge(Map.take(sv, @facts), %{c: c, t: sv.t, owned: false, var: c}))
+      put_var(env, name, %{c: c, t: sv.t, owned: false, var: c, facts: Facts.facts(sv)})
 
     subj = {name, [], nil}
 
@@ -5218,58 +5229,10 @@ defmodule Defk.Compiler do
   end
 
   # ---------------------------------------------------------- range facts --
-  # An i64 value may carry facts that let a[i] skip its bounds check:
-  #   lo, hi - constants with lo <= v <= hi (nil = unknown)
-  #   lb, ub - %{array_cvar => k}: v >= len(array) + k, v <= len(array) + k;
-  #            a multiple or quotient of a length (defk-upc) has the key
-  #            {array_cvar, p, q}, p >= 0 and q >= 1 coprime and not both 1:
-  #            q * v >= p * len(array) + k, q * v <= p * len(array) + k
-  # An array may carry len_lo / len_lb: the same lower bounds for its length.
-  # Facts are exact for checked arithmetic (an overflow raises, never wraps).
-  # They name array C variables, which are assigned in one place, never change
-  # length, and stay in scope only where every fact about them was derived.
-  # Every length is below 2^61 (DEFK_ALLOC_MAX_BYTES, and the largest
-  # binary), so an ub fact also bounds v by a constant (hi_of/1).
-
-  defp lb(v), do: v[:lb] || %{}
-  defp ub(v), do: v[:ub] || %{}
-  defp len_lb(a), do: a[:len_lb] || %{}
-
-  @len_max 2 ** 61 - 1
-
-  defp scale({_arr, _p, _q} = key), do: key
-  defp scale(arr), do: {arr, 1, 1}
-
-  # the fact q * v <= p * len(arr) + k (dir :ub) or >= (:lb), with p and q
-  # made coprime: dividing by their gcd rounds k down for ub, up for lb
-  defp norm_fact(arr, p, q, k, dir) do
-    g = Integer.gcd(p, q)
-    k = if dir == :ub, do: Integer.floor_div(k, g), else: -Integer.floor_div(-k, g)
-
-    case {div(p, g), div(q, g)} do
-      {1, 1} -> {arr, k}
-      {p, q} -> {{arr, p, q}, k}
-    end
-  end
-
-  # the constant bounds v's facts give, its lb/ub facts included
-  defp lo_of(v) do
-    Enum.reduce(lb(v), v[:lo], fn {key, k}, lo ->
-      {_, _, q} = scale(key)
-      either(lo, -Integer.floor_div(-k, q), &max/2)
-    end)
-  end
-
-  defp hi_of(v) do
-    Enum.reduce(ub(v), v[:hi], fn {key, k}, hi ->
-      {_, p, q} = scale(key)
-      either(hi, Integer.floor_div(p * @len_max + k, q), &min/2)
-    end)
-  end
-
-  # a value within lo..hi needs no i64 overflow check
-  defp in_i64?(lo, hi),
-    do: is_integer(lo) and is_integer(hi) and lo >= @i64_min and hi <= @i64_max
+  # The lattice lives in Defk.Facts (defk-k4x): what a value is known to
+  # satisfy, the derivations, and the proofs (in_bounds?, in_i64?) that drop
+  # checks. This file creates facts and asks those questions; it holds no
+  # fact algebra of its own.
 
   # ------------------------------------------------------- element types --
   # A narrow element (u8, i16, i32, f32) widens when read: an integer to an
@@ -5290,7 +5253,7 @@ defmodule Defk.Compiler do
 
   defp elem_val(c, e) when is_map_key(@int_range, e) do
     {lo, hi} = @int_range[e]
-    Map.merge(val(c, :i64), %{lo: lo, hi: hi})
+    Facts.assert(val(c, :i64), lo: lo, hi: hi)
   end
 
   defp elem_val(c, e), do: val(c, wide(e))
@@ -5301,9 +5264,10 @@ defmodule Defk.Compiler do
   defp narrowed(v, e) when is_map_key(@int_range, e) do
     {lo, hi} = @int_range[e]
 
-    if is_integer(v[:lo]) and is_integer(v[:hi]) and v[:lo] >= lo and v[:hi] <= hi,
-      do: "((#{ctype_elem(e)})#{v.c})",
-      else: "defk_to_#{e}(ctx, #{v.c})"
+    if is_integer(Facts.lo(v)) and is_integer(Facts.hi(v)) and Facts.lo(v) >= lo and
+         Facts.hi(v) <= hi,
+       do: "((#{ctype_elem(e)})#{v.c})",
+       else: "defk_to_#{e}(ctx, #{v.c})"
   end
 
   defp narrowed(v, _e), do: v.c
@@ -5315,10 +5279,10 @@ defmodule Defk.Compiler do
   defp int_stored(%{t: :u64} = v, :u64), do: v.c
 
   defp int_stored(%{t: :i64} = v, :u64),
-    do: if(nonneg?(v), do: v.c, else: "defk_to_u64(ctx, #{v.c})")
+    do: if(Facts.nonneg?(v), do: v.c, else: "defk_to_u64(ctx, #{v.c})")
 
   defp int_stored(%{t: :u64} = v, :i64) do
-    if is_integer(v[:hi]) and v[:hi] <= @max_i64,
+    if is_integer(Facts.hi(v)) and Facts.hi(v) <= @max_i64,
       do: "((int64_t)#{v.c})",
       else: "defk_to_i64_elem(ctx, #{v.c})"
   end
@@ -5328,199 +5292,6 @@ defmodule Defk.Compiler do
 
   defp ctype_elem(:u8), do: "uint8_t"
   defp ctype_elem(e), do: "#{String.replace(to_string(e), "i", "int")}_t"
-
-  # 0 <= i < len(a); with a width w (a word load), 0 <= i and i + w <= len(a)
-  defp in_bounds?(a, i, w \\ 1) do
-    lo = lo_of(i)
-    i = if w == 1, do: i, else: %{lo: i[:lo], hi: add(i[:hi], w - 1), ub: shift(ub(i), w - 1)}
-    hi = hi_of(i)
-
-    below? =
-      (is_integer(a[:len_lo]) and is_integer(hi) and hi < a[:len_lo]) or
-        Enum.any?(ub(i), &below_len?(&1, a.c, len_lb(a)))
-
-    is_integer(lo) and lo >= 0 and below?
-  end
-
-  # q * i <= p * len(y) + o proves i < len(a): y is a with p <= q and o < 0,
-  # or len(a) has a lower bound q1 * len(a) >= p1 * len(y) + d with
-  # p / q <= p1 / q1 and o / q < d / q1
-  defp below_len?({key, o}, arr, len_lb) do
-    {y, p, q} = scale(key)
-
-    (y == arr and p <= q and o < 0) or
-      Enum.any?(len_lb, fn {key1, d} ->
-        {y1, p1, q1} = scale(key1)
-        y1 == y and p * q1 <= p1 * q and o * q1 < d * q
-      end)
-  end
-
-  defp add_facts(a, b) do
-    %{
-      lo: add(a[:lo], b[:lo]),
-      hi: add(a[:hi], b[:hi]),
-      lb: Map.merge(shift(lb(a), b[:lo]), shift(lb(b), a[:lo]), fn _, x, y -> max(x, y) end),
-      ub: Map.merge(shift(ub(a), b[:hi]), shift(ub(b), a[:hi]), fn _, x, y -> min(x, y) end)
-    }
-  end
-
-  defp sub_facts(a, b) do
-    %{
-      lo: add(a[:lo], neg(b[:hi])),
-      hi: add(a[:hi], neg(b[:lo])),
-      lb: shift(lb(a), neg(b[:hi])),
-      ub: shift(ub(a), neg(b[:lo]))
-    }
-  end
-
-  # a product: lo..hi from the operands' (nil when one is unbounded), and
-  # for a constant k >= 1 times v, v's facts scaled by k
-  defp mul_facts(a, b) do
-    case {a, b} do
-      {%{lo: k, hi: k}, v} when is_integer(k) and k > 0 ->
-        scaled(v, k)
-
-      {v, %{lo: k, hi: k}} when is_integer(k) and k > 0 ->
-        scaled(v, k)
-
-      _ ->
-        Map.new(
-          Enum.zip([:lo, :hi], Tuple.to_list(mul_bounds({a[:lo], a[:hi]}, {b[:lo], b[:hi]})))
-        )
-    end
-  end
-
-  defp scaled(v, k) do
-    %{
-      lo: v[:lo] && v[:lo] * k,
-      hi: v[:hi] && v[:hi] * k,
-      lb: scale_facts(lb(v), k, :lb),
-      ub: scale_facts(ub(v), k, :ub)
-    }
-  end
-
-  # every value of a * b, with the bounds lb/ub facts give (lo_of, hi_of)
-  defp mul_range(a, b), do: mul_bounds({lo_of(a), hi_of(a)}, {lo_of(b), hi_of(b)})
-
-  defp mul_bounds({a1, a2}, {b1, b2})
-       when is_integer(a1) and is_integer(a2) and is_integer(b1) and is_integer(b2) do
-    ps = [a1 * b1, a1 * b2, a2 * b1, a2 * b2]
-    {Enum.min(ps), Enum.max(ps)}
-  end
-
-  defp mul_bounds(_a, _b), do: {nil, nil}
-
-  # div(v, k) for a literal k >= 1: div is monotonic, and v's facts divided
-  # (ub only for v >= 0, where div rounds down rather than towards zero)
-  defp div_facts_of(v, k) do
-    ub = if is_integer(lo_of(v)) and lo_of(v) >= 0, do: div_facts(ub(v), k, :ub), else: %{}
-
-    %{
-      lo: v[:lo] && div(v[:lo], k),
-      hi: v[:hi] && div(v[:hi], k),
-      lb: div_facts(lb(v), k, :lb),
-      ub: ub
-    }
-  end
-
-  defp minmax_facts(:min, a, b) do
-    %{
-      lo: both(a[:lo], b[:lo], &min/2),
-      hi: either(a[:hi], b[:hi], &min/2),
-      lb: Map.intersect(lb(a), lb(b), fn _, x, y -> min(x, y) end),
-      ub: Map.merge(ub(a), ub(b), fn _, x, y -> min(x, y) end)
-    }
-  end
-
-  defp minmax_facts(:max, a, b) do
-    %{
-      lo: either(a[:lo], b[:lo], &max/2),
-      hi: both(a[:hi], b[:hi], &max/2),
-      lb: Map.merge(lb(a), lb(b), fn _, x, y -> max(x, y) end),
-      ub: Map.intersect(ub(a), ub(b), fn _, x, y -> max(x, y) end)
-    }
-  end
-
-  # band with a non-negative operand is in 0..that operand's hi; bor/bxor of
-  # two non-negative values stay below the next power of two above both
-  defp bit_facts(:band, a, b) do
-    case Enum.filter([a, b], &nonneg?/1) do
-      [] ->
-        %{}
-
-      nn ->
-        %{
-          lo: 0,
-          hi: nn |> Enum.map(& &1[:hi]) |> Enum.filter(&is_integer/1) |> Enum.min(fn -> nil end)
-        }
-    end
-  end
-
-  defp bit_facts(_bor_or_bxor, a, b) do
-    cond do
-      not (nonneg?(a) and nonneg?(b)) -> %{}
-      is_integer(a[:hi]) and is_integer(b[:hi]) -> %{lo: 0, hi: ones(max(a[:hi], b[:hi]))}
-      true -> %{lo: 0}
-    end
-  end
-
-  # a non-negative value shifted right by a non-negative amount shrinks
-  defp bsr_facts(a, n) do
-    if nonneg?(a) and nonneg?(n) do
-      lo = if is_integer(n[:hi]), do: Bitwise.bsr(a[:lo], n[:hi]), else: 0
-      %{lo: lo, hi: Bitwise.bsr(a[:hi] || 0x7FFFFFFFFFFFFFFF, n[:lo])}
-    else
-      %{}
-    end
-  end
-
-  defp nonneg?(v), do: is_integer(v[:lo]) and v[:lo] >= 0
-
-  # 2^k - 1 for the bit length k of h >= 0: every value of at most k bits
-  defp ones(h), do: Bitwise.bsl(1, length(Integer.digits(h, 2))) - 1
-
-  defp bnot(x) when is_integer(x), do: -x - 1
-  defp bnot(_), do: nil
-
-  defp add(x, y), do: both(x, y, &+/2)
-
-  defp neg(x) when is_integer(x), do: -x
-  defp neg(_), do: nil
-
-  # the facts of v + k from those of v
-  defp shift(_facts, nil), do: %{}
-
-  defp shift(facts, k) do
-    Map.new(facts, fn {key, o} ->
-      {_, _, q} = scale(key)
-      {key, o + q * k}
-    end)
-  end
-
-  # the facts of v * k, k >= 1, or div(v, k), k >= 1 (the ub facts only for
-  # v >= 0, where div rounds down): q * div(v, k) * k <= q * v, and
-  # q * div(v, k) * k >= q * (v - k + 1)
-  defp scale_facts(facts, k, dir) do
-    Map.new(facts, fn {key, o} ->
-      {arr, p, q} = scale(key)
-      norm_fact(arr, k * p, q, k * o, dir)
-    end)
-  end
-
-  defp div_facts(facts, k, dir) do
-    Map.new(facts, fn {key, o} ->
-      {arr, p, q} = scale(key)
-      norm_fact(arr, p, k * q, if(dir == :ub, do: o, else: o - q * (k - 1)), dir)
-    end)
-  end
-
-  # combine optional bounds: `both` needs both known, `either` is valid with one
-  defp both(x, y, f) when is_integer(x) and is_integer(y), do: f.(x, y)
-  defp both(_, _, _), do: nil
-
-  defp either(nil, y, _), do: y
-  defp either(x, nil, _), do: x
-  defp either(x, y, f), do: f.(x, y)
 
   defp literal_int(n) when is_integer(n), do: n
   defp literal_int({:-, _, [n]}) when is_integer(n), do: -n
@@ -5929,7 +5700,7 @@ defmodule Defk.Compiler do
     name = "defk_lit_" <> Base.encode16(binary_part(:crypto.hash(:sha256, b), 0, 8), case: :lower)
     Process.put(:defk_statics, Map.put(Process.get(:defk_statics), name, b))
     view = "((defk_arr_u8){(uint8_t *)#{name}, #{byte_size(b)}})"
-    Map.merge(val(view, {:arr, :u8}), %{len_lo: byte_size(b), buf: make_ref()})
+    Facts.assert(Map.merge(val(view, {:arr, :u8}), %{buf: make_ref()}), len_lo: byte_size(b))
   end
 
   # The declarations of the static arrays `body` uses (a speculative lowering
@@ -6317,20 +6088,18 @@ defmodule Defk.Compiler do
         {_, _, [arr, idx]} -> {Macro.to_string(node), arr, idx}
       end
 
-    if in_bounds?(a, i, w) do
+    if Facts.in_bounds?(a, i, w) do
       note(:bounds, node, :dropped, text)
     else
       {arr, idx} = {src_text(arr), src_text(idx)}
       low = "0 <= #{idx}"
       high = if w == 1, do: "#{idx} < len(#{arr})", else: "#{idx} + #{w} <= len(#{arr})"
-      with_low = Map.put(i, :lo, max(i[:lo] || 0, 0))
-      with_high = Map.put(i, :ub, Map.put(i[:ub] || %{}, a.c, -w))
 
       missing =
-        cond do
-          in_bounds?(a, with_low, w) -> low
-          in_bounds?(a, with_high, w) -> high
-          true -> "#{low} and #{high}"
+        case Facts.missing(a, i, w) do
+          :low -> low
+          :high -> high
+          :both -> "#{low} and #{high}"
         end
 
       note(:bounds, node, :kept, "#{text}: bounds check kept; nothing proves #{missing}")
