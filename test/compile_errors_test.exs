@@ -280,6 +280,48 @@ defmodule Defk.CompileErrorsTest do
       assert msg =~ ": 5 kernel compile errors\n"
     end
 
+    test "the body of a for rejected for its shape is checked too (HexDocs attempt 1)" do
+      src = File.read!("docs/cold-tests/hexdocs-entropy/attempt1.ex.txt")
+      body = src |> String.split("\n") |> Enum.slice(4..-3//1) |> Enum.join("\n")
+      msg = compile(body, "Attempt1")
+
+      # n is poisoned by the byte_size rejection, so the for's range is
+      # abandoned and its body is still lowered; the inner reduce's init is
+      # rejected and the pipe is one error, nothing in them is looked into
+      assert codes(msg) == ~w(unknown-function for-collect unsupported-map pipe)
+      assert msg =~ ": 4 kernel compile errors\n"
+    end
+
+    test "errors in a rejected for's body are reported once, next to for-collect" do
+      msg =
+        compile(
+          "defk f(a :: [f64], n :: i64) :: [f64] do\n  for i <- 0..(n - 1) do\n    m = %{a: i}\n    m + a[i]\n  end\nend",
+          "ForBody"
+        )
+
+      assert codes(msg) == ~w(for-collect unsupported-map)
+    end
+
+    test "a for rejected for its shape whose body is valid reports only for-collect" do
+      msg =
+        compile(
+          "defk f(a :: [f64], n :: i64) :: [f64] do\n  for i <- 0..(n - 1) do\n    y = a[i] * 2.0\n    y + 1.0\n  end\nend",
+          "ForValid"
+        )
+
+      assert codes(msg) == ["for-collect"]
+    end
+
+    test "a for rejected over a poisoned generator source only reports for-collect besides the poisoning error" do
+      msg =
+        compile(
+          "defk f(n :: i64) :: i64 do\n  m = %{a: n}\n  r = for x <- m do\n    x + 1\n  end\n  0\nend",
+          "ForPoison"
+        )
+
+      assert codes(msg) == ~w(unsupported-map for-collect)
+    end
+
     test "at most 10 are shown" do
       body = Enum.map_join(1..12, "\n", &"  v#{&1} = :a#{&1}")
       msg = compile("defk f(x :: i64) :: i64 do\n#{body}\n  x\nend", "Cap")
