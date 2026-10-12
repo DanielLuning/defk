@@ -31,6 +31,17 @@ defmodule Defk.Compiler do
   defp ctx_put(key, value), do: Process.put(@ctx, Map.put(ctx(), key, value))
   defp ctx_update(key, fun), do: Process.put(@ctx, Map.update!(ctx(), key, fun))
 
+  defp low(key), do: Map.fetch!(ctx(:lowering), key)
+  defp low_put(key, value), do: ctx_update(:lowering, &Map.put(&1, key, value))
+  defp low_update(key, fun), do: ctx_update(:lowering, &Map.update!(&1, key, fun))
+
+  # Map.pop on lowering.halted: whether loop `id` emitted a halt label
+  defp low_halted_pop(id) do
+    {was, halted} = Map.pop(low(:halted), id)
+    low_put(:halted, halted)
+    was
+  end
+
   # the whole-ctx snapshot: probing and backtracking restore one value
   defp ctx_swap(new) do
     old = ctx()
@@ -109,8 +120,8 @@ defmodule Defk.Compiler do
     # parameter: `<<>>` bound to one is a bitstring
     bits_params = Defk.Bitstring.bits_params(kernels)
 
-    Process.put(
-      :defk_bits_names,
+    ctx_put(
+      :bits_names,
       Map.new(
         kernels,
         &{{&1.name, &1.arity}, Defk.Bitstring.accumulator_names(&1.body, bits_params)}
@@ -572,18 +583,8 @@ defmodule Defk.Compiler do
   # ------------------------------------------------------------ kernels ----
 
   defp lower_kernel(k, sigs) do
-    Process.put(:defk_n, 0)
-    Process.put(:defk_decls, [])
-    Process.put(:defk_decl_loop, %{})
-    srec_reset()
-    Process.put(:defk_sp, 0)
-    Process.put(:defk_sps, [])
-    Process.put(:defk_loops, [])
-    Process.put(:defk_nloops, 0)
-    Process.put(:defk_nhalts, 0)
-    Process.put(:defk_halts_emitted, 0)
+    ctx_put(:lowering, %Ctx.Lowering{report_kernel: {{k.name, k.arity}, k.yield}})
     Copies.reset()
-    Process.put(:defk_report_kernel, {{k.name, k.arity}, k.yield})
     note(:kernel, k.head, if(k.yield, do: :yield, else: :no_yield), "#{k.name}/#{k.arity}")
 
     vars =
@@ -619,10 +620,10 @@ defmodule Defk.Compiler do
       stmts: [stmts, ret_stmts],
       ret_vals: ret_vals,
       ret_views: views,
-      decls: Enum.reverse(Process.get(:defk_decls)),
-      decl_loop: Process.get(:defk_decl_loop),
-      sp_count: Process.get(:defk_sp),
-      sps: Process.get(:defk_sps)
+      decls: Enum.reverse(low(:decls)),
+      decl_loop: low(:decl_loop),
+      sp_count: low(:sp),
+      sps: low(:sps)
     })
   end
 
@@ -2001,7 +2002,11 @@ defmodule Defk.Compiler do
   defp fparts({:op, fast, replay, r, ds}), do: {fast, r, replay, ds}
 
   # a C local of a float_tree check, scoped to its statement expression
-  defp ftmp, do: "f_#{Process.put(:defk_n, Process.get(:defk_n) + 1) + 1}"
+  defp ftmp do
+    n = low(:n) + 1
+    low_put(:n, n)
+    "f_#{n}"
+  end
 
   defp lower_tuple(items, env) do
     {stmts, elems} =
@@ -3059,7 +3064,7 @@ defmodule Defk.Compiler do
   @elem_bytes %{f64: 8, i64: 8, u64: 8, u8: 1, i16: 2, i32: 4, f32: 4}
 
   defp alloc_zeroed(e, v, {:alloc, m, _} = node) do
-    {{_, _}, yield?} = Process.get(:defk_report_kernel)
+    {{_, _}, yield?} = low(:report_kernel)
     hi = Facts.hi(v)
 
     cond do
@@ -3140,7 +3145,7 @@ defmodule Defk.Compiler do
         true -> with {st, [c]} <- bind_tmp(s, []), do: {st, c}
       end
 
-    {{_, _}, yield?} = Process.get(:defk_report_kernel)
+    {{_, _}, yield?} = low(:report_kernel)
     hi = Facts.hi(Enum.at(ints, 2))
     once? = not yield? or (is_integer(hi) and hi * @elem_bytes[e] <= @copy_at_once)
     k = fresh("copied", {:c, "int64_t"})
@@ -3452,7 +3457,7 @@ defmodule Defk.Compiler do
 
   # the names the current kernel appends to (Defk.Bitstring.accumulator_names/1)
   defp bits_names,
-    do: Map.get(Process.get(:defk_bits_names, %{}), ctx(:fun), MapSet.new())
+    do: Map.get(ctx(:bits_names), ctx(:fun), MapSet.new())
 
   # the initial value `v` of accumulator pattern `p`
   defp bits_init({n, _, ctx}, %{bits0: true} = v) when is_atom(n) and is_atom(ctx),
@@ -3776,11 +3781,11 @@ defmodule Defk.Compiler do
   # bounded amount of work. flat :: false | :plain | :exits (a reduce_while
   # halt jumps out of it).
   defp lower_quals_tracked(rest, env, inner) do
-    before = {Process.get(:defk_sp), Process.get(:defk_halts_emitted, 0)}
+    before = {low(:sp), low(:halts_emitted)}
     body = lower_quals(rest, env, inner)
 
     flat =
-      case {before, {Process.get(:defk_sp), Process.get(:defk_halts_emitted, 0)}} do
+      case {before, {low(:sp), low(:halts_emitted)}} do
         {{sp, h}, {sp, h}} -> :plain
         {{sp, _}, {sp, _}} -> :exits
         _ -> false
@@ -3805,14 +3810,12 @@ defmodule Defk.Compiler do
   # process-dictionary key: the defk_ prefix keeps with_acc_facts'
   # backtracking snapshot covering it; defk-euu folds it into the context.
 
-  defp srec_reset, do: Process.put(:defk_strip, %{seq: 0, path: [], cond: false, rows: []})
-
-  defp srec_get, do: Process.get(:defk_strip)
+  defp srec_get, do: low(:strip)
 
   defp srec(row) do
     %{seq: seq, path: path, cond: cond?, rows: rows} = st = srec_get()
     row = Map.merge(row, %{seq: seq, path: path, cond: cond?})
-    Process.put(:defk_strip, %{st | seq: seq + 1, rows: [row | rows]})
+    low_put(:strip, %{st | seq: seq + 1, rows: [row | rows]})
   end
 
   # the rows recorded while `fun` ran (oldest first), beside its result;
@@ -3834,9 +3837,9 @@ defmodule Defk.Compiler do
   # arm does
   defp srec_arm(ref, arm, fun) do
     st = srec_get()
-    Process.put(:defk_strip, %{st | path: [{ref, arm} | st.path]})
+    low_put(:strip, %{st | path: [{ref, arm} | st.path]})
     res = fun.()
-    Process.put(:defk_strip, %{srec_get() | path: st.path})
+    low_put(:strip, %{srec_get() | path: st.path})
     res
   end
 
@@ -3850,7 +3853,7 @@ defmodule Defk.Compiler do
         %{row | path: Enum.reject(row.path, &match?({^ref, _}, &1))}
       end)
 
-    Process.put(:defk_strip, %{st | rows: rows})
+    low_put(:strip, %{st | rows: rows})
   end
 
   defp srec_assign(var, rhs) do
@@ -3920,7 +3923,7 @@ defmodule Defk.Compiler do
 
         note(
           :nonfinite,
-          Process.get(:defk_report_loop),
+          low(:report_loop),
           :flagged,
           "#{checks} set a flag tested once per strip; a set flag replays the strip with raising checks"
         )
@@ -4226,7 +4229,7 @@ defmodule Defk.Compiler do
   defp flag_strip_rows(id, text, var, rows) do
     rest = unflagged_rest(text)
     joined = Regex.match?(@nf_join_call, text)
-    types = Map.new(Process.get(:defk_decls))
+    types = Map.new(low(:decls))
 
     vars =
       Regex.scan(~r/\b[vp]_\w+/, text)
@@ -4299,12 +4302,12 @@ defmodule Defk.Compiler do
   # the top of that loop's body dispatches to the next loop down, and so on.
   # The step that reaches the safepoint's own loop clears defk_rs.
   defp in_loop(fun) do
-    id = Process.get(:defk_nloops) + 1
-    Process.put(:defk_nloops, id)
-    stack = Process.get(:defk_loops)
-    Process.put(:defk_loops, [id | stack])
+    id = low(:nloops) + 1
+    low_put(:nloops, id)
+    stack = low(:loops)
+    low_put(:loops, [id | stack])
     res = fun.(id)
-    Process.put(:defk_loops, stack)
+    low_put(:loops, stack)
     # the loop's extent in the C, for safepoint_saves/2 (removed there)
     ["/* defk:in #{id} */\n", res, "/* defk:out #{id} */\n"]
   end
@@ -4312,7 +4315,7 @@ defmodule Defk.Compiler do
   # Dispatch for the loops entered from here (the current loop body, or the
   # kernel top level when no loop is open).
   defp resume_dispatch do
-    case resume_cases(Process.get(:defk_sps), Enum.reverse(Process.get(:defk_loops))) do
+    case resume_cases(low(:sps), Enum.reverse(low(:loops))) do
       [] -> []
       cases -> ["if (DEFK_RESUMING) switch (defk_rs) {\n", cases, "}\n"]
     end
@@ -4380,18 +4383,18 @@ defmodule Defk.Compiler do
   # accumulators; assign_accs throws for such an accumulator meeting a u64,
   # and the fold is lowered again from the saved compiler state with it as a
   # u64. Elixir mode settles the same types (Defk.ElixirMode). The saved
-  # state is with_acc_facts/2's (lowering_key?/1), so a retry of either kind
-  # inside the other's attempt is undone with that attempt: each restores
-  # what it saved, including the other's pending fact notes.
+  # state is the whole ctx, like with_acc_facts/2's, so a retry of either
+  # kind inside the other's attempt is undone with that attempt: each
+  # restores what it saved, including the other's pending fact notes.
   defp u64_accs(fun, u64s \\ []) do
-    snap = for {k, v} <- Process.get(), lowering_key?(k), do: {k, v}
+    snap = ctx()
     ref = make_ref()
 
     try do
       fun.({ref, u64s})
     catch
       {:defk_u64_acc, ^ref, name} ->
-        restore_lowering(snap)
+        ctx_swap(snap)
         u64_accs(fun, [name | u64s])
     end
   end
@@ -4420,8 +4423,8 @@ defmodule Defk.Compiler do
     {si, accs} =
       reduce_accs(acc_pat, init_ast, "the initial accumulator", env, node, loop_reads, u64s)
 
-    id = Process.get(:defk_nhalts) + 1
-    Process.put(:defk_nhalts, id)
+    id = low(:nhalts) + 1
+    low_put(:nhalts, id)
     label = "defk_halt#{id}"
     loop = {:for, m, [{:<-, m, [x, src]}, [do: body]]}
     lenv = loop_env(env, loop)
@@ -4433,8 +4436,8 @@ defmodule Defk.Compiler do
           assign = assign_accs(accs, v, v_ast, "{:#{tag}, acc}", lenv.live, fix)
 
           if tag == :halt do
-            Process.put({:defk_halted, id}, true)
-            Process.put(:defk_halts_emitted, Process.get(:defk_halts_emitted, 0) + 1)
+            low_update(:halted, &Map.put(&1, id, true))
+            low_put(:halts_emitted, low(:halts_emitted) + 1)
           end
 
           [s, assign, if(tag == :halt, do: "goto #{label};\n", else: [])]
@@ -4444,7 +4447,7 @@ defmodule Defk.Compiler do
         lower_quals([{:<-, m, [x, src]}], lenv, inner)
       end)
 
-    halt = if Process.delete({:defk_halted, id}), do: "#{label}:;\n", else: []
+    halt = if low_halted_pop(id), do: "#{label}:;\n", else: []
     {[si, loops, halt], acc_result(accs)}
   end
 
@@ -4558,26 +4561,22 @@ defmodule Defk.Compiler do
   # state) with those facts dropped.
   defp with_acc_facts(accs, lower) do
     if Enum.any?(accs, fn {_, _, a} -> facts?(a) end) do
-      fix = {:defk_acc_facts, make_ref()}
-      snap = for {k, v} <- Process.get(), lowering_key?(k), do: {k, v}
-      Process.put(fix, MapSet.new())
+      fix = make_ref()
+      snap = ctx()
+      low_update(:acc_fix, &Map.put(&1, fix, MapSet.new()))
       res = lower.(accs, fix)
-      weak = Process.delete(fix)
+      weak = Map.fetch!(low(:acc_fix), fix)
+      low_update(:acc_fix, &Map.delete(&1, fix))
 
       if Enum.empty?(weak) do
         res
       else
-        restore_lowering(snap)
+        ctx_swap(snap)
         accs |> Enum.map(&drop_facts(&1, weak)) |> with_acc_facts(lower)
       end
     else
       lower.(accs, nil)
     end
-  end
-
-  defp restore_lowering(snap) do
-    for {k, _} <- Process.get(), lowering_key?(k), do: Process.delete(k)
-    for {k, v} <- snap, do: Process.put(k, v)
   end
 
   defp drop_facts({name, c, a} = acc, weak),
@@ -4601,12 +4600,6 @@ defmodule Defk.Compiler do
   # an array accumulator with facts a new value may not have
   defp facts?(%{t: {:arr, e}} = a), do: (e in [:f64, :f32] and a.fin) or Facts.carries?(a)
   defp facts?(_a), do: false
-
-  # the compiler state a lowering changes (decls, safepoints, loop ids, ...)
-  defp lowering_key?({:defk_halted, _}), do: true
-  defp lowering_key?({:defk_acc_facts, _}), do: true
-  defp lowering_key?(k) when is_atom(k), do: String.starts_with?(Atom.to_string(k), "defk_")
-  defp lowering_key?(_k), do: false
 
   defp acc_env(accs, env) do
     Enum.reduce(accs, env, fn {name, c, a}, e ->
@@ -4660,7 +4653,9 @@ defmodule Defk.Compiler do
       Enum.zip(accs, outs)
       |> Enum.map_reduce(MapSet.new(live, &elem(&1, 1)), fn
         {{name, c, %{t: {:arr, _}} = a}, r}, seen ->
-          lost_facts?(a, r) && Process.put(fix, MapSet.put(Process.get(fix), c))
+          lost_facts?(a, r) &&
+            low_update(:acc_fix, &Map.update!(&1, fix, fn set -> MapSet.put(set, c) end))
+
           a[:buf] && not Copies.carries?(r[:buf], a.buf) && Copies.cut_carry(a.buf)
           {rc, seen} = loop_owned(r, seen)
 
@@ -5129,9 +5124,9 @@ defmodule Defk.Compiler do
 
   # `weight` back-edges are charged to the budget at once
   defp safepoint(weight \\ "1") do
-    n = Process.get(:defk_sp) + 1
-    Process.put(:defk_sp, n)
-    Process.put(:defk_sps, [{n, Enum.reverse(Process.get(:defk_loops))} | Process.get(:defk_sps)])
+    n = low(:sp) + 1
+    low_put(:sp, n)
+    low_put(:sps, [{n, Enum.reverse(low(:loops))} | low(:sps)])
     "DEFK_SP(#{n}, #{weight})\n"
   end
 
@@ -5550,13 +5545,13 @@ defmodule Defk.Compiler do
   defp val(c, t, var \\ nil), do: %{c: c, t: t, owned: false, var: var}
 
   defp fresh(base, t) do
-    n = Process.get(:defk_n) + 1
-    Process.put(:defk_n, n)
+    n = low(:n) + 1
+    low_put(:n, n)
     c = "v_#{sanitize(base)}_#{n}"
-    Process.put(:defk_decls, [{c, ctype(t)} | Process.get(:defk_decls)])
+    low_put(:decls, [{c, ctype(t)} | low(:decls)])
     # the innermost loop open where it is bound (safepoint_saves/2)
-    loop = List.first(Process.get(:defk_loops))
-    Process.put(:defk_decl_loop, Map.put(Process.get(:defk_decl_loop), c, loop))
+    loop = List.first(low(:loops))
+    low_put(:decl_loop, Map.put(low(:decl_loop), c, loop))
     c
   end
 
@@ -5940,7 +5935,7 @@ defmodule Defk.Compiler do
   end
 
   defp note(topic, at, verdict, text) do
-    {kernel, _yield?} = Process.get(:defk_report_kernel)
+    {kernel, _yield?} = low(:report_kernel)
     n = {kernel, note_line(at), {topic, verdict, text}}
     ctx_update(:report, &[n | &1])
     note_per_iteration(topic, at)
@@ -5951,7 +5946,7 @@ defmodule Defk.Compiler do
   # max_owned (defk-4b2). A copy hoisted before a loop is lowered outside it
   # (the open loops are those around the loop statement), so it is not noted.
   defp note_per_iteration(topic, at) when topic in [:alloc, :copy] do
-    if Process.get(:defk_loops, []) != [] do
+    if low(:loops) != [] do
       text =
         case topic do
           :alloc ->
@@ -5981,7 +5976,7 @@ defmodule Defk.Compiler do
 
   # the line of the statement being lowered (in_ctx/2)
   defp ctx_line do
-    case Process.get(:defk_ctx) do
+    case ctx(:where) do
       {_, m, _} when is_list(m) -> Keyword.get(m, :line)
       _ -> nil
     end
@@ -6099,13 +6094,13 @@ defmodule Defk.Compiler do
     do: note(:branch, node, :branch, "#{elem(node, 0)}: a branch; #{what}")
 
   # the loop that loop/5 lowers next (range_loop/8, array_loop/5)
-  defp loop_at(node), do: Process.put(:defk_report_loop, note_line(node))
+  defp loop_at(node), do: low_put(:report_loop, note_line(node))
 
   # loop/5's choice of safepoints: the C marker that maps clang's remarks to
   # this loop (Defk.Report), and the note
   defp note_loop(verdict, why) do
-    {{name, arity}, yield?} = Process.get(:defk_report_kernel)
-    line = Process.get(:defk_report_loop)
+    {{name, arity}, yield?} = low(:report_kernel)
+    line = low(:report_loop)
 
     if yield? do
       note(:loop, line, verdict, why)
@@ -6135,7 +6130,7 @@ defmodule Defk.Compiler do
 
       note(
         :nonfinite,
-        Process.get(:defk_report_loop),
+        low(:report_loop),
         :checked,
         "float checks raise where they fail: #{why}"
       )
