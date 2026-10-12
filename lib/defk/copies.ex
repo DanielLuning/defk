@@ -8,6 +8,96 @@ defmodule Defk.Copies do
   # C emission of the copies it calls for stays in the lowering.
   @moduledoc false
 
+  # ------------------------------------------------- the tracking state ---
+  # What one kernel's lowering has recorded so far: the writes log (for
+  # unreturned_writes!), buffer carrying (:from, a copy or accumulator holds
+  # what its source held) and alias classes (buffers an if/cond/case made
+  # indistinguishable). One process-dictionary key holding one struct: the
+  # defk_ prefix keeps with_acc_facts' backtracking snapshot covering it,
+  # and defk-euu folds it into the compiler context as one field.
+
+  defstruct writes: [], from: %{}, alias: %{}
+
+  @key :defk_copies
+
+  def reset, do: Process.put(@key, %__MODULE__{})
+
+  defp state, do: Process.get(@key) || %__MODULE__{}
+
+  defp update(f), do: Process.put(@key, f.(state()))
+
+  # an array write `a[i] = v` happened on binding `id` of buffer `buf`
+  def record_write(id, buf, target),
+    do: update(&%{&1 | writes: [{id, buf, target} | &1.writes]})
+
+  # every write so far, oldest first
+  def writes, do: Enum.reverse(state().writes)
+
+  # replace the writes log, giving back the old one: inlining lowers the
+  # callee under its own log and restores the caller's after
+  def swap_writes(new) do
+    old = state()
+    Process.put(@key, %{old | writes: new})
+    old.writes
+  end
+
+  # Buffers that may be one buffer (defk-gqk). The array an if, cond or case
+  # gives is one of its arms' arrays, which the compiler can't tell apart, so
+  # their buffers are merged into one alias class, and bindings of any of
+  # them may share a buffer from then on (flow-insensitively, for the rest of
+  # the kernel: conservative, it may copy where it need not). A buffer not
+  # in the map is its own class.
+  def alias_class(nil), do: nil
+  def alias_class(buf), do: Map.get(state().alias, buf, buf)
+
+  def same_buf?(a, b), do: a != nil and alias_class(a) == alias_class(b)
+
+  # one alias class for buffers `bufs` (nil for an array of no binding's,
+  # such as alloc/2's): returns it, a new buffer for the merged value
+  def merge_bufs(bufs) do
+    new = make_ref()
+    classes = for b <- bufs, b != nil, uniq: true, do: alias_class(b)
+
+    update(fn st ->
+      m = Map.new(st.alias, fn {b, c} -> {b, if(c in classes, do: new, else: c)} end)
+      %{st | alias: Enum.reduce(classes, m, &Map.put(&2, &1, new))}
+    end)
+
+    new
+  end
+
+  # another live binding may see array a's buffer
+  def shared?(a, live) do
+    buf = alias_class(a[:buf])
+    buf != nil and Enum.any?(live, fn {id, b} -> alias_class(b) == buf and id != a[:id] end)
+  end
+
+  # Buffer `new` holds what buffer `old` held (a copy of it, or a loop
+  # accumulator started from it): a write to `old` is carried into `new`.
+  # Recorded for unreturned_writes!/3; `new` is returned.
+  def carried(new, nil), do: new
+
+  def carried(new, old) do
+    update(&%{&1 | from: Map.update(&1.from, new, [old], fn l -> [old | l] end)})
+    new
+  end
+
+  # buffer `buf` is `old`, or holds what `old` held
+  def carries?(buf, old), do: carries?([buf], old, %{})
+
+  defp carries?([], _old, _seen), do: false
+  defp carries?([old | _], old, _seen), do: true
+
+  defp carries?([b | rest], old, seen) do
+    if b == nil or Map.has_key?(seen, b),
+      do: carries?(rest, old, seen),
+      else: carries?(Map.get(state().from, b, []) ++ rest, old, Map.put(seen, b, true))
+  end
+
+  # A loop accumulator that may take a new value not carrying its buffer
+  # before (an alloc/2 array, say) no longer carries its initial value.
+  def cut_carry(buf), do: update(&%{&1 | from: Map.delete(&1.from, buf)})
+
   # ----------------------------------------------------- reads and arms ---
 
   # `ast` is one arm of an if, cond or case in `stmt`, and nowhere else in it

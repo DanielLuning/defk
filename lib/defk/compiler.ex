@@ -570,9 +570,7 @@ defmodule Defk.Compiler do
     Process.put(:defk_nloops, 0)
     Process.put(:defk_nhalts, 0)
     Process.put(:defk_halts_emitted, 0)
-    Process.put(:defk_writes, [])
-    Process.put(:defk_from, %{})
-    Process.put(:defk_alias, %{})
+    Copies.reset()
     Process.put(:defk_report_kernel, {{k.name, k.arity}, k.yield})
     note(:kernel, k.head, if(k.yield, do: :yield, else: :no_yield), "#{k.name}/#{k.arity}")
 
@@ -864,7 +862,7 @@ defmodule Defk.Compiler do
     # value semantics: the array is copied first if another binding may still
     # see its buffer (see "array values")
     {sc, a, env} = before_write(arr, a, env)
-    a[:id] && Process.put(:defk_writes, [{a.id, a[:buf], target} | Process.get(:defk_writes)])
+    a[:id] && Copies.record_write(a.id, a[:buf], target)
 
     store =
       if Facts.in_bounds?(a, i),
@@ -1196,34 +1194,6 @@ defmodule Defk.Compiler do
     for n <- names, %{buf: buf, id: id} <- [env.vars[n]], into: MapSet.new(), do: {id, buf}
   end
 
-  # another live binding may see array a's buffer
-  defp shared?(a, live) do
-    buf = alias_class(a[:buf])
-    buf != nil and Enum.any?(live, fn {id, b} -> alias_class(b) == buf and id != a[:id] end)
-  end
-
-  # Buffers that may be one buffer (defk-gqk). The array an if, cond or case
-  # gives is one of its arms' arrays, which the compiler can't tell apart, so
-  # their buffers are merged into one alias class, and bindings of any of
-  # them may share a buffer from then on (flow-insensitively, for the rest of
-  # the kernel: conservative, it may copy where it need not). :defk_alias
-  # maps a merged buffer to its class; a buffer not in it is its own class.
-  defp alias_class(nil), do: nil
-  defp alias_class(buf), do: Map.get(Process.get(:defk_alias, %{}), buf, buf)
-
-  defp same_buf?(a, b), do: a != nil and alias_class(a) == alias_class(b)
-
-  # one alias class for buffers `bufs` (nil for an array of no binding's,
-  # such as alloc/2's): returns it, a new buffer for the merged value
-  defp merge_bufs(bufs) do
-    new = make_ref()
-    classes = for b <- bufs, b != nil, uniq: true, do: alias_class(b)
-    m = Process.get(:defk_alias, %{})
-    m = Map.new(m, fn {b, c} -> {b, if(c in classes, do: new, else: c)} end)
-    Process.put(:defk_alias, Enum.reduce(classes, m, &Map.put(&2, &1, new)))
-    new
-  end
-
   # Before statement `e` of a block, `live` the names read after it: copy
   # what its nested writes need (hoist/3), then note what is live.
   defp enter(e, live, env) do
@@ -1246,7 +1216,7 @@ defmodule Defk.Compiler do
     Enum.reduce(Copies.nested_writes(e), {[], env}, fn n, {acc, env} ->
       case env.vars do
         %{^n => %{buf: _} = b} ->
-          if not b.owned or shared?(b, MapSet.union(pairs(env, seen), env.out)) do
+          if not b.owned or Copies.shared?(b, MapSet.union(pairs(env, seen), env.out)) do
             note(
               :copy,
               e,
@@ -1277,7 +1247,7 @@ defmodule Defk.Compiler do
   defp copied(a, base) do
     {:arr, e} = a.t
 
-    buf = carried(make_ref(), a[:buf])
+    buf = Copies.carried(make_ref(), a[:buf])
 
     if a.owned and a[:var] != nil do
       {"#{a.c} = defk_copy_#{e}(ctx, #{a.c});\n", Map.put(a, :buf, buf)}
@@ -1297,7 +1267,7 @@ defmodule Defk.Compiler do
 
   # `arr[i] = v` with `arr`'s value `a`: {stmts, the array written, env}
   defp before_write(arr, a, env) do
-    if a.owned and not shared?(a, env.live) do
+    if a.owned and not Copies.shared?(a, env.live) do
       {[], a, env}
     else
       case arr do
@@ -1368,7 +1338,7 @@ defmodule Defk.Compiler do
     |> Copies.writes_in(MapSet.new())
     |> Enum.uniq()
     |> Enum.reduce({[], env}, fn n, {acc, env} ->
-      with %{^n => %{buf: b_buf} = b} <- env.vars, true <- same_buf?(b_buf, buf) do
+      with %{^n => %{buf: b_buf} = b} <- env.vars, true <- Copies.same_buf?(b_buf, buf) do
         note(
           :copy,
           loop,
@@ -1386,33 +1356,6 @@ defmodule Defk.Compiler do
 
   defp snapshot_writes(_a, env), do: {[], env}
 
-  # Buffer `new` holds what buffer `old` held (a copy of it, or a loop
-  # accumulator started from it): a write to `old` is carried into `new`.
-  # Recorded in :defk_from (new => [old]) for unreturned_writes!/3; `new` is
-  # returned.
-  defp carried(new, nil), do: new
-
-  defp carried(new, old) do
-    Process.put(:defk_from, Map.update(Process.get(:defk_from), new, [old], &[old | &1]))
-    new
-  end
-
-  # buffer `buf` is `old`, or holds what `old` held
-  defp carries?(buf, old), do: carries?([buf], old, %{})
-
-  defp carries?([], _old, _seen), do: false
-  defp carries?([old | _], old, _seen), do: true
-
-  defp carries?([b | rest], old, seen) do
-    if b == nil or Map.has_key?(seen, b),
-      do: carries?(rest, old, seen),
-      else: carries?(Map.get(Process.get(:defk_from), b, []) ++ rest, old, Map.put(seen, b, true))
-  end
-
-  # A loop accumulator that may take a new value not carrying its buffer
-  # before (an alloc/2 array, say) no longer carries its initial value.
-  defp cut_carry(buf), do: Process.put(:defk_from, Map.delete(Process.get(:defk_from), buf))
-
   # dtw.18: a callee that writes an array parameter must return it, or the
   # write is lost to the caller (valid Elixir that does nothing). The array
   # returned may be the parameter bound again (defk-3z5), as long as it
@@ -1421,7 +1364,7 @@ defmodule Defk.Compiler do
   defp unreturned_writes!(k, params, returned) do
     ids = for v <- returned, v[:id], do: v.id
     bufs = for v <- returned, v[:buf], do: v.buf
-    writes = Enum.reverse(Process.get(:defk_writes))
+    writes = Copies.writes()
 
     for {p, id} <- params,
         id not in ids,
@@ -1455,7 +1398,7 @@ defmodule Defk.Compiler do
 
   # a write to binding `id` that no returned array carries
   defp lost?({wid, buf, _at}, id, bufs),
-    do: wid == id and (buf == nil or not Enum.any?(bufs, &carries?(&1, buf)))
+    do: wid == id and (buf == nil or not Enum.any?(bufs, &Copies.carries?(&1, buf)))
 
   @spec array_rebind_in_loop!(term(), term()) :: no_return()
   defp array_rebind_in_loop!({name, _, _} = var, match) do
@@ -2172,11 +2115,14 @@ defmodule Defk.Compiler do
   # parameter (resume_block/3), and a write to it copies it first.
   defp branch_val(tmp, {:arr, _} = t, vals) do
     bufs = for v <- vals, do: v[:buf]
-    buf = merge_bufs(bufs)
+    buf = Copies.merge_bufs(bufs)
 
     # a buffer every arm's array holds is carried into the value's (for
     # write-not-returned); one only some arms hold may be lost
-    for b <- Enum.uniq(bufs), b != nil, Enum.all?(bufs, &carries?(&1, b)), do: carried(buf, b)
+    for b <- Enum.uniq(bufs),
+        b != nil,
+        Enum.all?(bufs, &Copies.carries?(&1, b)),
+        do: Copies.carried(buf, b)
 
     lens = for v <- vals, do: Facts.len_lo(v)
 
@@ -2944,7 +2890,7 @@ defmodule Defk.Compiler do
     # the callee's rejections are reported in the callee
     {sb, rets} =
       in_kernel(k, fn ->
-        prev = Process.put(:defk_writes, [])
+        prev = Copies.swap_writes([])
 
         try do
           {sb, v} = lower_block(k.body, cenv)
@@ -2952,7 +2898,7 @@ defmodule Defk.Compiler do
           unreturned_writes!(k, params, Map.get(v, :elems, [v]))
           {sb, Enum.zip(ret, Map.get(v, :elems, [v]))}
         after
-          Process.put(:defk_writes, prev)
+          Copies.swap_writes(prev)
         end
       end)
 
@@ -3164,7 +3110,7 @@ defmodule Defk.Compiler do
   defp range_dest(a, {name, _, args} = node, env) do
     outer = MapSet.union(env.live, pairs(env, Copies.reads_outside(env.stmt, node)))
 
-    if a.owned and not shared?(Map.put(a, :id, make_ref()), outer) do
+    if a.owned and not Copies.shared?(Map.put(a, :id, make_ref()), outer) do
       {[], a}
     else
       {s, b} = copied(Map.put(a, :var, nil), "#{name}")
@@ -4493,7 +4439,12 @@ defmodule Defk.Compiler do
 
             acc =
               Facts.assert(
-                %{t: v.t, owned: true, fin: v[:fin] || false, buf: carried(make_ref(), v[:buf])},
+                %{
+                  t: v.t,
+                  owned: true,
+                  fin: v[:fin] || false,
+                  buf: Copies.carried(make_ref(), v[:buf])
+                },
                 len_lo: Facts.len_lo(v)
               )
 
@@ -4555,7 +4506,7 @@ defmodule Defk.Compiler do
   # earlier accumulators') may share its buffer
   defp loop_owned(v, seen) do
     {:arr, e} = v.t
-    copy? = not v.owned or Enum.any?(seen, &same_buf?(v[:buf], &1))
+    copy? = not v.owned or Enum.any?(seen, &Copies.same_buf?(v[:buf], &1))
     c = if copy?, do: "defk_copy_#{e}(ctx, #{v.c})", else: v.c
     {c, if(v[:buf], do: MapSet.put(seen, v.buf), else: seen)}
   end
@@ -4585,7 +4536,7 @@ defmodule Defk.Compiler do
         # and a name the body may bind again (array-rebind-in-loop is about
         # the outer variable it shadows)
         match?({:arr, _}, a.t) ->
-          buf = carried(make_ref(), a[:buf])
+          buf = Copies.carried(make_ref(), a[:buf])
           b = Map.merge(a, %{c: c, id: make_ref(), buf: buf, depth: e.depth + 1})
           %{put_var(e, name, b) | guard: MapSet.delete(e.guard, name)}
 
@@ -4628,7 +4579,7 @@ defmodule Defk.Compiler do
       |> Enum.map_reduce(MapSet.new(live, &elem(&1, 1)), fn
         {{name, c, %{t: {:arr, _}} = a}, r}, seen ->
           lost_facts?(a, r) && Process.put(fix, MapSet.put(Process.get(fix), c))
-          a[:buf] && not carries?(r[:buf], a.buf) && cut_carry(a.buf)
+          a[:buf] && not Copies.carries?(r[:buf], a.buf) && Copies.cut_carry(a.buf)
           {rc, seen} = loop_owned(r, seen)
 
           note_copy(
@@ -4665,7 +4616,7 @@ defmodule Defk.Compiler do
     do: %{t: {:tuple, Enum.map(accs, &elem(&1, 2).t)}, elems: Enum.map(accs, &acc_value/1)}
 
   defp acc_value({_, c, %{t: {:arr, _}} = a}),
-    do: Map.merge(a, %{c: c, var: c, buf: carried(make_ref(), a[:buf])})
+    do: Map.merge(a, %{c: c, var: c, buf: Copies.carried(make_ref(), a[:buf])})
 
   defp acc_value({_, c, a}), do: val(c, a.t, c)
 
