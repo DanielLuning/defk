@@ -48,6 +48,10 @@ _Avoid_: array type, dtype
 A kernel local built only by appending integer segments, `acc = <<acc::bitstring, v::size(n)>>`, starting from `<<>>`, and returned to the caller as a bitstring. It is how a kernel produces output whose length depends on the data. Like an array write, a segment value that doesn't fit its width raises.
 _Avoid_: bit buffer, bit writer, growable output
 
+**Raising guard**:
+An `if` at the top of a kernel whose only arm raises (`if w < 1, do: raise ArgumentError, "..."`). It checks a precondition on the arguments at run time, the same in Elixir mode, and the kernel may rely on it for everything after it, such as an index being in bounds.
+_Avoid_: assertion, precondition check, assume
+
 **Elixir mode**:
 A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir, with the kernel subset's limits applied (a value that doesn't fit its type raises there too). It is never a fallback in production and never a baseline.
 _Avoid_: fallback, interpreter, pure mode
