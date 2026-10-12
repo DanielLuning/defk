@@ -3,7 +3,9 @@
   "blocked_by": [
     "defk-mif"
   ],
-  "blocks": [],
+  "blocks": [
+    "defk-ch4"
+  ],
   "created": "2026-10-12T13:49:38Z",
   "description": "Mechanical extraction of compiler.ex 5220-5529 plus the ~25 fact-creation sites behind one hidden pure module, BEFORE the ADR-0007 representation migration (which then happens inside the module). Decisions (grilling 2026-10-12): one opaque facts type for scalars and array lengths, under a single v.facts key (six loose keys collapse; no stray v[:lo] possible). Interface: assert + per-op derivations (add/sub/mul/div/minmax/bit/bsr) in; prove_in_bounds/prove_i64/lo/hi out, prove_in_bounds returns its support (the bindings the proof used - ADR-0007 needs it visible to the flagged-strip classifier); missing/3 absorbs the report's perturbation loop (compiler.ex 6311-6332); carries?/covers?/weaken serve the accumulator carry, whose backtracking protocol and fin stay in the compiler (fin is a contents fact, out of scope). New facts_test.exs property suite as the module's spec (random values satisfying asserted facts =\u003e proven queries hold); scaled_facts_test.exs kept as the e2e truth net for the assert sites. Gate: dump-all-C byte-identical. CONTEXT.md 'Range fact' added.",
   "id": "defk-k4x",
@@ -12,5 +14,5 @@
   "status": "open",
   "title": "Extract Defk.Facts: the range-facts lattice, byte-identical",
   "type": "task",
-  "updated_at": "2026-10-12T13:49:58Z"
+  "updated_at": "2026-10-12T13:49:59Z"
 }
