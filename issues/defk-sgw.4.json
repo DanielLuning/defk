@@ -10,6 +10,7 @@
     "defk-9p6.16",
     "defk-aok",
     "defk-jlk",
+    "defk-klw",
     "defk-sgw.2"
   ],
   "blocks": [
@@ -26,5 +27,5 @@
   "status": "open",
   "title": "Freeze the workload-results snapshot on a quiet machine",
   "type": "task",
-  "updated_at": "2026-10-12T10:12:06Z"
+  "updated_at": "2026-10-12T10:12:07Z"
 }
