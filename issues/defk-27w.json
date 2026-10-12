@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-12T20:07:25Z",
+  "description": "Split from defk-0ha step 2 with its framing corrected. The hand-synced part is the message FRAGMENTS (the @arith/@arg match keys in Defk.Test and the literal strings at 57 sites in priv/defk_runtime.h and 17 in ElixirMode.Ops/Bits - what crc32c tripped over). Honest payoff: the taxonomy stops being hand-synced, it does NOT die - native and Elixir-mode messages can never be byte-identical where they carry formatted values (C prints floats as C does). Shape: one Elixir module of fragments, a generated priv/defk_messages.h of defines (dev-time mix task + mix ci check, like the generated docs), runtime.h's raise sites switched to the defines, Ops/Bits and Defk.Test's taxonomy consuming the module. A defk-ch4-sized C edit: gate byte-identical for kernel C (the header is not in the dump), message-equality pinned by raise_test and the exact-message agreement sites.",
+  "id": "defk-27w",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Single-source the runtime error message fragments between defk_runtime.h and ElixirMode.Ops",
+  "type": "task",
+  "updated_at": "2026-10-12T20:07:25Z"
+}
