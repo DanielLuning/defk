@@ -138,7 +138,7 @@ defmodule Defk.ElixirMode do
   @doc false
   # Quoted definitions: `__defk_elixir__/2` and one private function per kernel.
   def definitions(raw_kernels, sigs, file) do
-    Process.put(:defk_file, file)
+    Defk.Compiler.Ctx.set(:file, file)
     by_key = Map.new(sigs, &{{&1.name, &1.arity}, &1})
     kernels = Enum.zip_with(raw_kernels, sigs, fn raw, sig -> kernel(raw.body, sig, by_key) end)
 

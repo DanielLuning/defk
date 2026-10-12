@@ -31,19 +31,23 @@ One module, ordered by section dividers you can grep for
 | parsing | heads, types, options | |
 | kernels | lowering one kernel, return handling | `lower_kernel`, `coerce_return`, `emit_result` |
 | blocks / statements | statement lowering, bindings | `lower_block`, `lower_stmts` |
-| array values | ownership, the copy analysis, value semantics | `owned`, alias groups (`:defk_alias`) |
+| array values | ownership, value semantics; the copy analysis's rules and tracking state live in `Defk.Copies` | `owned`, `before_write`, `hoist` |
 | expressions | arithmetic, comparisons, overflow checks | `i64_arith` |
 | calls | kernel-to-kernel inlining, builtins | (inline size: `Defk.InlineSize.check/3`) |
 | loops | `for`, reduce accumulators, safepoints | `lower_quals`, `with_acc_facts/2`, `for_collect!/6`, `recover_for/4` |
 | case | clause dispatch (multi-clause kernels) | |
-| range facts | bounds proofs (ADR-0007 moves this to symbolic bounds) | `in_bounds?/3`, `range_limit` |
+| range facts | the lattice lives in `Defk.Facts` (ADR-0007's migration happens inside it); this file creates facts and asks the proofs | `Facts.prove_in_bounds`, `range_limit` |
 | element types | narrow loads/stores | |
 | emitting | C text: entries, init, frames, resume | `emit_entry`, `resume_block/3`, `view_term/3` |
-| report | fast-path notes | `note/4`, `note_bounds/4`, `fixed_indices?/3` |
+| report | fast-path notes; one of `compile/4`'s results | `note/4`, `note_bounds/4` |
 
-State during one kernel's lowering is in the process dictionary
-(`:defk_decls`, `:defk_sp`, `:defk_writes`, `:defk_alias`, ...), reset per
-kernel in `lower_kernel`; defk-euu plans to replace this with a context.
+The compiler's state is one process-dictionary key, `:defk_ctx`, holding a
+`Defk.Compiler.Ctx` (defk-euu): compile-wide fields (file, diags, report,
+...) plus a `lowering` sub-struct replaced wholesale per kernel in
+`lower_kernel`. Probing and backtracking (`probe/1`, `with_acc_facts/2`,
+`u64_accs/2`) snapshot and restore that one value. The flagged-strip
+classifier decides from the strip record (`lowering.strip`, rows the
+lowering declares as it emits; defk-ch4), not from the C text.
 
 ## The other modules
 
@@ -54,6 +58,13 @@ kernel in `lower_kernel`; defk-euu plans to replace this with a context.
 - `lib/defk/errors.ex`: the error registry (code, why, fix), `reference/0`
   and `scope/1` feed the generated docs — after changing it, follow
   `docs/agents/generated-docs.md`.
+- `lib/defk/facts.ex`: the range-facts lattice (one opaque value under
+  `v.facts`; assert/derive in, `prove_in_bounds`/`prove_i64` with support
+  out). ADR-0007's representation migration happens here.
+- `lib/defk/copies.ex`: the copy analysis — what counts as a read after a
+  write, and the pure tracking state (writes log, buffer carrying, alias
+  classes) the compiler keeps at `ctx.lowering.copies`.
+- `lib/defk/compiler/ctx.ex`: the ctx struct itself.
 - `lib/defk/clauses.ex`: multi-clause heads and patterns.
 - `lib/defk/elixir_mode.ex`: the Elixir compilation of kernels (tests only).
 - `lib/defk/inline_size.ex`: the code-size warning (defk-6ag).
