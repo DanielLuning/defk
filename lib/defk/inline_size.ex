@@ -78,14 +78,16 @@ defmodule Defk.InlineSize do
     do: Enum.find_index(order, &(&1 == a)) < Enum.find_index(order, &(&1 == b))
 
   # the kernels `key` reaches, callers before callees (reverse post-order);
-  # an edge back into the current chain is skipped
+  # an edge back into the current chain is skipped. `seen` is a plain map:
+  # a MapSet in the accumulator tuple breaks its opaque type for dialyzer
+  # (defk-c9h)
   defp topo(key, graph) do
-    {_, post} = visit(key, graph, [], {MapSet.new(), []})
+    {_, post} = visit(key, graph, [], {%{}, []})
     post
   end
 
   defp visit(key, graph, chain, {seen, post}) do
-    if MapSet.member?(seen, key) do
+    if Map.has_key?(seen, key) do
       {seen, post}
     else
       {_, callees} = graph[key]
@@ -94,7 +96,7 @@ defmodule Defk.InlineSize do
         callees
         |> Map.keys()
         |> Enum.reject(&(&1 in [key | chain]))
-        |> Enum.reduce({MapSet.put(seen, key), post}, &visit(&1, graph, [key | chain], &2))
+        |> Enum.reduce({Map.put(seen, key, true), post}, &visit(&1, graph, [key | chain], &2))
 
       {seen, [key | post]}
     end
