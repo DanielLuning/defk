@@ -16,7 +16,8 @@ defmodule Defk.MixProject do
       name: "defk",
       source_url: @source_url,
       docs: docs(),
-      aliases: aliases()
+      aliases: aliases(),
+      usage_rules: usage_rules()
     ]
   end
 
@@ -42,8 +43,23 @@ defmodule Defk.MixProject do
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:vibe_kit, "~> 0.1", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: [:dev, :test], runtime: false},
+      {:usage_rules, "~> 1.2", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.1", only: :test},
       {:igniter, "~> 0.6", optional: true}
+    ]
+  end
+
+  # `mix usage_rules.sync` writes these rules into the marked section of
+  # AGENTS.md; `mix ci` fails when that section is out of date. Choice
+  # (defk-mob): usage_rules' own rules (doc lookup with `mix usage_rules.docs`
+  # and `search_docs`) and the generic Elixir and OTP rules. `:usage_rules`
+  # brings its :elixir and :otp sub-rules with it; listing them as well
+  # (usage_rules 1.2.8) repeats the main rules once per entry. igniter's
+  # rules are left out: defk writes no Igniter code.
+  defp usage_rules do
+    [
+      file: "AGENTS.md",
+      usage_rules: [:usage_rules]
     ]
   end
 
@@ -179,7 +195,8 @@ defmodule Defk.MixProject do
         "credo --strict",
         "dialyzer",
         "ex_dna --max-clones 0",
-        "reach.check --arch --smells"
+        "reach.check --arch --smells",
+        "usage_rules.sync --check"
       ]
     ]
   end
