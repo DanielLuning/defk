@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-9p6.30"
+  ],
   "created": "2026-10-12T09:52:03Z",
   "description": "Why: docs/research/string-workloads.md lists 'a growable [i64] output (offset lists, category E/F; the alternative is a two-pass kernel)' as a need below its top three and says it is not ticketed. The bitstring accumulator (defk-cmr) covers bit/byte output of data-dependent length, not typed arrays; today a kernel that produces, say, delimiter offsets or token ids must alloc a worst-case size and return {array, count} (the pattern defk-9p6.21's loader uses), or run twice (count, then fill). That works but over-allocates (worst case can be n elements for an n-byte input) and leaves Elixir to trim with binary_part.\n\nDo not build this speculatively: start when a catalog workload (defk-9p6.21's CSV loader, a tape output for parsers, BPE token ids) measures that the {array, count} or two-pass form costs enough to matter.\n\nScope when started:\n1. Measure the cost of the alternatives on the workload: worst-case alloc + {array, count}, two passes, and the bitstring accumulator with 64-bit segments read back as [i64].\n2. If a new construct is worth it: a design that keeps the one rule and Elixir mode (an Elixir meaning, e.g. an append-only accumulator like the bitstring one, `acc = append(acc, v)` returning [i64]), value semantics, bounds checks, max_owned: budget (defk-4b2) and frame cleanup on process death.\n3. Compile errors, docs/language.md, and generated docs per docs/agents/generated-docs.md.\n\nDone when: either the measurement shows the existing forms are enough (documented in docs/performance.md and language.md's 'results of unknown length' row), or the construct lands with agreement properties and forced-yield tests.",
   "id": "defk-3rl",
@@ -12,5 +14,5 @@
   "status": "open",
   "title": "Output arrays whose length depends on the data: a growable [i64] (when a workload needs it)",
   "type": "task",
-  "updated_at": "2026-10-12T09:52:04Z"
+  "updated_at": "2026-10-12T09:52:05Z"
 }
