@@ -46,6 +46,17 @@ defmodule Defk.Bench do
   changes it (see the `:native`, `:responsiveness`, `:realistic_size` and
   `:sweep` options of `report/1`).
 
+  **Heap state timing starts from.** Before every timed run, for every side,
+  the benchmark process is collected twice: a full sweep, then a minor GC.
+  Garbage from the previous run is gone, and the live data (the input lists
+  the funs close over) sits in the old heap, where a minor GC inside the
+  timed run does not copy it. With the full sweep alone the inputs would sit
+  in the young heap and a minor GC would copy them into some runs only: a
+  side that allocates little pays it sometimes, one that allocates a lot
+  pays it always. This models long-lived inputs; a list built a moment ago
+  is young, and a caller that builds its inputs per call pays that copy on
+  both sides.
+
   The measurement rules, and every example calling `report/1`, are in the
   catalog's
   [README](https://github.com/DanielLuning/defk/blob/main/examples/README.md).
@@ -263,15 +274,33 @@ defmodule Defk.Bench do
 
   defp elem_fun(native), do: native |> native_parts() |> elem(0)
 
-  # A full GC before each run, so garbage left by the previous run is not
-  # billed to the next one. Large inputs shared across requests should live
-  # where a real app keeps them (:persistent_term, ETS), not on this process's
-  # heap: a major GC copying them lands on whichever side is being timed.
+  @doc false
+  # The heap state every timed run starts from: no garbage, and the caller's
+  # live data (its input lists) in the old generation. A full sweep clears the
+  # garbage the previous run left, but it copies the live data into the new
+  # young heap, so the first minor GC inside the timed run would copy it again
+  # (a 100k-element u64 list is ~0.6 ms, and a side that allocates little pays
+  # it in only some runs). A minor collection straight after promotes the
+  # live data: the old heap holds it, and later minor GCs leave it alone.
+  # (A second full sweep would not: it puts the data in the young heap again.)
+  # Not reliable under `fullsweep_after: 0`, where every GC is a full sweep.
+  def settle do
+    :erlang.garbage_collect()
+    :erlang.garbage_collect(self(), type: :minor)
+    :ok
+  end
+
+  # `settle/0` before each run, so garbage left by the previous run is not
+  # billed to the next one and a copy of the inputs is not billed to some
+  # runs only. Both sides start from the same state. It is the state of
+  # long-lived data a real caller holds; a list built a moment ago is young.
+  # Large inputs shared across requests should still live where a real app
+  # keeps them (:persistent_term, ETS), not on this process's heap.
   defp best(fun, runs) do
     fun.()
 
     Enum.map(1..runs, fn _ ->
-      :erlang.garbage_collect()
+      settle()
       elem(:timer.tc(fun), 0)
     end)
     |> Enum.min()

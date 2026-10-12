@@ -111,17 +111,41 @@ Also keep only the last result of a repeated job (`Enum.reduce(blocks, nil, fn s
 
 ### 1.3 A forced full GC leaves the caller's input list in the young heap
 
-`Defk.Bench` runs `:erlang.garbage_collect()` before each timed run. A big
-input list then sits in the young heap, and a minor GC inside the timed run
-copies it. Low-allocating sides (a kernel) pay it only sometimes.
+`Defk.Bench` used to run `:erlang.garbage_collect()` before each timed run. A
+full sweep copies the live data into the new young heap (`old_heap_size` 0
+afterwards), so a big input list sat there and a minor GC inside the timed
+run copied it into the old heap. Low-allocating sides (a kernel) paid it only
+sometimes. Fix: `Defk.Bench`'s pre-run step (`settle/0`) follows the full sweep with a minor GC
+(`:erlang.garbage_collect(self(), type: :minor)`), which promotes the live
+data, so the timing starts with the inputs in the old heap, for every side.
+A second full sweep does not do it (verified: `old_heap_size` stays 0), and
+the "second GC" in the ticket has to be a minor one.
 
-- **Numbers:** 100k-element u64 list (~500k words): the minor-GC copy is
-  ~0.6 ms. `hll_update_many` defk side 0.36-0.38 ms best of 7, but 1.06 ms
-  best of 3 in the sweep (4 of 4 runs), which reads as 3.2x instead of
-  9.2-9.4x. Packing 100k hashes: ~270-460 us with 0 GCs, ~850-1100 us with 1 GC.
-- **Conditions:** under load.
-- **Source:** `defk-9p6.27` (open), `defk-9p6.15` comment 2026-10-10, [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs) (070a179).
-- **Status:** provisional; the fix (a second GC, or a fresh process per timed call) is not chosen yet.
+- **Numbers:** 100k-element u64 list (~394k words). Before the fix
+  `hll_update_many` defk side 0.44-0.46 ms in the report (best of 5) but
+  1.08-1.11 ms in the sweep (best of 3, 3 of 3 runs): 3.2-3.3x instead of
+  7.6-7.9x. After: 0.36-0.39 ms report, 0.36-0.40 ms sweep: 8.7-9.8x in
+  both, the Elixir side unchanged (3.5 ms). Promotion, from
+  `process_info(self(), :garbage_collection_info)` in a fresh process with a
+  list built inside it: after full sweep alone `old_heap_size` 0; after full
+  sweep + minor GC `old_heap_size` equals `:erts_debug.flat_size(list)` (3940,
+  393754 and 3937504 words for 1k, 100k and 1M elements), unchanged by the
+  later minor GCs of the timed run (`min_heap_size` 233 and 1M, default
+  `fullsweep_after` all alike). Counter-case: `fullsweep_after: 0` makes every
+  GC a full sweep, so nothing is ever promoted; the bench process does not
+  set it. Two full sweeps in a row: old heap still 0, no promotion.
+- **Conditions:** M-series Mac, 12 schedulers, OTP 29, load average ~8 (other
+  agents' suites and benchmarks running), so provisional. Before and after
+  alternated in the same session, three runs each.
+- **Test:** `test/bench_test.exs` counts words, not time: after `settle/0` the
+  old heap holds the list and minor GCs in a churning fun leave it unchanged;
+  after a full sweep alone the same churn copies it.
+- **Scope:** the heap state is now the one of long-lived inputs. A list built
+  just before the call is young, and a caller that builds its input per call
+  pays the copy on both sides; the examples that run their own
+  `:erlang.garbage_collect()` loops (not through `Defk.Bench`) are unchanged.
+- **Source:** `defk-9p6.27`, `defk-9p6.15` comment 2026-10-10, [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs), `lib/defk/bench.ex`.
+- **Status:** provisional (loaded machine); the mechanism is verified by heap counters, not by wall time.
 
 ### 1.4 Give a process that holds a chunk's lists a heap big enough for them
 
