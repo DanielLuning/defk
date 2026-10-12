@@ -308,30 +308,6 @@ defk f(x :: i64, y :: f64) :: i64 do
 end
 ```
 
-### return-input-array
-
-A returned array is one the kernel created with alloc/2 or wrote; returning an unwritten input array is planned.
-
-- kind: not supported yet (planned)
-- why: a kernel returns arrays it owns: one from alloc/2, or an input array it wrote, which is a copy; handing an unwritten input array back to the caller is planned
-- hint: return the input itself from the Elixir caller, which already holds it
-
-Rejected:
-
-```elixir
-defk f(a :: [f64]) :: [f64] do
-  a
-end
-```
-
-Write instead:
-
-```elixir
-defk f(a :: [f64]) :: f64 do
-  a[0]
-end
-```
-
 ### empty-block
 
 Every block in a kernel has a value, its last expression.
@@ -494,31 +470,6 @@ Write instead:
 defk f(x :: i64) :: i64 do
   {a, b} = if x > 0, do: {x, 1}, else: {x, 0}
   a + b
-end
-```
-
-### array-in-branch
-
-An if, cond or case used as a value gives no array, alone or in a tuple; arrays through branches are planned.
-
-- kind: not supported yet (planned)
-- why: an if/cond/case may give numbers, booleans or tuples of them, not arrays yet
-- hint: do the array work inside each branch, so that each branch gives a number: read the element there (if p, do: a[i], else: b[i]), or write the output array in each branch
-
-Rejected:
-
-```elixir
-defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do
-  c = if p, do: a, else: b
-  c[0]
-end
-```
-
-Write instead:
-
-```elixir
-defk f(p :: bool, a :: [f64], b :: [f64]) :: f64 do
-  if p, do: a[0], else: b[0]
 end
 ```
 

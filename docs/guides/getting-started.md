@@ -282,9 +282,6 @@ From people writing their first kernels:
   `exp`, `log`, `log2`, `log10`, `sin`, `cos` and `pow`, each also as
   `:math.log2/1` and so on, and each giving the same bits as `:math`. Others
   (`:math.tan/1`, say) are written from these or computed in Elixir.
-- **Arrays can't come out of an `if`.** Write to the array inside each
-  branch instead of returning it from the branch (planned:
-  [`array-in-branch`](../compile-errors.md#array-in-branch)).
 - **Elixir mode in a script.** In a `Mix.install` script, add
   `use Defk, elixir_mode: true` to get the plain Elixir version of each
   kernel for checking (see [Testing kernels](testing.md)). In a Mix

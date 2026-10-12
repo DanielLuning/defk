@@ -1,8 +1,8 @@
 # An `if`, `cond` or `case` whose arms are tuples gives a tuple (defk-uew):
 # natively one branch per element position, the conditions evaluated once,
 # with a select per element when the arms are pure; in Elixir mode the same
-# branch. Each position has its own type; arrays inside such tuples are
-# array-in-branch until arrays go through branches (defk-gqk).
+# branch. Each position has its own type; an array inside such tuples is
+# tested in test/array_branch_test.exs (defk-gqk).
 
 defmodule Defk.TupleBranchTest.K do
   use Defk
@@ -240,12 +240,6 @@ defmodule Defk.TupleBranchTest do
 
       msg = compile_error("{p, q} = if x > 0, do: {x, x}, else: x\np + q")
       assert msg =~ "(defk branch-tuple"
-    end
-
-    test "an array inside a tuple branch is array-in-branch" do
-      msg = compile_error("{c, n} = if x > 0, do: {a, 1}, else: {b, 2}\nc[0] + n")
-      assert msg =~ "(defk array-in-branch"
-      assert msg =~ "not supported yet"
     end
 
     test "a tuple branch bound to one variable is tuple-binding" do
