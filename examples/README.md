@@ -99,7 +99,7 @@ tried yet.
 Also not what defk is for (no script needed):
 
 - **Wrapping an existing native library** (codecs, crypto, databases): use Rustler, Zigler or an existing binding.
-- **Tensor and ML work**: use Nx, which compiles to XLA or LibTorch. [`matmul.exs`](matmul.exs) (defk-9p6.3) measures where the boundary lies.
+- **Tensor and ML work at scale** (large fixed-shape arrays, linear algebra, gradients, GPU, batched serving), or any numeric job in an app already on Nx with EXLA: use Nx. Its speed comes from a compiled backend; `BinaryBackend` is slower than plain Elixir. [`matmul.exs`](matmul.exs) (defk-9p6.3) and [`cosine_topk.exs`](cosine_topk.exs) measure where the boundary lies. Overlap is fine: a numeric loop in an app that doesn't otherwise need Nx is a fair defk job, and an example may compare against Nx without having to beat it.
 - **I/O-bound work**: native code doesn't make the network faster.
 
 Numbers are from an M-series Mac (OTP 29, Elixir 1.20); ranges cover the runs so far.
