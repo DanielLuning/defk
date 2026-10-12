@@ -10,11 +10,15 @@
     {
       "text": "Re-check before starting (flagged in the 2026-10-12 review wrap-up): the '~80% of builtins fit the capped row vocabulary' estimate came from one ~70-line excerpt of each emitter, not a census. Step one: census every Compiler.builtin/4 and ElixirMode.builtin/4 clause and count what actually fits. Known blind spot to close: typing: :bespoke rows carry no operand-type patterns, so the Q25 enforcement (table-generated agreement kernels) cannot generate kernels for them - yet bespoke rows are exactly where typing drift survives. Likely fix: bespoke rows carry concrete example signatures (not patterns) to generate agreement kernels from; decide with the census in hand. If the bespoke fraction is high, revisit the vocabulary cap itself.",
       "timestamp": "2026-10-12T14:51:35Z"
+    },
+    {
+      "text": "Census done (step one): all 25 clause pairs of Compiler.builtin/4 x ElixirMode.builtin/4 fit the capped vocabulary - bespoke fraction is ZERO, not ~20%. Needed vocabulary, confirmed exhaustive: concrete types (i64/u64/f64/bitstring/arr(u8)), classes :int (i64|u64) and :number (int|f64), a same-scalar type var (min/max [t,t] -\u003e t), a same-element array var (copy/copy_back arr(e)...arr(e) -\u003e arr(e)), results as a constant or an operand reference (rotl -\u003e type of x; trunc of an int -\u003e its own type), ordered rows per name (div [i64,i64]-\u003ei64 before [int,int]-\u003eu64), and a per-operand coercion map (-\u003e i64 or -\u003e f64). The typing: :bespoke escape hatch stays in the schema for the future but no current row uses it, so the generated-kernel blind spot flagged earlier is moot. One generation caveat found: u64 is not a kernel parameter type, so :int-class instantiations at u64 need an in-kernel idiom (i64_to_u64 or masked arithmetic) or stay covered by the existing suite - decided during implementation.",
+      "timestamp": "2026-10-12T19:38:55Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Grow Defk.Builtins into the builtin signature table (ADR-0008)",
   "type": "task",
-  "updated_at": "2026-10-12T19:37:27Z"
+  "updated_at": "2026-10-12T19:38:55Z"
 }
