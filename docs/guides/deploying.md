@@ -116,6 +116,43 @@ script or notebook, so that machine needs the C compiler. The builds are
 cached with the rest of `Mix.install`'s cache. A kernel module defined in
 the script itself loads its library from its absolute build path.
 
+## Defining kernels at run time
+
+A kernel module can be defined in a running node, with no restart:
+`Code.compile_string/2` (or IEx) on source that does `use Defk` builds the
+library, loads it and the module is ready to call, with the same compiler,
+compile errors, yielding and [runtime contract](runtime-contract.md) as a
+module in `lib/`:
+
+<!-- defk-example skip: the kernel is inside a string; test/runtime_define_test.exs runs the same steps -->
+```elixir
+Code.compile_string("""
+defmodule MyApp.Live do
+  use Defk
+  defk add(a :: i64, b :: i64) :: i64, do: a + b
+end
+""")
+
+MyApp.Live.add(2, 3)
+#=> 5
+```
+
+- **The node that compiles is a build machine.** It needs the C compiler
+  and `erl_nif.h` (the running ERTS's, or `ERTS_INCLUDE_DIR`), which a
+  runtime image built as above does not have. Each new kernel costs a C
+  compile (about 0.7 s for a small one on an M-series Mac); an unchanged
+  one is a cache hit (about 20 ms).
+- **The library stays where it was built**: under `_build/<env>/defk/` in a
+  Mix project, else in the system temp directory, loaded from that absolute
+  path. It is not copied into `ebin/` and is not part of a release, so the
+  module is gone after a restart until it is defined again.
+- **Defining the module again** builds and loads the new version; a kernel
+  still running the old one finishes in it, as in a
+  [hot code upgrade](runtime-contract.md#4-hot-code-upgrade-a-suspended-kernel-finishes-in-its-own-code).
+- **The source is native code.** The kernel subset leaves out the unsafe
+  parts of C, but compiling source you did not write still runs it in your
+  node; compile only source you trust.
+
 ## Shipping kernels in a Hex package
 
 defk itself is not on Hex; a release waits for the project's verdict. A

@@ -92,7 +92,7 @@ defmodule Defk.Build do
   # {app, ebin} when `file` is compiled by Mix into its project's ebin
   defp owning_app(file) do
     with true <- is_binary(file) and Path.extname(file) == ".ex",
-         true <- Code.ensure_loaded?(Mix.Project) and Mix.Project.get() != nil,
+         true <- mix_project?(),
          config = Mix.Project.config(),
          app when is_atom(app) and app != nil <- config[:app],
          true <- in_elixirc_paths?(file, config) do
@@ -321,8 +321,18 @@ defmodule Defk.Build do
     _ -> "unknown"
   end
 
+  @doc false
+  # Whether a Mix project is running. Mix.Project can be loaded without Mix
+  # started (`elixir script.exs`, an escript, a release that ships :mix),
+  # and then Mix.Project.get/0 exits: check the project stack first.
+  @spec mix_project?() :: boolean()
+  def mix_project? do
+    Code.ensure_loaded?(Mix.Project) and Process.whereis(Mix.ProjectStack) != nil and
+      Mix.Project.get() != nil
+  end
+
   defp build_root do
-    if Code.ensure_loaded?(Mix.Project) and Mix.Project.get(),
+    if mix_project?(),
       do: Mix.Project.build_path(),
       else: System.tmp_dir!()
   end
