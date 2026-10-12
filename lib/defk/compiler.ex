@@ -122,9 +122,15 @@ defmodule Defk.Compiler do
       diags -> raise Defk.Errors.compile_error(module, file, diags)
     end
 
+    entries_c = Enum.map(lowered, &IO.iodata_to_binary(emit_entry(&1)))
+
+    # each entry inlines its callees once per call site: warn when that makes
+    # its C large (defk-6ag), before the C compiler spends minutes on it
+    Defk.InlineSize.check(Enum.zip(lowered, entries_c), kernels, file)
+
     body =
       [
-        Enum.map(lowered, &emit_entry/1),
+        entries_c,
         emit_init(
           module,
           lowered,
