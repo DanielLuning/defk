@@ -54,6 +54,140 @@ defmodule Defk.Builtins do
   """
   def bits, do: @bits
 
+  # -------------------------------------------------------------- typing ---
+  # The builtin signature table (ADR-0008, defk-o49): name and operand type
+  # patterns in, result type and coercions out, consumed by both the C
+  # lowering and Elixir mode so the two cannot drift. SEMANTICS stay written
+  # twice on purpose: Elixir mode is the oracle (see the ADR before
+  # deduplicating further).
+  #
+  # A pattern is a concrete type (:i64, :u64, :f64, :bitstring, {:arr, :u8}),
+  # a class (:int = i64 | u64; :number = int | f64), the same-scalar variable
+  # :t (every :t operand has one type, from [:i64, :u64, :f64]), or the
+  # same-element array {:arr, :e}. A result is a type, {:arg, i} (the type of
+  # operand i after coercion), :t or {:arr, :e}. Coercions widen an operand
+  # before emission: {index, to, label}, the label exactly as the rejection
+  # names the argument. Rows are ordered: the first match per name wins.
+  # A row's acceptance is structural; a fact-dependent rejection (mixing a
+  # possibly-negative i64 into u64 min/max) stays with the emitters.
+  @typing [
+            {:len, [arr: :e], :i64, []},
+            {:bit_size, [:bitstring], :i64, []}
+          ] ++
+            for(f <- @loads, do: {f, [{:arr, :u8}, :i64], :i64, []}) ++
+            [
+              {:copy, [{:arr, :e}, :int, {:arr, :e}, :int, :int], {:arr, :e},
+               [{1, :i64, "index"}, {3, :i64, "source index"}, {4, :i64, "length"}]},
+              {:copy_back, [{:arr, :e}, :int, :int, :int], {:arr, :e},
+               [{1, :i64, "index"}, {2, :i64, "offset"}, {3, :i64, "length"}]},
+              {:clz, [:int], :i64, []},
+              {:ctz, [:int], :i64, []},
+              {:popcount, [:int], :i64, []},
+              {:mulhi, [:i64, :i64], :i64, []},
+              {:rotl64, [:i64, :i64], :i64, []},
+              {:rotr64, [:i64, :i64], :i64, []},
+              {:clz, [:int, :int], :i64, [{1, :i64, "clz/2 width"}]},
+              {:ctz, [:int, :int], :i64, [{1, :i64, "ctz/2 width"}]},
+              {:rotl, [:int, :int, :int], {:arg, 0},
+               [{1, :i64, "rotl/3 count"}, {2, :i64, "rotl/3 width"}]},
+              {:rotr, [:int, :int, :int], {:arg, 0},
+               [{1, :i64, "rotr/3 count"}, {2, :i64, "rotr/3 width"}]},
+              {:crc32c, [:int, :int, :int], :i64, [{2, :i64, "crc32c/3 width"}]},
+              {:f64_to_u64, [:number], :u64, [{0, :f64, "f64_to_u64/1"}]},
+              {:div, [:i64, :i64], :i64, []},
+              {:rem, [:i64, :i64], :i64, []},
+              {:div, [:int, :int], :u64, []},
+              {:rem, [:int, :int], :u64, []},
+              {:float, [:f64], :f64, []},
+              {:float, [:int], :f64, []},
+              {:trunc, [:int], {:arg, 0}, []},
+              {:round, [:int], {:arg, 0}, []},
+              {:trunc, [:f64], :i64, []},
+              {:round, [:f64], :i64, []},
+              {:abs, [:i64], :i64, []},
+              {:abs, [:u64], :u64, []},
+              {:abs, [:f64], :f64, []},
+              {:min, [:t, :t], :t, []},
+              {:max, [:t, :t], :t, []},
+              {:min, [:int, :int], :u64, []},
+              {:max, [:int, :int], :u64, []}
+            ] ++
+            for(f <- @math1, do: {f, [:number], :f64, [{0, :f64, "#{f}/1"}]}) ++
+            [{:pow, [:number, :number], :f64, [{0, :f64, "pow/2"}, {1, :f64, "pow/2"}]}]
+
+  # typed outside the table: alloc's element-type literal, the bitwise
+  # builtins' own lowering, and wrap64 (masked arithmetic)
+  @bespoke_typing [:alloc, :wrap64] ++ @bitwise
+
+  @doc false
+  def typing, do: @typing
+
+  @doc false
+  # The one typing of builtin `name` applied to operand types `types`:
+  # {:ok, result_type, coercions} with classes and variables resolved,
+  # :bespoke for a name typed outside the table, or :error (no row).
+  def typing(name, types) do
+    cond do
+      name in @bespoke_typing ->
+        :bespoke
+
+      true ->
+        @typing
+        |> Enum.filter(fn {n, pats, _, _} -> n == name and length(pats) == length(types) end)
+        |> Enum.find_value(:error, fn {_, pats, result, coerce} ->
+          case binds(pats, types, %{}) do
+            :error -> nil
+            binds -> {:ok, resolve(result, binds, types, coerce), coerce}
+          end
+        end)
+    end
+  end
+
+  defp binds([], [], binds), do: binds
+
+  defp binds([pat | pats], [t | ts], binds) do
+    case bind(pat, t, binds) do
+      :error -> :error
+      binds -> binds(pats, ts, binds)
+    end
+  end
+
+  defp binds(_pats, _ts, _binds), do: :error
+
+  defp bind(:int, t, binds) when t in [:i64, :u64], do: binds
+  defp bind(:number, t, binds) when t in [:i64, :u64, :f64], do: binds
+
+  defp bind(:t, t, binds) when t in [:i64, :u64, :f64] do
+    case binds do
+      %{t: ^t} -> binds
+      %{t: _} -> :error
+      _ -> Map.put(binds, :t, t)
+    end
+  end
+
+  defp bind({:arr, :e}, {:arr, e}, binds) do
+    case binds do
+      %{e: ^e} -> binds
+      %{e: _} -> :error
+      _ -> Map.put(binds, :e, e)
+    end
+  end
+
+  defp bind(t, t, binds), do: binds
+  defp bind(_pat, _t, _binds), do: :error
+
+  # the result type, with the coercions already applied to operand types
+  defp resolve({:arg, i}, _binds, types, coerce) do
+    case List.keyfind(coerce, i, 0) do
+      {^i, to, _label} -> to
+      nil -> Enum.at(types, i)
+    end
+  end
+
+  defp resolve(:t, binds, _types, _coerce), do: Map.fetch!(binds, :t)
+  defp resolve({:arr, :e}, binds, _types, _coerce), do: {:arr, Map.fetch!(binds, :e)}
+  defp resolve(t, _binds, _types, _coerce), do: t
+
   @doc "Whether `name` is a builtin."
   def builtin?(name), do: name in @all
 

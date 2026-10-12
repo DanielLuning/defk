@@ -2658,12 +2658,10 @@ defmodule Defk.Compiler do
   end
 
   # `node` is the call, for the argument expressions
-  defp builtin(:len, [%{t: :bitstring}], node, _), do: bits_read!(node, arg(node, 0))
-
-  defp builtin(:bit_size, [%{t: :bitstring} = a], _node, _),
+  defp emit_builtin(:bit_size, [%{t: :bitstring} = a], _node, _),
     do: Facts.assert(val("(#{a.c}).nbits", :i64), lo: 0)
 
-  defp builtin(:len, [%{t: {:arr, _}} = a], _node, _) do
+  defp emit_builtin(:len, [%{t: {:arr, _}} = a], _node, _) do
     # a view that is not a variable (e.g. a kernel call) is a new array each time it is evaluated
     own = if a.var, do: %{a.c => 0}, else: %{}
 
@@ -2677,7 +2675,7 @@ defmodule Defk.Compiler do
   # u64_le(bytes, i) and the other word loads (Defk.Builtins.loads/0): an
   # unaligned load of w bytes at byte offset i, bounds-checked unless
   # i + w <= len(bytes) is proven. u64 gives the i64 bit pattern.
-  defp builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], node, _) when f in @loads do
+  defp emit_builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], node, _) when f in @loads do
     w = Defk.Builtins.load_width(f)
     note_bounds(node, a, i, w)
 
@@ -2698,36 +2696,30 @@ defmodule Defk.Compiler do
   # copy(out, at, src, from, n) and copy_back(out, at, off, n) (defk-52v.16):
   # `out` with a range replaced, checked once for the whole range
   # (defk_rcopy_T and defk_rcopy_back_T in defk_runtime.h).
-  defp builtin(:copy, [%{t: {:arr, e}} = a, at, %{t: {:arr, e}} = s, from, n], node, env) do
-    ints = coerce_args!([at, from, n], node, [1, 3, 4], ["index", "source index", "length"])
-    range_copy(:copy, a, s, ints, node, env)
-  end
+  defp emit_builtin(:copy, [%{t: {:arr, _}} = a, at, s, from, n], node, env),
+    do: range_copy(:copy, a, s, [at, from, n], node, env)
 
-  defp builtin(:copy_back, [%{t: {:arr, _}} = a, at, off, n], node, env) do
-    ints = coerce_args!([at, off, n], node, [1, 2, 3], ["index", "offset", "length"])
-    range_copy(:copy_back, a, nil, ints, node, env)
-  end
+  defp emit_builtin(:copy_back, [%{t: {:arr, _}} = a, at, off, n], node, env),
+    do: range_copy(:copy_back, a, nil, [at, off, n], node, env)
 
   # mulhi, clz, ctz, popcount, rotl64, rotr64 (Defk.Builtins.bits/0): the
   # Defk.Bits functions on the u64 bit patterns; the helpers are in
   # defk_runtime.h. The counts are in 0..64.
-  defp builtin(f, [%{t: t} = a], _, _) when f in [:clz, :ctz, :popcount] and t in @ints,
+  defp emit_builtin(f, [%{t: t} = a], _, _) when f in [:clz, :ctz, :popcount] and t in @ints,
     do: Facts.assert(val("defk_#{f}(#{a.c})", :i64), lo: 0, hi: 64)
 
-  defp builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:mulhi, :rotl64, :rotr64],
-    do: val("defk_#{f}(#{a.c}, #{b.c})", :i64)
+  defp emit_builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _)
+       when f in [:mulhi, :rotl64, :rotr64],
+       do: val("defk_#{f}(#{a.c}, #{b.c})", :i64)
 
   # clz/2, ctz/2, rotl/3, rotr/3 (defk-wlu): x is a w-bit value, checked as
   # Defk.Bits checks it; an i64 x passes its sign. rotl/rotr give x's type.
-  defp builtin(f, [%{t: t} = x, w], node, _) when f in [:clz, :ctz] and t in @ints do
-    w = coerce!(w, :i64, arg(node, 1), "#{f}/2 width")
+  defp emit_builtin(f, [%{t: t} = x, w], _node, _) when f in [:clz, :ctz] and t in @ints do
     c = "defk_#{f}_#{if t == :i64, do: "i", else: "u"}(ctx, #{x.c}, #{w.c})"
     Facts.assert(val(c, :i64), lo: 0, hi: 64)
   end
 
-  defp builtin(f, [%{t: t} = x, n, w], node, _) when f in [:rotl, :rotr] and t in @ints do
-    n = coerce!(n, :i64, arg(node, 1), "#{f}/3 count")
-    w = coerce!(w, :i64, arg(node, 2), "#{f}/3 width")
+  defp emit_builtin(f, [%{t: t} = x, n, w], _node, _) when f in [:rotl, :rotr] and t in @ints do
     c = val("defk_#{f}_#{if t == :i64, do: "i", else: "u"}(ctx, #{x.c}, #{n.c}, #{w.c})", :u64)
     if t == :i64, do: u64_to_i64(c), else: c
   end
@@ -2735,9 +2727,8 @@ defmodule Defk.Compiler do
   # crc32c(crc, x, w) (defk-ulk.4): one CRC32C step, checked as Defk.Bits
   # checks it; the instruction or the table is picked at run time in
   # defk_runtime.h. The result is a 32-bit value.
-  defp builtin(:crc32c, [%{t: tc} = c, %{t: tx} = x, w], node, _)
+  defp emit_builtin(:crc32c, [%{t: tc} = c, %{t: tx} = x, w], _node, _)
        when tc in @ints and tx in @ints do
-    w = coerce!(w, :i64, arg(node, 2), "crc32c/3 width")
     sfx = Enum.map_join([tc, tx], &if(&1 == :i64, do: "i", else: "u"))
 
     Facts.assert(val("defk_crc32c_#{sfx}(ctx, #{c.c}, #{x.c}, #{w.c})", :i64),
@@ -2746,12 +2737,12 @@ defmodule Defk.Compiler do
     )
   end
 
-  defp builtin(:f64_to_u64, [x], node, _) do
+  defp emit_builtin(:f64_to_u64, [x], node, _) do
     numeric!(x, arg(node, 0), "f64_to_u64/1")
     val("defk_f64_to_u64(#{to_f(x)})", :u64)
   end
 
-  defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, env)
+  defp emit_builtin(f, [%{t: ta} = a, %{t: tb} = b], node, env)
        when f in [:div, :rem] and ta in @ints and tb in @ints do
     v = int_div(f, a, b, node, env)
 
@@ -2762,27 +2753,27 @@ defmodule Defk.Compiler do
       else: v
   end
 
-  defp builtin(:float, [a], node, _),
+  defp emit_builtin(:float, [a], node, _),
     do:
       (
         numeric!(a, arg(node, 0), "float/1")
         val(to_f(a), :f64)
       )
 
-  defp builtin(f, [%{t: t} = a], _, _) when f in [:trunc, :round] and t in @ints, do: a
+  defp emit_builtin(f, [%{t: t} = a], _, _) when f in [:trunc, :round] and t in @ints, do: a
 
-  defp builtin(f, [%{t: :f64} = a], _, env) when f in [:trunc, :round],
+  defp emit_builtin(f, [%{t: :f64} = a], _, env) when f in [:trunc, :round],
     do: val("defk_#{f}#{checked(env)}, #{a.c})", :i64)
 
-  defp builtin(:abs, [%{t: :u64} = a], _, _), do: a
+  defp emit_builtin(:abs, [%{t: :u64} = a], _, _), do: a
 
-  defp builtin(:abs, [%{t: :i64} = a], _, env),
+  defp emit_builtin(:abs, [%{t: :i64} = a], _, env),
     do: val("defk_abs_i64#{checked(env)}, #{a.c})", :i64)
 
-  defp builtin(:abs, [%{t: :f64} = a], _, _),
+  defp emit_builtin(:abs, [%{t: :f64} = a], _, _),
     do: Map.put(val("fabs(#{a.c})", :f64), :nonneg, true)
 
-  defp builtin(f, [%{t: ta} = a, %{t: tb} = b], node, _)
+  defp emit_builtin(f, [%{t: ta} = a, %{t: tb} = b], node, _)
        when f in [:min, :max] and ta in @ints and tb in @ints do
     case int_pair!(a, b, node) do
       {:i64, a, b} ->
@@ -2794,7 +2785,7 @@ defmodule Defk.Compiler do
   end
 
   # max(x, 0.0) is never below 0.0, and neither is the min of two such
-  defp builtin(f, [%{t: :f64} = a, %{t: :f64} = b], _, _) when f in [:min, :max] do
+  defp emit_builtin(f, [%{t: :f64} = a, %{t: :f64} = b], _, _) when f in [:min, :max] do
     nonneg = if f == :max, do: a[:nonneg] || b[:nonneg], else: a[:nonneg] && b[:nonneg]
     Map.put(val("defk_#{f}_f64(#{a.c}, #{b.c})", :f64), :nonneg, nonneg == true)
   end
@@ -2802,10 +2793,10 @@ defmodule Defk.Compiler do
   # sqrt of a value never below 0.0 cannot raise, and its result is finite
   # when the value is (a non-finite one was checked where it was made), so it
   # needs no check, also in a flagged strip (defk-hki)
-  defp builtin(:sqrt, [%{t: :f64, nonneg: true} = a], _node, _),
+  defp emit_builtin(:sqrt, [%{t: :f64, nonneg: true} = a], _node, _),
     do: Map.put(val("__builtin_sqrt(#{a.c})", :f64), :nonneg, true)
 
-  defp builtin(f, [a], node, _) when f in @math1 do
+  defp emit_builtin(f, [a], node, _) when f in @math1 do
     numeric!(a, arg(node, 0), "#{f}/1")
 
     c =
@@ -2816,13 +2807,42 @@ defmodule Defk.Compiler do
     val(c, :f64)
   end
 
-  defp builtin(:pow, [a, b], node, _) do
+  defp emit_builtin(:pow, [a, b], node, _) do
     numeric!(a, arg(node, 0), "pow/2")
     numeric!(b, arg(node, 1), "pow/2")
     val("defk_pow(ctx, #{to_f(a)}, #{to_f(b)})", :f64)
   end
 
+  # len of a bitstring keeps its own rejection (the accumulator cannot be
+  # measured mid-build)
+  defp builtin(:len, [%{t: :bitstring}], node, _), do: bits_read!(node, arg(node, 0))
+
   defp builtin(name, vals, node, env) do
+    case Defk.Builtins.typing(name, Enum.map(vals, & &1.t)) do
+      {:ok, _result, coerce} ->
+        emit_builtin(name, coerce_builtin(vals, coerce, node), node, env)
+
+      _bespoke_or_no_row ->
+        dispatch_call(name, vals, node, env)
+    end
+  end
+
+  # The i64 coercions a row names, applied before emission with the row's
+  # own argument label. An f64 coercion stays with the emitters (to_f/1
+  # emits the same C it always has); the table still gates acceptance.
+  defp coerce_builtin(vals, coerce, node) do
+    Enum.reduce(coerce, vals, fn
+      {i, :i64, label}, vals ->
+        List.update_at(vals, i, &coerce!(&1, :i64, arg(node, i), label))
+
+      {_i, :f64, _label}, vals ->
+        vals
+    end)
+  end
+
+  # a kernel-to-kernel call, or the rejection for a builtin given the wrong
+  # arguments (the signature table said no row matches)
+  defp dispatch_call(name, vals, node, env) do
     arity = length(vals)
 
     case Map.get(env.sigs, {name, arity}) do
@@ -3157,12 +3177,6 @@ defmodule Defk.Compiler do
   # one runs in strips with a safepoint after each, as alloc/2's zeroing does,
   # unless the kernel has yield: false or the length is known to be short.
   @copy_at_once 1024 * 1024
-
-  defp coerce_args!(vals, {name, _, args}, idx, labels) do
-    Enum.zip_with([vals, idx, labels], fn [v, i, l] ->
-      coerce!(v, :i64, Enum.at(args, i), "#{name}/#{length(args)} #{l}")
-    end)
-  end
 
   defp range_copy(f, a, s, ints, node, env) do
     {:arr, e} = a.t
