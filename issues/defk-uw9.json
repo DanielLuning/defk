@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-11T12:47:33Z",
@@ -15,8 +15,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Report compile errors inside a construct the compiler rejected",
   "type": "task",
-  "updated_at": "2026-10-11T21:08:24Z"
+  "updated_at": "2026-10-12T09:39:05Z"
 }
