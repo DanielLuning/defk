@@ -16,11 +16,15 @@
     {
       "text": "From defk-djy.6: at the Hex release, change @url_base in lib/defk/errors.ex to https://hexdocs.pm/defk/#{Mix.Project.config()[:version]}/compile-errors.html# (compile error footers currently use the GitHub blob on main), and update the footer examples in docs/language.md and Defk.Errors moduledoc. Hex package files must not need docs/ (footer falls back to the URL when it is absent).",
       "timestamp": "2026-10-11T12:24:50Z"
+    },
+    {
+      "text": "Moved from defk-djy to defk-sgw: it is gated on the verdict (defk-sgw.5), and as a djy child it made bw roll that blocker up to the whole docs epic, hiding defk-djy.17 from bw ready.",
+      "timestamp": "2026-10-12T10:12:06Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Hex package metadata and publishing readiness",
   "type": "task",
-  "updated_at": "2026-10-12T10:12:05Z"
+  "updated_at": "2026-10-12T10:12:06Z"
 }
