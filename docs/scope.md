@@ -79,9 +79,29 @@ A provisional win is a reason to measure your own job
 - the job builds BEAM terms, such as maps, strings or lists: a kernel cannot
   build them;
 - the BEAM already has a native answer: `:binary.match/2`, `:crypto`,
-  `String.valid?/1`, `:erlang.crc32/1`;
-- the work is tensor or ML maths: use Nx (with EXLA), and keep defk for a
-  custom loop beside it.
+  `String.valid?/1`, `:erlang.crc32/1`.
+
+**Nx is the right choice** when the app already uses Nx with a compiled
+backend (EXLA, EMLX or Torchx), or the job is whole-tensor work at scale:
+large arrays of a fixed shape, linear algebra, convolutions, gradients, a GPU,
+or many requests of one shape batched with `Nx.Serving`. On that work Nx with
+EXLA is faster than a kernel: a dot-product top-k over 100k embeddings ran
+6-8x faster than defk (provisional). The speed comes from the compiled
+backend: Nx's default `BinaryBackend` is written in Elixir and is slower than
+plain Elixir.
+
+**defk is a fair choice beside Nx, or instead of it**, when the numeric job is
+a loop rather than tensor algebra (each step depends on the last, it stops
+early, or it is a state machine), when inputs change length from call to call
+or are small and called often, when the results must be integer-exact, when
+the call must stay preemptible and stop with its process, or when it is the
+one numeric job in an app that doesn't otherwise need Nx and a compiled
+backend. Some overlap with Nx is fine: a kernel that saves you adding EXLA for
+one loop is a good use of defk. A kernel takes the same packed layout as
+`Nx.to_binary/1`, so the two work side by side. The
+[Nx boundary research](https://github.com/DanielLuning/defk/blob/main/docs/research/nx-boundary.md)
+gives the sources; the small-input and early-exit cases are not measured
+against EXLA yet.
 
 **A wrapper NIF (Rustler, Zigler or an existing binding) is the right
 choice** when the value is in an existing native library rather than in a
