@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [
     "defk-2mz",
+    "defk-b38",
     "defk-qdz"
   ],
   "blocks": [],
@@ -29,5 +30,5 @@
   "status": "open",
   "title": "Prove b[base + i] in bounds for a variable block offset (i \u003c- 0..(len(b) - base - 1), or i \u003c- m..(len(b) - 1) with b[i - m])",
   "type": "task",
-  "updated_at": "2026-10-12T10:58:05Z"
+  "updated_at": "2026-10-12T10:58:06Z"
 }
