@@ -118,10 +118,6 @@ Each planned item has a ticket in the project's issue tracker (beadwork,
 `bw show <id>`). Constructs the compiler rejects as planned say "not supported
 yet" in the compile error.
 
-- Arrays through `if`, `cond` and `case`, and returning an input array the
-  kernel never writes (defk-gqk):
-  [`array-in-branch`](compile-errors.md#array-in-branch),
-  [`return-input-array`](compile-errors.md#return-input-array).
 - `Enum.reduce/3`, and `Enum.find/2` and `Enum.find_index/2` in a form that
   keeps their meaning without `nil` (defk-nii):
   [`enum-reduce`](compile-errors.md#enum-reduce),
@@ -144,8 +140,6 @@ yet" in the compile error.
 
 Every compile error the compiler marks as planned:
 
-- [`return-input-array`](compile-errors.md#return-input-array): A returned array is one the kernel created with alloc/2 or wrote; returning an unwritten input array is planned.
-- [`array-in-branch`](compile-errors.md#array-in-branch): An if, cond or case used as a value gives no array, alone or in a tuple; arrays through branches are planned.
 - [`enum-reduce`](compile-errors.md#enum-reduce): Enum.reduce/3 is planned; write the same fold as `for ..., reduce:`.
 - [`enum-find`](compile-errors.md#enum-find): Enum.find/2 and Enum.find_index/2 are planned; stop early with Enum.reduce_while/3.
 - [`bitstring-segment`](compile-errors.md#bitstring-segment): An append to a bitstring accumulator takes big-endian integer segments, unsigned or `signed`: `v::size(n)`, `v::k` or `v`.
