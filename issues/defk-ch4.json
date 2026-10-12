@@ -4,13 +4,14 @@
     "defk-k4x"
   ],
   "blocks": [],
+  "closed_at": "2026-10-12T18:52:10Z",
   "created": "2026-10-12T13:49:39Z",
   "description": "Replace the flagged-strip classifier's text analysis (seen_later/y_reaches?/unchanged?/fixed_indices? regex+brace-matching over the compiler's own C, then string-replacement rewrites) with: (1) lowering declares into a per-loop record as it emits - checks placed, ctx uses, array accesses with index composition and the bounds-proof support (from Defk.Facts prove_in_bounds), locals and their kinds, arrays written/read; (2) flag_strip classifies from the record; (3) check-sites emit marker nodes in the iodata which the strip assembler renders per variant (plain/flagged/replay) - no re-parse, no string matching, one lowering. Sequenced after the Defk.Facts extraction and BEFORE ADR-0007 adds new fact sources (its soundness consequence leans on the classifier seeing proof support). Unit tests of eligibility from constructed records; strip/yield e2e tests keep the runtime contract; C-grep assertions retire. Stays a compiler section for now (module extraction optional once the record shape settles). CONTEXT.md 'Strip' added. Decided: grilling 2026-10-12.",
   "id": "defk-ch4",
   "labels": [],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Strip record: structured flagged-strip decisions, no regex over emitted C",
   "type": "task",
-  "updated_at": "2026-10-12T18:20:14Z"
+  "updated_at": "2026-10-12T18:52:10Z"
 }
