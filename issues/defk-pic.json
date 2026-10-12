@@ -1,7 +1,8 @@
 {
   "assignee": "",
   "blocked_by": [
-    "defk-2mz"
+    "defk-2mz",
+    "defk-qdz"
   ],
   "blocks": [],
   "created": "2026-10-10T09:19:58Z",
@@ -28,5 +29,5 @@
   "status": "open",
   "title": "Prove out[i] in bounds for out = alloc(e, n) with n = min(len(a), len(b))",
   "type": "task",
-  "updated_at": "2026-10-12T10:57:59Z"
+  "updated_at": "2026-10-12T10:58:05Z"
 }
