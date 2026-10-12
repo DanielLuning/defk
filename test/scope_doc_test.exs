@@ -46,9 +46,22 @@ defmodule Defk.ScopeDocTest do
     |> Enum.map(fn b -> b |> String.split(~r/\n\n/, parts: 2) |> hd() end)
   end
 
-  test "the generated lists are the registry's text", %{doc: doc} do
-    for kind <- [:planned, :subset] do
-      assert String.contains?(doc, Defk.Errors.scope(kind)),
+  # the generated list of a section: from the blank line after "Every compile
+  # error the compiler marks ..." to the next blank line
+  defp generated(doc, title) do
+    [_, after_intro] =
+      String.split(section(doc, title), "\nEvery compile error the compiler marks", parts: 2)
+
+    [_, rest] = String.split(after_intro, "\n\n", parts: 2)
+    [list | _] = String.split(rest, "\n\n", parts: 2)
+    String.trim_trailing(list, "\n") <> "\n"
+  end
+
+  # the whole list, not just a match inside it: a stray line pasted with the
+  # output (mix run's "Compiling N files (.ex)") fails here
+  test "the generated lists are the registry's text and nothing else", %{doc: doc} do
+    for {kind, title} <- [planned: "Not yet: planned", subset: "Won't be: by design"] do
+      assert generated(doc, title) == Defk.Errors.scope(kind),
              "regenerate with: mix run -e 'IO.write(Defk.Errors.scope(#{inspect(kind)}))'"
     end
   end

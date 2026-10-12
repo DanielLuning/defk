@@ -46,8 +46,10 @@ defmodule Defk.CompileErrorsDocTest do
     end
   end
 
-  test "the Codes section is the registry's text", %{doc: doc} do
-    assert String.contains?(codes_section(doc), Defk.Errors.reference()),
+  # the whole section, not just a match inside it: a stray line pasted with
+  # the output (mix run's "Compiling N files (.ex)") fails here
+  test "the Codes section is the registry's text and nothing else", %{doc: doc} do
+    assert codes_section(doc) == "\n\n" <> Defk.Errors.reference(),
            "regenerate with: mix run -e 'IO.write(Defk.Errors.reference())' (docs/agents/generated-docs.md)"
   end
 
