@@ -79,6 +79,11 @@ defmodule Defk.BinaryLiteralsTest.K do
       acc -> band(acc * 31 + "0123456789abcdef"[band(i, 15)], 0xFFFFFFFF)
     end
   end
+
+  # returned unwritten: a new binary of its bytes (defk-gqk)
+  defk literal_back(c :: bool) :: [u8] do
+    if c, do: "abc", else: <<1, 2>>
+  end
 end
 
 defmodule Defk.BinaryLiteralsTest do
@@ -175,8 +180,14 @@ defmodule Defk.BinaryLiteralsTest do
     empty_len: [],
     empty_at: [],
     empty_sum: [],
-    lit_rounds: [args: StreamData.fixed_list([G.i64(0..500)])]
+    lit_rounds: [args: StreamData.fixed_list([G.i64(0..500)])],
+    literal_back: []
   )
+
+  test "a literal is returned unwritten" do
+    assert agrees(:literal_back, [true]) == {:ok, "abc"}
+    assert agrees(:literal_back, [false]) == {:ok, <<1, 2>>}
+  end
 
   describe "compile errors" do
     @dir Path.join(System.tmp_dir!(), "defk_binary_literals_test")
@@ -200,15 +211,6 @@ defmodule Defk.BinaryLiteralsTest do
 
     defp kernel(expr, ret \\ "i64"),
       do: "defk f(i :: i64) :: #{ret} do\n  #{expr}\nend"
-
-    # a write copies it first (test/value_semantics_test.exs)
-    test "a literal is not returnable unwritten" do
-      msg = rejected(kernel("\"ab\"", "[u8]"))
-      assert codes(msg) == ["return-input-array"]
-
-      msg = rejected(kernel("<<1, 2>>", "[u8]"))
-      assert codes(msg) == ["return-input-array"]
-    end
 
     test "interpolation is rejected with the rewrite hint" do
       msg = rejected(kernel(~S|s = "a#{i}"| <> "\n  len(s)"))

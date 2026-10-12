@@ -70,15 +70,17 @@
 #   P3 pack: comprehension, into: <<>>       0.003  0.014  0.12  2.4
 #   P4 pack: Enum.map + iodata (the NIF's)   0.002  0.015  0.12  2.3
 #
-# defk at 100k is 0.36-0.38 ms best of 7 but 1.06 ms best of 3 in the sweep:
-# Defk.Bench's forced full GC leaves the caller's 100k-element list in the
-# young heap, and a minor GC that copies it (~0.6 ms) lands in some runs.
-# The Elixir side allocates enough to pay it in every run.
+# defk at 100k was 0.36-0.38 ms best of 7 but 1.06 ms best of 3 in the sweep
+# (defk-9p6.27): Defk.Bench's full GC left the caller's 100k-element list in
+# the young heap, and a minor GC that copied it (~0.6 ms) landed in some runs.
+# Defk.Bench now follows the full sweep with a minor GC, so the list starts in
+# the old heap: report and sweep both give 0.36-0.40 ms (loaded, provisional).
+# The Elixir side allocates enough to have paid the copy in every run.
 #
-# Result at 100k: Elixir 3.4-3.5 ms, defk 0.36-0.38 ms: 9.2-9.4x, good (3.2x
-# against the sweep's 1.06 ms). At 100 hashes: Elixir 0.020 ms, defk
+# Result at 100k: Elixir 3.4-3.5 ms, defk 0.36-0.38 ms: 9.2-9.4x, good (the
+# sweep agrees now). At 100 hashes: Elixir 0.020 ms, defk
 # 0.0013-0.0021 ms (mean of 5000 calls), 10-15x. Sweep (100 to 100k, x3.16):
-# 2.7-5x at 100, 12-17x from 1k to 31k, 3.2x at 100k (the GC above); the
+# 2.7-5x at 100, 12-17x from 1k to 31k, 9x at 100k; the
 # crossover is 100, the smallest size.
 #
 # Native: the NIF is 2.55-2.8 ms at 100k (defk 6.9-7.4x faster) and 0.003 ms at

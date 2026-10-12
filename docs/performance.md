@@ -111,17 +111,41 @@ Also keep only the last result of a repeated job (`Enum.reduce(blocks, nil, fn s
 
 ### 1.3 A forced full GC leaves the caller's input list in the young heap
 
-`Defk.Bench` runs `:erlang.garbage_collect()` before each timed run. A big
-input list then sits in the young heap, and a minor GC inside the timed run
-copies it. Low-allocating sides (a kernel) pay it only sometimes.
+`Defk.Bench` used to run `:erlang.garbage_collect()` before each timed run. A
+full sweep copies the live data into the new young heap (`old_heap_size` 0
+afterwards), so a big input list sat there and a minor GC inside the timed
+run copied it into the old heap. Low-allocating sides (a kernel) paid it only
+sometimes. Fix: `Defk.Bench`'s pre-run step (`settle/0`) follows the full sweep with a minor GC
+(`:erlang.garbage_collect(self(), type: :minor)`), which promotes the live
+data, so the timing starts with the inputs in the old heap, for every side.
+A second full sweep does not do it (verified: `old_heap_size` stays 0), and
+the "second GC" in the ticket has to be a minor one.
 
-- **Numbers:** 100k-element u64 list (~500k words): the minor-GC copy is
-  ~0.6 ms. `hll_update_many` defk side 0.36-0.38 ms best of 7, but 1.06 ms
-  best of 3 in the sweep (4 of 4 runs), which reads as 3.2x instead of
-  9.2-9.4x. Packing 100k hashes: ~270-460 us with 0 GCs, ~850-1100 us with 1 GC.
-- **Conditions:** under load.
-- **Source:** `defk-9p6.27` (open), `defk-9p6.15` comment 2026-10-10, [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs) (070a179).
-- **Status:** provisional; the fix (a second GC, or a fresh process per timed call) is not chosen yet.
+- **Numbers:** 100k-element u64 list (~394k words). Before the fix
+  `hll_update_many` defk side 0.44-0.46 ms in the report (best of 5) but
+  1.08-1.11 ms in the sweep (best of 3, 3 of 3 runs): 3.2-3.3x instead of
+  7.6-7.9x. After: 0.36-0.39 ms report, 0.36-0.40 ms sweep: 8.7-9.8x in
+  both, the Elixir side unchanged (3.5 ms). Promotion, from
+  `process_info(self(), :garbage_collection_info)` in a fresh process with a
+  list built inside it: after full sweep alone `old_heap_size` 0; after full
+  sweep + minor GC `old_heap_size` equals `:erts_debug.flat_size(list)` (3940,
+  393754 and 3937504 words for 1k, 100k and 1M elements), unchanged by the
+  later minor GCs of the timed run (`min_heap_size` 233 and 1M, default
+  `fullsweep_after` all alike). Counter-case: `fullsweep_after: 0` makes every
+  GC a full sweep, so nothing is ever promoted; the bench process does not
+  set it. Two full sweeps in a row: old heap still 0, no promotion.
+- **Conditions:** M-series Mac, 12 schedulers, OTP 29, load average ~8 (other
+  agents' suites and benchmarks running), so provisional. Before and after
+  alternated in the same session, three runs each.
+- **Test:** `test/bench_test.exs` counts words, not time: after `settle/0` the
+  old heap holds the list and minor GCs in a churning fun leave it unchanged;
+  after a full sweep alone the same churn copies it.
+- **Scope:** the heap state is now the one of long-lived inputs. A list built
+  just before the call is young, and a caller that builds its input per call
+  pays the copy on both sides; the examples that run their own
+  `:erlang.garbage_collect()` loops (not through `Defk.Bench`) are unchanged.
+- **Source:** `defk-9p6.27`, `defk-9p6.15` comment 2026-10-10, [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs), `lib/defk/bench.ex`.
+- **Status:** provisional (loaded machine); the mechanism is verified by heap counters, not by wall time.
 
 ### 1.4 Give a process that holds a chunk's lists a heap big enough for them
 
@@ -1670,7 +1694,7 @@ loop; H' as one loop over V_1 .. V_(r+1)) gave 3.6 MB of C and a 1.1 MB
 `.so` in about 2.5 minutes, with no measurable run-time cost (H' hashes at
 most 1 KiB at a time). Each entry kernel is its own copy: the second entry
 (`argon2id` calling `argon2`) is half of the C. An entry kernel past
-80,000 lines of C now gets a compile warning naming the chain (6.26).
+80,000 lines of C now gets a compile warning naming the chain (6.27).
 
 - **Conditions:** under load; Apple clang 21.
 - **Source:** [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (header), `defk-52v.9`, `defk-6ag`.
@@ -1897,7 +1921,33 @@ for w <- 0..(n - 1)//1 do
 end
 ```
 
-### 6.26 Inlining warns past 80,000 lines of C per entry kernel
+### 6.26 An array from a branch, and a returned input, cost nothing measurable
+
+Since `defk-gqk` an `if`, `cond` or `case` may give an array and a kernel may
+return an input array unwritten. Neither copies: the branch's temporary
+holds the arm's view, an input view in it is re-bound after each resume (a
+few compares per local at a resume, a store per input at a yield), and an
+unwritten input is returned as the caller's own term (two compares at the
+return). Only a write to the branch's array copies, as a write to an input
+always did.
+
+- **Numbers** (best 3 of 5 rounds, per call): `x = if c, do: a, else: b`
+  then a sum over `x` against the old workaround `if c, do: total(a), else:
+  total(b)`: 75.4 against 76.0 ns at 64 elements, 2.15 against 2.17 us at
+  4096, 498.0 against 498.4 us at 10^6. Returning an unwritten 4096-element
+  input: 24.7 ns, against 24.1 ns for a kernel returning `len(a)`. Under
+  forced yields (a yield at every safepoint, 194-1785 per call), walking an
+  input through a branch's local against walking the parameter: 0.35 against
+  0.37 ms (7-element heap binary), 0.22 against 0.23 ms (4096-element refc
+  binary). Every difference is inside the run-to-run spread.
+- **Conditions:** M-series Mac, Apple clang, `MIX_ENV=dev`; other agents'
+  work on the machine, so provisional.
+- **Source:** `defk-gqk`, a scratch benchmark of the kernels in
+  [`test/array_branch_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/array_branch_test.exs);
+  `resume_block/3` and `view_term/3` in `lib/defk/compiler.ex`.
+- **Status:** provisional.
+
+### 6.27 Inlining warns past 80,000 lines of C per entry kernel
 
 Since `defk-6ag` an entry kernel (one called from Elixir) whose generated C
 passes 80,000 lines gets a compile warning at its head. It names the size,
@@ -2226,4 +2276,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
-  `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`.
+  `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`.

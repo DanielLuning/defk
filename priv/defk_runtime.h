@@ -545,6 +545,25 @@ static ERL_NIF_TERM defk_make_arr(ErlNifEnv *env, defk_ctx *ctx, void *data) {
 }
 
 /*
+ * Hand back an array the kernel may not own (defk-gqk): an owned buffer is
+ * handed over as defk_make_arr does; any other (a binary literal's or
+ * attribute's static bytes) is copied into a new binary. The generated code
+ * matches an input array first and returns the caller's own binary.
+ */
+__attribute__((unused)) static ERL_NIF_TERM defk_make_arr_view(ErlNifEnv *env, defk_ctx *ctx,
+                                                               const void *data, size_t bytes) {
+  ERL_NIF_TERM t;
+  if (bytes) {
+    for (int i = 0; i < ctx->nowned; i++)
+      if (ctx->owned[i].data == data) return defk_make_arr(env, ctx, ctx->owned[i].data);
+    memcpy(enif_make_new_binary(env, bytes, &t), data, bytes);
+    return t;
+  }
+  enif_make_new_binary(env, 0, &t);
+  return t;
+}
+
+/*
  * Bind a binary argument as a packed array. Called on EVERY entry (first call
  * and each resume) because heap binaries can move during GC between yields.
  * Misaligned data (e.g. a sub-binary at an odd offset) is copied once into an
