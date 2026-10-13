@@ -16,7 +16,9 @@ defmodule Defk.CompileErrorsTest do
       Defk.Errors.codes()
       |> Enum.filter(& &1.example)
       |> Task.async_stream(
-        fn e -> {e.code, {compile(e.example, "Ex"), compile(e.rewrite, "Rw")}} end,
+        fn e ->
+          {e.code, {compile(e.example, "Ex", e.code), compile(e.rewrite, "Rw", e.code)}}
+        end,
         timeout: :infinity,
         ordered: false
       )
@@ -25,10 +27,12 @@ defmodule Defk.CompileErrorsTest do
     %{results: results}
   end
 
-  # Compile `body` (kernels) in a fresh module from a file, so errors have
-  # source lines. Returns :ok or the CompileError message.
-  defp compile(body, tag) do
-    mod = "Defk.CompileErrorsTest.M#{tag}#{System.unique_integer([:positive])}"
+  # Compile `body` (kernels) in a module from a file, so errors have source
+  # lines. Returns :ok or the CompileError message. The name comes from the
+  # code, not a counter: the same name and source on the next run hit the
+  # build cache, where a new library costs a C compile and a first dlopen.
+  defp compile(body, tag, code \\ nil) do
+    mod = "Defk.CompileErrorsTest.M#{tag}#{stable_id({code, body})}"
     path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
 
     indented =
@@ -43,6 +47,9 @@ defmodule Defk.CompileErrorsTest do
       e in CompileError -> Exception.message(e)
     end
   end
+
+  defp stable_id(term),
+    do: :erlang.md5(:erlang.term_to_binary(term)) |> Base.encode16() |> binary_part(0, 12)
 
   defp codes(msg),
     do:

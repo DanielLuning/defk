@@ -69,9 +69,12 @@ defmodule Defk.CompileRewritesTest do
       @cases
       |> Task.async_stream(
         fn {construct, params, ret, template, _} = c ->
-          msg = compile(params, ret, String.replace(template, "@@", construct))
+          msg = compile({c, :construct}, params, ret, String.replace(template, "@@", construct))
           rw = if is_binary(msg), do: rewrite(msg)
-          fixed = if rw, do: compile(params, ret, String.replace(template, "@@", rw))
+
+          fixed =
+            if rw, do: compile({c, :rewrite}, params, ret, String.replace(template, "@@", rw))
+
           {c, {msg, rw, fixed}}
         end,
         timeout: :infinity,
@@ -82,8 +85,13 @@ defmodule Defk.CompileRewritesTest do
     %{results: results}
   end
 
-  defp compile(params, ret, body) do
-    mod = "Defk.CompileRewritesTest.M#{System.unique_integer([:positive])}"
+  # The name comes from the case, not a counter: the same name and source on
+  # the next run hit the build cache, where a new library costs a C compile
+  # and a first dlopen. `key` is unique per compile, so no two tasks define
+  # one module at the same time.
+  defp compile(key, params, ret, body) do
+    id = :erlang.md5(:erlang.term_to_binary({key, body})) |> Base.encode16() |> binary_part(0, 12)
+    mod = "Defk.CompileRewritesTest.M#{id}"
     path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
 
     body =

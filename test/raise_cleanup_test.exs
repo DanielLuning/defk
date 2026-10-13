@@ -105,18 +105,4 @@ defmodule Defk.RaiseCleanupTest do
     assert K.raise_in_loop(10, 0, 0) == 55
     assert_frames_live(K)
   end
-
-  defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + 30_000) do
-    cond do
-      f.() ->
-        :ok
-
-      System.monotonic_time(:millisecond) > deadline ->
-        flunk("timed out")
-
-      true ->
-        Process.sleep(1)
-        wait_until(f, deadline)
-    end
-  end
 end

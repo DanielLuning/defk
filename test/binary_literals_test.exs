@@ -223,7 +223,10 @@ defmodule Defk.BinaryLiteralsTest do
 
     test "a charlist is rejected with the string-literal hint" do
       for src <- [~S('abc'), ~S(~c"abc")] do
-        msg = rejected(kernel("s = #{src}\n  len(s)"))
+        # 'abc' also gets Elixir's deprecation warning for single quotes
+        {msg, _warning} =
+          ExUnit.CaptureIO.with_io(:stderr, fn -> rejected(kernel("s = #{src}\n  len(s)")) end)
+
         assert codes(msg) == ["binary-literal"], msg
         assert msg =~ ~s(use a string literal, "abc")
       end

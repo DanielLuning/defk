@@ -2,8 +2,9 @@ defmodule Defk.ReleaseLayoutTest do
   # Where a kernel's library ships and loads from (defk-n8f): a Mix app's
   # module loads it from its app's ebin/, wherever the app is at load time, so
   # it travels with `mix release` and a moved _build; anything else loads it
-  # from the absolute build path.
-  use ExUnit.Case, async: false
+  # from the absolute build path. The subprocess builds in a directory of its
+  # own, so the module can run async.
+  use ExUnit.Case, async: true
 
   @root Path.expand("..", __DIR__)
 
