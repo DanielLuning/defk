@@ -29,17 +29,23 @@ measurement rules are in [`examples/README.md`](https://github.com/DanielLuning/
 what is planned and what stays out by design; what we have learned about speed
 on the BEAM is in the [performance guide](docs/performance.md).
 
-- **Where defk looks like it helps.** These are provisional: the Elixir baselines are optimised, but the numbers were measured under load and wait for a quiet-machine run. Measure your own job.
-  - rolling sensor statistics
-  - nearest of 500k locations
-  - 1080p image blur
-  - FFT and convolution over audio-sized f64 signals (63–91× an optimised Elixir baseline)
+- **Where defk helps.** Speedups over an optimised Elixir baseline, measured end to end on an otherwise idle M4 Pro on 2026-10-13 (the frozen snapshot in [the verdict](https://github.com/DanielLuning/defk/blob/main/docs/verdict.md); every number is one machine, so measure your own job):
+  - non-cryptographic hashes that must match other systems: xxHash64 209×, with Murmur3, SipHash and CRC32C beside it
+  - FFT and convolution over audio-sized f64 signals (73× at 4096 points)
+  - BLAKE2b and BLAKE3 from scratch (32×, level with the reference C NIF)
+  - 1080p image resize, blur, YUV420 conversion and dithering on raw frames (7–14×, bit-exact; libvips not compared)
+  - a bounded CDCL SAT solver on an authorisation job (13×, 4× faster than picosat behind Crux)
+  - cosine top-k over 100k resident f32 embeddings (13×; Nx with EXLA is faster still for a plain dot product)
+  - rolling sensor statistics (11×), HyperLogLog updates (10×), PCM mixing with clip prevention (8.6×), a byte histogram (7.8×)
+  - base64, hex and base58 codecs (6.9×, 4× the fast64 NIF), Snappy and LZ4 block decode on untrusted input (5×)
+  - sorting packed keys (6×), nearest of 500k locations (3.3×), Monte Carlo slot RTP simulation with `:rand`'s generator bit for bit (3×), Gorilla time-series encoding (2.4×)
   - a fuzzy-search web service, where `/health` latency stays at Elixir levels while a blocking NIF pushes it to ~80 ms p99
-  - 1080p image resize, YUV420 conversion and Floyd-Steinberg dithering on raw frames (12–26× an optimised Elixir baseline, bit-exact; libvips not compared)
-  - Monte Carlo slot RTP simulation, the kernel running `:rand`'s exsss generator bit for bit (3.2–3.3× an optimised Elixir baseline at 100M spins on all schedulers; totals equal exactly)
 - **Where Elixir is the right choice:**
-  - data that arrives as lists (defk ≈3× slower)
-  - one kernel call per element (defk ≈2.5× slower)
+  - data that arrives as lists (defk 0.08×: packing costs more than the whole `Enum.sum`)
+  - one kernel call per element (defk 0.28×)
+  - small WebSocket frames (1.0×), UTF-8 validation (1.05×) and substring search (1.1×): the BIFs are native already
+  - a dictionary-wide Levenshtein batch over all schedulers (1.7×: Myers bit-parallel in Elixir is close)
+  - anything `:crypto` does (SHA-256 chains 0.55×) and memory-hard password hashing (Argon2 0.25×: the C runs its lanes on threads)
   - maps and string building (not expressible; a string literal is a read-only `[u8]`)
 
 ## A first kernel

@@ -81,20 +81,20 @@ How a kernel is compiled, Elixir mode and the fast-path report are described in 
 8. **Hot code upgrade: a suspended kernel finishes in the code it started in.** Recompiling a module builds a new `.so` (its path carries a hash of the C source and runtime). A yielded kernel reschedules its own library's step function, and ERTS keeps that library mapped until the continuation returns. Each loaded library has its own frame resource type and is never taken over by a newer library, so the old library destroys its own frames with the frame layout it was built with, and stays loaded while any exist. Purging the old code (`:code.purge/1`, or loading a third version while the kernel is still running) kills processes still running it, as for any old Erlang code, and the old library frees their frames. `__defk_stats__/0` counts the current library's frames only. Earlier, the new library took over a shared frame type: its destructor and `frames_live` counter were applied to old frames, which is unsafe once the frame layout changes. `test/upgrade_test.exs` covers all of this.
 9. **A fault inside kernel code is an exception, not a node crash** ([ADR-0009](adr/0009-fault-containment.md)). Each library installs a chained `sigaction` handler at load; a synchronous fault with its PC inside the library's own code, while one of its kernels runs on that thread, `siglongjmp`s to the guard like a bounds check and raises `RuntimeError` "defk bug: ..." after the owned buffers are freed. Any other fault chains on and kills the node as before. The running call is one thread-local set by the guard: 12.5-12.7 ns to 12.7-13.2 ns per scalar call. An image never leaves a dangling handler (restore at unload if it is the head, else pin the image; the upgrader pins the image it replaces). `test/fault_containment_test.exs` covers it, with the cases that must still kill the node in a child VM.
 
-## Results snapshot (M-series Mac, OTP 29, Elixir 1.20; noisy, single runs)
+## Results snapshot
 
-The float rows predate the inf/NaN checks (defk-i00). Since defk-6tt they cost `dot` nothing measurable (see [`performance.md`](performance.md) 6.5 and [`language.md`](language.md) section 12).
+Apple M4 Pro, OTP 29.0.3, Elixir 1.20.2, commit f064e33, 2026-10-13: `bench/demo.exs`, `bench/tick_gap.exs` and `bench/yield_cost.exs`, run one after the other with nothing else on the machine (load average 3.1-3.3; defk-sgw.4 and defk-yzw). The catalog's snapshot from the same session is in [`verdict.md`](verdict.md).
 
 | | Elixir | defk | plain C |
 |---|---|---|---|
-| sum of 5M f64 (ns/elem) | 8.5 (list), 16.7 (binary comprehension) | 0.58 | 0.64 |
-| dot of 5M f64 via `a[i]` (ns/elem) | 12.2 (list) | 0.50 | 0.50 |
-| count_primes(1M), trial division (ms) | 1400 | 180 | 186 |
-| count_primes_early(1M), trial division to the first divisor (ms) | 236 (`Enum.all?`), 140 (tail recursion, fastest tried) | 33 | 32 |
-| call overhead (ns/call) | 1.6 | 12 | — |
-| worst 1 ms-ticker gap on one scheduler (ms) | 2.0–2.2 (busy Elixir process) | 2.3–2.5 (yielding), 2.3 (loop in a called kernel), 867 (`yield: false`) | — |
+| sum of 5M f64 (ns/elem) | 8.0 (list), 12.1 (binary comprehension) | 0.55 | 0.54 |
+| dot of 5M f64 via `a[i]` (ns/elem) | 16.7 (list) | 0.57 | 0.56 |
+| count_primes(1M), trial division (ms) | 1504 | 206 (yielding), 201 (`yield: false`) | 204 |
+| count_primes_early(1M), trial division to the first divisor (ms) | 239 (`Enum.all?`), 167 (tail recursion, fastest tried) | 38 | 37 |
+| call overhead (ns/call) | 1.8 | 13.1 (11.3 ns over the Elixir call; one thread-local store pair of it is fault containment, ADR-0009) | — |
+| worst 1 ms-ticker gap on one scheduler (ms) | 2.0–2.5 (busy Elixir process; idle 2.0–2.4) | 2.25–2.3 (yielding), 2.3 (loop in a called kernel), 2.3 (early exit), 554 (`yield: false`) | — |
 
-- Safepoint overhead: ~0% (within noise), including branchy nested loops such as the fuzzy_search Levenshtein kernel (20 ms yielding vs 20 ms `yield: false`).
+- Safepoint overhead: 2.4-2.7% on `count_primes` (2,065 yields per run, 6.5 µs per yield, `bench/yield_cost.exs` on the idle machine), ~0% on branchy nested loops such as the fuzzy_search Levenshtein kernel (20 ms yielding vs 20 ms `yield: false`).
 - A kernel yields after 250 µs of wall time (`DEFK_SLICE_US`). At 1 ms, the limit ERTS allows a NIF, the ticker's worst gap was 3.5 ms. A busy Elixir process yields every few µs. Each yield costs a few µs of scheduler work (mostly its I/O poll): 2–3% on `count_primes`, which yields ~3,300 times a second, and nothing measurable on fuzzy_search. `bench/tick_gap.exs` and `bench/yield_cost.exs` measure both sides.
 - Kernel calls are inlined, so a loop in a callee yields too: `count_primes_via_call` (all its work two calls deep) has the yielding kernel's worst tick gap (2.3 ms). Inlining costs `count_primes` nothing measurable: `prime?`'s trial division (up to 1000 trips at 1M) is a flat loop, and since `DEFK_STRIP` went from 512 to 2048 it runs as one plain loop (at 512 it ran in two strips, 6% slower than `yield: false`).
 - `count_primes_early` is `count_primes` with `prime?` written as `Enum.all?(2..limit//1, fn d -> rem(x, d) != 0 end)`, so trial division stops at the first divisor. Elixir and C get the same algorithm (`Enum.all?` or tail recursion; a `return` in C). It is a separate kernel, so `count_primes` stays the long-running yield and preemption workload. With early exit, defk is 4.3× faster than the fastest Elixir version, against 8× when both sides scan the whole range: Elixir gains more from early exit, because each of its iterations costs more. The yielding and `yield: false` forms run within 1–2% of each other.

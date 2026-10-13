@@ -30,7 +30,7 @@ You don't have to do anything for a kernel to share its scheduler:
 Measured on one scheduler with a 1 ms ticker, the worst gap beside a
 yielding kernel was 2.3 to 2.5 ms, against 2.0 to 2.2 ms beside a busy Elixir
 process (the
-[results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot-m-series-mac-otp-29-elixir-120-noisy-single-runs), [`bench/tick_gap.exs`](https://github.com/DanielLuning/defk/blob/main/bench/tick_gap.exs)).
+[results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot), [`bench/tick_gap.exs`](https://github.com/DanielLuning/defk/blob/main/bench/tick_gap.exs)).
 
 `yield: false` after the return type compiles a kernel without safepoints.
 Use it only for kernels that always finish in well under a millisecond: the
