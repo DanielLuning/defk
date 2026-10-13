@@ -4370,7 +4370,14 @@ defmodule Defk.Compiler do
   # it means re-testing that loop's condition. The kernel's top dispatch jumps
   # to the label in front of the outermost loop on the way to the safepoint;
   # the top of that loop's body dispatches to the next loop down, and so on.
-  # The step that reaches the safepoint's own loop clears defk_rs.
+  #
+  # While resuming, defk_rs is the safepoint and the dispatch depth reached,
+  # n * 256 + depth (defk-yqo): each level matches only its own depth and
+  # hands the next one on, so a missing case above leaves the depth behind
+  # and nothing below matches. The last step jumps to the safepoint's arrival
+  # label, defk_a<n>, in front of its own loop (arrival_blocks/3): only
+  # arriving there clears the resume, so a jump to any other loop leaves it
+  # pending, and the next yield or the return raises (defk_lost_resume).
   defp in_loop(fun) do
     id = low(:nloops) + 1
     low_put(:nloops, id)
@@ -4396,10 +4403,34 @@ defmodule Defk.Compiler do
     depth = length(here)
 
     for {n, path} <- Enum.sort(sps), length(path) > depth, List.starts_with?(path, here) do
-      # reaching the safepoint's own loop completes the resume (defk_lost_resume)
-      clear = if length(path) == depth + 1, do: "defk_rs = F->resume = 0; ", else: ""
-      "case #{n}: #{clear}goto defk_l#{Enum.at(path, depth)};\n"
+      if length(path) == depth + 1,
+        do: "case #{rs(n, depth)}: goto defk_a#{n};\n",
+        else:
+          "case #{rs(n, depth)}: defk_rs = #{rs(n, depth + 1)}; goto defk_l#{Enum.at(path, depth)};\n"
     end
+  end
+
+  # defk_rs while resuming safepoint n at dispatch depth `depth`
+  defp rs(n, depth) when depth < 256, do: n * 256 + depth
+
+  # The arrival label of each safepoint, in front of its own loop's label, in
+  # a block only a goto enters: the normal path never runs it, and the loop
+  # itself does not change. A kernel that never yields keeps its dispatch
+  # behind DEFK_RESUMING (0), so the labels stay, with nothing to clear.
+  defp arrival_blocks(text, sps, yields?) do
+    clear = if yields?, do: " defk_rs = F->resume = 0;", else: ""
+    own = Enum.group_by(sps, fn {_, path} -> List.last(path) end, fn {n, _} -> n end)
+
+    Regex.replace(~r/defk_l(\d+):;\n/, text, fn label, id ->
+      case own[String.to_integer(id)] do
+        nil ->
+          label
+
+        ns ->
+          arrive = Enum.map_join(Enum.sort(ns), " ", &"defk_a#{&1}:")
+          "if (0) { #{arrive};#{clear} }\n" <> label
+      end
+    end)
   end
 
   defp lower_reduce(quals, init_ast, clauses, env, node) do
@@ -5466,7 +5497,8 @@ defmodule Defk.Compiler do
         {n, params ++ for({c, _} <- k.decls, not dead_at?(local, c, open), do: c)}
       end
 
-    {Regex.replace(~r{/\* defk:(in|out) \d+ \*/\n}, text, ""), saves}
+    text = String.replace(text, ~r{/\* defk:(in|out) \d+ \*/\n}, "")
+    {arrival_blocks(text, k.sps, yields?(k)), saves}
   end
 
   # a local of a loop whose iterations do not enclose the safepoint
@@ -5510,7 +5542,7 @@ defmodule Defk.Compiler do
           rebinds = Enum.map(input_aliases(k, saved), &rebind_view/1)
           ["case #{n}:\n", Enum.map(saved, &"#{&1} = F->#{&1};\n"), rebinds, "break;\n"]
         end),
-        "}\nswitch (defk_rs) {\n",
+        "}\ndefk_rs *= 256;\nswitch (defk_rs) {\n",
         resume_cases(k.sps, []),
         "}\n}\n"
       ]
