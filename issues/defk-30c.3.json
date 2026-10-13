@@ -18,11 +18,15 @@
     {
       "text": "From defk-30c.4: include the fuzzy_search app's tests: (cd examples/fuzzy_search \u0026\u0026 mix deps.get \u0026\u0026 mix test), 7 tests, ~10 s. Needs /usr/share/dict/words.",
       "timestamp": "2026-10-13T14:02:22Z"
+    },
+    {
+      "text": "Done: mix defk.examples (dev/mix/tasks), check-only via DEFK_CHECK_ONLY in Defk.Bench.report; run_all.exs removed. Full check-only run: 24/24 ok, 792 s wall.",
+      "timestamp": "2026-10-13T14:52:50Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Own task that runs every other example: mix defk.examples",
   "type": "task",
-  "updated_at": "2026-10-13T14:24:26Z"
+  "updated_at": "2026-10-13T14:52:50Z"
 }
