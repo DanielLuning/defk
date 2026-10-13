@@ -9,7 +9,7 @@
   "description": "Found in defk-4ai. In out = alloc(i16, n); for i \u003c- 0..(n - 1)//1 do out[i] = f(a[i], b[i]) end with n = min(len(a), len(b)), the reads of a and b are proven but the out[i] write keeps defk_put_* (a bounds branch that stops vectorisation): alloc/2 records only len_lo/len_lb (lower bounds of n relative to arrays), and min gives n no lower bound in terms of arrays. Natural shape for PCM mixing (defk-9p6.14) and other two-input elementwise kernels. Options: record that len(out) equals the C value of n (e.g. carry n's ub facts plus an identity fact so i \u003c= n - 1 implies i \u003c len(out)), or let loop variables carry ub facts relative to the alloc. Workaround today: out = alloc(e, len(a)) with i \u003c- 0..(min(len(a), len(b)) - 1)//1. Done when: that kernel compiles with no bounds check in both reads and the write, test in both modes.",
   "id": "defk-pic",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "parent": "defk-o08",
   "comments": [
@@ -30,5 +30,5 @@
   "status": "open",
   "title": "Prove out[i] in bounds for out = alloc(e, n) with n = min(len(a), len(b))",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:05Z"
+  "updated_at": "2026-10-13T19:08:15Z"
 }
