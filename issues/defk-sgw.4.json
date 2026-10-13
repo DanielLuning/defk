@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-63k",
     "defk-9p6.11",
@@ -30,8 +30,8 @@
     }
   ],
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Freeze the workload-results snapshot on a quiet machine",
   "type": "task",
-  "updated_at": "2026-10-12T10:12:07Z"
+  "updated_at": "2026-10-13T20:51:51Z"
 }
