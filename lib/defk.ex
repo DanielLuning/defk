@@ -280,7 +280,34 @@ defmodule Defk do
       else: kernel(head, opts ++ body, :head, __CALLER__)
   end
 
+  # Module aliases are lexical, so they are expanded here, at the `defk` call
+  # site, where the caller's `alias` lines are in scope (`__before_compile__`
+  # runs later, with another scope). The expansion stays an `__aliases__`
+  # node, so the compiler's `{:__aliases__, _, [:Defk, :Bits]}` patterns match
+  # `Bits.clz(x)` under `alias Defk.Bits` and an aliased unsupported module is
+  # reported under its real name. `Macro.expand/2` keeps compile tracers firing.
+  defp expand_aliases(ast, caller) do
+    Macro.prewalk(ast, fn
+      {:__aliases__, meta, [first | _]} = node when is_atom(first) ->
+        case Macro.expand(node, caller) do
+          mod when is_atom(mod) ->
+            if match?("Elixir." <> _, Atom.to_string(mod)),
+              do: {:__aliases__, meta, mod |> Module.split() |> Enum.map(&String.to_atom/1)},
+              else: node
+
+          _ ->
+            node
+        end
+
+      node ->
+        node
+    end)
+  end
+
   defp kernel(head, opts, body, caller) do
+    head = expand_aliases(head, caller)
+    body = if body == :head, do: body, else: expand_aliases(body, caller)
+
     kernel =
       if body == :head,
         do: %{head: head, opts: opts, body: nil, line: caller.line, head?: true},

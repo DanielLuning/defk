@@ -349,6 +349,24 @@ defmodule Defk.CompileErrorsTest do
     end
   end
 
+  describe "module aliases (defk-kwl)" do
+    test "an aliased unsupported module is rejected under its real name" do
+      msg =
+        compile(
+          """
+          alias Enum, as: E
+
+          defk f(a :: [i64]) :: i64 do
+            E.map(a)
+          end
+          """,
+          "Alias"
+        )
+
+      assert whats(msg) == ["Enum.map/1 is not in the kernel subset"]
+    end
+  end
+
   describe "targeted hints for first-write forms" do
     defp rejection(body, sig \\ "a :: [f64], x :: i64, n :: i64", ret \\ "f64") do
       msg =
