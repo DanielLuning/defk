@@ -168,6 +168,18 @@ defmodule Defk.NonFiniteTest.K do
     end
   end
 
+  # a filter puts the accumulator's update under a branch, where no
+  # end-of-strip test covers it: the update keeps its own check in a flagged
+  # strip (defk-zj8). The comparison keeps an inf from the result's check.
+  defk filtered_sumsq(a :: [f64]) :: bool do
+    s =
+      for x <- a, x > 0.0, reduce: 0.0 do
+        acc -> acc + x * x
+      end
+
+    s > 1.0
+  end
+
   # a numerator keeps an inf or NaN too, and 1.0 / 0.0 makes one
   defk halving(a :: [f64]) :: f64 do
     for x <- a, reduce: 0.0 do
@@ -454,6 +466,18 @@ defmodule Defk.NonFiniteTest do
     flagged_strips(true)
   end
 
+  # the update sits under the filter's branch, and the sum's inf never
+  # reaches a return check: only the update's own check can raise (defk-zj8)
+  test "a filtered accumulator overflowing in a flagged strip raises at the operation" do
+    for n <- [100, 2 * @strip + 3], p <- positions(n) do
+      non_finite(:filtered_sumsq, [with_bad(n, p, 1.0e308, -1.0)])
+      non_finite(:filtered_sumsq, [with_bad(n, p, 1.0e200, 1.0e154)])
+    end
+
+    assert {:ok, false} = agrees(:filtered_sumsq, [with_bad(2 * @strip + 3, -1, nil, -1.0e308)])
+    assert {:ok, true} = agrees(:filtered_sumsq, [with_bad(2 * @strip + 3, 5, 1.0e154, -1.0)])
+  end
+
   # Mixed-error strips (defk-hki). Each kind of error is made at one
   # iteration by the index ix[i] it reads: an i64 overflow of ix[i] * 2, an
   # index out of bounds (past the end, negative, far away), a NaN input
@@ -674,6 +698,7 @@ defmodule Defk.NonFiniteTest do
     ],
     moments: [args: fixed_list([one_of([G.array(:f64), G.array_non_finite()])])],
     halving: [args: fixed_list([one_of([G.array(:f64), G.array_non_finite()])])],
+    filtered_sumsq: [args: fixed_list([one_of([G.array(:f64), G.array_non_finite()])])],
     gather: [
       args:
         fixed_list([

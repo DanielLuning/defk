@@ -67,6 +67,60 @@ defmodule Defk.StripRecordTest do
     refute IO.iodata_to_binary(fl.body) =~ "DEFK_FCHECK"
   end
 
+  describe "an accumulator that is a leaf of its own tree (defk-zj8)" do
+    # the base strip's tree and its assignment under a branch arm (a
+    # filter's), plus whatever `extra` rows and text follow them
+    defp arm_rows(extra) do
+      ref = make_ref()
+
+      base_rows()
+      |> Enum.map(fn
+        %{k: :ftree} = r -> %{r | path: [{ref, 0}]}
+        %{k: :assign, var: "v_acc_2"} = r -> %{r | path: [{ref, 0}]}
+        r -> r
+      end)
+      |> Kernel.++(rows(extra))
+      |> Enum.with_index(fn r, seq -> %{r | seq: seq} end)
+    end
+
+    defp body(fl), do: IO.iodata_to_binary(fl.body)
+
+    test "under a branch it keeps its own check: no end-of-strip test covers it" do
+      with_types(base_types())
+      fl = classify(base_text(), arm_rows([]))
+
+      assert fl.test == []
+      assert body(fl) =~ "DEFK_FCHECK(DEFK_NONFIN(f_1))"
+      refute body(fl) =~ "if (0)"
+    end
+
+    test "written twice it is not sticky, and keeps its own check" do
+      with_types(base_types())
+      rs = base_rows() ++ rows([%{k: :assign, var: "v_acc_2", rhs: "0.0"}])
+      fl = classify(base_text() <> "v_acc_2 = 0.0;\n", rs)
+
+      assert fl.test == []
+      assert body(fl) =~ "DEFK_FCHECK(DEFK_NONFIN(f_1))"
+    end
+
+    test "under a branch, a checked read after the branch still covers it" do
+      later = "({ double f_5 = (v_acc_2 + 1.0); DEFK_FCHECK(DEFK_NONFIN(f_5)) { } f_5; })"
+
+      extra = [
+        %{k: :ftree, f: "f_5", anchor: "DEFK_FCHECK(DEFK_NONFIN(f_5))", leaves: ["v_acc_2"]},
+        %{k: :assign, var: "v_z_5", rhs: later}
+      ]
+
+      rs = arm_rows(extra)
+      with_types(base_types() ++ [{"v_z_5", "double"}])
+      fl = classify(base_text() <> "v_z_5 = #{later};\n", rs)
+
+      assert fl.test == []
+      refute body(fl) =~ "DEFK_FCHECK(DEFK_NONFIN(f_1))"
+      assert body(fl) =~ "DEFK_FCHECK(DEFK_NONFIN(f_5))"
+    end
+  end
+
   test "a float read whose inf reaches a later checked expression is read unchecked" do
     with_types(base_types())
     fl = classify(base_text(), base_rows())
