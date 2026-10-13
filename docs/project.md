@@ -2,20 +2,24 @@
 
 This page is for people inside the repository: how to run the demo and the
 benchmarks, which file does what, the design decisions the benchmarks
-validated, a results snapshot and the roadmap with its ticket ids. It is
+validated, a results snapshot and where the roadmap lives. It is
 linked from the [README](../README.md) and is not part of HexDocs. What defk is
 and how to use it is in the README and the guides in `docs/guides/`.
 
 ## Running things
 
 ```bash
-mix run demo.exs              # correctness, throughput vs Elixir and plain C, boundary cost,
+mix run bench/demo.exs        # correctness, throughput vs Elixir and plain C, boundary cost,
                               # preemption on one scheduler, failure isolation
 mix run bench/tick_gap.exs    # worst scheduler gap: idle vs Elixir vs kernel
 mix run bench/yield_cost.exs  # throughput cost of yielding
 mix test                      # resumed kernels match yield: false, incl. a forced yield at every clock read;
                               # reloading a module while a kernel is suspended
 mix defk.examples            # every example outside mix test, check-only (not in mix ci); --bench for the scoreboard
+mix ci                        # what must be green before a merge
+DEFK_DUMP_C=<dir> mix dump_c  # the byte-identical gate for compiler refactors (dev/dump_c.exs)
+verify/fuzz/run.sh            # libFuzzer over the decoder kernels, outside the VM (verify/fuzz/README.md)
+verify/valgrind/run.sh        # the test suite under Valgrind memcheck, in a container (verify/valgrind/README.md)
 ```
 
 Work is tracked with beadwork (`bw`, on the `beadwork` branch); see
@@ -42,8 +46,15 @@ in `CONTEXT.md`.
 | Runtime: arrays, checks, safepoints, frames, exceptions | `priv/defk_runtime.h` |
 | BEAM/NIF reference (execution model, lifecycles, errors, upgrade) | `docs/beam-nifs.md` |
 | Performance guide: what is fast on the BEAM, what isn't, and how to fix it | `docs/performance.md` |
-| Example kernels | `lib/examples.ex` |
+| Example kernels (compiled in `:dev` and `:test` only) | `test/support/examples.ex` |
+| The catalog's kernels that `mix test` compiles | `test/support/catalog.ex` |
+| Demo and benchmark scripts | `bench/` (`demo.exs`, `tick_gap.exs`, `yield_cost.exs`, ...) |
 | Plain C baseline | `bench/native.c` |
+| Repo-only Mix tasks and dev scripts (never in a dependent's build or the Hex package) | `dev/` (`mix defk.examples`, `dump_c.exs`) |
+| Verification tooling that is not part of `mix ci`: fuzzing, Valgrind | `verify/fuzz/`, `verify/valgrind/` |
+| Use-case catalog, measured against optimised Elixir | `examples/` (`examples/README.md`) |
+| Research notes, one per research ticket | `docs/research/` |
+| Design decisions | `docs/adr/`, vocabulary in `CONTEXT.md` |
 
 How a kernel is compiled, Elixir mode and the fast-path report are described in [`language.md`](language.md) (sections 2 and 10) and [`fast-path-report.md`](fast-path-report.md).
 
@@ -91,64 +102,32 @@ The float rows predate the inf/NaN checks (defk-i00). Since defk-6tt they cost `
 
 ## Roadmap
 
-The larger steps, grouped by goal. Each item names its beadwork ticket (`bw show <id>`); ticked items are closed.
+The roadmap lives in beadwork and nowhere else: `bw prime` shows the current
+state, `bw ready` the next unblocked steps, `bw show <epic>` an epic's goal,
+children and order. This page does not repeat it, because a copy goes stale
+within days (the checklist that used to be here did).
 
-**0. Verdict** (plan in `bw show defk-sgw`)
-- [x] Draft docs/verdict.md with the pre-registered go/no-go rule (defk-sgw.2)
-- [x] Write docs/language.md, the kernel subset reference (defk-sgw.1)
-- [x] Devex cold test: a new kernel from the docs alone (defk-sgw.3)
-- [ ] Freeze the workload-results snapshot on a quiet machine (defk-sgw.4)
-- [ ] Write the verdict: guide, runtime contract, devex, limitations (defk-sgw.5)
-- [ ] Final verdict session (defk-sgw.6)
+The destination is the verdict in [`verdict.md`](verdict.md). The map that
+holds the decisions behind it is the epic `defk-dtw`; the epic `defk-sgw`
+sequences the build to the verdict and is the critical path. While it is
+open, the other epics are either in support of it or deferred:
 
-**1. Honest measurement: show where defk helps Elixir**
-- [x] Record the purpose: Elixir first, defk only where it helps (defk-9p6.5)
-- [x] Example catalog with a scoreboard (defk-9p6.1)
-- [x] fuzzy_search example app (defk-nv1)
-- [x] Optimise the Elixir baselines, so the `good` verdicts are no longer provisional: rolling_stats (defk-9p6.6), geo_nearest (defk-9p6.7), image_blur (defk-9p6.8), fuzzy_search (defk-9p6.9)
-- [x] Re-measure fuzzy_search, yielding against blocking, on a quiet machine (defk-klw)
-- [ ] Refresh the results table and demo numbers on a quiet machine (defk-yzw)
-- [ ] Separate code-layout noise (±3%) from real effects (defk-wnu)
+| Epic | What it holds | State while the verdict is open |
+|---|---|---|
+| `defk-sgw` | the verdict: freeze the snapshot, fault containment, write and accept the verdict | the critical path |
+| `defk-dtw` | the map: decisions behind the verdict; closes with `defk-sgw.6` | open, no work of its own |
+| `defk-9p6` | the example catalog: new entries and baseline work | open, in support |
+| `defk-djy` | documentation: API docs, guides, HexDocs | open, in support |
+| `defk-o08` | symbolic bounds: prove more indices in range (ADR-0007) | open |
+| `defk-w8r` | measurement and per-call cost | open |
+| `defk-vcx` | kernel subset and devex gaps | open |
+| `defk-52v` | from-scratch kernels where people wrap a library today | deferred |
+| `defk-n4r` | 1BRC: parse and aggregate a 1-billion-row file | deferred |
+| `defk-sve` | kernel-owned state across calls | deferred |
+| `defk-ulk` | SIMD and target-specific builds | deferred |
+| `defk-96f` | verification of the generated C: sanitizers, Valgrind, fuzzing, bounded proofs | deferred |
 
-**2. Language: express the algorithms people write NIFs for**
-- [x] Early exit: `Enum.reduce_while`, `Enum.all?/any?` (defk-9vl)
-- [x] `case` on `i64`/`bool` (defk-9vl)
-- [x] Calls between kernels that yield (defk-jaj)
-- [x] Bitwise operators (`band`/`bor`/`bxor`/`bsl`/`bsr`) for hashing and checksums (defk-w38)
-- [ ] Arrays through `if`/`cond` branches, and returning input arrays (defk-gqk)
-- [ ] `Enum.reduce/3`, and a `find_index` that keeps Elixir semantics without `nil` (defk-nii)
-- [x] More `case` patterns: `x in [1, 2, 3]` and ranges (defk-gid)
-- [x] Module attributes as constants (defk-ivt)
-- [x] Multi-clause kernels with a typed function head (defk-u9c)
-- [x] Signed integer segments in the bitstring accumulator (defk-dki)
-- [x] Pass the bitstring accumulator through helper kernels (defk-ooq)
-
-**3. Semantics: behave like Elixir where it matters**
-- [x] Array value semantics: copy on aliased write (defk-i2e, defk-auo)
-- [x] inf/NaN inside kernels: raise like Elixir (defk-q1c, defk-i00)
-- [x] An error inside a guard fails the clause instead of raising (defk-7a6)
-
-**4. Performance: plain-C speed from Elixir-shaped code**
-- [x] Bounds-check elimination for provably in-range `a[i]` (defk-88q)
-- [x] count_primes at C speed: `if`/`cond` arms compiled as selects (defk-jp3, defk-7q5)
-- [ ] Guard against code-size blowup from inlined calls (defk-6ag)
-- [x] No C compiler warnings in generated code (defk-5dd)
-
-**5. Runtime: be a good BEAM citizen**
-- [x] Safepoints cost ~0% in hot loops (defk-5s3, defk-nua)
-- [x] Worst scheduler gap in line with a busy Elixir process (defk-j3h)
-- [x] Resume correctness under forced yields (defk-h8a)
-- [x] Hot code upgrade with suspended kernels (defk-nbl)
-- [x] Resume tests fail instead of hanging on a resume bug (defk-juw)
-- [x] Show an early-exit kernel in the preemption demo and `tick_gap` (defk-tfh)
-- [ ] `__defk_stats__` semantics across reloads (defk-9qv)
-- [x] Layout version tag on frames, as defence in depth (defk-ls8)
-
-**6. Catalog: map the boundary of defk's niche**
-- [ ] Checksum/hash over binaries, compared with `:erlang.crc32` (defk-9p6.2, needs defk-w38)
-- [x] Matrix multiply against Nx (expected verdict: use Nx) (defk-9p6.3)
-- [x] n-body step with state kept packed between calls (defk-9p6.4)
-- [x] Fair early-exit cutoff for fuzzy_search's Levenshtein, in both backends (defk-8i4)
-
-**7. Later**
-- [ ] Cranelift JIT backend for kernels specialised at runtime (defk-o1w)
+A deferred epic is hidden from `bw ready` until the verdict closes; `bw list
+--all` shows it. The rule comes from the map: expansion candidates are
+listed in the verdict, not built before it ([`scope.md`](scope.md) says what
+is planned, under exploration and out by design).

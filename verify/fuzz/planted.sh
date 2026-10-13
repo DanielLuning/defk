@@ -4,7 +4,7 @@
 # it does (an AddressSanitizer heap-buffer-overflow in the kernel), 1 when the
 # run stays clean or fails some other way.
 #
-#   scripts/fuzz/planted.sh                 # FUZZ_TIME (default 60) is the deadline
+#   verify/fuzz/planted.sh                  # FUZZ_TIME (default 60) is the deadline
 #
 # The plant drops the kernel's `if ip >= n, do: raise ...` guard before the
 # token read ("lz4: block ends after a match, not literals") and turns the

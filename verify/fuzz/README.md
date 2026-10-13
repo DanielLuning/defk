@@ -11,7 +11,7 @@ inside the VM. Background and the spike this grew from:
 
 Not part of `mix ci`. It runs on demand and in the release set (the
 `mix defk.verify` task and release alias are defk-96f.2). Sibling tools:
-`scripts/valgrind/` (memcheck inside the VM, Linux container) and the
+`verify/valgrind/` (memcheck inside the VM, Linux container) and the
 sanitizer build mode (`DEFK_SANITIZE`, `lib/defk/build.ex`).
 
 ## Run it
@@ -21,11 +21,11 @@ runtime), Erlang/OTP (for `erl_nif.h`) and the project's deps (the C is
 generated with `mix run`).
 
 ```sh
-scripts/fuzz/run.sh                                  # the release set: every target, both strip settings, 60 s each
-scripts/fuzz/run.sh lz4_block_decode                 # chosen targets
-FUZZ_TIME=600 STRIPS=small scripts/fuzz/run.sh snappy_decode
-scripts/fuzz/planted.sh                              # self-test: must FIND the planted bug
-REPRO=<crash file> STRIPS=small scripts/fuzz/run.sh lz4_block_decode   # rerun one input, verbose
+verify/fuzz/run.sh                                   # the release set: every target, both strip settings, 60 s each
+verify/fuzz/run.sh lz4_block_decode                  # chosen targets
+FUZZ_TIME=600 STRIPS=small verify/fuzz/run.sh snappy_decode
+verify/fuzz/planted.sh                               # self-test: must FIND the planted bug
+REPRO=<crash file> STRIPS=small verify/fuzz/run.sh lz4_block_decode    # rerun one input, verbose
 ```
 
 `run.sh` generates the C, builds one binary per target and strip setting,
@@ -103,7 +103,7 @@ The release set runs both.
 ## How the C is generated
 
 `gen_c.exs` evaluates the `defmodule` forms of the example that `use Defk`
-(as `scripts/dump_c.exs` does: no `Mix.install`, no bench) with the current
+(as `dev/dump_c.exs` does: no `Mix.install`, no bench) with the current
 compiler and writes the module's `__defk_c_source__/0`. Nothing is
 hand-copied, so a change to the compiler or to `priv/defk_runtime.h` is what
 gets fuzzed. `MIX_ENV` defaults to `dev` (no test-only fault hooks, as a
@@ -145,7 +145,7 @@ encoders (snappyer, lz4_erl fast and HC) from payloads chosen to cover the
 format's cases: empty and one-byte inputs, literals only, short and long
 matches (LZ4 length continuation bytes, Snappy copy-2), overlapping matches
 (offset below the length), incompressible bytes. 10 Snappy seeds (790
-bytes) and 12 LZ4 seeds (957 bytes). `elixir scripts/fuzz/seeds.exs`
+bytes) and 12 LZ4 seeds (957 bytes). `elixir verify/fuzz/seeds.exs`
 regenerates them (it `Mix.install`s the encoders). libFuzzer reads them and
 writes what it finds to `tmp/fuzz/corpus/`, never here.
 
@@ -165,7 +165,7 @@ Apple M4 Pro (14 cores), macOS 26, Homebrew LLVM 23.1.3, OTP 29.0.3, one
 worker per run, 2026-10-13. The machine was shared with another agent's
 work (load average 6-9 on 14 cores), so the rates are provisional.
 
-`scripts/fuzz/run.sh` (the release set, 60 s per run, seeds plus an empty
+`verify/fuzz/run.sh` (the release set, 60 s per run, seeds plus an empty
 working corpus), all clean:
 
 | Run | Inputs | Inputs/s | Coverage |

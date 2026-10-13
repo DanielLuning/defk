@@ -1,10 +1,10 @@
 # Write the generated C of one example's kernel module, with the current
-# compiler, for the libFuzzer targets (scripts/fuzz/README.md):
+# compiler, for the libFuzzer targets (verify/fuzz/README.md):
 #
-#   mix run --no-start scripts/fuzz/gen_c.exs <example.exs> <Module> <out.c>
+#   mix run --no-start verify/fuzz/gen_c.exs <example.exs> <Module> <out.c>
 #
 # Only the example's `defmodule` forms that `use Defk` are evaluated (as
-# scripts/dump_c.exs does), so no Mix.install and no bench runs; the module's
+# dev/dump_c.exs does), so no Mix.install and no bench runs; the module's
 # `__defk_c_source__/0` is what the compiler emitted for it. Nothing is
 # hand-copied: a compiler or runtime-header change is what gets fuzzed.
 
@@ -16,7 +16,7 @@
     _ ->
       IO.puts(
         :stderr,
-        "usage: mix run --no-start scripts/fuzz/gen_c.exs <example.exs> <Module> <out.c>"
+        "usage: mix run --no-start verify/fuzz/gen_c.exs <example.exs> <Module> <out.c>"
       )
 
       System.halt(2)

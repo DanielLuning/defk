@@ -2,7 +2,7 @@
 # Host side: build the image (cached), then run the per-file memcheck
 # runner in a container with this checkout mounted read-only.
 #
-#   scripts/valgrind/run.sh [test/foo_test.exs ...]
+#   verify/valgrind/run.sh [test/foo_test.exs ...]
 #
 # Environment: IMAGE (default defk-valgrind), LOGDIR (default
 # tmp/valgrind-logs under the repo, which is git-ignored), REBUILD=1 to force

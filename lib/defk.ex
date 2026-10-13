@@ -587,7 +587,7 @@ defmodule Defk do
 
   # DEFK_DUMP_C=<dir>: every module compiled while it is set writes its
   # generated C to <dir>/<Module>.c — the byte-identical gate for compiler
-  # refactors (scripts/dump_c.exs, defk-mif). A pure side channel: the build
+  # refactors (dev/dump_c.exs, defk-mif). A pure side channel: the build
   # and the module are unchanged.
   defp dump_c!(dir, module, c_src) do
     File.mkdir_p!(dir)

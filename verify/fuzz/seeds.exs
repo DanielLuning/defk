@@ -1,11 +1,11 @@
-# Regenerate the seed corpora in scripts/fuzz/corpus/ from the reference
+# Regenerate the seed corpora in verify/fuzz/corpus/ from the reference
 # encoders (snappyer: the snappy C++ library; lz4_erl: liblz4, fast and HC).
 # The seeds are committed; run this only to change them:
 #
-#   elixir scripts/fuzz/seeds.exs
+#   elixir verify/fuzz/seeds.exs
 #
 # Each seed is a small valid input in the target's input format
-# (scripts/fuzz/targets/*.c): snappy_decode takes the block as is,
+# (verify/fuzz/targets/*.c): snappy_decode takes the block as is,
 # lz4_block_decode a 2-byte little-endian max_out + 16 and then the block.
 # The payloads cover the format's cases: an empty and a one-byte input,
 # literals only, short and long matches (lengths past 15 and 255, so LZ4's
