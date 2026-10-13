@@ -10,9 +10,10 @@
   "labels": [
     "ready-for-human"
   ],
+  "parent": "defk-w8r",
   "priority": 3,
   "status": "open",
   "title": "Refresh README results table and demo numbers on a quiet machine",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:58Z"
+  "updated_at": "2026-10-13T19:08:09Z"
 }
