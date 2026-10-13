@@ -8,6 +8,7 @@
   "labels": [
     "ready-for-agent"
   ],
+  "parent": "defk-vcx",
   "comments": [
     {
       "text": "Classified nice to have (not a safety gap, not required for the verdict) by 'Which open runtime issues are safety gaps?' (defk-dtw.12).",
@@ -26,5 +27,5 @@
   "status": "open",
   "title": "Define __defk_stats__ semantics across hot reloads",
   "type": "task",
-  "updated_at": "2026-10-11T21:24:14Z"
+  "updated_at": "2026-10-13T19:08:12Z"
 }
