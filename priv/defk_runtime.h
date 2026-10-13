@@ -22,6 +22,15 @@
 #include <string.h>
 #include <unistd.h>
 
+/* glibc's <setjmp.h> declares __sigsetjmp without returns_twice, and clang with
+ * -fno-builtin does not recognise it either: guard_k*'s `return run_k*()` after
+ * sigsetjmp then becomes a tail call, and a raise's siglongjmp lands in a dead
+ * frame (Bus error on the first raise). Redeclaring it restores the attribute
+ * (defk-o52). gcc and Apple clang are unaffected. */
+#if defined(__GLIBC__)
+extern int __sigsetjmp(struct __jmp_buf_tag __env[1], int __savemask) __attribute__((returns_twice));
+#endif
+
 #define DEFK_DONE 0
 #define DEFK_YIELD 1
 #define DEFK_ERR 2
@@ -1709,7 +1718,7 @@ typedef struct {
 
 /* hint: the run-queue length the caller saw (NULL: none passed) */
 __attribute__((unused)) static void defk_slice_init(ErlNifEnv *env, defk_ctx *ctx, const ERL_NIF_TERM *hint) {
-  int64_t waiting;
+  ErlNifSInt64 waiting; /* not int64_t: enif_get_int64 takes long * on macOS (defk-o52) */
   if (hint && enif_get_int64(env, *hint, &waiting) && waiting > 0) {
     ctx->slice_us = DEFK_SHORT_SLICE_US;
     ctx->short_left = DEFK_SHORT_FOR_US;
