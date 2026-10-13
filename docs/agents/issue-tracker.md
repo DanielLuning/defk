@@ -4,6 +4,14 @@ Issues and PRDs for this repo live in beadwork. It stores them in git on the
 `beadwork` branch; IDs look like `defk-XYZ` (children of an epic: `defk-XYZ.N`).
 Run `bw prime` first for the current state. `bw <command> --help` has the details.
 
+## Zero-bug policy
+
+Open `[BUG]` tickets come before new feature work (maintainer, 2026-10-13):
+when picking from `bw ready`, take actionable bugs first, and don't start a
+feature ticket while one is open. Bugs that are blocked, or labelled
+`ready-for-human` (e.g. a quiet-machine re-measure), don't hold feature work
+up — call them out instead.
+
 ## Conventions
 
 - An issue is `bw create "<title>" -t task|bug -p P0-P4 -d "<description>"`.
