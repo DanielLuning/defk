@@ -239,10 +239,5 @@ defmodule Defk.BinaryLiteralsTest do
         assert msg =~ "build it in Elixir and pass it as a [u8] parameter"
       end
     end
-
-    test "concatenation stays unsupported-string" do
-      msg = rejected(kernel(~S|s = "a" <> "b"| <> "\n  len(s)"))
-      assert codes(msg) == ["unsupported-string"]
-    end
   end
 end

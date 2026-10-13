@@ -1,7 +1,8 @@
 defmodule Defk.CompileErrorsDocTest do
   # docs/compile-errors.md, the error catalogue (defk-djy.6): every error code
   # has its anchor (the compile error footer links <page>#<code>), the "Codes"
-  # section is the registry's text, and every in-page link resolves.
+  # section is the registry's text. Its links are checked in
+  # test/docs_checks_test.exs.
   use ExUnit.Case, async: true
 
   import Defk.LanguageDoc, only: [headings: 1, anchors: 1]
@@ -51,13 +52,5 @@ defmodule Defk.CompileErrorsDocTest do
   test "the Codes section is the registry's text and nothing else", %{doc: doc} do
     assert codes_section(doc) == "\n\n" <> Defk.Errors.reference(),
            "regenerate with: mix run -e 'IO.write(Defk.Errors.reference())' (docs/agents/generated-docs.md)"
-  end
-
-  test "every in-page link resolves", %{doc: doc} do
-    anchors = MapSet.new(anchors(doc))
-
-    for [_, a] <- Regex.scan(~r/\]\(#([^)]+)\)/, doc) do
-      assert a in anchors, "broken link ##{a}"
-    end
   end
 end
