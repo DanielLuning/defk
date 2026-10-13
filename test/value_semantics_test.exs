@@ -914,21 +914,26 @@ defmodule Defk.ValueSemanticsTest do
       assert before_loop =~ "defk_copy_u8"
     end
 
-    test "the catalog's kernels have none" do
+    test "the catalog's kernels have none, except one deliberate copy" do
       mods = [
         Examples.Kernels,
         FuzzySearch.Kernels,
         Geo.Kernels,
         Rolling.Kernels,
         Blur.Kernels,
-        Orders.Kernels,
-        Clamp.Kernels,
-        Example.Kernels
+        Gorilla.Kernels,
+        LzSnappy.Kernels,
+        Hashes.Kernels,
+        Cosine.Kernels
       ]
 
       for mod <- mods do
         assert copies(mod.__defk_c_source__()) == 0, inspect(mod)
       end
+
+      # Hll.Kernels.update_many writes into its input state: one copy, made
+      # before the loop (the caller's binary is never changed)
+      assert copies(Hll.Kernels.__defk_c_source__()) == 1
     end
   end
 
