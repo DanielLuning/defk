@@ -14,11 +14,15 @@
     {
       "text": "ready-for-human: the diff is the owner's uncommitted experiment; an agent should not revert it unasked. Once the decision is recorded here it becomes ready-for-agent.",
       "timestamp": "2026-10-09T17:10:49Z"
+    },
+    {
+      "text": "Checked 2026-10-13: the experiment is gone. The working tree on main is clean, lib/ has no DEFK_EXP, DEFKTIMING, DEFKBUILD or DEFKLOAD, and no commit ever added them (git log -S'DEFKTIMING' --all is empty), so the uncommitted diff was dropped. Done-when (clean tree on main) holds via the drop path; no numbers were recorded with it.",
+      "timestamp": "2026-10-13T18:33:53Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Resolve the uncommitted DEFK_EXP compile-timing instrumentation in lib/defk.ex and lib/defk/build.ex",
   "type": "task",
-  "updated_at": "2026-10-12T10:12:06Z"
+  "updated_at": "2026-10-13T18:33:53Z"
 }
