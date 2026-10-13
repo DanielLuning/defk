@@ -10,9 +10,10 @@
   "labels": [
     "needs-triage"
   ],
+  "parent": "defk-9p6",
   "priority": 2,
   "status": "open",
   "title": "Myers bit-parallel Levenshtein in both fuzzy_search backends",
   "type": "task",
-  "updated_at": "2026-10-07T13:31:13Z"
+  "updated_at": "2026-10-13T19:08:13Z"
 }
