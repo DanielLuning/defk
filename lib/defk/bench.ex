@@ -37,9 +37,17 @@ defmodule Defk.Bench do
     * `out_of_scope` - defk cannot express the use case at all: use Elixir
 
   **Check-only mode.** With `DEFK_CHECK_ONLY=1` in the environment, `report/1`
-  runs only the example's `:check` (no timing, no verdict).
-  the repo's examples runner (mix defk.examples) uses it by default, so an example's correctness can be
-  checked on a loaded machine.
+  runs only the example's `:check` (no timing, no verdict). The repo's
+  examples runner (mix defk.examples) uses it by default, so an example's
+  correctness can be checked on a loaded machine.
+
+  **Result cache.** Under `mix defk.examples --bench`, `report/1` reuses a
+  result measured on a quiet machine when nothing it depends on changed: the
+  kernels' `.beam` files, the C build inputs, the script, its dependencies,
+  this module, the OTP and Elixir versions and the machine. It still runs
+  the `:check`, and the `DEFK_RESULT` line says `"cache": "reused"` with the
+  date in `measured_at`. Run directly (`elixir examples/x.exs`), it always
+  measures.
 
   A `good` verdict only counts once the Elixir side is `baseline: :optimized`.
   Until then the runner shows it as provisional.
@@ -71,6 +79,8 @@ defmodule Defk.Bench do
   catalog's
   [README](https://github.com/DanielLuning/defk/blob/main/examples/README.md).
   """
+
+  alias Defk.Bench.Cache
 
   # Thresholds, and the tie band: a speedup within 5% below a threshold counts
   # as reaching it (`defk-9p6.24`).
@@ -127,7 +137,74 @@ defmodule Defk.Bench do
   """
   @spec report(keyword()) :: map()
   def report(opts) do
-    if check_only?(), do: check_only(opts), else: measure(opts)
+    if check_only?(), do: check_only(opts), else: measure_or_reuse(opts)
+  end
+
+  # The result cache (Defk.Bench.Cache, defk-30c.5): `:off` unless the
+  # examples runner turned it on. A reused result gets a fresh `:check`.
+  defp measure_or_reuse(opts) do
+    refuse_sanitized!()
+
+    case Cache.lookup(Keyword.fetch!(opts, :name)) do
+      :off ->
+        result = measure(opts)
+        print(result)
+        result
+
+      {:hit, cached, entry} ->
+        reuse(opts, cached, entry)
+
+      {:miss, slot, changed} ->
+        load = Cache.load_average()
+        result = measure(opts)
+        {stored, loads} = Cache.store(slot, result, load)
+        result = Map.put(result, :cache, if(stored == :stored, do: "stored", else: "not_stored"))
+        print(result, miss_line(stored, loads, changed))
+        result
+    end
+  end
+
+  defp reuse(opts, cached, entry) do
+    date = entry.measured_at |> DateTime.to_date() |> Date.to_iso8601()
+
+    result =
+      Map.merge(cached, %{
+        correct: run_check(opts),
+        cache: "reused",
+        measured_at: DateTime.to_iso8601(entry.measured_at)
+      })
+
+    print(
+      result,
+      "  cache      REUSED, NOT MEASURED: inputs unchanged; numbers from #{date} (#{loads(entry.loads)})"
+    )
+
+    result
+  end
+
+  defp miss_line(stored, loads, changed) do
+    why = if changed == [], do: "", else: ", changed: #{Enum.join(changed, ", ")}"
+
+    case stored do
+      :stored ->
+        "  cache      measured#{why}; stored (#{loads(loads)})"
+
+      :not_stored ->
+        "  cache      measured#{why}; not stored: not a quiet machine " <>
+          "(#{loads(loads)}, quiet is at most #{Cache.quiet_limit()})"
+    end
+  end
+
+  defp loads({before, after_}), do: "load #{before || "?"} before, #{after_ || "?"} after"
+
+  # The `:check` alone, for check-only mode and a reused result: true when
+  # there is no `:defk` side, `:skipped` for `check: :none`.
+  defp run_check(opts) do
+    case check_fun(opts) do
+      nil -> true
+      :skipped -> :skipped
+      check -> check.()
+    end
   end
 
   @doc false
@@ -148,14 +225,7 @@ defmodule Defk.Bench do
     baseline in [:first_pass, :optimized] ||
       raise ArgumentError, "baseline must be :first_pass or :optimized"
 
-    check = check_fun(opts)
-
-    correct =
-      cond do
-        not Keyword.has_key?(opts, :defk) -> true
-        check == :skipped -> :skipped
-        true -> check.()
-      end
+    correct = run_check(opts)
 
     result = %{
       example: name,
@@ -181,7 +251,6 @@ defmodule Defk.Bench do
   end
 
   defp measure(opts) do
-    refuse_sanitized!()
     name = Keyword.fetch!(opts, :name)
     expected = Keyword.fetch!(opts, :expected)
     baseline = Keyword.get(opts, :baseline, :first_pass)
@@ -218,15 +287,11 @@ defmodule Defk.Bench do
         reason: Keyword.get(opts, :reason)
       })
 
-    result =
-      result
-      |> add_native(Keyword.get(opts, :native), runs)
-      |> add_realistic_size(Keyword.get(opts, :realistic_size))
-      |> add_sweep(Keyword.get(opts, :sweep), Keyword.get(opts, :sweep_runs, 3))
-      |> add_responsiveness(Keyword.get(opts, :responsiveness), opts)
-
-    print(result)
     result
+    |> add_native(Keyword.get(opts, :native), runs)
+    |> add_realistic_size(Keyword.get(opts, :realistic_size))
+    |> add_sweep(Keyword.get(opts, :sweep), Keyword.get(opts, :sweep_runs, 3))
+    |> add_responsiveness(Keyword.get(opts, :responsiveness), opts)
   end
 
   # The sanitizer build mode (defk-96f.1) is for checking the C, never for
@@ -424,7 +489,7 @@ defmodule Defk.Bench do
 
   defp ms(us), do: Float.round(us / 1000, 3)
 
-  defp print(r) do
+  defp print(r, cache_line \\ nil) do
     IO.puts("")
     IO.puts("  elixir     #{r.elixir_ms} ms")
     if r.defk_ms, do: IO.puts("  defk       #{r.defk_ms} ms   (#{r.speedup}x)")
@@ -449,6 +514,7 @@ defmodule Defk.Bench do
     if r.reason && r.correct != :skipped, do: IO.puts("  why        #{r.reason}")
     print_gaps(r)
     print_sweep(r)
+    if cache_line, do: IO.puts(cache_line)
     IO.puts("\nDEFK_RESULT " <> JSON.encode!(r))
   end
 
