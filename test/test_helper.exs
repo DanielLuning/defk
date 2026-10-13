@@ -9,5 +9,8 @@ Code.require_file("../examples/fuzzy_search/lib/fuzzy_search/kernels.ex", __DIR_
 #   excluded when CC is not clang (mix test --only clang runs just these)
 # :sanitize - kernels built in the sanitizer build mode (DEFK_SANITIZE), which
 #   need the toolchain's sanitizer runtimes (mix test --only sanitize)
+# :erlang_memory - assert on :erlang.memory(:binary), which raises notsup under
+#   the valgrind emulator and under ASan with +Mea min (allocators off);
+#   scripts/valgrind runs with --exclude erlang_memory
 clang = if Defk.Build.clang?(), do: [], else: [:clang]
 ExUnit.start(exclude: [:deep, :divergence, :timing, :sanitize] ++ clang)

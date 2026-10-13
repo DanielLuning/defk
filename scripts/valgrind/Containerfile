@@ -1,0 +1,52 @@
+# Valgrind memcheck for defk kernels inside the BEAM (defk-96f.3).
+#
+# Debian + the distro's valgrind + OTP built from source with the `valgrind`
+# emulator flavor (`make -C erts/emulator valgrind`) + Elixir copied from the
+# hexpm image. Valgrind must be installed before the valgrind emulator is
+# built: that build includes <valgrind/memcheck.h>.
+#
+# Build:  podman build -t defk-valgrind -f scripts/valgrind/Containerfile scripts/valgrind
+# Use:    scripts/valgrind/run.sh   (see README.md)
+ARG OTP_VERSION=29.0.3
+ARG ELIXIR_IMAGE=docker.io/hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713-slim
+ARG DEBIAN_IMAGE=docker.io/library/debian:trixie-20260713-slim
+
+FROM ${ELIXIR_IMAGE} AS elixir
+
+FROM ${DEBIAN_IMAGE}
+ARG OTP_VERSION
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential autoconf m4 libncurses-dev libssl-dev valgrind \
+      clang git ca-certificates curl procps bc time util-linux \
+    && rm -rf /var/lib/apt/lists/*
+
+# OTP from the release tarball (it ships prebuilt .beam files, so this is
+# about 30 s of C compilation plus 15 s for the valgrind emulator).
+WORKDIR /otp
+ENV ERL_TOP=/otp
+RUN curl -fsSL -o /tmp/otp.tar.gz \
+      https://github.com/erlang/otp/releases/download/OTP-${OTP_VERSION}/otp_src_${OTP_VERSION}.tar.gz \
+    && tar xzf /tmp/otp.tar.gz -C /otp --strip-components=1 && rm /tmp/otp.tar.gz
+RUN ./configure --prefix=/usr/local --without-wx --without-javac --without-odbc \
+      --without-debugger --without-observer --without-et > configure.log 2>&1 \
+    && make -j"$(nproc)" > make.log 2>&1 && make install > install.log 2>&1
+RUN make -C erts/emulator valgrind -j"$(nproc)" > make_valgrind.log 2>&1
+
+# Elixir, then hex and rebar (mix test needs them to resolve deps).
+COPY --from=elixir /usr/local/lib/elixir /usr/local/lib/elixir
+RUN for f in elixir elixirc iex mix; do ln -s /usr/local/lib/elixir/bin/$f /usr/local/bin/$f; done
+ENV LANG=C.UTF-8 MIX_HOME=/root/.mix
+RUN mix local.hex --force && mix local.rebar --force
+
+# erlexec execs $BINDIR/beam.valgrind.smp for `-emu_type valgrind`, so that
+# name becomes a script that starts the real valgrind-built beam under
+# memcheck (what `cerl -valgrind` does in the source tree; cerl bypasses
+# erlexec, so mix cannot go through it). install-valgrind-beam.sh does it.
+COPY defk.supp cc-vg install-valgrind-beam.sh run-suite.sh /opt/defk-vg/
+RUN chmod +x /opt/defk-vg/*.sh /opt/defk-vg/cc-vg \
+    && /opt/defk-vg/install-valgrind-beam.sh \
+    && erl -emu_type valgrind -noshell -eval 'io:format("~s~n",[erlang:system_info(build_type)]),halt().' \
+    | grep -qx valgrind
+ENV DEFK_VG_HOME=/opt/defk-vg
+WORKDIR /work
+CMD ["/opt/defk-vg/run-suite.sh"]

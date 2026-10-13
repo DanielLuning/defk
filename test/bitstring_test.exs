@@ -476,6 +476,7 @@ defmodule Defk.BitstringTest do
       end
     end
 
+    @tag :erlang_memory
     test "a process killed mid-build frees the buffer" do
       # 32 MB of output when done
       xs = i64s(List.duplicate(12_345, 4_000_000))

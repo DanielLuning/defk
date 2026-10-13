@@ -51,6 +51,7 @@ defmodule Defk.RaiseCleanupTest do
 
   defp binary_bytes, do: :erlang.memory(:binary)
 
+  @tag :erlang_memory
   test "a raise after alloc frees every owned buffer" do
     before = binary_bytes()
 

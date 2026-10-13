@@ -1,0 +1,25 @@
+# defk-specific Memcheck suppressions, on top of OTP's suppress.standard.
+#
+# Keep this file short: every entry hides a class of report from the runner.
+
+# frame_tag_test.exs, "a frame with a foreign tag fails cleanly": the test
+# stamps promoted frames with a wrong layout tag (__defk_corrupt_tags__), and
+# defk_frame_dtor deliberately frees nothing for a foreign frame ("The leak
+# (the binaries it owned) is accepted; a crash is not", priv/defk_runtime.h,
+# defk-ls8). The abandoned owned table and its buffers are by design.
+#
+# Scoped to the one kernel library that test builds
+# (Elixir.Defk.FrameTagTest.K-<key>.so), so the same leak anywhere else
+# still fails the run. The indirect blocks (the buffers the table held) go
+# with their definite parent.
+{
+   defk_frame_dtor_foreign_frame_owned_buffers
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   fun:realloc
+   fun:erts_sys_realloc
+   fun:erts_realloc_fnf
+   fun:enif_realloc
+   obj:*Elixir.Defk.FrameTagTest.K-*.so
+   ...
+}

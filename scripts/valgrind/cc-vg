@@ -1,0 +1,26 @@
+#!/bin/bash
+# CC wrapper for the Valgrind runs: adds -g so reports carry file:line, and,
+# when $PLANT is set, applies that sed expression to a copy of each generated
+# .c first (the repo's C is never touched; used by planted/run.sh to prove the
+# runner fails on a real error). Its --version line carries a hash of the
+# extra flags and the plant, because defk's build cache is keyed on it and
+# must not reuse a library built with a different plant.
+REAL=${REAL_CC:-clang}
+if [ "$1" = "--version" ]; then
+  first=$($REAL --version | head -1)
+  echo "$first vg=$(printf '%s' "$PLANT" | md5sum | cut -c1-8)"
+  $REAL --version | tail -n +2
+  exit 0
+fi
+out=()
+for a in "$@"; do
+  if [[ -n "$PLANT" && "$a" == *.c ]]; then
+    p="${a%.c}.planted.c"
+    sed -e "$PLANT" "$a" > "$p"
+    cmp -s "$a" "$p" && echo "cc-vg: PLANT changed nothing in $a" >&2
+    out+=("$p")
+  else
+    out+=("$a")
+  fi
+done
+exec "$REAL" "${out[@]}" -g
