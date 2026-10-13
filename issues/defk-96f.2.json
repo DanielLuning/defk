@@ -15,9 +15,15 @@
     "needs-triage"
   ],
   "parent": "defk-96f",
+  "comments": [
+    {
+      "text": "From defk-30c.3: the check-only 'mix defk.examples' (compile + agreement of every example outside mix test, plus fuzzy_search's 7 tests; no timing, works on a loaded machine; DEFK_SANITIZE allowed) is a candidate for the release set. Measured wall time 792 s (13 min) on a loaded host (load 4-7, provisional; deps and C build cache warm; a cold run with Mix.install deps adds ~9 min for argon2). Biggest: cdcl_sat 340 s, keccak 129 s, cdcl_sat_per_call 76 s, hash_chain 65 s. Task layout: dev/mix/tasks/ (put mix defk.verify there).",
+      "timestamp": "2026-10-13T14:52:51Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "mix task to run the verification checks on demand, and a release alias that runs them",
   "type": "task",
-  "updated_at": "2026-10-13T10:53:46Z"
+  "updated_at": "2026-10-13T14:52:51Z"
 }
