@@ -1,7 +1,8 @@
 {
   "assignee": "",
   "blocked_by": [
-    "defk-30c.1"
+    "defk-30c.1",
+    "defk-30c.4"
   ],
   "blocks": [],
   "created": "2026-10-13T12:53:15Z",
@@ -13,5 +14,5 @@
   "status": "open",
   "title": "Own task that runs every other example: mix defk.examples",
   "type": "task",
-  "updated_at": "2026-10-13T12:53:16Z"
+  "updated_at": "2026-10-13T12:53:17Z"
 }
