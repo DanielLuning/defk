@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-bh3"
   ],
@@ -14,8 +14,8 @@
   ],
   "parent": "defk-96f",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Valgrind container: Containerfile, per-file runner, suppressions",
   "type": "task",
-  "updated_at": "2026-10-13T11:18:38Z"
+  "updated_at": "2026-10-13T11:42:19Z"
 }
