@@ -10,9 +10,15 @@
   "labels": [
     "needs-triage"
   ],
+  "comments": [
+    {
+      "text": "Related: the sanitizer build mode (defk-96f.1) needs the same thing — flags added by a CC wrapper or a sanitizer mode must enter the build cache key; in the C verification spike an ASan build was silently reused by a normal run.",
+      "timestamp": "2026-10-13T10:53:48Z"
+    }
+  ],
   "priority": 3,
   "status": "closed",
   "title": "Changing CC or ERTS_INCLUDE_DIR does not recompile kernel modules (no __mix_recompile__?/0)",
   "type": "bug",
-  "updated_at": "2026-10-13T07:36:24Z"
+  "updated_at": "2026-10-13T10:53:48Z"
 }
