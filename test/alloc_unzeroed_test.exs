@@ -393,7 +393,9 @@ defmodule Defk.AllocUnzeroedTest.K do
 end
 
 defmodule Defk.AllocUnzeroedTest do
-  use ExUnit.Case, async: false
+  # No other test file calls K or Shapes, so their forced-yield flags are
+  # this module's own.
+  use ExUnit.Case, async: true
   import Defk.Test.Frames
   use Defk.Properties
 

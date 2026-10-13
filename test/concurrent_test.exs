@@ -83,18 +83,4 @@ defmodule Defk.ConcurrentTest do
 
     assert_frames_live(K)
   end
-
-  defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + @timeout) do
-    cond do
-      f.() ->
-        :ok
-
-      System.monotonic_time(:millisecond) > deadline ->
-        flunk("timed out")
-
-      true ->
-        Process.sleep(1)
-        wait_until(f, deadline)
-    end
-  end
 end

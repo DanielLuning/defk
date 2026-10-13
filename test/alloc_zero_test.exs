@@ -108,8 +108,9 @@ defmodule Defk.AllocZeroTest.K do
 end
 
 defmodule Defk.AllocZeroTest do
-  # async: false: the forced-yield tests flip a flag of K's library
-  use ExUnit.Case, async: false
+  # The forced-yield tests flip a flag of K's library. No other test file
+  # calls K, so the module can run async (Defk.Test.assert_agrees/4).
+  use ExUnit.Case, async: true
   import Defk.Test.Frames
   use Defk.Properties
 
