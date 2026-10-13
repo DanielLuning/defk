@@ -183,12 +183,12 @@ Elixir job can use every scheduler.
   bit-parallel on both sides and Elixir chunked over all schedulers it is
   0.86-0.99x (Elixir 3.9-4.2 ms, defk 4.3-4.6 ms at 234k words): poor.
   `fuzzy_search`: the early cut-off gained 1.9x in Elixir (112 -> 60 ms per
-  query) but 1.5x in the kernel (20.4-20.8 -> 14.1-14.2 ms), so the gap went
-  from 5.4x to 4.2x. `geo_nearest`'s coarse-grid prefilter: Elixir 0.14 ms,
+  query) but 1.5x in the kernel (20.4-20.8 -> 13.6-13.8 ms), so the gap went
+  from 5.4x to 4.4x (quiet re-measure, `defk-klw`; 4.2x under load). `geo_nearest`'s coarse-grid prefilter: Elixir 0.14 ms,
   defk 0.017 ms (8x), against 3.2-3.9x for the full scan.
-- **Conditions:** batched_levenshtein and fuzzy_search under load (fuzzy_search load average 5-90).
-- **Source:** [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) (4b8d17d), `defk-8i4`; [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md) geo_nearest row.
-- **Status:** provisional (batched_levenshtein, fuzzy_search); measured (geo_nearest grid).
+- **Conditions:** batched_levenshtein under load; fuzzy_search's "before" numbers under load (load average 5-90), its cut-off numbers on a quiet machine (2026-10-13).
+- **Source:** [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) (4b8d17d), `defk-8i4`, `defk-klw`; [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md) geo_nearest row.
+- **Status:** provisional (batched_levenshtein); measured (fuzzy_search cut-off, geo_nearest grid).
 
 ### 1.7 Load makes numbers provisional, and some differences are noise
 
@@ -1320,9 +1320,19 @@ for LLVM. Resuming through each loop's header fixed it.
   instead of 18) cost nothing measurable and brought `/health` median from 3
   ms to 1.1 ms. Each yield costs ~6-9 us of scheduler work, mostly the I/O
   poll (macOS): 2-3% on `count_primes`, which yields ~3,300 times a second.
-- **Conditions:** load not recorded; Linux not measured.
-- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md).
-- **Status:** measured; a later loaded run disagrees (see 8.2, open questions).
+- **Quiet re-measure (`defk-klw`, 2026-10-13):** the pre-cut-off kernel on
+  today's compiler is still 0.97-0.98x (yielding faster). With the cut-off
+  (`defk-8i4`) the kernel is +3.5-4.5% (12.25-12.75 vs 11.7-12.0 ms, ~55
+  yields per query), and +3.6-4.7% when built with `DEFK_SLICE_US=10000000`
+  (0.2-0.4 yields per query). So the yields are free; the cost is per-row
+  bookkeeping in the `Enum.reduce_while` over rows: a safepoint every row
+  (it holds the DP loop, so it cannot run in strips), a resume check and the
+  strip copy of the DP loop, which the cut-off's short rows no longer hide
+  (see `defk-w8l`). Under load defk gives 0.94-0.98x the blocking build's
+  req/s. The 27-28 vs ~21 ms seen at load average 30+ was load noise.
+- **Conditions:** `defk-nua`/`defk-j3h` load not recorded; `defk-klw` quiet (load average 3-6, no builds); Linux not measured.
+- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, `defk-klw`, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md).
+- **Status:** measured.
 
 ### 6.5 Float checks: flag the strip, replay on failure
 
@@ -2220,10 +2230,6 @@ blocked scheduler) are what it adds.
   (`per_pair_distance`) and ~0.12-0.13 us (`ws_masking`, under load), and a
   bitstring result adds ~0.1 us (`defk-cao`). No source says which costs are
   included in each. A single micro-benchmark on a quiet machine would settle it.
-- **Yielding vs blocking on fuzzy_search.** `defk-nua` measured 0.99-1.02x
-  (20 vs 20 ms); `defk-klw` measured 27-28 ms vs ~21 ms at load average 30+
-  and later +4.7-4.9% after the cut-off (~55 yields per query). Open until
-  the quiet re-measure (`defk-klw`).
 - **Geohash batch break-even.** The `geohash_crc.exs` header says the encode
   crossover is about 100 points (1 point 0.5x); its report reason and the
   catalog row say a batch of 10 breaks even.

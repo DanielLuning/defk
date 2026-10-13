@@ -55,39 +55,64 @@ the server-side compute time. `GET /health` is a liveness probe.
 
 ## Results
 
-### With the early cut-off (provisional, noisy machine)
+### With the early cut-off
 
-> **Provisional.** Measured while other agents were building on the same
-> machine (load average 5–90 during the session). Each number is one of two
-> alternating before/after runs, which agreed within ~5%. The quiet-machine
-> re-measure, including the load test below, belongs to `defk-klw`.
+Measured for `defk-klw` on 2026-10-13 on a quiet machine (no builds or other
+agents; load average 3–6 before each run). M-series Mac, 12 cores, OTP 29,
+Elixir 1.20.
 
-Single query, in-process (`bench/verify.exs`, 40 typo'd queries, k = 10), M-series Mac, 12 cores, OTP 29, Elixir 1.20:
+Single query, in-process (`bench/verify.exs`, 40 typo'd queries, k = 10, three runs):
 
 | Backend | before (no cut-off) | after (cut-off) | gain |
 |---|---|---|---|
-| `elixir` | 112 ms | 60 ms | 1.9× |
-| `defk` | 20.4–20.8 ms | 14.1–14.2 ms | 1.5× |
-| `blocking` | 20.6 ms | 13.1–13.7 ms | 1.5× |
-| defk vs Elixir | 5.4× | **4.2×** | |
+| `elixir` | 112 ms | 59.9–61.4 ms | 1.9× |
+| `defk` | 20.4–20.8 ms | 13.6–13.8 ms | 1.5× |
+| `blocking` | 20.6 ms | 13.1–13.3 ms | 1.6× |
+| defk vs Elixir | 5.4× | **4.4×** | |
 
-`bench/yield_cost.exs` (20 queries × 5, interleaved): yielding 12.6–12.8 ms vs
-blocking 12.0–12.4 ms (+4.7–4.9%, 55 yields/query); before the cut-off it was
-20.9–21.4 vs 21.7 ms (−2%, 77 yields/query). Whether that ~5% is real or code
-layout noise (`defk-9vl` saw ±3% from layout alone) is for the quiet re-measure.
+The "before" column was measured under load (load average 5–90); `defk-8i4`
+measured the cut-off at 60 ms and 14.1–14.2 ms under the same load, so load
+moved those numbers by less than 5%.
+
+**Yielding vs blocking.** `bench/yield_cost.exs` (20 queries × 5, interleaved,
+five runs): yielding 12.25–12.75 ms vs blocking 11.7–12.0 ms, **+3.5–4.5%**,
+54–56 yields/query. The gap is real and comes from the kernel's shape, not from
+the yields or from a compiler regression:
+
+- Built with `DEFK_SLICE_US=10000000` (0.2–0.4 yields/query), the gap stays
+  (+3.6–4.7%). The yields cost nothing measurable.
+- The kernel from before the cut-off (`d3bc3cd^`), on today's compiler, gives
+  yielding −1.6% to −3.4% against blocking, as it did in `defk-nua`. So no
+  compiler commit since then made yielding slower.
+- What the yielding build adds is per-row bookkeeping in the `Enum.reduce_while`
+  over rows: a safepoint every row (the row loop holds the DP loop, so it can't
+  run in strips), a resume check, and the strip copy of the DP loop. The
+  cut-off made rows short work, so this costs a larger share. This is the
+  class of cost `defk-w8l` tracks.
+
+The 27–28 ms vs ~21 ms that `defk-jaj` saw at load average 30+ was load noise.
 
 The cut-off helps Elixir more than defk. A likely reason (not yet profiled):
 it removes the same DP cells on both sides, but the per-word cost it can't
 remove (row setup, the reduce over rows, the top-k check) is a larger share of
 the kernel's time.
 
-### Before the cut-off: under load
-
-Measured on an M-series Mac with 12 cores, OTP 29 and Elixir 1.20; two runs agreed within a few percent.
-These predate the cut-off and have not been re-run with it.
+### Under load
 
 **Under load:** 24 concurrent clients saturating the server, while a prober hits
-`GET /health` every 5 ms.
+`GET /health` every 5 ms (`elixir --erl "+S 2" bench/loadgen.exs 4047 8`).
+
+With the cut-off (`defk-klw`, quiet machine): three runs that agreed within
+~3%. Four earlier runs overlapped another session's test suite and scattered
+(defk 499–629 req/s, blocking 499–681); they are not used.
+
+| Backend | 1 client p50 | req/s | search p50 | search p99 | health p50 | health p99 |
+|---|---|---|---|---|---|---|
+| `elixir` | 54 ms | 126–130 | 163–167 ms | 507–544 ms | 0.4 ms | 9.6–12.1 ms |
+| `defk` | 11.6–11.9 ms | 652–663 | 32–33 ms | 99–105 ms | 1.0–1.1 ms | 9.8–11.7 ms |
+| `blocking` | 11.5–11.8 ms | 676–693 | 32 ms | 85–100 ms | **18–22 ms** | **75–82 ms** |
+
+Before the cut-off (two runs agreed within a few percent; load not recorded):
 
 | Backend | 1 client p50 | req/s | search p50 | search p99 | health p50 | health p99 |
 |---|---|---|---|---|---|---|
@@ -97,18 +122,18 @@ These predate the cut-off and have not been re-run with it.
 
 ### What the numbers say
 
-1. **defk gives 6.2× the throughput of pure Elixir and cuts p99 latency by 5.4×**, from the same code shape. The speedup is smaller than the 10–15× seen on float arrays, because the BEAM JIT handles small-integer DP loops well.
-2. **The blocking NIF is barely faster, and it slows every other request.** `/health`, which does nothing, takes a median of 33 ms and up to 90 ms at p99. Processes queued on a scheduler that is busy in a NIF wait until the NIF finishes. In an earlier run with only 4 clients (8 of 12 cores idle), its `/health` p99 was 26 ms, against 2 ms for defk.
-3. **defk keeps `/health` in the same range as pure Elixir** (p99 8–10 ms against 6–9 ms) while serving 6.2× the traffic. This is the BEAM promise the example exists to test.
-4. **defk is within ~2% of the blocking build** under load. One query at a time, the two take the same time (~21 ms). An earlier version of defk was ~30% slower. That gap closed for several reasons: bounds checks are now elided (`defk-88q`), the short inner DP loops no longer check a safepoint per cell (`defk-5s3`), and a resumed kernel re-enters its loops through their headers instead of jumping into the middle of them, which had made the loops irreducible for LLVM (`defk-nua`).
-5. **Yielding more often cost nothing measurable here.** Kernels now yield after 250 µs instead of 1 ms (`defk-j3h`), ~78 yields per query instead of 18. Throughput stayed within run-to-run noise, and defk's `/health` median fell from 3 ms to 1.1 ms. `bench/yield_cost.exs` compares `search/4` with its `yield: false` twin, query by query.
+1. **defk gives 5.1–5.2× the throughput of pure Elixir and cuts p99 latency by 5.1–5.3×**, from the same code shape (6.2× and 5.4× before the cut-off). The speedup is smaller than the 10–15× seen on float arrays, because the BEAM JIT handles small-integer DP loops well.
+2. **The blocking NIF is a little faster, and it slows every other request.** `/health`, which does nothing, takes a median of 18–22 ms and up to 75–82 ms at p99 (33 ms and 90 ms before the cut-off). Processes queued on a scheduler that is busy in a NIF wait until the NIF finishes. In an earlier run with only 4 clients (8 of 12 cores idle), its `/health` p99 was 26 ms, against 2 ms for defk.
+3. **defk keeps `/health` in the same range as pure Elixir** (p99 9.8–11.7 ms against 9.6–12.1 ms) while serving 5.1–5.2× the traffic. This is the BEAM promise the example exists to test.
+4. **defk gives 2–6% less throughput than the blocking build under load** (652–663 vs 676–693 req/s), and is 3.5–4.5% slower one query at a time. Before the cut-off the two were within ~2%. The single-query gap comes from per-row bookkeeping in the cut-off's `Enum.reduce_while`, not from yielding (see above). An earlier version of defk was ~30% slower. That gap closed for several reasons: bounds checks are now elided (`defk-88q`), the short inner DP loops no longer check a safepoint per cell (`defk-5s3`), and a resumed kernel re-enters its loops through their headers instead of jumping into the middle of them, which had made the loops irreducible for LLVM (`defk-nua`).
+5. **Yielding more often cost nothing measurable here.** Kernels now yield after 250 µs instead of 1 ms (`defk-j3h`), ~78 yields per query instead of 18 before the cut-off (~55 with it). Throughput stayed within run-to-run noise, and defk's `/health` median fell from 3 ms to 1.1 ms. With the cut-off, a build that almost never yields is no faster than the one that yields every 250 µs. `bench/yield_cost.exs` compares `search/4` with its `yield: false` twin, query by query.
 
 ## Elixir baseline: first pass
 
 The Elixir backend is careful (a precomputed charlist catalog in
 `:persistent_term`, tail-recursive rows, the early cut-off, bounded top-k),
 and its row layout has now been measured against the alternatives. It stays
-**first pass**, so the 4.2× is **provisional**, because a better algorithm
+**first pass**, so the 4.4× is **provisional**, because a better algorithm
 exists that the kernel can't use yet (Myers, below).
 
 What was tried for `defk-8i4` (`bench/elixir_variants.exs`: 20 queries × 3
@@ -136,7 +161,7 @@ median ms/query, noisy machine, the two runs agreed within ~10%):
   **3.3× faster than the shipped DP and within ~1.3× of the defk DP kernel**,
   which would make this example `marginal`. A defk kernel can't write it until
   kernels have bitwise operators (`defk-w38`); then both sides should use it
-  and be re-measured. Until then the 4.2× is a DP-vs-DP comparison only.
+  and be re-measured. Until then the 4.4× is a DP-vs-DP comparison only.
 - **The length pre-filter** is cheap on both sides; adding it to both is a follow-up.
 
 The Elixir backend now processes the catalog in parallel chunks across schedulers
