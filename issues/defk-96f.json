@@ -10,11 +10,15 @@
     {
       "text": "Plan (maintainer, 2026-10-13): zero-bug policy first — defk-bh3 lands before the epic (96f.3 depends on it: the Valgrind runner must not hit multi-GiB agreement cases). Then 96f.1 (sanitizer mode) and 96f.3 (Valgrind container) in parallel. Then 96f.4/.5/.6 (at most 3 agents), then 96f.2 (mix defk.verify + release alias).",
       "timestamp": "2026-10-13T11:18:37Z"
+    },
+    {
+      "text": "Deferred 2026-10-13 (focus review): expansion work waits until the verdict closes (defk-sgw.6). The date is a placeholder; the trigger is defk-sgw.6 closing. Nothing is dropped: bw ready hides deferred issues, bw list --all shows them.",
+      "timestamp": "2026-10-13T19:08:38Z"
     }
   ],
   "priority": 2,
   "status": "open",
   "title": "Verification of generated C: release-time and on-demand checks (sanitizers, Valgrind, fuzzing, bounded proofs)",
   "type": "epic",
-  "updated_at": "2026-10-13T11:18:37Z"
+  "updated_at": "2026-10-13T19:08:38Z"
 }
