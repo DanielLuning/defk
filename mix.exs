@@ -202,7 +202,11 @@ defmodule Defk.MixProject do
         "docs --warnings-as-errors",
         "credo --strict",
         "dialyzer",
-        "ex_dna --max-clones 0",
+        # every compiled path, tests included (defk-zdm.4); defk kernel
+        # bodies are skipped, as tests repeat a kernel on purpose (the same
+        # kernel under other options). Helpers under ~30 AST nodes stay a
+        # review concern: a lower --min-mass reports noise.
+        "ex_dna lib dev test --exclude-macro defk --max-clones 0",
         "reach.check --arch --smells",
         "usage_rules.sync --check"
       ]

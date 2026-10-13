@@ -235,6 +235,10 @@ defmodule Defk.Generators do
   @doc "A length either side of DEFK_STRIP."
   def strip_length, do: member_of([@strip - 1, @strip, @strip + 1])
 
+  @doc "Indices of an n-element array in the first strip, at its end and in the next one."
+  def strip_positions(n),
+    do: Enum.uniq(for p <- [0, 1, @strip - 1, @strip, @strip + 1, n - 1], p < n, do: p)
+
   @doc "Packs `list` as an array of `type`."
   def pack(:f64, list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
   def pack(:i64, list), do: for(x <- list, into: <<>>, do: <<x::signed-64-native>>)
