@@ -26,7 +26,7 @@ mkdir -p "$LOGDIR" "$WORK"
 # A fresh copy, without the host's _build (it holds absolute paths and macOS
 # objects) and without anything a previous run left in the container.
 rm -rf "$WORK"/* "$WORK"/.[!.]* 2>/dev/null
-(cd "$SRC" && tar cf - --exclude=./_build --exclude=./erl_crash.dump --exclude=./tmp--exclude=./.git .) | tar xf - -C "$WORK"
+(cd "$SRC" && tar cf - --exclude=./_build --exclude=./erl_crash.dump --exclude=./tmp --exclude=./.git .) | tar xf - -C "$WORK"
 cd "$WORK" || exit 1
 
 export MIX_ENV=test CC=/opt/defk-vg/cc-vg REAL_CC=${REAL_CC:-clang}
