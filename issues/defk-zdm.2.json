@@ -2,14 +2,15 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-13T18:12:01Z",
   "created": "2026-10-13T18:06:03Z",
   "description": "Verified duplicates: doctest Defk.Bits twice (bit_builtins, masked_arith); array_branch_test.exs:453 forced-yield property (agreement block already forces yields); dirty kernel property in both alloc_zero and alloc_unzeroed; in-page link checks in language_doc_test, compile_errors_doc_test:56, scope_doc_test:86 (docs_checks_test:28 covers them); slug check twice; FNV-1a 32 and mask63/wrap63 in bitwise/u64 vs masked_arith; integer-literal rejection x3; log2/log10 domain tests in log2_log10 vs non_finite; bitstring_test:656 vs bitstring_helper:354; elixir_mode_test early-exit/select/resume blocks beyond the native-only inputs; runtime_define:17 vs upgrade:145; value_semantics:1099; bench_test unrounded speedup twice; case_in in_partial twice; case_guard_errors then_match twice. Done when each is removed or merged into the kept test and mix test passes.",
   "id": "defk-zdm.2",
   "labels": [],
   "parent": "defk-zdm",
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Prune duplicate tests that add no coverage",
   "type": "task",
-  "updated_at": "2026-10-13T18:08:00Z"
+  "updated_at": "2026-10-13T18:12:01Z"
 }
