@@ -8,12 +8,12 @@
   "description": "Replace Defk.Catalog's script list with the set chosen in the selection ticket: compile only the modules (no Mix.install, no benchmark) and run their agreement checks (test/agreement_test.exs style). Drop poor_list_data and poor_tiny_calls from mix test (elixir_mode_test.exs:519 tests them now: move that coverage to the examples task or keep it only if it tests a compiler area nothing else covers, with the reason). mix test time must not grow by more than a few seconds; report the before/after.",
   "id": "defk-30c.2",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "parent": "defk-30c",
   "priority": 2,
   "status": "open",
   "title": "Run the chosen examples' agreement checks in mix test",
   "type": "task",
-  "updated_at": "2026-10-13T12:53:17Z"
+  "updated_at": "2026-10-13T14:01:21Z"
 }
