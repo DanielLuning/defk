@@ -12,9 +12,10 @@
   "labels": [
     "ready-for-agent"
   ],
+  "parent": "defk-o08",
   "priority": 3,
   "status": "open",
   "title": "Symbolic bounds core: move range facts onto ADR-0007's representation, no behaviour change",
   "type": "task",
-  "updated_at": "2026-10-12T10:58:04Z"
+  "updated_at": "2026-10-13T19:08:03Z"
 }
