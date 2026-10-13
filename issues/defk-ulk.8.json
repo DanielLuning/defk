@@ -5,6 +5,7 @@
   ],
   "blocks": [],
   "created": "2026-10-10T14:54:36Z",
+  "defer_until": "2026-11-15",
   "description": "After the target API decision is implemented: README and docs/language.md sections on portable vs architecture builds (when to pick which, how to check it helped with report: :full, how to deploy, what a mismatch error looks like); compile and load errors in the defk-vku format with codes in the catalogue. Then a cold test like defk-dig (fresh session, docs only): set up a project, switch to an architecture build, ship a release to a different machine profile, and record every point of confusion. Fix or ticket each.",
   "id": "defk-ulk.8",
   "labels": [
@@ -12,8 +13,8 @@
   ],
   "parent": "defk-ulk",
   "priority": 3,
-  "status": "open",
+  "status": "deferred",
   "title": "Devex: document and cold-test the chosen target API",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:22Z"
+  "updated_at": "2026-10-13T19:08:47Z"
 }
