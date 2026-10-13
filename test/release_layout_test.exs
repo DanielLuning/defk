@@ -83,6 +83,18 @@ defmodule Defk.ReleaseLayoutTest do
     refute new_so == so
     so = new_so
 
+    # a deleted library (and cache) is rebuilt by a plain compile: without it
+    # the module's on_load fails, and Mix never asks __mix_recompile__?/0 of
+    # a module that cannot load. Mix loads the old module once while it checks
+    # for stale sources, so the compile prints that on_load failure, then
+    # recompiles the module.
+    File.rm!(so)
+    File.rm_rf!(Path.join(app, "_build/prod/defk"))
+    out = mix!(app, ["compile"])
+    assert out =~ "The on_load function for module Elixir.N8fApp returned"
+    assert out =~ "Compiling 1 file (.ex)"
+    assert File.exists?(so)
+
     # move the compiled apps away and drop the whole _build
     moved = Path.join(tmp, "moved")
     File.mkdir_p!(moved)
