@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-13T19:07:54Z",
+  "description": "Found in the 2026-10-13 focus review. Three roadmaps exist (docs/project.md Roadmap, docs/scope.md 'Not yet' ticket ids, beadwork) and the first two are stale: project.md ticks none of the five epics opened 9-13 Oct and lists defk-gqk and defk-6ag as open (both closed); its 'Where things are' table points at lib/examples.ex, which lives at test/support/examples.ex. Root clutter: demo.exs beside mix.exs instead of with bench/, scripts/ mixes the byte-identical gate (dump_c.exs, a dev tool) with the fuzz and Valgrind verification tooling for defk-96f.\n\nDo:\n- docs/project.md: fix the table; replace the Roadmap section with the list of beadwork epics and a pointer (bw prime, bw show \u003cepic\u003e), no per-ticket checklist.\n- docs/scope.md 'Not yet' / 'Under exploration': reference epics, not task ids, where a task id would go stale.\n- Move demo.exs to bench/demo.exs and scripts/dump_c.exs to dev/dump_c.exs; rename scripts/ to verify/ (fuzz/, valgrind/); update every reference (mix.exs aliases, docs, READMEs, scripts' own relative paths).\n- Delete erl_crash.dump and the contents of tmp/ (both git-ignored); delete the branches prototype/compile-errors and prototype/defk-dtw.18-sketches (their decisions are recorded in defk-dtw.8 and defk-dtw.18).\n\nDone when: mix ci is green, no document in the repo references a moved path, and docs/project.md names beadwork as the only roadmap.",
+  "id": "defk-wjb",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Housekeeping: one roadmap in beadwork, root cleanup, stale paths",
+  "type": "task",
+  "updated_at": "2026-10-13T19:07:54Z"
+}
