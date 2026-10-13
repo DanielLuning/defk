@@ -164,30 +164,20 @@ defmodule Defk.ArrayBranchTest do
   use ExUnit.Case, async: false
   use Defk.Properties
   import Defk.Test.Frames
+  import Defk.TestKit
 
   alias Defk.ArrayBranchTest.K
 
   @timeout 60_000
 
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
   defp agree(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
-
-  defp forced(f) do
-    K.__defk_force_yields__(true)
-
-    try do
-      f.()
-    after
-      K.__defk_force_yields__(false)
-    end
-  end
 
   # Runs `f` in a new process under forced yields, garbage-collecting that
   # process for as long as the call runs: every safepoint yields, so the GCs
   # land between two steps of the kernel and may move its heap binaries.
   # `f` builds its inputs itself, so heap binaries are on that process's heap.
   defp with_gcs(f) do
-    forced(fn ->
+    forced(K, fn ->
       parent = self()
 
       {pid, ref} =
@@ -308,7 +298,7 @@ defmodule Defk.ArrayBranchTest do
 
     test "copies nothing where nothing is written" do
       for k <- [:two_inputs, :input_or_alloc, :nested, :cond_case, :in_tuple, :return_branch] do
-        refute kernel_c(k) =~ "defk_copy_", "#{k}"
+        refute kernel_c(K, k) =~ "defk_copy_", "#{k}"
       end
     end
   end
@@ -391,34 +381,14 @@ defmodule Defk.ArrayBranchTest do
     end
 
     test "killing the call mid-run leaves no frame" do
-      forced(fn ->
+      forced(K, fn ->
         a = large(1)
         y0 = K.__defk_stats__().yields
         pid = spawn(fn -> K.two_inputs(true, a, a, 1_000_000) end)
-        wait_until(fn -> K.__defk_stats__().yields > y0 + 20 end)
+        wait_until(fn -> K.__defk_stats__().yields > y0 + 20 end, @timeout)
         Process.exit(pid, :kill)
         assert_frames_live(K)
       end)
-    end
-  end
-
-  # the generated C of kernel `name`
-  defp kernel_c(name) do
-    [_ | chunks] = String.split(K.__defk_c_source__(), "/* ---- ")
-    Enum.find(chunks, &String.starts_with?(&1, "#{name}/")) || flunk("no kernel #{name}")
-  end
-
-  defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + @timeout) do
-    cond do
-      f.() ->
-        :ok
-
-      System.monotonic_time(:millisecond) > deadline ->
-        flunk("timed out")
-
-      true ->
-        Process.sleep(1)
-        wait_until(f, deadline)
     end
   end
 

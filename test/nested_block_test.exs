@@ -142,25 +142,9 @@ defmodule Defk.NestedBlockTest do
   use ExUnit.Case, async: true
   use Defk.Properties
 
+  import Defk.TestKit
+
   alias Defk.NestedBlockTest.K
-
-  @dir Path.join(System.tmp_dir!(), "defk_nested_block_test")
-
-  defp compile(body) do
-    File.mkdir_p!(@dir)
-    mod = "Defk.NestedBlockTest.M#{System.unique_integer([:positive])}"
-    path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-    File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{body}\nend\n")
-
-    try do
-      Code.compile_file(path)
-      :ok
-    rescue
-      e in CompileError -> Exception.message(e)
-    end
-  end
-
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
 
   test "a binding in a nested block is visible after it" do
     assert {:ok, 12} = Defk.Test.assert_agrees(K, :used_after, [5])
@@ -198,7 +182,7 @@ defmodule Defk.NestedBlockTest do
 
   test "a name bound only in an if branch is still undefined after it" do
     msg =
-      compile("""
+      reject(__MODULE__, """
         defk f(a :: i64) :: i64 do
           if a > 0 do
             (
@@ -216,7 +200,7 @@ defmodule Defk.NestedBlockTest do
 
   test "an array bound again in a nested block inside a loop body is still an error" do
     msg =
-      compile("""
+      reject(__MODULE__, """
         defk f(n :: i64) :: [i64] do
           prev = alloc(i64, n)
           cur = alloc(i64, n)

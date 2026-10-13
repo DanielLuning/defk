@@ -1,5 +1,6 @@
 defmodule Defk.BuildTest do
   use ExUnit.Case, async: false
+  import Defk.TestKit, only: [restore_env_on_exit: 1]
 
   @env %{erts: "15.2.1", cc: "cc", cc_version: "Apple clang version 17.0.0"}
   @src "int f(void) { return 1; }"
@@ -35,11 +36,7 @@ defmodule Defk.BuildTest do
 
   describe "environment" do
     setup do
-      saved = Map.new(["CC", "ERTS_INCLUDE_DIR"], &{&1, System.get_env(&1)})
-
-      on_exit(fn ->
-        for {k, v} <- saved, do: if(v, do: System.put_env(k, v), else: System.delete_env(k))
-      end)
+      restore_env_on_exit(["CC", "ERTS_INCLUDE_DIR"])
     end
 
     test "a missing compiler raises the actionable error and leaves no .so" do

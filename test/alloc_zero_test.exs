@@ -112,6 +112,7 @@ defmodule Defk.AllocZeroTest do
   # calls K, so the module can run async (Defk.Test.assert_agrees/4).
   use ExUnit.Case, async: true
   import Defk.Test.Frames
+  import Defk.TestKit
   use Defk.Properties
 
   alias Defk.AllocZeroTest.K
@@ -124,32 +125,11 @@ defmodule Defk.AllocZeroTest do
 
   defp agree(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
 
-  defp forced(fun) do
-    K.__defk_force_yields__(true)
-
-    try do
-      fun.()
-    after
-      K.__defk_force_yields__(false)
-    end
-  end
-
-  defp yields(fun) do
-    y0 = K.__defk_stats__().yields
-    res = fun.()
-    {res, K.__defk_stats__().yields - y0}
-  end
-
-  defp kernel_c(name) do
-    [_ | chunks] = String.split(K.__defk_c_source__(), "/* ---- ")
-    Enum.find(chunks, &String.starts_with?(&1, "#{name}/")) || flunk("no kernel #{name}")
-  end
-
   defp zero_bytes(n), do: :binary.copy(<<0>>, n)
 
   describe "the generated C" do
     test "an alloc of unknown length zeroes in strips, a safepoint per strip" do
-      c = kernel_c(:zeros)
+      c = kernel_c(K, :zeros)
       assert c =~ "defk_alloc_raw_u8(ctx, "
       assert c =~ "defk_zero_strip("
       assert c =~ ~r/DEFK_SP\(\d+, DEFK_ZERO_TICKS\(/
@@ -157,7 +137,7 @@ defmodule Defk.AllocZeroTest do
     end
 
     test "a constant length of at most 4 KiB is zeroed at once" do
-      c = kernel_c(:small)
+      c = kernel_c(K, :small)
       assert c =~ "defk_alloc_i64(ctx, "
       refute c =~ "defk_zero_strip("
       refute c =~ "(yielding)"
@@ -180,9 +160,9 @@ defmodule Defk.AllocZeroTest do
       n = 4 * @strip + 5
 
       {res, ys} =
-        forced(fn ->
+        forced(K, fn ->
           K.dirty(n)
-          yields(fn -> K.zeros(n) end)
+          yields(K, fn -> K.zeros(n) end)
         end)
 
       assert res == zero_bytes(n)
@@ -192,7 +172,7 @@ defmodule Defk.AllocZeroTest do
     end
 
     test "under forced yields, every kernel agrees with Elixir mode" do
-      forced(fn ->
+      forced(K, fn ->
         for {f, args} <- [
               zeros: [@strip * 5 + 3],
               zeros_f64: [@strip + 1],
@@ -222,7 +202,7 @@ defmodule Defk.AllocZeroTest do
 
     test "a raise in the middle of zeroing frees the buffers" do
       assert {:raise, %ArgumentError{}} = agree(:zeros, [-1])
-      assert {:raise, %Enum.OutOfBoundsError{}} = forced(fn -> agree(:nested, [0, 1]) end)
+      assert {:raise, %Enum.OutOfBoundsError{}} = forced(K, fn -> agree(:nested, [0, 1]) end)
       assert_frames_live(K)
     end
   end
@@ -268,7 +248,7 @@ defmodule Defk.AllocZeroTest do
 
   property "a partly written alloc agrees under forced yields, after the allocator held 255s" do
     check all([n, lo, hi] <- len_range(), max_runs: 50) do
-      forced(fn ->
+      forced(K, fn ->
         K.dirty(n)
         agree(:partial, [n, lo, hi])
       end)

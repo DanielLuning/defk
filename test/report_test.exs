@@ -94,6 +94,7 @@ end
 defmodule Defk.ReportTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
+  import Defk.TestKit, only: [restore_env_on_exit: 1]
 
   alias Defk.ReportTest.{Full, K}
 
@@ -305,7 +306,7 @@ defmodule Defk.ReportTest do
   describe "report: :full when CC is not clang" do
     setup do
       saved = System.get_env("CC")
-      on_exit(fn -> if saved, do: System.put_env("CC", saved), else: System.delete_env("CC") end)
+      restore_env_on_exit(["CC"])
 
       dir = Path.join(System.tmp_dir!(), "defk-report-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)

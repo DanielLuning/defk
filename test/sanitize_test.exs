@@ -11,20 +11,17 @@ defmodule Defk.SanitizeTest do
   #
   #     mix test test/sanitize_test.exs --only sanitize
   use ExUnit.Case, async: false
+  import Defk.TestKit, only: [restore_env_on_exit: 1]
 
   alias Defk.Build
 
   @vars ["CC", "DEFK_SANITIZE", "MIX_BUILD_PATH"]
 
   setup do
-    saved = Map.new(@vars, &{&1, System.get_env(&1)})
+    restore_env_on_exit(@vars)
     tmp = Path.join(System.tmp_dir!(), "defk_sanitize_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
-
-    on_exit(fn ->
-      for {k, v} <- saved, do: if(v, do: System.put_env(k, v), else: System.delete_env(k))
-      File.rm_rf!(tmp)
-    end)
+    on_exit(fn -> File.rm_rf!(tmp) end)
 
     %{tmp: tmp}
   end
