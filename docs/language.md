@@ -1566,8 +1566,16 @@ fails, which would break the [runtime contract](guides/runtime-contract.md).
 - The count is per call: concurrent calls each have their own, a call
   after a raise starts from zero, and a yield keeps it. An array a kernel
   returns counts until it returns.
-- It is a [limit](#12-limits) of native code only: Elixir mode does not
-  know which arrays native code would still hold, so it never raises it.
+- Elixir mode enforces the same budget on `alloc/2`: it adds up the bytes
+  every `alloc/2` of the call asks for (in called kernels too), against
+  the same `max_owned` (it reads `__defk_stats__().max_owned`), and raises
+  the same message before building the binary. So an `alloc` in a loop
+  raises at the same iteration in both modes, and a size no host could
+  hold raises instead of exhausting the node. Elixir mode does not see
+  copies, bitstring accumulator buffers or aligned input copies (it
+  garbage-collects those, as Elixir does), so a call whose copies pass the
+  budget raises in native code and succeeds in Elixir mode: its total is
+  never above native code's, so never the reverse.
 - A single allocation of 2^47 bytes or more, which no allocator serves,
   raises the plain "out of memory (allocating N bytes)" of
   [Allocating](#allocating) instead, the same in both modes.
@@ -2224,7 +2232,7 @@ bug.
 | a bitstring segment size outside `0..64` | any non-negative size | `ArgumentError` "bitstring segment size n is outside 0..64" |
 | a `bitstring` parameter of a kernel no kernel called from Elixir calls (an entry kernel taking a bitstring) | a function taking any bitstring | compile error [`bitstring-use`](compile-errors.md#bitstring-use) |
 | `alloc/2` of more than 2^48 bytes | (the VM would abort) | `ArgumentError` "alloc/2: length too large" |
-| `alloc/2` of a size the allocator cannot provide | (the VM would abort) | `ArgumentError` "out of memory"; Elixir mode raises it from 2^47 bytes without trying |
+| `alloc/2` of a size the allocator cannot provide | (the VM would abort) | `ArgumentError` "out of memory"; Elixir mode raises it without trying from 2^47 bytes, and past the [owned-buffer budget](#the-owned-buffer-budget) |
 | a range whose last element is within one step of the `i64` limit, e.g. `0..9223372036854775807` | runs | `ArithmeticError` "range element ... is within one step of the i64 limit" before the loop starts, also when the loop would stop earlier |
 | an `i64` overflow inside a `case` guard (`n * n > 100`) | the guard is computed exactly | `ArithmeticError`. A zero divisor in a guard is no limit: it fails the clause, as in Elixir, even beside an overflow; an overflow that decides an `and`/`or` or a divisor raises ([`case`](#case)) |
 | ordering booleans, comparing a boolean with a number | term order | compile error [`operand-type`](compile-errors.md#operand-type) |
@@ -2235,7 +2243,7 @@ bug.
 | an array variable bound again inside a loop body and read after the loop | the binding is gone after the loop | compile error [`array-rebind-in-loop`](compile-errors.md#array-rebind-in-loop) |
 | a called kernel writing an array parameter it does not return | the write is lost | compile error [`write-not-returned`](compile-errors.md#write-not-returned) |
 | memory of arrays written in a loop while another variable still reads them | the old binaries are garbage collected | each copy (see [Copies](#copies)) lives until the kernel returns |
-| a call holding more bytes in arrays it allocated or copied (an `alloc` or a copy in a loop body) than its [owned-buffer budget](#the-owned-buffer-budget) (`max_owned`, by default half of physical memory) | the old binaries are garbage collected | `ArgumentError` "out of memory (allocating N bytes would take this call's buffers past max_owned, M bytes)"; Elixir mode never raises it |
+| a call holding more bytes in arrays it allocated or copied (an `alloc` or a copy in a loop body) than its [owned-buffer budget](#the-owned-buffer-budget) (`max_owned`, by default half of physical memory) | the old binaries are garbage collected | `ArgumentError` "out of memory (allocating N bytes would take this call's buffers past max_owned, M bytes)"; Elixir mode raises it for `alloc/2` (the same message), not for copies |
 | the C compiler is needed at build time | | compile error [`no-c-compiler`](compile-errors.md#no-c-compiler) |
 
 ## 13. Known divergences

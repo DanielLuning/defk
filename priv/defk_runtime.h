@@ -219,6 +219,9 @@ static void defk_frame_dtor(ErlNifEnv *env, void *obj) {
  * DEFK_OWNED_FALLBACK (4 GiB).
  *
  * The check is one compare and one add per allocation, never per element.
+ * Elixir mode applies the same budget, with the same message, to the bytes
+ * of the call's alloc/2 calls (Defk.ElixirMode.Ops.alloc/2, defk-bh3), so a
+ * size no host could hold raises there too instead of aborting the VM.
  */
 #define DEFK_OWNED_FALLBACK ((uint64_t)1 << 32)
 static uint64_t defk_max_owned = DEFK_OWNED_FALLBACK;

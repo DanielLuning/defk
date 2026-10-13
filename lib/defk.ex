@@ -65,7 +65,9 @@ defmodule Defk do
       allocation past it raises `ArgumentError` "out of memory" instead of
       letting the operating system kill the node. A positive integer, or an
       expression giving one; default half of physical memory, read when the
-      library loads. Native code only: Elixir mode never raises it. See
+      library loads. Elixir mode enforces the same budget, with the same
+      message, on the bytes the call's `alloc/2` calls ask for; it does not
+      count copies or bitstring buffers, which it garbage-collects. See
       [the owned-buffer budget](language.md#the-owned-buffer-budget).
 
   Any other option raises `ArgumentError`. Module attributes whose names
