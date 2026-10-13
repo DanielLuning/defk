@@ -9,12 +9,12 @@
   "description": "From the builtin prototype and the vector ceiling study, decide which hardware builtins to adopt (and how they dispatch), and whether portable vector values enter the subset (now, later, never). Record the evidence and rejected options; file implementation tickets for what is adopted.",
   "id": "defk-ulk.7",
   "labels": [
-    "needs-triage"
+    "ready-for-human"
   ],
   "parent": "defk-ulk",
   "priority": 3,
   "status": "open",
   "title": "Decide: hardware builtins and vector types, build or not",
   "type": "task",
-  "updated_at": "2026-10-10T14:54:45Z"
+  "updated_at": "2026-10-13T19:08:22Z"
 }
