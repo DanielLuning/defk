@@ -71,6 +71,10 @@ defmodule Defk do
   Any other option raises `ArgumentError`. Module attributes whose names
   start with `@defk_` are reserved for defk: don't define your own.
 
+  A module may set its own `@on_load`. defk chains it: the kernels' library
+  loads first, then your hook runs (so it may call the module's kernels), and
+  the module loads only if both return `:ok`.
+
   ## Types
 
   | Type | In a kernel | Passed from Elixir as | Returned as |
@@ -405,8 +409,11 @@ defmodule Defk do
 
     lib_defs = lib_defs(Defk.Build.placement!(env.module, lib, env.file))
 
+    load_def = load_def(Defk.take_on_load(env.module))
+
     quote do
       @on_load :__defk_load__
+      unquote(load_def)
       unquote(lib_defs)
       @doc false
       def __defk_c_source__, do: unquote(c_src)
@@ -424,7 +431,45 @@ defmodule Defk do
     end
   end
 
-  # __defk_load__/0 and __defk_lib__/0 (Defk.Build.placement!/3). A Mix app's
+  # The module's own `@on_load` (defk-6c4): a module may have only one, so take
+  # the user's off here (defk sets its own) and chain it after the kernels load.
+  @doc false
+  def take_on_load(module) do
+    hook = Module.get_attribute(module, :on_load)
+    Module.delete_attribute(module, :on_load)
+
+    case hook do
+      nil -> nil
+      [h | _] -> hook_name(h)
+      h -> hook_name(h)
+    end
+  end
+
+  defp hook_name({name, 0}), do: name
+  defp hook_name(name) when is_atom(name), do: name
+
+  # __defk_load__/0 is the module's on_load: load the kernels, then the
+  # module's own hook; only :ok from both lets the module load.
+  defp load_def(nil) do
+    quote do
+      @doc false
+      def __defk_load__, do: __defk_load_nif__()
+    end
+  end
+
+  defp load_def(user_hook) do
+    quote do
+      @doc false
+      def __defk_load__ do
+        case __defk_load_nif__() do
+          :ok -> unquote(user_hook)()
+          other -> other
+        end
+      end
+    end
+  end
+
+  # __defk_load_nif__/0 and __defk_lib__/0 (Defk.Build.placement!/3). A Mix app's
   # module loads its library from beside its beams, wherever the app is at
   # load time (a release, a moved _build: defk-n8f); anything else from the
   # absolute build path. Only :code and :filename at load time: the on_load
@@ -432,7 +477,7 @@ defmodule Defk do
   defp lib_defs({:path, base}) do
     quote do
       @doc false
-      def __defk_load__, do: :erlang.load_nif(unquote(String.to_charlist(base)), 0)
+      def __defk_load_nif__, do: :erlang.load_nif(unquote(String.to_charlist(base)), 0)
       @doc false
       def __defk_lib__, do: unquote(base <> ".so")
     end
@@ -451,7 +496,7 @@ defmodule Defk do
       end
 
       @doc false
-      def __defk_load__, do: :erlang.load_nif(__defk_lib_base__(), 0)
+      def __defk_load_nif__, do: :erlang.load_nif(__defk_lib_base__(), 0)
       @doc false
       def __defk_lib__, do: :unicode.characters_to_binary(__defk_lib_base__() ++ ~c".so")
     end
