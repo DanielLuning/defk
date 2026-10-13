@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-13T17:40:40Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Skip the xcrun shim per C compile on macOS: resolve clang and the SDK once per VM",
   "type": "task",
-  "updated_at": "2026-10-13T17:40:42Z"
+  "updated_at": "2026-10-13T18:34:03Z"
 }
