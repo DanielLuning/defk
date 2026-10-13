@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-13T18:55:04Z",
   "created": "2026-10-07T14:53:21Z",
   "description": "Found by defk-t11.4: defk-juw's lost-resume check (F-\u003eresume cleared on arrival at the safepoint's loop) misses (1) a wrong dispatch case that jumps to another loop's label: it still clears F-\u003eresume, so the kernel silently gives a wrong answer; (2) nested loops where the top-level case is missing: the inner loop's dispatch still finds and clears the resume after the outer loop restarted. Consider clearing only when the arrived-at safepoint id equals F-\u003eresume (compare ids, not just clear), keeping zero loop cost. Done when the t11.4 mutation harness (test/resume_test.exs lost_mutant/2) has a wrong-label and a nested-missing case that both raise.",
   "id": "defk-yqo",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Resume check can't catch a dispatch to the wrong loop",
   "type": "task",
-  "updated_at": "2026-10-13T18:44:33Z"
+  "updated_at": "2026-10-13T18:55:04Z"
 }
