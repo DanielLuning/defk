@@ -9,7 +9,7 @@
   "description": "A mix task (outside mix ci) that runs every example not in the mix test subset: check-only by default (compile + agreement/correctness, no timing, so it runs on a loaded machine), and --bench to keep run_all.exs's scoreboard behaviour (verdict check, --snapshot). Exits non-zero on an incorrect or crashing example. Decide whether run_all.exs becomes a thin wrapper or goes. Include the fuzzy_search app's tests per the fuzzy_search ticket's decision. Consider adding the check-only run to the release set of defk-96f.2 (note it there). Document in examples/README.md.",
   "id": "defk-30c.3",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "parent": "defk-30c",
   "comments": [
@@ -22,5 +22,5 @@
   "status": "open",
   "title": "Own task that runs every other example: mix defk.examples",
   "type": "task",
-  "updated_at": "2026-10-13T14:02:22Z"
+  "updated_at": "2026-10-13T14:18:46Z"
 }
