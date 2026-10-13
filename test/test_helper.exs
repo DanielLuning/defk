@@ -7,5 +7,8 @@ Code.require_file("../examples/fuzzy_search/lib/fuzzy_search/kernels.ex", __DIR_
 #   (mix test --include timing)
 # :clang - facts from clang's remarks (the fast-path report's report: :full);
 #   excluded when CC is not clang (mix test --only clang runs just these)
+# :erlang_memory - assert on :erlang.memory(:binary), which raises notsup under
+#   the valgrind emulator (allocators off); scripts/valgrind runs with
+#   --exclude erlang_memory
 clang = if Defk.Build.clang?(), do: [], else: [:clang]
 ExUnit.start(exclude: [:deep, :divergence, :timing] ++ clang)
