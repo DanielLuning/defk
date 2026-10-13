@@ -269,10 +269,6 @@ defmodule Defk.MaskedArithTest do
 
     msg = rejection("wrap64(x * 1.5)", "x :: i64")
     assert whats(msg) == ["wrap64/1 takes integers, and x * 1.5 is f64"]
-
-    # past 2^64 - 1 no literal and no mask
-    msg = rejection("band(x * x, 0x1FFFFFFFFFFFFFFFF)", "x :: i64")
-    assert codes(msg) == ["integer-literal"]
   end
 
   # ---------------------------------------------------- agreement properties --

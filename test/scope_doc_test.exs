@@ -2,14 +2,12 @@ defmodule Defk.ScopeDocTest do
   # docs/scope.md, the scope page: its two lists of compile errors are the
   # registry's text (Defk.Errors.scope/1), the hand-written "Not yet" list
   # names every planned code with a ticket, the hand-written "Won't be" list
-  # names only codes outside the subset for good, and every link into
-  # docs/compile-errors.md or docs/language.md resolves. Its example kernel runs in
+  # names only codes outside the subset for good. Its links are checked in
+  # test/docs_checks_test.exs, and its example kernel runs in
   # test/language_doc_examples_test.exs.
   use ExUnit.Case, async: true
 
   @doc_path "docs/scope.md"
-  @language_path "docs/language.md"
-  @errors_path "docs/compile-errors.md"
 
   setup_all do
     %{doc: File.read!(@doc_path)}
@@ -81,15 +79,5 @@ defmodule Defk.ScopeDocTest do
     linked = codes_linked(hand_written(doc, "Won't be: by design"))
     assert linked != []
     assert linked -- codes(:subset) == []
-  end
-
-  test "every link into docs/language.md and docs/compile-errors.md resolves", %{doc: doc} do
-    for {page, path} <- [{"language.md", @language_path}, {"compile-errors.md", @errors_path}] do
-      anchors = MapSet.new(Defk.LanguageDoc.anchors(File.read!(path)))
-
-      for [_, a] <- Regex.scan(~r/\]\(#{Regex.escape(page)}#([^)]+)\)/, doc) do
-        assert a in anchors, "broken link #{page}##{a}"
-      end
-    end
   end
 end

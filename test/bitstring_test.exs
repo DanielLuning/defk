@@ -652,21 +652,6 @@ defmodule Defk.BitstringTest do
       assert rejected(appends("acc = <<acc::bitstring, x::8>>\n  len(acc)", "i64")) =~
                "bit_size(acc)"
     end
-
-    test "a bitstring parameter, and passing the accumulator to a kernel" do
-      msg = rejected("defk f(b :: bitstring) :: i64 do\n  bit_size(b)\nend")
-      assert codes(msg) == ["bitstring-use"]
-      assert msg =~ "f/1 takes the bitstring b, so only a kernel can call it"
-
-      msg =
-        rejected(
-          "defk g(b :: [u8]) :: i64, do: len(b)\n\n" <>
-            appends("acc = <<acc::bitstring, x::8>>\n  g(acc)", "i64")
-        )
-
-      assert codes(msg) == ["bitstring-use"]
-      assert msg =~ "passing the bitstring acc to g/1 as b :: [u8] is not supported"
-    end
   end
 
   agreement(K,

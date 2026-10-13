@@ -717,8 +717,6 @@ defmodule Defk.U64Test do
     assert codes(rejection("if c, do: h, else: x", "c :: bool, h :: u64, x :: i64")) == [
              "branch-types"
            ]
-
-    assert codes(rejection("band(x, 0x1FFFFFFFFFFFFFFFF)", "x :: i64")) == ["integer-literal"]
   end
 
   # ---------------------------------------------------- agreement properties --

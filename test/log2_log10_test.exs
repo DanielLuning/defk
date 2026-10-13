@@ -51,10 +51,12 @@ defmodule Defk.Log2Log10Test do
     assert K.l10(1000.0) === 3.0
   end
 
-  test "x <= 0 raises ArithmeticError" do
-    for f <- [:l2, :l10, :m2, :m10], x <- [0.0, -0.0, -1.0, -@max, -4.9e-324] do
-      assert_raise ArithmeticError, fn -> apply(K, f, [x]) end
-      assert {:raise, %ArithmeticError{}} = Defk.Test.assert_agrees(K, f, [x])
+  test "x <= 0 raises ArithmeticError at the operation, in both modes" do
+    for f <- [:l2, :l10, :m2, :m10], x <- [0.0, -0.0, -1.0, -1.0e308, -@max, -4.9e-324] do
+      assert {:raise, %ArithmeticError{} = e} = Defk.Test.assert_agrees(K, f, [x])
+      assert Defk.Test.agreement_reason(e) == :non_finite
+      # raised by the log itself, never the strip's fallback message
+      refute e.message == "float result is inf or NaN"
     end
   end
 end

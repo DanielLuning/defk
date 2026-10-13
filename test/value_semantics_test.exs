@@ -1095,21 +1095,6 @@ defmodule Defk.ValueSemanticsTest do
       assert mem == i64s(Enum.to_list(1..16))
       assert r == i64s(List.duplicate(0, 8))
     end
-
-    test "under forced yields" do
-      K.__defk_force_yields__(true)
-
-      try do
-        assert agree(:rebind_call, [2]) == {:ok, i64s([1, 7])}
-        assert {:ok, _} = agree(:rebind_reduce, [i64s(Enum.to_list(1..16))])
-        assert {:ok, _} = agree(:rebind_tuple, [50])
-
-        assert {:ok, _} =
-                 agree(:rebind_input, [i64s(Enum.to_list(1..16)), i64s(List.duplicate(0, 8)), 50])
-      after
-        K.__defk_force_yields__(false)
-      end
-    end
   end
 
   describe "under forced yields" do
@@ -1386,7 +1371,7 @@ defmodule Defk.ValueSemanticsTest do
     range_filter: [args: StreamData.fixed_list([StreamData.integer(-1..200)])],
     rebind_call: [args: StreamData.fixed_list([StreamData.integer(0..20)])],
     rebind_reduce: [args: StreamData.fixed_list([G.array(:i64)])],
-    rebind_tuple: [args: StreamData.fixed_list([StreamData.integer(0..40)])],
+    rebind_tuple: [args: StreamData.fixed_list([StreamData.integer(0..50)])],
     seg_shape: [
       args:
         StreamData.fixed_list([
@@ -1400,7 +1385,7 @@ defmodule Defk.ValueSemanticsTest do
         StreamData.fixed_list([
           G.array(:i64, of: StreamData.integer(-1000..1000)),
           G.array(:i64, of: StreamData.integer(-1000..1000)),
-          StreamData.integer(0..20)
+          StreamData.integer(0..50)
         ])
     ],
     hll_update: [

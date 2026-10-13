@@ -271,7 +271,6 @@ defmodule Defk.ElixirModeTest do
   alias Defk.EarlyExitTest.K, as: E
   alias Defk.ElixirModeTest.K
   alias Defk.ResumeTest.K, as: R
-  alias Defk.SelectTest.K, as: S
 
   @moduletag timeout: 300_000
 
@@ -327,6 +326,8 @@ defmodule Defk.ElixirModeTest do
   end
 
   describe "agreement on the existing tests' inputs" do
+    # the inputs of the @native_only tests; the other early exit and select
+    # test bodies run in Elixir mode above
     test "early exit kernels" do
       for stop <- [1, 2, 7, 50, 301, 699, 700, 701], do: agree(E, :nest3, [700, stop])
       for x <- 2..500, do: agree(E, :first_div, [x])
@@ -355,36 +356,6 @@ defmodule Defk.ElixirModeTest do
       for stop <- [10, 3_000, 3_001],
           f <- [:sum_until, :sum_until_nb],
           do: agree(E, f, [b, stop, 3_050])
-
-      for x <- [-3, -1, 0, 1, 2, 3, 100, 101, 102, 1_000, 1_001],
-          do: agree(E, :case_val, [x]) && agree(E, :case_partial, [x])
-
-      for b <- [true, false],
-          do:
-            agree(E, :case_partial_bool, [b]) &&
-              agree(E, :case_stmt, [i64s([3, 4, 5, 6, 7, 9, 10]), b])
-
-      big = 1_099_511_627_776
-      for k <- [0, 1], do: agree(E, :case_sel, [big, k])
-      agree(E, :case_loop, [120, 7])
-    end
-
-    test "select kernels, including the overflow in the taken arm" do
-      big = 1_099_511_627_776
-      agree(S, :count_if, [10_000, 7])
-      agree(S, :count_if, [10, 9_223_372_036_854_775_000])
-      agree(S, :cond_count, [10, 9_223_372_036_854_775_000])
-
-      for c <- [true, false] do
-        agree(S, :square_unless, [c, big])
-        agree(S, :next_or_neg, [c, @min])
-        agree(S, :cmp_arms, [c, 3, 3])
-        agree(S, :cond_square, [c, big])
-        agree(S, :cond_later, [c, big])
-        agree(S, :cond_later, [c, @min])
-      end
-
-      for x <- [3, 4, 0, -4], do: agree(S, :cond_calls, [x])
     end
 
     test "resume shapes and their callees (the forced-yield inputs, smaller where slow)" do

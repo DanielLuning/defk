@@ -299,12 +299,6 @@ defmodule Defk.NonFiniteTest do
     assert {:ok, -0.0} = agrees(:sqrt_of, [-0.0])
   end
 
-  test "log2 and log10 outside their domain raise" do
-    for f <- [:log2_of, :log10_of], x <- [0.0, -0.0, -1.0, -1.0e308, -5.0e-324] do
-      non_finite(f, [x])
-    end
-  end
-
   test "exp and pow overflowing raise" do
     non_finite(:exp_of, [1000.0])
     non_finite(:pow_of, [10.0, 400.0])
