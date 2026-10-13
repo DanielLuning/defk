@@ -98,20 +98,26 @@ defmodule Defk.CompileErrorsTest do
       end
     end
 
-    test "every code the compiler uses is in the registry, and every registry code is used" do
-      src = File.read!("lib/defk/compiler.ex") <> File.read!("lib/defk/errors.ex")
+    # Every code literal in lib/ is in the registry, and every registry code
+    # is used somewhere in lib/. Not errors.ex: it defines every code, so it
+    # would make the second half pass for any code. Not test.ex: its strings
+    # are message fragments ("non-finite"), not codes. err! checks its own
+    # literal codes when the compiler compiles (Errors.validate_code!/1); the
+    # rewrites, clauses, raise and diagnostics modules pass theirs as data.
+    test "every code literal in lib/ is in the registry, and every registry code is used" do
+      src =
+        (Path.wildcard("lib/**/*.ex") -- ["lib/defk/errors.ex", "lib/defk/test.ex"])
+        |> Enum.map_join("\n", &File.read!/1)
 
       used =
-        Regex.scan(~r/\{?"([a-z0-9]+(?:-[a-z0-9]+)+|recursion|pipe)",/, src)
-        |> Enum.map(&Enum.at(&1, 1))
+        ~r/"([a-z0-9]+(?:-[a-z0-9]+)+|recursion|pipe)"[,)]/
+        |> Regex.scan(src)
+        |> MapSet.new(&Enum.at(&1, 1))
 
       registry = MapSet.new(Defk.Errors.codes(), & &1.code)
 
-      assert MapSet.subset?(MapSet.new(used), registry),
-             inspect(MapSet.difference(MapSet.new(used), registry))
-
-      assert MapSet.subset?(registry, MapSet.new(used)),
-             inspect(MapSet.difference(registry, MapSet.new(used)))
+      assert MapSet.difference(used, registry) == MapSet.new(), "codes not in the registry"
+      assert MapSet.difference(registry, used) == MapSet.new(), "registry codes no module uses"
     end
   end
 
