@@ -140,20 +140,24 @@ defmodule Defk.Examples.Scoreboard do
     end
   end
 
+  # The markdown table for the scoreboard pages (examples/README.md,
+  # docs/verdict.md): the verdict mark first, rows sorted by verdict and
+  # then by speedup, so the good, marginal and poor results read off at a
+  # glance.
   defp print_snapshot(results) do
     IO.puts(
-      "\n| Example | Realistic size | Verdict | Speedup | Elixir ms | defk ms | vs native | " <>
+      "\n| | Example | Realistic size | Speedup | Elixir ms | defk ms | vs native | " <>
         "Tick gap ms, max / p99 | Crossover |\n|---|---|---|---|---|---|---|---|---|"
     )
 
-    for r <- results do
+    for r <- Enum.sort_by(results, &{verdict_rank(&1["verdict"]), -(&1["speedup"] || 0)}) do
       cells = [
+        verdict_mark(r["verdict"]),
         if(r["cache"] == "reused",
           do: "#{r["example"]} (reused, measured #{measured_on(r)})",
           else: r["example"]
         ),
         cell(r["realistic_size"]),
-        r["verdict"],
         speedup(r),
         cell(r["elixir_ms"]),
         cell(r["defk_ms"]),
@@ -165,6 +169,18 @@ defmodule Defk.Examples.Scoreboard do
       IO.puts("| " <> Enum.join(cells, " | ") <> " |")
     end
   end
+
+  defp verdict_rank("good"), do: 0
+  defp verdict_rank("marginal"), do: 1
+  defp verdict_rank("poor"), do: 2
+  defp verdict_rank("out_of_scope"), do: 3
+  defp verdict_rank(_), do: 4
+
+  defp verdict_mark("good"), do: "✅ good"
+  defp verdict_mark("marginal"), do: "🟡 marginal"
+  defp verdict_mark("poor"), do: "❌ poor"
+  defp verdict_mark("out_of_scope"), do: "⛔ out of scope"
+  defp verdict_mark(other), do: "#{other || "?"}"
 
   defp native_cell(%{"native_speedup" => nil}), do: "-"
   defp native_cell(%{"native_speedup" => x, "native_label" => l}), do: "#{x}x (#{l})"

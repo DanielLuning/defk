@@ -29,24 +29,30 @@ measurement rules are in [`examples/README.md`](https://github.com/DanielLuning/
 what is planned and what stays out by design; what we have learned about speed
 on the BEAM is in the [performance guide](docs/performance.md).
 
-- **Where defk helps.** Speedups over an optimised Elixir baseline, measured end to end on an otherwise idle M4 Pro on 2026-10-13 (the frozen snapshot in [the verdict](https://github.com/DanielLuning/defk/blob/main/docs/verdict.md); every number is one machine, so measure your own job):
-  - non-cryptographic hashes that must match other systems: xxHash64 209×, with Murmur3, SipHash and CRC32C beside it
-  - FFT and convolution over audio-sized f64 signals (73× at 4096 points)
-  - BLAKE2b and BLAKE3 from scratch (32×, level with the reference C NIF)
-  - 1080p image resize, blur, YUV420 conversion and dithering on raw frames (7–14×, bit-exact; libvips not compared)
-  - a bounded CDCL SAT solver on an authorisation job (13×, 4× faster than picosat behind Crux)
-  - cosine top-k over 100k resident f32 embeddings (13×; Nx with EXLA is faster still for a plain dot product)
-  - rolling sensor statistics (11×), HyperLogLog updates (10×), PCM mixing with clip prevention (8.6×), a byte histogram (7.8×)
-  - base64, hex and base58 codecs (6.9×, 4× the fast64 NIF), Snappy and LZ4 block decode on untrusted input (5×)
-  - sorting packed keys (6×), nearest of 500k locations (3.3×), Monte Carlo slot RTP simulation with `:rand`'s generator bit for bit (3×), Gorilla time-series encoding (2.4×)
-  - a fuzzy-search web service, where `/health` latency stays at Elixir levels while a blocking NIF pushes it to ~80 ms p99
-- **Where Elixir is the right choice:**
-  - data that arrives as lists (defk 0.08×: packing costs more than the whole `Enum.sum`)
-  - one kernel call per element (defk 0.28×)
-  - small WebSocket frames (1.0×), UTF-8 validation (1.05×) and substring search (1.1×): the BIFs are native already
-  - a dictionary-wide Levenshtein batch over all schedulers (1.7×: Myers bit-parallel in Elixir is close)
-  - anything `:crypto` does (SHA-256 chains 0.55×) and memory-hard password hashing (Argon2 0.25×: the C runs its lanes on threads)
-  - maps and string building (not expressible; a string literal is a read-only `[u8]`)
+Speedups over an optimised Elixir baseline, measured end to end on an
+otherwise idle M4 Pro on 2026-10-13 (the frozen snapshot in
+[the verdict](https://github.com/DanielLuning/defk/blob/main/docs/verdict.md);
+every number is one machine, so measure your own job). ✅ defk helps;
+🟡 and ❌ use Elixir.
+
+| | The job | defk vs best Elixir |
+|---|---|---|
+| ✅ | non-cryptographic hashes that must match other systems (xxHash64; Murmur3, SipHash and CRC32C beside it) | 209× |
+| ✅ | FFT and convolution over audio-sized f64 signals | 73× |
+| ✅ | BLAKE2b and BLAKE3 from scratch, level with the reference C NIF | 32× |
+| ✅ | cosine top-k over 100k resident f32 embeddings (Nx with EXLA is faster still for a plain dot product) | 13× |
+| ✅ | a bounded CDCL SAT solver on an authorisation job, 4× faster than picosat behind Crux | 13× |
+| ✅ | 1080p image resize, blur, YUV420 conversion and dithering on raw frames, bit-exact | 7–14× |
+| ✅ | rolling sensor statistics, HyperLogLog updates, PCM mixing with clip prevention, a byte histogram | 8–11× |
+| ✅ | base64, hex and base58 codecs (4× the fast64 NIF); Snappy and LZ4 block decode on untrusted input | 5–7× |
+| ✅ | sorting packed keys, nearest of 500k locations, Monte Carlo slot simulation with `:rand` bit for bit, Gorilla encoding | 2.4–6× |
+| ✅ | a fuzzy-search web service: `/health` p99 stays at 10–12 ms where a blocking NIF pushes it to ~80 ms | 4.4× per query |
+| 🟡 | a dictionary-wide Levenshtein batch over all schedulers: Myers bit-parallel in Elixir is close | 1.7× |
+| 🟡 | small WebSocket frames, UTF-8 validation, substring search: the BIFs are native already | 1.0–1.1× |
+| ❌ | anything `:crypto` does (a SHA-256 chain) and memory-hard password hashing (Argon2: the C runs its lanes on threads) | 0.25–0.55× |
+| ❌ | one kernel call per element | 0.28× |
+| ❌ | data that arrives as lists: packing costs more than the whole `Enum.sum` | 0.08× |
+| ⛔ | maps and string building | not expressible (a string literal is a read-only `[u8]`) |
 
 ## A first kernel
 
