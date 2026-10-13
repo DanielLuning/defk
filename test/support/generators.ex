@@ -16,6 +16,8 @@ defmodule Defk.Generators do
   # DEFK_ALLOC_MAX_BYTES: alloc/2 over it raises "length too large", and at it
   # "out of memory" (Defk.ElixirMode.Ops)
   @max_alloc_bytes 2 ** 48
+  # from 2^47 bytes neither mode tries to allocate (DEFK_NO_ALLOC_BYTES)
+  @no_alloc_bytes 2 ** 47
 
   @i64_edges Enum.uniq([
                0,
@@ -111,13 +113,17 @@ defmodule Defk.Generators do
   """
   def alloc_len(esz, small \\ 0..64) do
     over = div(@max_alloc_bytes, esz)
+    # 2^47 bytes: out of memory without trying; one element less: past any
+    # host's max_owned (half of physical memory by default), so both modes
+    # raise the budget's out of memory before allocating (defk-bh3)
+    no_alloc = div(@no_alloc_bytes, esz)
 
     safe =
       Enum.filter(@i64_edges, fn n -> n < 0 or n * esz < 2 ** 24 or n * esz > @max_alloc_bytes end)
 
     frequency([
       {6, integer(small)},
-      {3, member_of(Enum.uniq(safe ++ [over, over + 1, -over]))}
+      {3, member_of(Enum.uniq(safe ++ [over, over + 1, -over, no_alloc, no_alloc - 1]))}
     ])
   end
 

@@ -136,7 +136,50 @@ defmodule Defk.ElixirMode.Ops do
   def alloc(n, esz) when n * esz >= @no_alloc_bytes,
     do: raise(ArgumentError, "out of memory (allocating #{n * esz} bytes)")
 
-  def alloc(n, esz), do: <<0::size(n * esz)-unit(8)>>
+  def alloc(n, esz) do
+    bytes = n * esz
+    own!(bytes)
+    <<0::size(bytes)-unit(8)>>
+  end
+
+  # The owned-buffer budget (defk-4b2, defk-bh3). Native code keeps every
+  # buffer a call allocates until the kernel returns and raises once the
+  # call's live bytes would pass max_owned (defk_owned_check). Elixir mode
+  # counts the bytes of every alloc/2 of the call against the same max_owned,
+  # read from the module's native library (so the default, half of physical
+  # memory, and `use Defk, max_owned:` are the same number), and raises the
+  # same message before building the binary. It cannot see what else native
+  # code counts (value-semantics copies, bitstring accumulator buffers,
+  # aligned copies of misaligned inputs), so its total is never above
+  # native's: where Elixir mode raises, native has raised at that alloc or
+  # before it.
+  @owned :defk_em_owned
+
+  @doc false
+  # runs one Elixir-mode call (`__defk_elixir__/2`) with a fresh count
+  def owned_call(max_owned, fun) do
+    Process.put(@owned, {0, max_owned})
+
+    try do
+      fun.()
+    after
+      Process.delete(@owned)
+    end
+  end
+
+  defp own!(bytes) do
+    case Process.get(@owned) do
+      {owned, max} when bytes > max - owned ->
+        raise ArgumentError,
+              "out of memory (allocating #{bytes} bytes would take this call's buffers past max_owned, #{max} bytes)"
+
+      {owned, max} ->
+        Process.put(@owned, {owned + bytes, max})
+
+      nil ->
+        :ok
+    end
+  end
 
   def len_f64(a), do: Kernel.div(byte_size(a), 8)
   def len_i64(a), do: Kernel.div(byte_size(a), 8)
