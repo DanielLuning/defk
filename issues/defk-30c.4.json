@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-13T12:53:16Z",
+  "description": "Findings (2026-10-13): mix test does not run the fuzzy_search app. test_helper.exs and 3 test files (resume, elixir_mode, value_semantics; agreement uses it too) Code.require_file only examples/fuzzy_search/lib/fuzzy_search/kernels.ex (106 lines, one module) as a realistic yielding kernel. The app's own test (examples/fuzzy_search/test, Plug + Bandit, /usr/share/dict/words 234k words, compares 3 backends with a full scan) never runs in CI. Decide and implement: keep kernels.ex in mix test (cheap, real kernel) or replace it with a fixture; run the app's tests in the examples task (cd examples/fuzzy_search \u0026\u0026 mix test) or not at all; check the app still compiles against the current defk.",
+  "id": "defk-30c.4",
+  "labels": [],
+  "parent": "defk-30c",
+  "priority": 2,
+  "status": "open",
+  "title": "fuzzy_search in CI: keep kernels.ex as a test fixture, move the app's tests out",
+  "type": "task",
+  "updated_at": "2026-10-13T12:53:16Z"
+}
