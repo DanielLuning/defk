@@ -8,12 +8,12 @@
   "description": "At 13 GB, :file.pread into chunk binaries copies the whole file once into BEAM memory (and allocates and frees ~200 refc binaries of 64 MB). The fast native entries mmap the file. The BEAM has no mmap for binaries, but a NIF can expose a mapped file as a binary term with enif_make_resource_binary: the term is an ordinary binary to Elixir (and so to Elixir mode), sub-binaries of it are the chunks, and nothing is copied until the kernel reads it. Keep it outside the kernel subset (an I/O helper, e.g. Defk.IO.mmap/1 or an example-local NIF), with the resource destructor unmapping when the term is collected.\n\nMeasure first on the 100M example whether I/O is actually the bottleneck (pread throughput vs kernel throughput per core); if the kernel is slower than the disk, this ticket is not worth doing before the full-size run. That is why it is blocked by the example ticket and needs-triage.\n\nRisks: a page fault inside a kernel is time the safepoint clock sees but ERTS does not; a mapped file that is truncated under the mapping is a SIGBUS, which is a node crash (fault containment, defk-7dm). Both must be stated as limits.\n\nDone when: either the measurement shows I/O is not the bottleneck and this is closed with the numbers, or the helper exists with a test and the 1BRC example can run on it.",
   "id": "defk-n4r.7",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "parent": "defk-n4r",
   "priority": 3,
   "status": "open",
   "title": "mmap-backed input binaries for large files",
   "type": "task",
-  "updated_at": "2026-10-09T18:40:54Z"
+  "updated_at": "2026-10-13T19:08:14Z"
 }
