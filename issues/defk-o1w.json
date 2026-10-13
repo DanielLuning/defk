@@ -16,11 +16,15 @@
     {
       "text": "Triage (defk-sgw plan): ready-for-human. Open-ended exploration outside the verdict's scope (Cranelift stays an exploration per defk-dtw.11).",
       "timestamp": "2026-10-06T09:13:43Z"
+    },
+    {
+      "text": "Deferred 2026-10-13: an exploration outside the map; revisit after the verdict (defk-sgw.6).",
+      "timestamp": "2026-10-13T19:08:39Z"
     }
   ],
   "priority": 4,
   "status": "open",
   "title": "Explore Cranelift JIT backend for runtime-specialised kernels",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:59Z"
+  "updated_at": "2026-10-13T19:08:39Z"
 }
