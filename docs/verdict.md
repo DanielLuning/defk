@@ -2,13 +2,60 @@
 
 ## Conclusion
 
-<!-- TODO(defk-sgw.5): 3-5 sentences including the go/no-go outcome. -->
-TODO: filled by defk-sgw.5.
+Draft for the final session (defk-sgw.6); the pre-registered rule is in
+[Method](#method).
+
+A typed subset of Elixir does compile to native code that runs at C speed
+with a cheap boundary while keeping the BEAM's promises: on the frozen
+snapshot, 11 of the 14 target workloads are good on optimised Elixir
+baselines (the pre-registered six: four good, two marginal), across byte
+transforms, hashing and sketches, numeric arrays, codecs and decoders and a
+search algorithm, and the kernels stay within half a millisecond of the
+scheduler's idle tick gap where the anchor NIFs block for 19-44 ms. No
+safety gap in the runtime contract is open: a fault inside kernel code is an
+exception, the threat list has a test per entry, and the deep, sanitizer,
+Valgrind and fuzz runs are clean. The devex bar is met and three cold tests
+wrote working kernels from the docs alone; the C-compiler stance is settled
+and a release ships its kernels. By the rule, defk warrants growing into a
+library. The honest frame around that: most NIFs wrap a library, where defk
+cannot help, and where a BIF or `:crypto` already does the job natively defk
+loses or ties; its niche is the hand-written loop over packed data, and
+there it replaces the scheduling workarounds those NIFs carry.
 
 ## "Should I use defk for X?" guide
 
-<!-- TODO(defk-sgw.5): guide by job type (Elixir / defk / Nx / Rustler) plus the traps list. -->
-TODO: filled by defk-sgw.5.
+Elixir is the default. Read the rows in order; the first that fits is the
+answer. Every row names the example that measured it.
+
+| Your job | Use | Why |
+|---|---|---|
+| The data is lists, maps, strings or other terms, and stays so | **Elixir** | packing a list costs more than the whole `Enum.sum` (`poor_list_data`, 0.08×); a kernel cannot build terms (`out_of_scope_word_count`) |
+| A BIF or `:crypto`, `:zlib`, `:binary`, `String` or `:re` already does it natively | **Elixir** | they are C or hardware instructions already: UTF-8 validation 1.05×, substring search 1.1×, SHA-256 0.55×, CRC32 (`:erlang.crc32`) 100× faster than any table loop |
+| Whole-tensor numerics, linear algebra, gradients, or an app already on Nx with EXLA | **Nx** | EXLA is 6-8× faster than defk on a plain dot-product top-k and expected to win matmul; defk fits a custom loop beside Nx, not instead of it |
+| Wrapping an existing library: parsers that produce terms, databases, big codecs, crypto with secrets, memory-hard hashing | **a binding** (Rustler, Zigler, elixir_make) | the value is the library; Argon2's C runs its lanes on threads (0.25×); constant time is not a kernel property (`examples/README.md`, "Where a wrapper is the right choice") |
+| A loop over packed bytes or numbers with no native equivalent, called with at least a few microseconds of work and a kilobyte or so of input | **defk** | hashes 209×, FFT 73×, BLAKE 32×, image ops 7-14×, HLL 10×, PCM 8.6×, codecs 6.9×, decoders 5×; checked, yielding, bit-exact with Elixir mode |
+| The same, but one call per element or per tiny item | **Elixir, or batch it** | a call costs 13 ns against 2 ns for an Elixir call (`poor_tiny_calls` 0.28×); per-pair string distance pays only from ~8-byte strings; batch SAT solves are 2-4× per-call |
+| A job a hand-written NIF does today, on a normal scheduler, that must not block it | **defk** | the WebSocket, PCM, Keccak, BLAKE and SAT NIFs block their scheduler 9-1,300 ms per call; the kernels stay within 0.5 ms of the idle tick gap |
+| Decoding untrusted input of a simple format (Snappy, LZ4) | **defk if safety and yielding matter, the C NIF if throughput does** | every access checked, 6,000 fuzz inputs raise or agree; the libraries built -O2 are 1.5-5× faster than the kernel |
+| Something that needs state kept in native memory between calls, SIMD intrinsics, strings as values, or a Windows build | **not defk today** | see [Limitations](#limitations) |
+
+**Traps**, each with the example that measures it:
+
+- Packing a list on every call (`poor_list_data`): keep the data packed, or
+  stay in Elixir.
+- One kernel call per element inside `Enum.map` (`poor_tiny_calls`): batch
+  the elements into one call.
+- Building terms in a kernel (`out_of_scope_word_count`): the compiler
+  refuses; return packed arrays or scalars and build terms in Elixir.
+- Many short kernel calls spawned from one process stay on 2-4 of 12
+  schedulers (`monte_carlo_rtp` at 1M spins, `batched_levenshtein`): give
+  each call a few milliseconds of work, start the calls at once, or use
+  `+swt very_low` (`examples/README.md`, Measuring correctly, rule 7).
+- Comparing with a first-pass Elixir baseline: the fuzzy-search app's 4.4×
+  is against an unoptimised baseline; with Myers bit-parallel in Elixir the
+  same job is 1.7× (`batched_levenshtein`). Optimise Elixir first.
+- A `good` on a loaded machine: the snapshot's quiet-machine figures moved
+  several results by 20-50% against earlier loaded runs, in both directions.
 
 ## Workload results
 
@@ -152,13 +199,61 @@ scheduler for 19-44 ms per call.
 
 ## Runtime contract
 
-<!-- TODO(defk-sgw.5): one row per promise with linked test/bench, measured figure, known gaps. -->
-TODO: filled by defk-sgw.5.
+What a kernel promises the BEAM while it runs, with the mechanism, the
+evidence and the measured figure for each promise. Figures are from the
+snapshot session (2026-10-13, idle M4 Pro, commit `f064e33`;
+`docs/project.md`, results snapshot) unless marked.
+
+| Promise | Mechanism | Evidence | Measured | Known gaps |
+|---|---|---|---|---|
+| **Preemption**: a long kernel never starves other processes | a safepoint at every loop back-edge; an adaptive budget reads the clock every 25-60 µs of work; the kernel yields after 250 µs (50 µs for its first millisecond on a crowded run queue) by rescheduling itself with `enif_schedule_nif`; its locals move to a frame only on the first yield | `test/resume_test.exs` (every resume path under forced yields, a resume that misses its safepoint fails instead of hanging), `test/yield_false_strip_test.exs`, `bench/tick_gap.exs`, `bench/yield_cost.exs`, the tick-gap column of every target workload | worst gap of a 1 ms ticker on one scheduler: 2.25-2.3 ms beside a yielding kernel, 2.0-2.5 ms beside a busy Elixir process, 2.0-2.4 ms idle; the kernels in the snapshot stay within 0.5 ms of the floor where the anchor NIFs block 9-44 ms (SAT: 1.3 s); yielding costs 2.4-2.7% on `count_primes` (6.5 µs per yield), ~0% on branchy loops | `yield: false` is an opt-out that blocks the scheduler for the whole call (554 ms gap in the demo); calls under ~1 ms spawned from one process spread over few schedulers (`defk-8qs`, mitigated by the 50 µs first-millisecond slice) |
+| **Isolation**: an error is an exception in the caller, never a crash | every array access checked or proven in range; checked i64 arithmetic; inf/NaN raise like Elixir; arrays are values (a write to an input writes a copy); a fault inside kernel code is turned into `RuntimeError` by a chained signal handler (ADR-0009); hardening flags `-fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-strict-overflow` (+1.6% at worst, `defk-j5n`) | 755 agreement properties (every catalog kernel and every subset test in both modes), the deep run (684 properties, 10k cases each, seed 20261013), hostile-argument generators, `test/fault_containment_test.exs` (faults injected on the C stack and in a promoted frame, in the VM and in a child VM), the whole suite under ASan and UBSan (0 reports), 76 test files under Valgrind (0 errors, `verify/valgrind`), 6,000 fuzz inputs against the decoders (`verify/fuzz`) | the fault handler costs 0.2-0.5 ns per call; `alloc/2` size overflow (`defk-gtv`) raises `ArgumentError` since 2026-10-08 | not contained: a fault inside libc or ERTS called from a kernel, a wild write that never faults, a corrupted C stack, and every fault on Windows; the chain's pin path is verified on macOS only (Linux: `defk-a1p`); when both operands of an operator can raise, which error wins is unspecified (`docs/language.md`, section 13) |
+| **Cleanup on process death**: nothing leaks | a frame that outlives a call is a resource whose destructor frees the kernel's buffers; every owned buffer is released on the error path; a per-call budget (`max_owned`, half of physical memory by default) raises before the OS kills the node | `test/raise_cleanup_test.exs` (`:erlang.memory(:binary)` comes back down), `test/bitstring_test.exs` (a process killed mid-build), `test/upgrade_test.exs` (a kernel killed while suspended in the old library), `test/owned_budget_test.exs`, `bench/demo.exs` ("suspended frames while running / after kill 1 / 0"), Valgrind's leak check | `frames_live` 1 → 0 after a kill; a killed 256 MiB Argon2 kernel frees its memory at once, where the killed C NIF holds its dirty scheduler 400-500 ms more (`argon2.exs`) | the budget bounds one call, not the node: many concurrent calls near their budgets can still exhaust memory, as Elixir processes can; on macOS a purged kernel library stays mapped (its `.so` size) because its image has thread-local storage (ADR-0009) |
+| **Hot code upgrade**: a suspended kernel finishes in its own code | each library image opens its own frame resource type and is never taken over by a newer image; the old image stays loaded while its frames exist; a purge kills processes in old code, as for Erlang code; a frame carries a layout tag checked at every resume | `test/upgrade_test.exs` (finish in the old library, reload the same library, purge mid-kernel), `test/frame_tag_test.exs`, `test/runtime_define_test.exs` | a reload while a kernel is suspended: the kernel completes with the old code's answer; a second reload kills it like old Erlang code | `__defk_stats__/0` counts the current image's frames only; its meaning across reloads is not settled (`defk-9qv`) |
+| **Build and deploy**: a C compiler at build time only | kernels compile to C and build with `cc -O3` at `mix compile`, cached by source hash; the library is copied into the app's `ebin/` and loaded from there, so it ships in a `mix release`; a missing compiler is a kernel compile error with the per-OS install hint | `examples/release_debian` (`defk-ds0`, `defk-n8f`), `test/release_layout_test.exs`, `test/build_test.exs`, the `no-c-compiler` error | a stock Debian builder needs `gcc libc6-dev` (+214 MB) or `build-essential` (+335 MB); the runtime image needs no compiler (178 MB, kernels 212 KB); the whole multi-stage build 33 s | compile times of big kernels: Argon2 7 minutes, the SAT solver 5 (2.35 MB of C); cross-compiling and other architectures unverified |
+
+**The threat list** (`defk-5fc`), one test per entry, all green at the
+snapshot commit: sizes and indices at their extremes (`test/alloc_test.exs`);
+a yield with heap-binary inputs under 64 bytes and a forced GC between steps
+(`test/heap_binary_yield_test.exs`); a process killed at a safepoint
+(`test/upgrade_test.exs`); a raise after `alloc` (`test/raise_cleanup_test.exs`);
+hot upgrade and purge mid-kernel (`test/upgrade_test.exs`); concurrent calls
+of one kernel from many processes (`test/concurrent_test.exs`). Found while
+writing it and fixed: none; found by the map's review and fixed: the
+`alloc/2` size overflow.
+
+**Never take down the BEAM, the evidence in one place:** for any arguments a
+kernel returns or raises (hostile-argument generators, the deep run), the
+generated C has no memory error on the suite's inputs (ASan, UBSan,
+Valgrind, the fuzz corpora), a fault that escapes those checks is still an
+exception (fault containment), and what is not contained is listed above
+rather than hidden.
 
 ## Developer experience
 
-<!-- TODO(defk-sgw.5): three-part bar with evidence. -->
-TODO: the rest of this section is filled by defk-sgw.5.
+The bar from the map has three parts; each is met with the evidence below,
+and the three cold tests after them are the end-to-end check.
+
+1. **Actionable compile errors.** Every rejection is an Elixir diagnostic
+   with the line and a caret, what was written, why it is rejected, a
+   rewrite where one exists and a stable code that links the catalogue;
+   every rejection in a module is reported together, capped at ten. The
+   catalogue (`docs/compile-errors.md`) holds 73 codes, each with an example
+   and a rewrite, generated from the registry and checked by the test suite
+   (`test/compile_errors_doc_test.exs`, `test/docs_checks_test.exs`). The
+   cold tests rated the six errors they hit: three helped, two helped
+   partly, one hid the real blocker (fixed since); of seven deliberate
+   probes, two helped and five partly, which drove the hint rewrites.
+2. **A subset reference that lists every limit.** `docs/language.md` is the
+   reference: types, constructs, builtins, every limit, every planned and
+   out-by-design code (`docs/scope.md`, generated and checked), and the
+   divergence page (section 13). Its examples run in both modes in the test
+   suite (`test/language_doc_examples_test.exs`).
+3. **The one rule, with zero divergences.** A kernel gives Elixir's result,
+   or raises where its types cannot hold it, or does not compile. Elixir
+   mode is normative; the known-divergences list is empty (the last one,
+   aliasing on write, was removed by giving arrays value semantics), and
+   755 agreement properties plus the deep run keep it so.
 
 ### Cold test (defk-sgw.3)
 
@@ -234,8 +329,65 @@ docs. Full log, with the resolution of each point:
 
 ## Limitations
 
-<!-- TODO(defk-sgw.5): limitations and what would change the verdict. -->
-TODO: filled by defk-sgw.5.
+What the evidence does not cover, what defk does not do, and what would
+change the verdict.
+
+**One machine.** Every figure is an Apple M4 Pro on macOS (arm64, Apple
+clang). The test suite has run on Linux once, inside a Debian container for
+the release build; x86-64 kernels have been compiled and checked, not timed
+(`defk-ulk.1`, `defk-ulk.4`); the fault handler's unload path has an
+untested branch on Linux (`defk-a1p`). A Linux run with different speedups
+or a failing test would move rows and could move the conclusion.
+
+**A C compiler at build time.** Settled for applications (`defk-dtw.11`):
+as for elixir_make packages, the build machine needs `cc` (`gcc libc6-dev`
+at minimum on Debian) and the runtime image does not. A Hex library that
+uses kernels would force that toolchain on every dependent; the way out,
+precompiled artefacts in the cc_precompiler style, is named here and not
+built (`defk-ajw`). Cross-compiling is unverified.
+
+**Where a kernel loses by design.** Jobs the BEAM already does in C or on
+hardware instructions (UTF-8 validation, substring search, SHA, CRC32, zlib)
+tie or lose: a portable kernel has no SIMD and no hardware builtins beyond
+`crc32c/3`, and target-specific builds are researched, not built
+(`defk-ulk`). A hand-tuned C library beats a kernel on the same algorithm
+by 1.5-5× (liblz4, Snappy, BLAKE3's NEON build); the kernel's answer there is
+checks and yielding, not speed. A call costs 13 ns, so one call per small
+item loses; the crossover sizes are in the scoreboard.
+
+**What the subset does not have.** Lists, maps, atoms, strings as values,
+anonymous functions, recursion, calls into other modules, kernel-owned state
+between calls (state travels as binaries, ADR-0001; an in-place buffer is
+under exploration, `defk-sve`), output arrays whose length depends on the
+data (the bitstring accumulator covers bit output; `defk-3rl`), sub-array
+views (`defk-n4r.3`). Each is a compile error with a rewrite or a documented
+limit, not a silent difference.
+
+**Not constant time.** A kernel computing on secrets is not safe against
+timing: clang may turn a select into a branch, and a frame holds key
+material. Signing, key exchange and AEAD stay with `:crypto` or a binding.
+
+**Windows.** Not built or tested; fault containment uses `sigaction`.
+
+**Elixir mode is for tests.** It applies the subset's limits and is never a
+production fallback: a module compiled without a C compiler does not fall
+back to it, it fails to compile.
+
+**What would change the verdict.** A Linux measurement that reverses several
+target rows; Elixir baselines that keep improving (Myers bit-parallel took
+the dictionary batch from good to marginal, and more of that is expected);
+a safety gap found by a wider fuzz or sanitizer campaign; or the C-compiler
+requirement proving unacceptable to library authors in practice.
+
+**Where defk could grow**, the expansion candidates the map set aside
+(`defk-dtw.5`) and the epics deferred until this verdict closes: text
+workloads at scale (the One Billion Row Challenge, `defk-n4r`), from-scratch
+decoders where safety matters (inflate and PNG, zstd, baseline JPEG,
+`defk-52v`), kernel-owned state for sketches and streaming decoders
+(`defk-sve`), SIMD and target-specific builds or portable vector values
+(`defk-ulk`), on-demand verification of the generated C (`defk-96f`), a tape
+output so a kernel can feed a parser (`defk-9p6.30`), precompiled artefacts
+for libraries (`defk-ajw`), and the per-call cost (`defk-25s`).
 
 ## Method
 
