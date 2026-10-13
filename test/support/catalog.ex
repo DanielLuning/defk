@@ -5,7 +5,7 @@ defmodule Defk.Catalog do
   # defmodule" (a helper such as Cosine.NxSearch needs a Mix.install dep and
   # would not compile). Each script lists its kernel module (and the Elixir
   # version a test compares it with, where one does), in definition order.
-  # chosen in examples/README.md ("Examples in mix test"). test_helper.exs
+  # The choice is in examples/README.md ("Examples in mix test"). test_helper.exs
   # calls load once, before any test file is loaded.
   #
   # The scripts compile in parallel (their modules do not depend on each
