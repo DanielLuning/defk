@@ -69,6 +69,36 @@ defmodule Defk.BuildTest do
       assert Path.wildcard(Path.join(dir, "#{mod}-*.so")) == []
     end
 
+    test "a kernel module asks Mix to recompile when CC or ERTS_INCLUDE_DIR changes" do
+      System.put_env("CC", System.get_env("CC") || "cc")
+      System.delete_env("ERTS_INCLUDE_DIR")
+      mod = Module.concat(Defk.BuildTest, "Hook#{System.unique_integer([:positive])}")
+
+      Code.compile_string("""
+      defmodule #{inspect(mod)} do
+        use Defk
+        defk f(x :: i64) :: i64, do: x + 1
+      end
+      """)
+
+      assert mod.__mix_recompile__?() == false
+
+      original = System.get_env("CC")
+      System.put_env("CC", original <> "-other")
+      assert mod.__mix_recompile__?()
+      System.put_env("CC", original)
+      assert mod.__mix_recompile__?() == false
+
+      System.delete_env("CC")
+      assert mod.__mix_recompile__?()
+      System.put_env("CC", original)
+
+      System.put_env("ERTS_INCLUDE_DIR", "/somewhere")
+      assert mod.__mix_recompile__?()
+      System.delete_env("ERTS_INCLUDE_DIR")
+      assert mod.__mix_recompile__?() == false
+    end
+
     test "ERTS_INCLUDE_DIR overrides the include dir" do
       System.delete_env("ERTS_INCLUDE_DIR")
       default = Defk.Build.erts_include()
