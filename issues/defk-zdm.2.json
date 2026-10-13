@@ -8,9 +8,15 @@
   "id": "defk-zdm.2",
   "labels": [],
   "parent": "defk-zdm",
+  "comments": [
+    {
+      "text": "Kept after a check (not duplicates, or removal costs more than it saves): dirty property in alloc_unzeroed (assert_covered needs every kernel; an opt-out belongs to defk-zdm.3); mask63 in u64 (keeps the (1 \u003c\u003c\u003c 63) - 1 spelling); runtime_define:17 (docs/guides/deploying.md names it as the checked steps); bench verdict asserts (band edges vs rounding edge); case_in in_partial (many inputs vs exception equality); elixir_mode resume shapes (resume_test is not run in Elixir mode; larger inputs); elixir_mode alloc sizes (f64 byte boundary, alloc_test has u8); for w \u003c- 0..(n - 1) (do: vs do-block); diagnostics cap (unit layer); heap_binary_yield test 1 (control for the GC test). Stale elixir_mode:667 is in defk-zdm.1.",
+      "timestamp": "2026-10-13T18:12:16Z"
+    }
+  ],
   "priority": 2,
   "status": "closed",
   "title": "Prune duplicate tests that add no coverage",
   "type": "task",
-  "updated_at": "2026-10-13T18:12:01Z"
+  "updated_at": "2026-10-13T18:12:16Z"
 }
