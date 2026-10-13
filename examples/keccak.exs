@@ -11,7 +11,7 @@
 #   elixir examples/keccak.exs                     # agreement + two reports
 #   KECCAK_VARIANTS=1 elixir examples/keccak.exs   # also every Elixir variant
 #
-# DEFK_RESULT lines, in this order (run_all.exs reads the first):
+# DEFK_RESULT lines, in this order (mix defk.examples reads the first):
 #   1. keccak          Keccak-256, 10k x 32 B per call: defk batch kernel vs
 #                      the best pure Elixir; ex_keccak reported as `native`
 #   2. keccak_sha3_256 SHA3-256, same batch: defk vs :crypto.hash(:sha3_256, _)

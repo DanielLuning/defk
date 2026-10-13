@@ -12,7 +12,7 @@
 #
 #   elixir examples/geohash_crc.exs
 #
-# DEFK_RESULT lines, in this order (run_all.exs reads the first):
+# DEFK_RESULT lines, in this order (mix defk.examples reads the first):
 #   1. geohash_encode  (100k points, packed f64 columns in, fixed-width hashes out)
 #   2. geohash_decode  (100k hashes in, packed f64 centre columns out)
 #   3. crc16           (CRC-16/CCITT-FALSE, 1 MB; sweep to 16 MB)

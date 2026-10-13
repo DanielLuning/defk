@@ -22,7 +22,7 @@
 #   elixir examples/byte_histogram.exs                   # agreement + reports
 #   HIST_VARIANTS=1 elixir examples/byte_histogram.exs   # also every variant
 #
-# Two DEFK_RESULT lines: byte_histogram, then windowed_entropy; run_all reads
+# Two DEFK_RESULT lines: byte_histogram, then windowed_entropy; mix defk.examples reads
 # the first and the script checks the second itself.
 #
 # Both sides return the same bytes: the histogram as 256 native-endian i64
@@ -917,7 +917,7 @@ r_ent =
       "a histogram per window plus 256 table lookups: Elixir pays a BIF call per byte and per bin, the kernel neither"
   )
 
-# run_all reads the first DEFK_RESULT line; the second is checked here.
+# mix defk.examples reads the first DEFK_RESULT line; the second is checked here.
 if not r_ent.correct or r_ent.verdict != r_ent.expected do
   IO.puts(
     "windowed_entropy: verdict #{r_ent.verdict}, expected #{r_ent.expected}, correct #{r_ent.correct}"

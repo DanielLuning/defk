@@ -15,7 +15,7 @@ mix run bench/tick_gap.exs    # worst scheduler gap: idle vs Elixir vs kernel
 mix run bench/yield_cost.exs  # throughput cost of yielding
 mix test                      # resumed kernels match yield: false, incl. a forced yield at every clock read;
                               # reloading a module while a kernel is suspended
-elixir examples/run_all.exs   # the example catalog's scoreboard
+mix defk.examples            # every example outside mix test, check-only (not in mix ci); --bench for the scoreboard
 ```
 
 Work is tracked with beadwork (`bw`, on the `beadwork` branch); see

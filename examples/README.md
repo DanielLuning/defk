@@ -17,9 +17,33 @@ The format follows [mix_install_examples](https://github.com/wojtekmach/mix_inst
 one self-contained script per use case.
 
 ```bash
-elixir examples/geo_nearest.exs     # one example
-elixir examples/run_all.exs         # all of them + scoreboard (exit 1 if any claim fails)
+elixir examples/geo_nearest.exs     # one example, timed
+mix defk.examples                   # every example `mix test` does not run: compile + agreement checks, no timing
+mix defk.examples --bench           # the same, timed, with the scoreboard (exit 1 if any claim fails)
 ```
+
+## Running the examples: `mix defk.examples`
+
+`mix test` compiles a few chosen examples ([Examples in mix test](#examples-in-mix-test)). `mix defk.examples` runs the rest, plus the `fuzzy_search` app's own tests. It is not part of `mix ci`: it takes about a quarter of an hour (argon2 and cdcl_sat compile for minutes) and some examples need `Mix.install` dependencies.
+
+```bash
+mix defk.examples                          # check-only, all but the mix test examples + fuzzy_search's tests
+mix defk.examples --only keccak,hashes     # just these (any example; `fuzzy_search` names the app's tests)
+mix defk.examples --all                    # also the examples mix test covers
+mix defk.examples --list                   # print the selection and stop
+mix defk.examples --timeout 600            # kill an example that runs longer than 600 s (default: no limit)
+mix defk.examples --bench [--snapshot]     # timed, verdict checked, scoreboard (`--bench --all --snapshot` is the old run_all.exs)
+```
+
+**Check-only (the default).** Each example runs in its own `elixir` process with `DEFK_CHECK_ONLY=1`. In that mode `Defk.Bench.report/1` runs the example's `:check` (defk against Elixir) and returns: no timed runs, no Elixir baseline, no `:native`, `:sweep` or `:responsiveness`, no verdict. So the answer ("it compiles and agrees") does not depend on the machine's load, and the sanitizer build mode (`DEFK_SANITIZE`) is allowed, because nothing is timed. The `DEFK_RESULT` line then has `"check_only": true` and `"verdict": null` (the map `report/1` returns claims the expected verdict, so the scripts' own verdict assertions after it pass); every `DEFK_RESULT` line of a script counts, not just the first. An example passes when its process exits 0 and every check is `true` (or `skipped`, which the summary lists with its reason). `out_of_scope_word_count` passes when its expected compile error is raised (the script fails if the kernel compiles). The scripts need no change for this mode.
+
+**fuzzy_search.** `cd examples/fuzzy_search && mix deps.get && mix test` (7 tests, about 10 s). It needs `/usr/share/dict/words`; if the file is missing the run fails with that message rather than skipping silently.
+
+**`--bench`** replaces the old `examples/run_all.exs`: examples run one at a time with their timings; an example fails if it is incorrect, crashes, or measures a verdict other than the one it claims. The scoreboard lists `good` claims whose baseline is still provisional and the skipped checks. Run it on a quiet machine, and never across all examples on a loaded one: timings under load are meaningless.
+
+**Progress and time.** Long compiles are real (argon2 more than 7 minutes, cdcl_sat about 5, keccak about 1, hash_chain about 26 s per copy: see the table in [Examples in mix test](#examples-in-mix-test)). The task prints the example it is on (`[7/24] keccak`) and a line every 30 s of silence. Output of a passing example is not shown; a failing one prints its stdout and stderr. The exit status is non-zero if anything failed.
+
+**Where the task lives.** `dev/mix/tasks/defk.examples.ex` (helpers in `dev/defk/`). `mix.exs` adds `dev` to `elixirc_paths` for `:dev` and `:test` only, so it is not compiled into a dependent's build, and `dev/` is not among the files Hex packages by default (nor is `examples/`). `mix defk.verify` (defk-96f.2) goes in the same place.
 
 ## Measuring correctly
 
@@ -52,13 +76,13 @@ once and reused.
 | [`image_blur.exs`](image_blur.exs) | Grayscale + 3×3 box blur on a raw 1080p frame | **provisional (measured under load):** 3.8–4.2× with both sides in 12 row bands (Elixir 9.1–9.9 ms vs defk 2.3–2.5 ms, one `Task.async` per band; 5.6× with `+swt very_low`, defk 1.7 ms). One process against one call: 26–29× (141–160 vs 5.5 ms). Both sides use the sliding/separable sum; was 37–41× against the 9-reads-per-pixel first pass (~800 ms). Bit-exact | optimised (3 variants: first pass, three-row walk, walk on bands; separable 16-bit rows, list/iodata output lose) |
 | [`fft.exs`](fft.exs) | Radix-2 FFT of a 2^20-point signal; direct convolution of 2 s of 48 kHz audio with a 64-tap FIR | FFT 63–91× (62× at n = 4096); convolution 28–38×; bit-exact with Elixir. Nx `binary` backend is slower than pure Elixir here; EXLA not measured | optimised (4 FFT variants, 2 convolution variants) |
 | [`fuzzy_search/`](fuzzy_search) (app) | Typo-tolerant search service: Levenshtein over 234k words behind Plug + Bandit | 4.4× per query with the early cut-off on both sides (Elixir 60 ms vs defk 13.7 ms, quiet machine); under load 5.1–5.2× req/s, 5.1–5.3× lower p99; `/health` latency stays at Elixir levels (p99 10–12 ms for both; a blocking NIF pushes it to 75–82 ms p99). Yielding costs +3.5–4.5% against `yield: false`, from per-row bookkeeping, not the yields (`defk-klw`). Elixir with Myers bit-parallel comes within ~1.3× of the DP kernel; defk can run Myers too now (bitwise ops, defk-w38): see [`batched_levenshtein.exs`](batched_levenshtein.exs), where Myers on both sides leaves defk 2.4–2.8× ahead in one process but level with Elixir chunked over all schedulers | first pass: **provisional** |
-| [`image_ops.exs`](image_ops.exs) | Bilinear resize 1080p to 480x270, RGB to YUV420, Floyd-Steinberg dither on raw 1080p frames (the script reports three verdicts; `run_all` shows the resize one) | resize ~12×, YUV420 14–18×, dither 21–26×; bit-exact with Elixir. libvips (SIMD) not compared; expected to win resize | optimised (3, 3 and 2 variants) |
+| [`image_ops.exs`](image_ops.exs) | Bilinear resize 1080p to 480x270, RGB to YUV420, Floyd-Steinberg dither on raw 1080p frames (the script reports three verdicts; `mix defk.examples --bench` shows the resize one) | resize ~12×, YUV420 14–18×, dither 21–26×; bit-exact with Elixir. libvips (SIMD) not compared; expected to win resize | optimised (3, 3 and 2 variants) |
 | [`sort_u64_keys.exs`](sort_u64_keys.exs) | Sort 1M random i64 keys that arrive as a packed binary (heapsort kernel vs decode + `:lists.sort`) | `sort_packed` 4.3–5.3× when the result stays packed; `sort_to_list` 2.3–2.7× when the caller needs a list (decode cost included). The script prints two `DEFK_RESULT` lines; `run_all.exs` reads the first (`sort_packed`) and the script checks the second itself | optimised (`:lists.sort`, `Enum.sort`) |
 | [`per_pair_distance.exs`](per_pair_distance.exs) | Levenshtein for 50k short string pairs, one kernel call per pair (ex_strsim's API shape) | 3.2–3.4× at 8–16 bytes; 1.1–1.2× at 4 bytes (stay in Elixir below ~8 bytes). Expected poor, measured good: a quadratic DP outweighs the call cost. Batching from a *list of pairs* is slower than per-pair (packing); batching pays only from an already-packed blob (4.2–4.6× at 4 bytes). | optimised |
 | [`monte_carlo_rtp.exs`](monte_carlo_rtp.exs) | Slot RTP certification run: 100M spins of a 5-reel, 10-line slot on all schedulers, reel stops from `:rand`'s exsss | 3.2–3.3× at 100M spins (2.9× at 10M, ~1× at 1M where the kernel tasks stay on 2–3 schedulers); 5.3× on one scheduler. The kernel matches `:rand` bit for bit (draws, floats, the `uniform_s/2` redraw), so totals equal Elixir's exactly | optimised (4 variants, incl. exsss inlined in Elixir) |
 | [`geohash_crc.exs`](geohash_crc.exs) | Geohash encode/decode of 100k points (packed f64 columns, fixed-width hashes) beside CRC-16/CCITT-FALSE and CRC-64/XZ of 1 and 16 MB buffers. Five `DEFK_RESULT` lines in the order geohash_encode, geohash_decode, crc16, crc64, geohash_encode_single; `run_all` reads the first | encode 7.3-7.5x, decode 10.2-10.5x (both sides use quantise-and-bit-spread; the bisecting Elixir and the `geohash` package are 8x slower than the baseline); CRCs only 1.65-1.8x (marginal, see below); one point per call 0.77-0.85x (poor, a batch of 10 breaks even) | optimised (bisecting vs quantised Elixir; CRC-64 as one integer vs two 32-bit halves) |
-| [`codecs.exs`](codecs.exs) | base64, hex and base58 encode + decode round trips (fast64, b64fast, ex_base58 territory); three `DEFK_RESULT` lines, `run_all.exs` reads the first (base64) and the script checks the other two | base64 at 1 MB 2.9–3.0× over `Base` (2–2.5 GB/s; 2.1× faster than the fast64 C NIF; 2.6–3.4× from 64 KB to 16 MB); hex 2.02–2.04× over `:binary.encode_hex/decode_hex`, at the 2× line (encode alone 1.5×: use the BIF); base58 2.6–2.7× on 10k 32-byte keys per call, but one key per call is no faster than Elixir (1.04 vs 0.94 µs) | optimised (`Base`, `:base64`, `:binary`, b58, erl_base58, a 58^9-chunk bignum) |
-| [`hashes.exs`](hashes.exs) | xxHash64, Murmur3 x64_128, SipHash-2-4 and CRC32C that must match other systems, vs the murmur, xxhash, siphash and crc32cer packages (four reports; `run_all` shows xxHash64) | xxHash64 90–101× and Murmur3 133–145× on a 4 MB message (10 and 8 GB/s; Elixir is bignum-bound at 0.06–0.12 GB/s), 19–25× on 1k 32-byte keys; SipHash 77–89× on 1k keys, level with siphash's C NIF (0.96–1.0×) and 1.36× ahead of it at 4 MB. CRC32C 17–18× at 4 MB with the `crc32c/3` hardware builtin in three streams (0.15 ms, 0.84–0.91× crc32cer; the table fallback 0.7 ms, the old slicing-by-8 kernel 1.9 ms, Elixir slicing-by-8 2.6 ms), 0.9× on 1k keys (packing). **CRC32C provisional, under load; arm64 timed, x86-64 compiled only**. `:erlang.phash2` 2.5 GB/s for comparison (not portable) | optimised (xxhash and siphash's fallback each beaten by a rewrite, murmur kept; CRC32C slicing-by-8 over byte at a time) |
+| [`codecs.exs`](codecs.exs) | base64, hex and base58 encode + decode round trips (fast64, b64fast, ex_base58 territory); three `DEFK_RESULT` lines, `mix defk.examples --bench` reads the first (base64) and the script checks the other two | base64 at 1 MB 2.9–3.0× over `Base` (2–2.5 GB/s; 2.1× faster than the fast64 C NIF; 2.6–3.4× from 64 KB to 16 MB); hex 2.02–2.04× over `:binary.encode_hex/decode_hex`, at the 2× line (encode alone 1.5×: use the BIF); base58 2.6–2.7× on 10k 32-byte keys per call, but one key per call is no faster than Elixir (1.04 vs 0.94 µs) | optimised (`Base`, `:base64`, `:binary`, b58, erl_base58, a 58^9-chunk bignum) |
+| [`hashes.exs`](hashes.exs) | xxHash64, Murmur3 x64_128, SipHash-2-4 and CRC32C that must match other systems, vs the murmur, xxhash, siphash and crc32cer packages (four reports; `mix defk.examples --bench` shows xxHash64) | xxHash64 90–101× and Murmur3 133–145× on a 4 MB message (10 and 8 GB/s; Elixir is bignum-bound at 0.06–0.12 GB/s), 19–25× on 1k 32-byte keys; SipHash 77–89× on 1k keys, level with siphash's C NIF (0.96–1.0×) and 1.36× ahead of it at 4 MB. CRC32C 17–18× at 4 MB with the `crc32c/3` hardware builtin in three streams (0.15 ms, 0.84–0.91× crc32cer; the table fallback 0.7 ms, the old slicing-by-8 kernel 1.9 ms, Elixir slicing-by-8 2.6 ms), 0.9× on 1k keys (packing). **CRC32C provisional, under load; arm64 timed, x86-64 compiled only**. `:erlang.phash2` 2.5 GB/s for comparison (not portable) | optimised (xxhash and siphash's fallback each beaten by a rewrite, murmur kept; CRC32C slicing-by-8 over byte at a time) |
 | [`keccak.exs`](keccak.exs) | Ethereum Keccak-256 of 10k 32-byte messages per call (addresses, transactions), and one 16 MB message; :crypto has no Keccak-256 | 8.3x batch, 5x one call per message, 10.6x at 1 KB, 13x at 16 MB. ex_keccak (tiny-keccak NIF) is 1.7x faster on the batch (0.59x, per-message overhead) and level at 16 MB (20.7 vs 19.1 ms, under load; 28 ms before defk-zep's spill fix) but blocks its scheduler ~20 ms on 16 MB where the kernel yields. Bit-exact with ex_keccak, :crypto and the FIPS 202 vectors | optimised (ex_sha3, 64-bit lanes, 32-bit halves: the halves are 20x faster than 64-bit lanes) |
 | [`blake.exs`](blake.exs) | BLAKE2b-512 (RFC 7693, keyed) and BLAKE3 from scratch for content hashing and dedup, at one 64 KB message (64 MB and 1 KB swept), vs blake2_elixir (reference C NIF), blake3 (Rust NIF, NEON) and the pure-Elixir blake2 and b3 packages; three `DEFK_RESULT` lines (blake = BLAKE2b, blake_crypto, blake3), `run_all` reads the first | **provisional (measured under load, load 13-135):** BLAKE2b 31.8-32.7x at 64 KB (Elixir 1.37-1.43 ms vs defk 0.042-0.049 ms, 1.5 GB/s), 32.5-33.3x at 64 MB, 21-22x at 1 KB; level with blake2_elixir's reference C (1.02x) and 1.16-1.19x over `:crypto` (see below). BLAKE3 10.6-10.9x at 64 KB (0.56-0.65 vs 0.054-0.059 ms), 10.1x at 64 MB; level with BLAKE3's portable C (52 us at 64 KB), 0.6x of the NEON NIF. Tick gap (64 MB): both NIFs block 34-49 ms, kernels 2.1-2.7 ms. RFC 7693 and official BLAKE3 vectors pass; equal to `:crypto`, both NIFs, blake2 and b3 on 661 random messages | optimised (BLAKE2b: blake2 package, 64-bit words, 32-bit halves 10x faster; BLAKE3: b3 package, a struct-free rewrite 5-10% faster) |
 | [`hll_update_many.exs`](hll_update_many.exs) | Fold 100k pre-hashed u64s into a p = 14 HyperLogLog sketch, as ex_data_sketch 0.10.3's backend `hll_update_many` does (Pure and Rust NIF backends); the caller's list is packed end to end | 9.2–9.4× at 100k (Elixir 3.4–3.5 ms vs defk 0.36–0.38 ms, of which the kernel is 0.07 ms and the pack the rest; 3.2× when a GC copy of the caller's list lands in the run); 10–15× at 100 hashes (0.020 vs ~0.002 ms); 12–17× from 1k to 31k. The Rust NIF is 2.55–2.8 ms (defk 6.9–7.4×), 2.3 ms of it its Enum.map + iodata pack; fed defk's packer it is 0.46 ms, level with defk. Tick gaps ~2 ms for all three (the floor; NIF dirty above 10k). State byte-identical across Elixir, defk and the NIF. **Provisional, measured under load** | optimised (9 variants: top-down rank, sorted keys + splice below 5k, `:atomics` + one rebuild from 5k; `:array`, tuple, bit-syntax update, parallel tasks lose) |
@@ -103,7 +127,7 @@ Also not what defk is for (no script needed):
 - **I/O-bound work**: native code doesn't make the network faster.
 
 Numbers are from an M-series Mac (OTP 29, Elixir 1.20); ranges cover the runs so far.
-The scoreboard, not these tables, is the source of truth: rerun `run_all.exs`.
+The scoreboard, not these tables, is the source of truth: rerun `mix defk.examples --bench`.
 
 ## Where a wrapper is the right choice
 
@@ -126,7 +150,7 @@ Every script ends with `Defk.Bench.report/1`, which:
 
 - checks that the Elixir and defk results agree (`:check` is required with
   `:defk`; opting out is explicit — `check: :none, reason: "..."` — reports
-  `correct: skipped (<reason>)`, and `run_all.exs` lists every skipped entry),
+  `correct: skipped (<reason>)`, and `mix defk.examples` lists every skipped entry),
 - takes the best of several timed runs for each side, measured end to end,
 - prints a `DEFK_RESULT` JSON line, including the baseline status.
 
@@ -151,11 +175,11 @@ scripts that do not pass them need no change:
 | `realistic_size: "n = 4096"` | the size the anchor package is really called with, which the verdict is measured at: `realistic_size` |
 | `sweep: [{label, elixir_fun, defk_fun}]` or `{sizes, fn size -> {elixir_fun, defk_fun} end}` | best-of (`sweep_runs`, default 3) per-size times and speedups, and the `crossover`: the first size where defk is at least 2x, or `null` |
 
-`elixir examples/run_all.exs` prints these on a second line per example, and
+`mix defk.examples --bench` prints these on a second line per example, and
 `--snapshot` adds the results as a markdown table for the "Workload results"
 section of `docs/verdict.md`.
 
-Each example also declares the verdict it **expects**. `run_all.exs` fails if an
+Each example also declares the verdict it **expects**. `mix defk.examples --bench` fails if an
 example is incorrect, crashes, or measures a different verdict than it claims,
 and it lists every `good` claim whose baseline is still provisional and every
 example that skipped its agreement check, with the reason.
@@ -169,7 +193,7 @@ Either way the catalog gets updated.
 
 ## Examples in mix test
 
-`mix test` compiles a few examples' kernels (`Defk.Catalog`, `test/support/catalog.ex`) and checks them against their Elixir mode (`test/agreement_test.exs`). The rest of the examples are a separate task's job (`defk-30c`). This section is the measurement and the choice behind that split (`defk-30c.1`); `defk-30c.2` made the change.
+`mix test` compiles a few examples' kernels (`Defk.Catalog`, `test/support/catalog.ex`) and checks them against their Elixir mode (`test/agreement_test.exs`). The rest of the examples are the job of `mix defk.examples` (above; `defk-30c.3`). This section is the measurement and the choice behind that split (`defk-30c.1`); `defk-30c.2` made the change.
 
 **Rules.** An example whose expected verdict is `:poor` or `:out_of_scope` never runs in `mix test`: it measures where Elixir wins, and its kernels teach the compiler nothing the others don't. Pick the fewest, fastest examples whose kernels together cover the most compiler areas. Budget: a few seconds of cold compile in total.
 
@@ -264,7 +288,7 @@ Tests that changed with it:
 4. Give both versions the same input, in the form a real caller would have.
 5. Compile the kernels with `use Defk, elixir_mode: true` and check in the script that each agrees with its Elixir mode (`Mod.__defk_elixir__(name, args)` against the native call, on small and bad inputs). The option works in a `Mix.install` script; the default call path stays native, so timing is unaffected.
 6. Call `Defk.Bench.report/1` with the `expected` verdict, the `baseline` status and a one-sentence `reason`.
-7. Run `elixir examples/run_all.exs` and add a row to the right table above.
+7. Run `mix defk.examples --only <use_case>` (agreement) and `mix defk.examples --bench --only <use_case>` (timed), then add a row to the right table above.
 8. Add or update the entries in [`docs/performance.md`](../docs/performance.md) for what you learned, including what didn't help: the numbers, the conditions (size, load: mark loaded runs provisional) and this script as the source.
 
 Planned examples, and the work to optimise each first-pass baseline, are

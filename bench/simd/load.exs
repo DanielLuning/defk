@@ -21,7 +21,7 @@ defmodule Simd.Load do
     files =
       @sources
       |> Enum.flat_map(&Path.wildcard(Path.join(@root, &1)))
-      |> Enum.reject(&(Path.basename(&1) in ["_template.exs", "run_all.exs"]))
+      |> Enum.reject(&(Path.basename(&1) in ["_template.exs"]))
       |> Enum.sort()
 
     ex = %{mod: Examples.Kernels, file: "test/support/examples.ex", form: nil, binding: []}

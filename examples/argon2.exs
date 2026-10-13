@@ -34,7 +34,7 @@
 #
 #   elixir examples/argon2.exs
 #
-# DEFK_RESULT lines, in this order (run_all.exs reads the first; the script
+# DEFK_RESULT lines, in this order (mix defk.examples reads the first; the script
 # checks the second itself and exits 1 when it fails):
 #   1. argon2           argon2id at argon2_elixir's defaults (t_cost 3,
 #                       64 MiB, 4 lanes, 32-byte tag) vs argon2_elixir: poor
@@ -1109,7 +1109,7 @@ one_lane =
       "one lane on each side: the kernel ties the reference C (0.9-1.1x), so marginal or poor both mean use argon2_elixir"
   )
 
-# run_all.exs reads the first DEFK_RESULT line; check the second here. A tie
+# mix defk.examples reads the first DEFK_RESULT line; check the second here. A tie
 # measures marginal or poor: both mean "use argon2_elixir".
 unless one_lane.correct and one_lane.verdict in [:marginal, :poor] do
   IO.puts("argon2_one_lane failed its check or measured another verdict")

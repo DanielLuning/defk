@@ -29,7 +29,7 @@
 #   elixir examples/blake.exs                    # agreement + three reports
 #   BLAKE_VARIANTS=1 elixir examples/blake.exs   # also every Elixir variant
 #
-# DEFK_RESULT lines, in this order (run_all.exs reads the first; the script
+# DEFK_RESULT lines, in this order (mix defk.examples reads the first; the script
 # checks the other two itself and exits 1 when one fails):
 #   1. blake         BLAKE2b-512 of one 64 KB message: defk vs the best pure
 #                    Elixir; blake2_elixir reported as `native`
@@ -1343,7 +1343,7 @@ blake3_report =
       "BLAKE3's 32-bit words keep pure Elixir in small integers (b3 is already tuned), but the kernel is still ~10x and level with blake3's portable C; the NEON NIF is ~1.6x faster"
   )
 
-# run_all.exs reads the first DEFK_RESULT line; check the other two here. The
+# mix defk.examples reads the first DEFK_RESULT line; check the other two here. The
 # :crypto line may measure marginal or poor (a tie either way): both mean
 # "use :crypto".
 unless crypto_report.correct and crypto_report.verdict in [:marginal, :poor] and

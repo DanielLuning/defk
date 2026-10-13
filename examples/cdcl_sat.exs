@@ -14,7 +14,7 @@
 #
 #   elixir examples/cdcl_sat.exs
 #
-# DEFK_RESULT lines, in this order (run_all.exs reads the first; the script
+# DEFK_RESULT lines, in this order (mix defk.examples reads the first; the script
 # checks the other three itself and exits 1 when one fails):
 #   1. cdcl_sat     S3: Crux.satisfying_scenarios on an Ash-shaped formula,
 #                   P = 12 policies (109 vars, 280 clauses), the whole
@@ -2748,7 +2748,7 @@ unless System.get_env("DEFK_SAT_LIB") == "1" do
     )
   end
 
-  # 1. S3: the whole enumeration, the catalog entry (run_all reads this line)
+  # 1. S3: the whole enumeration, the catalog entry (mix defk.examples reads this line)
   {_, f3} = Enum.find(formulas, fn {shape, _} -> shape == {12, 4, 16, 1} end)
   b3 = Map.new(enum_times)[{12, 1}]
 
@@ -2821,7 +2821,7 @@ unless System.get_env("DEFK_SAT_LIB") == "1" do
         "CDCL against the same CDCL in Elixir; picosat is ahead of both on hard instances (more heuristics)"
     )
 
-  # run_all.exs reads the first DEFK_RESULT line; check the others here
+  # mix defk.examples reads the first DEFK_RESULT line; check the others here
   others = [{r1, :good}, {r2, :good}, {r4, :good}]
 
   unless Enum.all?(others, fn {r, v} -> r.correct and r.verdict == v end) do

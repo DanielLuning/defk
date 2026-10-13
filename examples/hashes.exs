@@ -16,7 +16,7 @@
 #
 # Four reports, four DEFK_RESULT lines, in this order: hashes_xxh64 (good),
 # hashes_murmur3 (good), hashes_siphash24 (good), hashes_crc32c (good).
-# run_all.exs reads only the first (xxh64); the script checks the other three
+# mix defk.examples reads only the first (xxh64); the script checks the other three
 # itself and exits 1 when one is incorrect or measures another verdict.
 #
 # Kernels: xxh64(bytes, seed) :: i64, murmur3_128(bytes, seed) :: {i64, i64}
@@ -1161,7 +1161,7 @@ r_crc =
   )
 
 
-# run_all.exs reads only the first DEFK_RESULT line (xxh64); the other three
+# mix defk.examples reads only the first DEFK_RESULT line (xxh64); the other three
 # claims are checked here
 for r <- [r_xxh, r_mur, r_sip, r_crc], not r.correct or r.verdict != r.expected do
   IO.puts("#{r.example}: correct #{r.correct}, verdict #{r.verdict}, expected #{r.expected}")

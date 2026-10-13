@@ -43,12 +43,12 @@
 # call first reaches the 2x bar against the best Elixir solver is between 16
 # variables (1.1-1.6x) and 26 (2.4-2.8x); the sweep below reports 26.
 #
-# So the verdicts, reported with their lines (what run_all reads is the first):
+# So the verdicts, reported with their lines (what mix defk.examples reads is the first):
 #   1. cdcl_sat_per_call: the Ash-sized per-call drop-in, P = 4 (26-28 vars),
 #      two formulas, pre-registered marginal-or-poor, MEASURED GOOD, 2.5-2.8x
 #      (best Elixir 16.5-17.4 ms vs defk 6.3-6.5 ms per 20 enumerations of each),
 #      1.63-1.70x faster than Crux on picosat. `expected:` is :good, the
-#      measurement, as in cdcl_sat_s1 and per_pair_distance, so that run_all
+#      measurement, as in cdcl_sat_s1 and per_pair_distance, so that mix defk.examples
 #      does not fail on a claim that was wrong; the pre-registered text is
 #      above. Sweep over formula size attached, crossover reported.
 #   2. cdcl_sat_per_call_tiny: tiny formulas (P = 1-3, 5-11 vars), where the
@@ -90,7 +90,7 @@
 # DEFK_SAT_LIB=1 (that file stops after its modules) rather than copying
 # 2,200 lines. Same Mix.install arguments, so the compiled 2.35 MB kernel is
 # the one cdcl_sat.exs built (the first compile is ~3 minutes, cached after);
-# run_all.exs runs cdcl_sat.exs first (alphabetical), so this one starts
+# mix defk.examples runs cdcl_sat.exs first (alphabetical), so this one starts
 # warm. Run alone on a fresh checkout it pays the compile once.
 #
 # Tables (printed): 1 the per-call floor, 2 one solve per call by size,
@@ -385,7 +385,7 @@ sweep =
      fn -> for _ <- 1..reps, do: enum.(SatEx, f) end}
   end
 
-# 1. the Ash-sized per-call drop-in (what run_all reads). Pre-registered
+# 1. the Ash-sized per-call drop-in (what mix defk.examples reads). Pre-registered
 # marginal or poor; measured good, so expected is :good as in cdcl_sat_s1.
 r1 =
   report.(
@@ -426,7 +426,7 @@ IO.puts(
      |> Enum.map_join(", ", fn {l, n, r} -> "#{l} (#{n} vars, #{f1.(r)}x)" end))
 )
 
-# run_all.exs reads the first DEFK_RESULT line; this script checks the other itself
+# mix defk.examples reads the first DEFK_RESULT line; this script checks the other itself
 unless r1.correct and r1.verdict == :good and r2.correct and r2.verdict == :poor do
   IO.puts("cdcl_sat_per_call: a line failed its check or measured another verdict")
   System.halt(1)
