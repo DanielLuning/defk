@@ -15,11 +15,15 @@
     {
       "text": "Decision (maintainer, 2026-10-13): keep examples/fuzzy_search/lib/fuzzy_search/kernels.ex in mix test (cheap, real yielding kernel); the app's own tests (Plug, Bandit, /usr/share/dict/words) run only in mix defk.examples (defk-30c.3), not in mix ci.",
       "timestamp": "2026-10-13T14:01:19Z"
+    },
+    {
+      "text": "Done (2026-10-13, no code change): mix test keeps kernels.ex as is. The app compiles against main 129ce44 (path dep ../..) and its own tests pass: (cd examples/fuzzy_search \u0026\u0026 mix deps.get \u0026\u0026 mix test) -\u003e 7 passed, ~10 s wall incl. compile, load ~10 (provisional). _build and deps there are gitignored; the tree stays clean. For defk-30c.3: run exactly that command in mix defk.examples; it needs /usr/share/dict/words (present on macOS; on Debian install the 'wamerican' package) — check what the app does when the file is missing.",
+      "timestamp": "2026-10-13T14:02:22Z"
     }
   ],
   "priority": 2,
   "status": "open",
   "title": "fuzzy_search in CI: keep kernels.ex as a test fixture, move the app's tests out",
   "type": "task",
-  "updated_at": "2026-10-13T14:01:19Z"
+  "updated_at": "2026-10-13T14:02:22Z"
 }
