@@ -2,6 +2,8 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-13T07:55:34Z",
+  "close_reason": "guard error beats overflow in both modes, both operand orders; overflow-only still raises; overflow that decides the guard raises (see comment); merged 6ab71c4",
   "created": "2026-10-10T10:10:24Z",
   "description": "From defk-7a6 (merged). In a case guard such as rem(n, y) \u003c n * n with y = 0 and n * n overflowing i64, native raises ArithmeticError (overflow is a limit) while Elixir mode's try/rescue sees the zero divisor first and makes the guard false, so the two modes disagree. Documented in docs/language.md as a known edge; not covered by an agreement test (only the overflow-first order is). Fix: Elixir mode should apply the limit check for every operand of the guard before deciding false (e.g. evaluate with limit-checked ops that collect both flags, raise if any limit flag is set, as native's govf replay does), or native should treat a guard containing a real guard error as false regardless of overflow order if that matches Elixir. Done when an agreement test with y = 0 and an overflowing n * n passes in both orders.",
   "id": "defk-34l",
@@ -19,7 +21,7 @@
     }
   ],
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Elixir mode returns false where native raises: a guard with both a zero divisor and an i64 overflow",
   "type": "bug",
   "updated_at": "2026-10-13T07:55:34Z"
