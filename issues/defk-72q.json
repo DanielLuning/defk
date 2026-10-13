@@ -2,13 +2,14 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-13T18:06:55Z",
   "created": "2026-10-13T18:06:02Z",
   "description": "Deleting _build/\u003cenv\u003e/lib/\u003capp\u003e/ebin/*.so (or the defk cache) left the module's on_load failing; mix compile did nothing, because Mix calls __mix_recompile__?/0 only on modules that load (Mix.Compilers.Elixir: Code.ensure_all_loaded, then function_exported?). Only mix compile --force repaired it. Fix: lib_defs/1 for an app module declares the installed library as @external_resource; Mix marks the source stale when the file is gone. Done when: release_layout_test deletes the library and cache, a plain mix compile rebuilds it, and the expected on_load warning is asserted.",
   "id": "defk-72q",
   "labels": [],
   "priority": 1,
-  "status": "open",
+  "status": "closed",
   "title": "A kernel module whose library is missing from ebin/ is never recompiled",
   "type": "bug",
-  "updated_at": "2026-10-13T18:06:02Z"
+  "updated_at": "2026-10-13T18:06:55Z"
 }
