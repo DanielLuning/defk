@@ -51,9 +51,34 @@ defmodule Defk.Examples.Scoreboard do
     good = Enum.count(outcomes, &(&1.status == :ok))
     IO.puts("\n#{good}/#{length(outcomes)} examples behave as claimed")
     print_provisional(results)
+    print_cache(outcomes)
     print_skipped(outcomes)
     if snapshot?, do: print_snapshot(results)
   end
+
+  # every report's cache outcome (Defk.Bench.Cache, defk-30c.5), not only
+  # the first report's
+  defp print_cache(outcomes) do
+    reports = for o <- outcomes, r <- o.results, do: r
+    reused = Enum.filter(reports, &(&1["cache"] == "reused"))
+    unstored = Enum.filter(reports, &(&1["cache"] == "not_stored"))
+
+    if reused != [] do
+      IO.puts(
+        "#{length(reused)} report(s) reused a cached result (inputs unchanged; --fresh measures them): " <>
+          Enum.map_join(reused, ", ", &"#{&1["example"]} (#{measured_on(&1)})")
+      )
+    end
+
+    if unstored != [] do
+      IO.puts(
+        "#{length(unstored)} report(s) not cached, the machine was not quiet: " <>
+          Enum.map_join(unstored, ", ", & &1["example"])
+      )
+    end
+  end
+
+  defp measured_on(r), do: String.slice(r["measured_at"] || "?", 0, 10)
 
   # the first result line, or a stand-in for an example that crashed
   defp row(%{results: [first | _], status: status}) when status != :crashed, do: first
@@ -123,7 +148,10 @@ defmodule Defk.Examples.Scoreboard do
 
     for r <- results do
       cells = [
-        r["example"],
+        if(r["cache"] == "reused",
+          do: "#{r["example"]} (reused, measured #{measured_on(r)})",
+          else: r["example"]
+        ),
         cell(r["realistic_size"]),
         r["verdict"],
         speedup(r),

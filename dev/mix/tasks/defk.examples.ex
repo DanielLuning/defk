@@ -30,6 +30,18 @@ defmodule Mix.Tasks.Defk.Examples do
   for docs/verdict.md). Timings under load are meaningless: run it on a quiet
   machine.
 
+  **Result cache.** `--bench` reuses a stored result when nothing the
+  measurement depends on changed: the kernel modules' `.beam` files, the C
+  build inputs (cflags, `defk_runtime.h`, cc, ERTS, sanitizer mode), the
+  script and the files it requires, its `Mix.install` dependencies,
+  `Defk.Bench`, the OTP and Elixir versions and the machine. The example
+  still runs, and its `:check` still runs (correctness is never cached);
+  only the timing is skipped. Only results measured on a quiet machine are
+  stored (the 1-minute load average before and after is at most a quarter of
+  the logical cores, or `DEFK_BENCH_QUIET_LOAD`), so a loaded run measures
+  again next time. The cache is `_build/<env>/defk_bench/`, one file per
+  example; `--fresh` measures everything (and stores the quiet results).
+
   Some compiles are long (argon2 more than 7 minutes, cdcl_sat about 5,
   keccak about 1, hash_chain about 26 s per copy). The task prints a line
   every 30 s of silence; `--timeout` bounds each example.
@@ -44,7 +56,9 @@ defmodule Mix.Tasks.Defk.Examples do
     * `--all` - also the examples `mix test` covers
     * `--list` - print the selection and stop
     * `--bench` - timed run with the verdict check
-    * `--snapshot` - with `--bench`, also print the markdown table
+    * `--fresh` - with `--bench`, measure every example, reuse nothing
+    * `--snapshot` - with `--bench`, also print the markdown table (a reused
+      row is marked with the date it was measured)
     * `--timeout SECONDS` - kill an example (or the app's tests) that runs longer;
       the default is no limit
   """
@@ -60,6 +74,7 @@ defmodule Mix.Tasks.Defk.Examples do
     list: :boolean,
     bench: :boolean,
     snapshot: :boolean,
+    fresh: :boolean,
     timeout: :integer
   ]
 
@@ -68,6 +83,7 @@ defmodule Mix.Tasks.Defk.Examples do
     {opts, rest} = OptionParser.parse!(args, strict: @switches)
     rest == [] || Mix.raise("unexpected arguments: #{Enum.join(rest, " ")}")
     opts[:snapshot] && !opts[:bench] && Mix.raise("--snapshot needs --bench")
+    opts[:fresh] && !opts[:bench] && Mix.raise("--fresh needs --bench")
 
     only = opts[:only] && String.split(opts[:only], ",", trim: true)
 
@@ -102,13 +118,14 @@ defmodule Mix.Tasks.Defk.Examples do
     t0 = System.monotonic_time(:second)
 
     IO.puts("mix defk.examples (#{mode}): #{total} to run#{load_note()}")
+    if mode == :bench, do: IO.puts(cache_note(opts[:fresh]))
 
     outcomes =
       examples
       |> Enum.with_index(1)
       |> Enum.map(fn {name, i} ->
         announce(i, total, name)
-        name |> Examples.run_example(mode, timeout) |> report()
+        name |> Examples.run_example(mode, timeout, opts[:fresh] || false) |> report()
       end)
 
     app = if app?, do: [run_app(length(examples) + 1, total, timeout)], else: []
@@ -122,14 +139,30 @@ defmodule Mix.Tasks.Defk.Examples do
 
   defp announce(i, total, name), do: IO.puts("[#{i}/#{total}] #{name}")
 
+  defp cache_note(true),
+    do: "result cache: --fresh, every report is measured (quiet results are stored)"
+
+  defp cache_note(_) do
+    "result cache: ON (#{Path.relative_to_cwd(Examples.bench_cache_dir())}): " <>
+      "reports whose inputs did not change are NOT re-measured; --fresh measures everything"
+  end
+
   defp report(o) do
-    IO.puts("    #{o.status} (#{o.note}, #{Float.round(o.secs, 1)} s)")
+    IO.puts("    #{o.status} (#{o.note}, #{Float.round(o.secs, 1)} s)#{reused_note(o)}")
 
     unless o.status == :ok do
       IO.puts("--- stdout ---\n#{o.out}\n--- stderr ---\n#{o.err}\n--- end ---")
     end
 
     o
+  end
+
+  # a reused result must be visible where the example's line is read
+  defp reused_note(o) do
+    case Enum.count(o.results, &(&1["cache"] == "reused")) do
+      0 -> ""
+      n -> "  CACHED: #{n} of #{length(o.results)} report(s) reused, not measured"
+    end
   end
 
   defp summarize(mode, outcomes, app, opts, wall) do
