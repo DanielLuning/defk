@@ -106,7 +106,7 @@ TODO: filled by defk-sgw.5.
 
 Pre-registered: this section was committed before any workload row was filled (commit date is the pre-registration).
 
-The workload-results table is generated from `examples/run_all.exs` output once defk-9p6.10 lands. See `examples/README.md` for the measurement details.
+The workload-results table is generated from `mix defk.examples --bench --all --snapshot` output once defk-9p6.10 lands. See `examples/README.md` for the measurement details.
 
 <!-- Source: defk-dtw.4 resolution comment (2026-10-05T19:30:53Z), quoted verbatim below. -->
 

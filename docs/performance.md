@@ -207,7 +207,7 @@ What to do: interleave the variants in one VM, alternate which goes first,
 take best of 5 per round over several rounds, and report the run medians and
 the range ([`bench/float_checks.exs`](https://github.com/DanielLuning/defk/blob/main/bench/float_checks.exs) is the
 pattern). Don't assert wall-clock times in unit tests (`defk-m4b`), and run
-examples one at a time (`run_all.exs` does).
+examples one at a time (`mix defk.examples --bench` does).
 
 ### 1.8 Measure responsiveness with a ticker on one scheduler, and read the floor
 
@@ -2256,8 +2256,8 @@ blocked scheduler) are what it adds.
 The first harvest (`defk-djy.10`) read every source below. When you add an
 example or close a workload ticket, add its entries and its line here.
 
-- Example headers and code: every `examples/*.exs` (including `run_all.exs`
-  and `_template.exs`, which hold no findings), `examples/fuzzy_search/`,
+- Example headers and code: every `examples/*.exs` (including `_template.exs`,
+  which holds no findings), `examples/fuzzy_search/`,
   `examples/one_brc/`, `examples/release_debian/` (build cost only, no
   runtime findings).
 - [`examples/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/README.md): every row, "Measuring

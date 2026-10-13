@@ -10,7 +10,7 @@
 #
 #   elixir examples/hash_chain.exs
 #
-# Two DEFK_RESULT lines, in this order (run_all.exs reads the first; the
+# Two DEFK_RESULT lines, in this order (mix defk.examples reads the first; the
 # script exits 1 itself if either is incorrect or misses its verdict):
 #   1. hash_chain   10M-step SHA-256 chain from a 32-byte seed, expected poor
 #   2. hmac_rounds  HMAC-SHA256 of 1M nonces under one key, expected marginal

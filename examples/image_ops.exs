@@ -9,9 +9,9 @@
 #
 #   elixir examples/image_ops.exs
 #
-# Three kernels, three DEFK_RESULT lines. run_all.exs collects only the FIRST
+# Three kernels, three DEFK_RESULT lines. mix defk.examples collects only the FIRST
 # DEFK_RESULT line of a script, so the resize report is printed first and
-# run_all sees the resize verdict; the YUV and dither verdicts are visible
+# mix defk.examples sees the resize verdict; the YUV and dither verdicts are visible
 # when this script is run on its own (and are quoted below).
 #
 # Skipped: Lanczos-3 resize (a float-weights follow-up of the resize kernel),
@@ -513,7 +513,7 @@ resize_ok = fn ->
       ImageOps.Kernels.resize_bilinear(small, 37, 23, 4, 80, 50)
 end
 
-# run_all.exs takes the first DEFK_RESULT line, so resize is reported first
+# mix defk.examples takes the first DEFK_RESULT line, so resize is reported first
 Defk.Bench.report(
   name: "image_resize",
   expected: :good,

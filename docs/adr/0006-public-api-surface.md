@@ -47,7 +47,7 @@ above.
 | `Defk.Bits` | documented, specs, doctests | tests 5, 1 example, `language.md` | **public** | defines the Elixir meaning of the bit builtins; the docs say "as `Defk.Bits.wrap64/1`" |
 | `Defk.Report` | documented, types | tests, 1 example, README, `performance.md` | **public** (`print/1`, `format/1`, types) | the fast-path report entry point; the facts inside are unstable (below) |
 | `Defk.Errors` | documented | tests, README, `language.md`, `scope.md` | **public facade** (`codes/0`, `explain!/1`) | error codes are a stable contract ("codes are never renamed"); the rest is internal (`defk-euu` will split it) |
-| `Defk.Bench` | documented | 28 examples, `examples/README.md`, `performance.md` | **unstable** (`report/1` only) | catalog tooling: its verdicts and `DEFK_RESULT` line serve `run_all.exs`, not users |
+| `Defk.Bench` | documented | 28 examples, `examples/README.md`, `performance.md` | **unstable** (`report/1` only) | catalog tooling: its verdicts and `DEFK_RESULT` line serve `mix defk.examples`, not users |
 | `Defk.Bench.TickGap` | documented | `bench/tick_gap.exs`, `one_brc/rustler.exs`, `Defk.Bench` | **unstable** | measurement helper for the catalog and benches |
 | `Defk.Attributes`, `Defk.BinaryLiteral`, `Defk.Bitstring`, `Defk.Build`, `Defk.Builtins`, `Defk.Clauses`, `Defk.Compiler`, `Defk.GuardIn`, `Defk.Masked`, `Defk.Raise` | `@moduledoc false` (some functions carry `@doc` text anyway) | compiler, tests (`Defk.Build.cache_key/1` in 14 tests) | **hidden** | compiler internals |
 

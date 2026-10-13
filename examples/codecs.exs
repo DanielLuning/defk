@@ -10,7 +10,7 @@
 #   elixir examples/codecs.exs
 #
 # Three DEFK_RESULT lines, in this order: codecs_base64, codecs_hex,
-# codecs_base58. run_all.exs reads only the first (base64); the script exits 1
+# codecs_base58. mix defk.examples reads only the first (base64); the script exits 1
 # itself when hex or base58 is incorrect or misses its expected verdict.
 # Each verdict is one round trip: encode the input and decode its encoding.
 #
@@ -838,7 +838,7 @@ IO.puts(
 
 # ------------------------------------------------------------------ reports --
 # Each verdict is one round trip: encode the input, decode its encoding.
-# run_all.exs takes the first DEFK_RESULT line: base64 is printed first, then
+# mix defk.examples takes the first DEFK_RESULT line: base64 is printed first, then
 # hex, then base58; the script itself fails if the other two miss.
 
 round_trip = fn enc, dec, input, encoded -> fn -> {enc.(input), dec.(encoded)} end end
