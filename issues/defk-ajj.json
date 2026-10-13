@@ -8,9 +8,10 @@
   "labels": [
     "needs-triage"
   ],
+  "parent": "defk-vcx",
   "priority": 4,
   "status": "open",
   "title": "Report errors inside a rejected pipe and a reduce with a rejected init",
   "type": "task",
-  "updated_at": "2026-10-12T09:47:59Z"
+  "updated_at": "2026-10-13T19:08:11Z"
 }
