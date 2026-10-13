@@ -305,10 +305,6 @@ defmodule Defk.ElementTypesTest do
              agrees(:sum32, [i32s([2_147_483_647, 2_147_483_647, 2_147_483_647])])
   end
 
-  # positions in the first strip, at its end and in the next one
-  defp positions(n),
-    do: Enum.uniq(for p <- [0, 1, @strip - 1, @strip, @strip + 1, n - 1], p < n, do: p)
-
   # n elements, fill(i) everywhere but at p
   defp with_bad(n, p, bad, fill),
     do: for(i <- 0..(n - 1), do: if(i == p, do: bad, else: fill.(i)))
@@ -339,7 +335,7 @@ defmodule Defk.ElementTypesTest do
   end
 
   defp strips do
-    for n <- [100, 2 * @strip + 3], p <- positions(n), do: fails_at(n, p)
+    for n <- [100, 2 * @strip + 3], p <- G.strip_positions(n), do: fails_at(n, p)
     passes(2 * @strip + 3)
   end
 
