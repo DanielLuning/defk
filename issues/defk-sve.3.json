@@ -5,6 +5,7 @@
   ],
   "blocks": [],
   "created": "2026-10-09T19:47:35Z",
+  "defer_until": "2026-11-15",
   "description": "Only if the design review accepts the single-owner buffer shape for a prototype. On a prototype/ branch, never merged (as the repo's other prototypes): a `Defk.Buffer.new(i64, n)` returning a reference-backed resource; kernels with a `buf :: buffer(i64)` parameter type that mutate it and return the same reference; Elixir mode keeping the buffer in an ETS table owned by the process; the Bloom filter example (insert batch, query batch) measured against the value-semantics version from the copy-cost ticket and against a pure Elixir Bloom (bit set in a map or :atomics). Tests: agreement property between modes, process death frees the buffer (frames_live-style counter), hot upgrade with a live buffer, forced yields inside a kernel holding a buffer, cross-process call raises.\n\nReport: speed, the test results, and every place the Elixir meaning leaked (an observable difference between modes). The ADR is then accepted or rejected on that evidence.\n\nneeds-triage until the review lands.",
   "id": "defk-sve.3",
   "labels": [
@@ -12,8 +13,8 @@
   ],
   "parent": "defk-sve",
   "priority": 4,
-  "status": "open",
+  "status": "deferred",
   "title": "Throwaway prototype: Defk.Buffer on the Bloom filter, with ETS-backed Elixir mode",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:19Z"
+  "updated_at": "2026-10-13T19:08:44Z"
 }
