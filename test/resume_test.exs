@@ -230,8 +230,9 @@ defmodule Defk.ResumeTest do
   # runtime). This backstop fails any other endless resume loop before it
   # exhausts memory: each restart re-runs alloc/2 and keeps the binary until
   # the kernel ends, which got the VM OOM-killed in about 25 s (defk-juw).
-  # The tests take about a second.
-  @moduletag timeout: 10_000
+  # The tests take about a second. DEFK_TIMEOUT_SCALE stretches the backstop
+  # for a slow emulator (scripts/valgrind runs about 50x slower).
+  @moduletag timeout: 10_000 * String.to_integer(System.get_env("DEFK_TIMEOUT_SCALE", "1"))
 
   alias Defk.ResumeTest.K
   alias FuzzySearch.Kernels, as: F
