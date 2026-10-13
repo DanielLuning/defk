@@ -51,6 +51,13 @@ defmodule Defk.AdaptiveSliceTest do
     {r, K.__defk_stats__().yields - y0}
   end
 
+  defp collect_hints(to, acc) do
+    receive do
+      {:trace, _, :call, {K, :__defk_native_spin__, [_, hint]}} -> collect_hints(to, [hint | acc])
+      :done -> send(to, {:hints, acc})
+    end
+  end
+
   # n whose uncrowded call runs at least `us` microseconds
   defp calibrate(n, us) do
     {t, _} = :timer.tc(fn -> K.__defk_native_spin__(n, 0) end)
@@ -111,15 +118,34 @@ defmodule Defk.AdaptiveSliceTest do
     end
   end
 
-  test "the kernel's function passes the hint from inside a crowded fan-out" do
-    n = 20_000
+  test "the kernel's function passes the run-queue length as the hint" do
+    # busy processes beyond the schedulers keep the run queues non-empty
+    busy =
+      for _ <- 1..(2 * System.schedulers_online()) do
+        spawn(fn ->
+          Stream.repeatedly(fn -> :erlang.phash2(:rand.uniform()) end) |> Stream.run()
+        end)
+      end
 
-    results =
-      1..48
-      |> Task.async_stream(fn _ -> K.spin(n) end, max_concurrency: 12)
-      |> Enum.map(fn {:ok, r} -> r end)
+    # a tracer of its own: the hint is the NIF call's last argument
+    me = self()
+    tracer = spawn(fn -> collect_hints(me, []) end)
+    :erlang.trace_pattern({K, :__defk_native_spin__, 2}, true, [:local])
+    :erlang.trace(self(), true, [:call, {:tracer, tracer}])
 
-    assert results == List.duplicate(ex_spin(n), 48)
+    try do
+      for _ <- 1..20, do: assert(K.spin(20_000) == ex_spin(20_000))
+    after
+      :erlang.trace(self(), false, [:call])
+      :erlang.trace_pattern({K, :__defk_native_spin__, 2}, false, [:local])
+      Enum.each(busy, &Process.exit(&1, :kill))
+    end
+
+    send(tracer, :done)
+    assert_receive {:hints, hints}, 5_000
+    assert Enum.count(hints) == 20
+    assert Enum.all?(hints, &is_integer/1)
+    assert Enum.any?(hints, &(&1 > 0)), "no hint > 0 with busy processes: #{inspect(hints)}"
   end
 
   test "use Defk rejects a non-boolean adaptive_slice" do

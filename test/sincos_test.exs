@@ -186,29 +186,20 @@ defmodule Defk.SincosTest do
   defp bounded, do: fixed_list([G.array(:f64, of: G.f64(1.0e6))])
 
   # the libm probes: the full edge mix (negative and huge arguments make
-  # sqrt/log raise, which both modes must do alike) and the nearly-safe range
+  # sqrt/log/pow raise, and exp/pow overflow to inf, which both modes must do
+  # alike: defk-i00) and the nearly-safe range
   defp probe_args, do: one_of([fixed_list([G.array(:f64)]), bounded()])
-
-  # exp and pow overflow to inf for large arguments, which Elixir mode raises
-  # on and the kernel does not (defk-i00): keep their arguments small
-  # pow(x, 0.5) of a negative x is NaN, which an array store does not reject
-  # (unlike a scalar result): not a libm substitution, so out of this probe
-  defp non_negative do
-    fixed_list([G.array(:f64, of: StreamData.map(G.f64(100.0), &abs/1))])
-  end
-
-  defp small, do: fixed_list([G.array(:f64, of: G.f64(100.0))])
 
   agreement(K,
     cs: [args: bounded()],
     p_sqrt: [args: probe_args()],
-    p_exp: [args: small()],
+    p_exp: [args: probe_args()],
     p_log: [args: probe_args()],
     p_log2: [args: probe_args()],
     p_log10: [args: probe_args()],
-    p_pow_half: [args: non_negative()],
-    p_pow_two: [args: small()],
-    p_expm1: [args: small()],
+    p_pow_half: [args: probe_args()],
+    p_pow_two: [args: probe_args()],
+    p_expm1: [args: probe_args()],
     p_log1p: [args: probe_args()],
     p_abs: [args: probe_args()],
     p_round: [args: probe_args()],
