@@ -20,6 +20,38 @@ defmodule Defk.BitBuiltinsTest.K do
   defk(mix(h :: i64, n :: i64) :: i64, do: bxor(rotl64(h, 13), rotr64(h, n)))
 end
 
+# Module aliases are lexical (defk-kwl): `Bits.clz(x)` under `alias Defk.Bits`
+# (or `as: B`) is the same call as `Defk.Bits.clz(x)`, in native and Elixir mode.
+defmodule Defk.BitBuiltinsTest.AliasK do
+  use Defk, elixir_mode: true
+
+  alias Defk.Bits
+  alias Defk.Bits, as: B
+
+  defk(full(a :: i64) :: i64, do: Defk.Bits.clz(a))
+  defk(plain(a :: i64) :: i64, do: Bits.clz(a))
+  defk(renamed(a :: i64) :: i64, do: B.clz(a) + B.popcount(a))
+  defk(renamed_full(a :: i64) :: i64, do: Defk.Bits.clz(a) + Defk.Bits.popcount(a))
+end
+
+defmodule Defk.BitBuiltinsTest.AliasTest do
+  use ExUnit.Case, async: true
+
+  alias Defk.BitBuiltinsTest.AliasK, as: A
+
+  test "an aliased Defk.Bits call agrees with the qualified one, native and Elixir mode" do
+    assert A.plain(1) == 63
+
+    for a <- [0, 1, -1, 12_345, -2 ** 63] do
+      assert Defk.Test.assert_agrees(A, :plain, [a]) == Defk.Test.assert_agrees(A, :full, [a])
+      assert A.plain(a) == A.__defk_elixir__(:full, [a])
+
+      assert Defk.Test.assert_agrees(A, :renamed, [a]) ==
+               Defk.Test.assert_agrees(A, :renamed_full, [a])
+    end
+  end
+end
+
 defmodule Defk.BitBuiltinsTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
