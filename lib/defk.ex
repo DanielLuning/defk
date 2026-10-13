@@ -72,8 +72,10 @@ defmodule Defk do
   start with `@defk_` are reserved for defk: don't define your own.
 
   A module may set its own `@on_load`. defk chains it: the kernels' library
-  loads first, then your hook runs (so it may call the module's kernels), and
-  the module loads only if both return `:ok`.
+  loads first, then your hook runs (so it may call the module's kernels —
+  locally only, `kernel(x)` not `__MODULE__.kernel(x)`, since the module is
+  not loaded while its own `on_load` runs), and the module loads only if both
+  return `:ok`.
 
   ## Types
 
