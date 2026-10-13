@@ -4143,7 +4143,8 @@ defmodule Defk.Compiler do
 
   # ----------------------------------------------- the record classifier ---
   # Decisions from the strip record, each mirroring its text analysis
-  # exactly (bug-for-bug: the gate demands byte-identical C). Token-presence
+  # exactly (bug-for-bug: the gate demanded byte-identical C), except where
+  # a mirrored bug was fixed since (sr_reaches?/3, defk-zj8). Token-presence
   # scans over the body text stay (@nf_call, ctx-in-rest, the [vp]_ variable
   # roster): they reconstruct no structure and fail safe. What moved to rows
   # is everything that used to re-derive structure from the text: writes,
@@ -4240,23 +4241,25 @@ defmodule Defk.Compiler do
     end)
   end
 
+  # Whether `y`, assigned by row `from`, reaches a checked use later in the
+  # strip. A tree whose own variable is one of its leaves (acc = acc + ...)
+  # is not a later use of itself: the old text scan counted it (defk-ch4
+  # mirrored that), which removed the check of an accumulator updated under
+  # a branch (a filter's) with no end-of-strip test behind it, so an inf
+  # never raised (defk-zj8). The unconditional accumulator still drops its
+  # check: it is sticky (sr_sticky/1), and the end-of-strip test covers it.
   defp sr_reaches?(rows, y, from) do
-    # a tree whose own variable is one of its leaves (acc = acc + ...) sees
-    # itself as a later use: the text scan finds the expression just after
-    # its statement's start, in the same statement, with nothing in between
-    own = from.k == :assign and sr_ftree_f(from.rhs)
-
     uses =
-      for %{k: :ftree, leaves: ls, seq: t, f: f} = u <- rows,
+      for %{k: :ftree, leaves: ls, seq: t} = u <- rows,
           ls != nil,
           y in ls,
-          t > from.seq or f == own,
+          t > from.seq,
           do: u
 
     copies = for %{k: :assign, rhs: rhs, seq: t} = c <- rows, t > from.seq, rhs == y, do: c
 
     reached? = fn to ->
-      to.f == own or (sr_runs_after?(from, to) and sr_unchanged?(rows, y, from, to))
+      sr_runs_after?(from, to) and sr_unchanged?(rows, y, from, to)
     end
 
     Enum.any?(uses, reached?) or
