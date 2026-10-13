@@ -4,7 +4,8 @@
     "defk-96f.1",
     "defk-96f.3",
     "defk-96f.4",
-    "defk-96f.5"
+    "defk-96f.5",
+    "defk-96f.6"
   ],
   "blocks": [],
   "created": "2026-10-13T10:53:42Z",
@@ -16,5 +17,5 @@
   "status": "open",
   "title": "mix task to run the verification checks on demand, and a release alias that runs them",
   "type": "task",
-  "updated_at": "2026-10-13T10:53:44Z"
+  "updated_at": "2026-10-13T10:53:45Z"
 }
