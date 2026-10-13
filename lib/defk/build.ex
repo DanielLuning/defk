@@ -9,7 +9,8 @@ defmodule Defk.Build do
   # The cache key (see cache_key/2) covers: these cflags, the generated C
   # source, the contents of priv/defk_runtime.h, the ERTS version (whose
   # erl_nif.h the library is built against), the resolved compiler (`CC` or
-  # "cc") and the first line of its `--version` output.
+  # "cc") and the first line of its `--version` output, and the sanitizer
+  # mode's flags (`DEFK_SANITIZE`, sanitize/0; defk-96f.1).
   # -ffp-contract=off: never fuse a*b+c into an FMA, whose single rounding
   # differs from Elixir's in the last bit. Float results must be bit-exact
   # with Elixir mode, so no -ffast-math or reassociation either (defk-jlk).
@@ -34,11 +35,26 @@ defmodule Defk.Build do
   # +2.3% at the very worst, about +1% on the mean of rounds. Adopted.
   @cflags ~w(-O3 -ffp-contract=off -std=gnu11 -fPIC -shared -Wall -Wno-unused-label -Wno-unused-variable -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-strict-overflow -fno-builtin)
 
+  # The sanitizer build mode (defk-96f.1), `DEFK_SANITIZE`: a comma-separated
+  # list of the keys below, appended after @cflags (so they win), plus
+  # @sanitize_common. `undefined` stops at the first report
+  # (-fno-sanitize-recover), so a test run cannot pass with one; `trap` is
+  # UBSan with no runtime (SIGTRAP, no message: docs/research/
+  # c-verification-macos.md §1). DEFK_SANITIZE_ADDRESS turns on the poisoning
+  # of ERTS's binary slack in priv/defk_runtime.h (defk_poison_slack).
+  @sanitizers %{
+    "address" => ~w(-fsanitize=address -fno-common -DDEFK_SANITIZE_ADDRESS=1),
+    "undefined" => ~w(-fsanitize=undefined -fno-sanitize-recover=undefined),
+    "trap" => ~w(-fsanitize=undefined -fsanitize-trap=undefined)
+  }
+  @sanitize_common ~w(-g -fno-omit-frame-pointer)
+
   def build!(module, src, file) do
     dir = Path.join(build_root(), "defk")
     File.mkdir_p!(dir)
 
-    base = Path.join(dir, "#{module}-#{cache_key(src)}")
+    modes = sanitize()
+    base = Path.join(dir, "#{module}-#{cache_key(src)}#{sanitize_suffix(modes)}")
 
     unless File.exists?(base <> ".so") do
       File.write!(base <> ".c", src)
@@ -46,6 +62,7 @@ defmodule Defk.Build do
 
       args =
         @cflags ++
+          sanitize_flags(modes) ++
           ["-I", erts_include(), "-I", @priv, "-o", base <> ".so", base <> ".c"] ++
           if(match?({:unix, :darwin}, :os.type()), do: ~w(-undefined dynamic_lookup), else: [])
 
@@ -54,6 +71,59 @@ defmodule Defk.Build do
 
     base
   end
+
+  @doc """
+  The sanitizer build mode, from `DEFK_SANITIZE`: `[]` (unset or empty: a
+  normal build) or the sorted list of its modes, `"address"`, `"undefined"`
+  and `"trap"`. Raises `ArgumentError` on any other value, and on
+  `undefined` with `trap` (they are two ways to run UBSan).
+  """
+  @spec sanitize() :: [String.t()]
+  def sanitize, do: parse_sanitize(System.get_env("DEFK_SANITIZE", ""))
+
+  @doc false
+  @spec parse_sanitize(String.t()) :: [String.t()]
+  def parse_sanitize(value) do
+    modes =
+      value
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    case Enum.reject(modes, &Map.has_key?(@sanitizers, &1)) do
+      [] ->
+        :ok
+
+      bad ->
+        raise ArgumentError,
+              "DEFK_SANITIZE: unknown mode #{Enum.map_join(bad, ", ", &inspect/1)} in " <>
+                "#{inspect(value)}; expected a comma-separated list of address, undefined, trap"
+    end
+
+    if "undefined" in modes and "trap" in modes do
+      raise ArgumentError,
+            "DEFK_SANITIZE: undefined and trap are two ways to run UBSan; pick one, got #{inspect(value)}"
+    end
+
+    modes
+  end
+
+  @doc """
+  The compiler flags the sanitizer `modes` (`sanitize/0`) add after the
+  normal ones: `[]` for a normal build.
+  """
+  @spec sanitize_flags([String.t()]) :: [String.t()]
+  def sanitize_flags([]), do: []
+
+  def sanitize_flags(modes),
+    do: Enum.flat_map(modes, &Map.fetch!(@sanitizers, &1)) ++ @sanitize_common
+
+  # A sanitizer library's file name says so (`<Module>-<key>-san-address.so`):
+  # the key already differs, the name is for people reading _build.
+  defp sanitize_suffix([]), do: ""
+  defp sanitize_suffix(modes), do: "-san-" <> Enum.join(modes, "+")
 
   @doc """
   Where the module's library is loaded from at run time (defk-n8f), after
@@ -73,12 +143,20 @@ defmodule Defk.Build do
 
   Any other module (a script, `Mix.install`, `Code.compile_string/2`, a test
   file) gets `{:path, base}`: the absolute build path, as before.
+
+  In the sanitizer mode (`sanitize/0`) a Mix app's module compiles only when
+  `MIX_BUILD_PATH` is set (defk-96f.1): its `.beam` and its library land in
+  that build path's `ebin/`, never in the normal one, where a sanitized
+  library would replace the normal one and a later normal run would load it
+  (an ASan library aborts a VM without the ASan runtime, before Mix can
+  recompile the module).
   """
   @spec placement!(module(), String.t(), String.t() | nil) ::
           {:app, atom(), String.t(), String.t()} | {:path, String.t()}
   def placement!(module, base, file) do
     case owning_app(file) do
       {app, ebin} ->
+        sanitize_build_path!(module, file)
         name = Path.basename(base) <> ".so"
         target = Path.join(ebin, name)
         unless File.exists?(target), do: install!(base <> ".so", target, module)
@@ -86,6 +164,23 @@ defmodule Defk.Build do
 
       nil ->
         {:path, base}
+    end
+  end
+
+  defp sanitize_build_path!(module, file) do
+    modes = sanitize()
+
+    if modes != [] and System.get_env("MIX_BUILD_PATH", "") == "" do
+      mode = Enum.join(modes, ",")
+
+      raise CompileError,
+        file: file,
+        line: 0,
+        description:
+          "defk: #{inspect(module)} is compiled with DEFK_SANITIZE=#{mode} into its app's ebin/, " <>
+            "which would put a sanitized library where normal runs load it. Give the sanitizer " <>
+            "build a build path of its own, e.g. " <>
+            "MIX_BUILD_PATH=_build/#{Mix.env()}_sanitize_#{Enum.join(modes, "_")} DEFK_SANITIZE=#{mode}"
     end
   end
 
@@ -123,7 +218,7 @@ defmodule Defk.Build do
     File.cp!(src, tmp)
     File.rename!(tmp, target)
 
-    stale = ~r/\A#{Regex.escape(Atom.to_string(module))}-[0-9a-f]{10}\.so\z/
+    stale = ~r/\A#{Regex.escape(Atom.to_string(module))}-[0-9a-f]{10}(-san-[a-z+]+)?\.so\z/
 
     for f <- File.ls!(dir), f != Path.basename(target), f =~ stale do
       File.rm(Path.join(dir, f))
@@ -245,7 +340,8 @@ defmodule Defk.Build do
   Cache key for a generated kernel: the 10 hex chars used in the file name.
 
   Fills in the environment-dependent parts (ERTS version, resolved compiler,
-  first line of `cc --version`) and delegates to `cache_key/2`.
+  first line of `cc --version`, the sanitizer mode's flags) and delegates to
+  `cache_key/2`.
   """
   @spec cache_key(binary()) :: String.t()
   def cache_key(src) do
@@ -254,21 +350,28 @@ defmodule Defk.Build do
     cache_key(src, %{
       erts: to_string(:erlang.system_info(:version)) <> erts_include_override(),
       cc: cc,
-      cc_version: cc_version(cc)
+      cc_version: cc_version(cc),
+      sanitize: sanitize_flags(sanitize())
     })
   end
 
   @doc """
   Pure cache key: md5 over the cflags, the C source, the runtime header
-  contents, and the `:erts`, `:cc` and `:cc_version` strings in `env`.
+  contents, the `:erts`, `:cc` and `:cc_version` strings in `env`, and the
+  sanitizer flags in `env[:sanitize]` (defk-96f.1; `[]` or absent for a
+  normal build, which leaves the key as it was before the mode existed).
   Returns the first 10 lowercase hex chars.
   """
-  @spec cache_key(binary(), %{erts: String.t(), cc: String.t(), cc_version: String.t()}) ::
-          String.t()
-  def cache_key(src, %{erts: erts, cc: cc, cc_version: cc_version}) do
+  @spec cache_key(binary(), %{
+          required(:erts) => String.t(),
+          required(:cc) => String.t(),
+          required(:cc_version) => String.t(),
+          optional(:sanitize) => [String.t()]
+        }) :: String.t()
+  def cache_key(src, %{erts: erts, cc: cc, cc_version: cc_version} = env) do
     header = File.read!(Path.join(@priv, "defk_runtime.h"))
 
-    [@cflags, src, header, erts, cc, cc_version]
+    [@cflags, src, header, erts, cc, cc_version, Map.get(env, :sanitize, [])]
     |> :erlang.md5()
     |> Base.encode16(case: :lower)
     |> binary_part(0, 10)

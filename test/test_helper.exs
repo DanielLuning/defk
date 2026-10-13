@@ -7,5 +7,7 @@ Code.require_file("../examples/fuzzy_search/lib/fuzzy_search/kernels.ex", __DIR_
 #   (mix test --include timing)
 # :clang - facts from clang's remarks (the fast-path report's report: :full);
 #   excluded when CC is not clang (mix test --only clang runs just these)
+# :sanitize - kernels built in the sanitizer build mode (DEFK_SANITIZE), which
+#   need the toolchain's sanitizer runtimes (mix test --only sanitize)
 clang = if Defk.Build.clang?(), do: [], else: [:clang]
-ExUnit.start(exclude: [:deep, :divergence, :timing] ++ clang)
+ExUnit.start(exclude: [:deep, :divergence, :timing, :sanitize] ++ clang)

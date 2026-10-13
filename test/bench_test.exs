@@ -298,6 +298,41 @@ defmodule Defk.BenchTest do
     assert TickGap.percentile([5], 0.99) == 5
   end
 
+  # defk-96f.1: sanitized kernels are slower and optimised differently, so a
+  # verdict measured on them would be wrong. Refused before anything runs.
+  test "report refuses to measure in the sanitizer build mode" do
+    saved = System.get_env("DEFK_SANITIZE")
+
+    on_exit(fn ->
+      if saved,
+        do: System.put_env("DEFK_SANITIZE", saved),
+        else: System.delete_env("DEFK_SANITIZE")
+    end)
+
+    System.put_env("DEFK_SANITIZE", "address")
+    parent = self()
+
+    error =
+      assert_raise RuntimeError, fn ->
+        Bench.report(
+          name: "t",
+          expected: :good,
+          elixir: fn -> send(parent, :timed) end,
+          defk: fn -> send(parent, :timed) end,
+          check: fn -> true end,
+          runs: 1
+        )
+      end
+
+    assert Exception.message(error) =~ "refuses to measure in the sanitizer build mode"
+    assert Exception.message(error) =~ "DEFK_SANITIZE=address"
+    refute_received :timed
+
+    System.delete_env("DEFK_SANITIZE")
+    {r, _out, _json} = report([])
+    assert r.verdict in [:good, :marginal, :poor]
+  end
+
   @tag :timing
   test "a busy loop that never yields shows up as one big gap" do
     g = TickGap.run(fn -> :timer.sleep(1) && busy(60_000) end)

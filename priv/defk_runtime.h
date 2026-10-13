@@ -254,6 +254,34 @@ static inline void defk_owned_check(defk_ctx *ctx, size_t bytes) {
     defk_over_budget(ctx, bytes);
 }
 
+/*
+ * The sanitizer build mode's `address` (DEFK_SANITIZE=address, defk-96f.1):
+ * ERTS allocates every enif_alloc_binary buffer with CHICKEN_PAD
+ * (sizeof(void *) - 1) bytes of slack after it "to counter buggy drivers"
+ * (erl_binary.h), so under ASan with the stock emulator and +Mea min a write
+ * or read up to 7 bytes past an alloc/2 result is not reported. Poison that
+ * slack: from the end of the binary's data to the end of the malloc chunk
+ * that holds it (ref_bin, the Binary, is that chunk's start). Only when ASan's
+ * allocator owns the chunk: with ERTS's own allocators (no +Mea min) the
+ * memory is reused without ASan unpoisoning it, and OTP's asan emulator has
+ * no slack (the region is then empty). docs/research/c-verification-macos.md
+ * §1. A normal build compiles DEFK_POISON_SLACK to nothing.
+ */
+#ifdef DEFK_SANITIZE_ADDRESS
+#include <sanitizer/allocator_interface.h>
+#include <sanitizer/asan_interface.h>
+static void defk_poison_slack(const ErlNifBinary *b) {
+  const char *chunk = (const char *)b->ref_bin;
+  if (!chunk || !__sanitizer_get_ownership(chunk)) return;
+  const char *end = chunk + __sanitizer_get_allocated_size(chunk);
+  const char *tail = (const char *)b->data + b->size;
+  if (tail > chunk && tail < end) ASAN_POISON_MEMORY_REGION(tail, (size_t)(end - tail));
+}
+#define DEFK_POISON_SLACK(b) defk_poison_slack(b)
+#else
+#define DEFK_POISON_SLACK(b) ((void)0)
+#endif
+
 /* Owned binary: off-heap, stable address across yields and GC; uninitialised. */
 static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
   defk_owned_check(ctx, bytes);
@@ -270,6 +298,7 @@ static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
   ErlNifBinary *b = &ctx->owned[ctx->nowned];
   if (!enif_alloc_binary(bytes, b))
     defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", bytes);
+  DEFK_POISON_SLACK(b);
   ctx->owned_bytes += bytes;
   return ctx->nowned++;
 }
@@ -1547,6 +1576,7 @@ __attribute__((noinline, unused)) static defk_bits defk_bits_reserve(defk_ctx *c
     defk_owned_check(ctx, cap - old);
     if (!enif_realloc_binary(bin, cap))
       defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", cap);
+    DEFK_POISON_SLACK(bin);
     ctx->owned_bytes += cap - old;
     memset(bin->data + old, 0, cap - old);
     return b;
