@@ -2,8 +2,9 @@ defmodule Defk.ReleaseLayoutTest do
   # Where a kernel's library ships and loads from (defk-n8f): a Mix app's
   # module loads it from its app's ebin/, wherever the app is at load time, so
   # it travels with `mix release` and a moved _build; anything else loads it
-  # from the absolute build path.
-  use ExUnit.Case, async: false
+  # from the absolute build path. The subprocess builds in a directory of its
+  # own, so the module can run async.
+  use ExUnit.Case, async: true
 
   @root Path.expand("..", __DIR__)
 
@@ -81,6 +82,18 @@ defmodule Defk.ReleaseLayoutTest do
     assert [new_so] = Path.wildcard(Path.join(ebin, "Elixir.N8fApp-*.so"))
     refute new_so == so
     so = new_so
+
+    # a deleted library (and cache) is rebuilt by a plain compile: without it
+    # the module's on_load fails, and Mix never asks __mix_recompile__?/0 of
+    # a module that cannot load. Mix loads the old module once while it checks
+    # for stale sources, so the compile prints that on_load failure, then
+    # recompiles the module.
+    File.rm!(so)
+    File.rm_rf!(Path.join(app, "_build/prod/defk"))
+    out = mix!(app, ["compile"])
+    assert out =~ "The on_load function for module Elixir.N8fApp returned"
+    assert out =~ "Compiling 1 file (.ex)"
+    assert File.exists?(so)
 
     # move the compiled apps away and drop the whole _build
     moved = Path.join(tmp, "moved")

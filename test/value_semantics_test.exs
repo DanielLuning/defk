@@ -1145,7 +1145,9 @@ defmodule Defk.ValueSemanticsTest do
   describe "compile errors" do
     defp compile(body) do
       File.mkdir_p!(@dir)
-      mod = "Defk.ValueSemanticsTest.M#{System.unique_integer([:positive])}"
+      # named by the source, so the next run hits the build cache
+      id = :erlang.md5(body) |> Base.encode16() |> binary_part(0, 12)
+      mod = "Defk.ValueSemanticsTest.M#{id}"
       path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
       File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{body}\nend\n")
 
