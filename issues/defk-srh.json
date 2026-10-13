@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-12T21:15:15Z",
@@ -9,8 +9,8 @@
     "needs-triage"
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Changing CC or ERTS_INCLUDE_DIR does not recompile kernel modules (no __mix_recompile__?/0)",
   "type": "bug",
-  "updated_at": "2026-10-12T21:15:16Z"
+  "updated_at": "2026-10-13T07:20:25Z"
 }
