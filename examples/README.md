@@ -169,7 +169,7 @@ Either way the catalog gets updated.
 
 ## Examples in mix test
 
-`mix test` compiles a few examples' kernels (`Defk.Catalog`, `test/support/catalog.ex`) and checks them against their Elixir mode (`test/agreement_test.exs`). The rest of the examples are a separate task's job (`defk-30c`). This section is the measurement and the choice behind that split (`defk-30c.1`); `defk-30c.2` makes the change.
+`mix test` compiles a few examples' kernels (`Defk.Catalog`, `test/support/catalog.ex`) and checks them against their Elixir mode (`test/agreement_test.exs`). The rest of the examples are a separate task's job (`defk-30c`). This section is the measurement and the choice behind that split (`defk-30c.1`); `defk-30c.2` made the change.
 
 **Rules.** An example whose expected verdict is `:poor` or `:out_of_scope` never runs in `mix test`: it measures where Elixir wins, and its kernels teach the compiler nothing the others don't. Pick the fewest, fastest examples whose kernels together cover the most compiler areas. Budget: a few seconds of cold compile in total.
 
@@ -217,7 +217,7 @@ Areas: F floats (bit-exact, `-ffp-contract=off`, libm), U64 u64 / `wrap64` / u64
 | `utf8_valid` | marginal | Utf8.Kernels | 0.35-0.45 | 0.02 | EB, tables built per call | none | no |
 | `ws_masking` | marginal, good | Ws.Defk | 0.36-0.48 | 0.02 | RZ, `@impl true` | bandit, bandit_native | no |
 
-No example's kernel module needs a `Mix.install` dependency to compile; only `Cosine.NxSearch` (a helper in the same script) fails without Nx, and `Defk.Catalog.load` (which compiles every top-level `defmodule` and does not rescue) must skip it. `Catalog.load` also never sees `argon2`, `blake` and `keccak`, which define their kernels with `Module.create`.
+No example's kernel module needs a `Mix.install` dependency to compile; only `Cosine.NxSearch` (a helper in the same script) fails without Nx. `Defk.Catalog.load` therefore names the modules it compiles for each script, in order (the kernel module, its macro or table helpers, and for the three older scripts the `*.Elixir` module their tests compare with), instead of every top-level `defmodule`. It also never sees `argon2`, `blake` and `keccak`, which define their kernels with `Module.create`.
 
 ### The choice
 
@@ -234,9 +234,17 @@ Eight examples (plus `fuzzy_search`'s `kernels.ex`, `defk-30c.4`):
 | `hll_update_many` | a `[u64]` input, `clz`, the one deliberate value-semantics copy, the cheapest of all (0.3-0.45 s) |
 | `cosine_topk` | the only f32 element type, eight-way float accumulators, a tuple of two arrays as the return |
 
-Cost: cold compile of the kernel modules is about 4.8 s in one VM (5.0-5.9 s measured with each script's other modules; today's six scripts take 2.2 s), and 2.0 s when the modules compile in parallel (`Task.async_stream` over the modules worked; today's six take 0.9 s). With a warm `_build/test/defk` it is 0.2 s. Checks add 0.1 to 0.3 s per example with bounded generators. The whole `mix test` took 83.5 s here.
+Cost, measured by `defk-30c.1` before the change: cold compile of the kernel modules is about 4.8 s in one VM (the six scripts of the old catalog took 2.2 s), and 2.0 s when the modules compile in parallel (the old six took 0.9 s).
 
-`Defk.Catalog` today: `geo_nearest`, `rolling_stats`, `image_blur` stay; `poor_list_data` and `poor_tiny_calls` go (poor); `_template` goes (it is a template with a placeholder verdict, and `Examples.Kernels.sum` covers the same kernel). Existing tests name those modules and must change with the catalog: `test/elixir_mode_test.exs` ("poor_list_data, poor_tiny_calls and the template", Orders, Example, Clamp) and `test/value_semantics_test.exs` ("the catalog's kernels have none", which lists them too). That test must also expect exactly one copy from `Hll.Kernels.update_many` (the input state is copied once before the loop, on purpose).
+`Defk.Catalog` now loads exactly the eight chosen examples, one explicit module list per script (`test/support/catalog.ex`), the scripts compiling in parallel (`Task.async_stream`; the modules of one script in order). `Hashes.Kernels` is loaded without `Hashes.CRC32CPortable`, `Cosine.Kernels` without `Cosine.NxSearch`. `poor_list_data`, `poor_tiny_calls` (poor) and `_template` (a placeholder verdict; `Examples.Kernels.sum` covers the same kernel) left the catalog.
+
+Tests that changed with it:
+
+- `test/agreement_test.exs`: one agreement property per kernel of `Gorilla.Kernels`, `LzSnappy.Kernels`, `Hashes.Kernels` (37 kernels), `Hll.Kernels` and `Cosine.Kernels`, with bounded generators (`test/support/catalog_generators.ex`): Gorilla series with deltas of deltas on every bucket edge and values that flip a few bits; Snappy streams and LZ4 blocks encoded in Elixir (valid, then mutated: a changed, cut, added, dropped or inserted byte) plus arbitrary bytes, so decode and raise paths both run; byte windows and offset tables for the hashes (and 6 KB windows for the three-stream `crc32c`); HLL states of the demanded length and hashes with every leading-zero count; Cosine rows from a seeded generator, with ties and wrong shapes.
+- `test/elixir_mode_test.exs`: the test that named `Orders`, `Example` and `Clamp` is replaced by known-answer tests of the new kernels in Elixir mode (the CRC-32C and xxHash64 check values, a Snappy stream and an LZ4 block, HLL registers, the cosine ordering, the Gorilla value stream against `Defk.GorillaReference`).
+- `test/value_semantics_test.exs`: the catalog's kernels have no copies, except exactly one in `Hll.Kernels.update_many` (the input state is copied once before the loop, on purpose). `Gorilla`, `LzSnappy`, `Hashes` and `Cosine` have none.
+
+**Before and after** (2026-10-13, MIX_ENV=test, 12 cores, shared host: every number is **provisional**; the load swung between 4 and 10 during the runs and wall time with it, so CPU time is given too). Before (commit 1cab26f): warm cache 83.3 s ExUnit time, 85.3 s wall, 49.7 s user+sys, at load 8.6. After: warm cache 46.3 s, 50.1 s and 46.3 s ExUnit time (47-51 s wall) at load 4.6-10, 50.5-55.1 s user+sys. The difference between the runs is the host's load, not the change: CPU time grew by about 1-5 s. `Defk.Catalog.load` alone takes 1.4 s cold (a fresh `_build/test/defk`) and 0.33 s warm; `test/agreement_test.exs` went from 0.5 s to 1.4 s of test time (27 to 75 properties). A cold `_build/test/defk` run: before 66.7 s ExUnit time, after 82.1 s, both at load 6-10.
 
 ### Not covered by an example in mix test
 

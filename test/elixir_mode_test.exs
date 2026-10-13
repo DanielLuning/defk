@@ -264,6 +264,7 @@ end
 defmodule Defk.ElixirModeTest do
   use ExUnit.Case, async: false
 
+  import Bitwise
   import ExUnit.CaptureIO
   import Defk.ElixirModeTest.Agree
 
@@ -290,6 +291,12 @@ defmodule Defk.ElixirModeTest do
 
   @min -9_223_372_036_854_775_808
   @max 9_223_372_036_854_775_807
+  defp bits(v),
+    do:
+      (
+        <<b::signed-64-native>> = <<v::float-64-native>>
+        b
+      )
 
   describe "existing tests run in Elixir mode" do
     # yields, frames and reloads don't exist in Elixir mode: their inputs are
@@ -516,14 +523,70 @@ defmodule Defk.ElixirModeTest do
       agree(Blur.Kernels, :gray_blur, [<<>>, 0, 0])
     end
 
-    test "poor_list_data, poor_tiny_calls and the template" do
-      totals = f64s(for i <- 1..10_000, do: 5.0 + rem(i * 7919, 50_000) / 100)
-      agree(Orders.Kernels, :sum, [totals])
-      agree(Example.Kernels, :work, [totals])
-      assert Example.Kernels.__defk_elixir__(:work, [totals]) === Example.Elixir.work(totals)
+    # poor_list_data, poor_tiny_calls and the template left the catalog
+    # (defk-30c.2): their kernels (a float sum, a clamp) are covered by
+    # Examples.Kernels above. The properties of test/agreement_test.exs cover
+    # every kernel of the modules below in Elixir mode; these are known
+    # answers on realistic inputs.
 
-      for x <- [-50, -10.0, 0, 3.5, 90.0, 150.5],
-          do: agree(Clamp.Kernels, :clamp, [x, -10.0, 90.0])
+    test "gorilla_encode: the value stream is gorilla_stream's encoder output" do
+      vals = [12.0, 12.0, 12.5, 13.0, 12.5, 12.5, 11.0]
+      p = i64s(Enum.flat_map(Enum.with_index(vals), fn {v, i} -> [1_000 + 60 * i, bits(v)] end))
+      {:ok, {out, ts_len, val_len}} = agree(Gorilla.Kernels, :streams, [p])
+
+      # 64 bits for t0, 9 for the first delta (7-bit bucket), 1 per zero dod
+      assert ts_len == 64 + 9 + 5
+      <<_::bitstring-size(^ts_len), values::bitstring-size(^val_len), _::bitstring>> = out
+      assert values == Defk.GorillaReference.compress(vals)
+    end
+
+    test "lz4_snappy_decode: a Snappy stream and an LZ4 block with an overlapping copy" do
+      # "abc", then a copy of 6 bytes from offset 3
+      snappy = <<9, 2 <<< 2, "abc", 2 ||| 5 <<< 2, 3::16-little>>
+      assert agree(LzSnappy.Kernels, :snappy_decode, [snappy]) == {:ok, "abcabcabc"}
+
+      lz4 = <<3 <<< 4 ||| 2, "abc", 3::16-little, 1 <<< 4, "x">>
+      assert agree(LzSnappy.Kernels, :lz4_block_decode, [lz4, 10]) == {:ok, {"abcabcabcx", 10}}
+      assert {:raise, %ArgumentError{}} = agree(LzSnappy.Kernels, :lz4_block_decode, [lz4, 9])
+
+      assert {:raise, %ArgumentError{}} =
+               agree(LzSnappy.Kernels, :snappy_decode, [<<9, 8, "ab">>])
+    end
+
+    test "hashes: the published check values" do
+      # CRC-32C of "123456789", xxHash64 of the empty input (seed 0)
+      assert agree(Hashes.Kernels, :crc32c, ["123456789"]) == {:ok, 0xE3069283}
+      assert agree(Hashes.Kernels, :crc32c_s8, ["123456789"]) == {:ok, 0xE3069283}
+
+      assert agree(Hashes.Kernels, :xxh64, ["", 0]) ==
+               {:ok, Defk.Bits.wrap64(0xEF46DB3751D8E999)}
+
+      # all three CRC streams of the builtin kernel, and the table version
+      big = for i <- 1..7_000, into: <<>>, do: <<rem(i * 31, 251)>>
+      {:ok, crc} = agree(Hashes.Kernels, :crc32c, [big])
+      assert agree(Hashes.Kernels, :crc32c_s8, [big]) == {:ok, crc}
+    end
+
+    test "hll_update_many: registers hold 1 + the leading zeros" do
+      state = <<1, 4, 0, 0>> <> :binary.copy(<<0>>, 16)
+      hashes = <<0::64-native, 1 <<< 63::64-native, 0x1FFFFFFFFFFFFFFF::64-native>>
+      {:ok, out} = agree(Hll.Kernels, :update_many, [state, hashes, 4])
+      # all-zero bits give 64 - p + 1; the top bit picks register 8
+      assert :binary.at(out, 4) == 61
+      assert :binary.at(out, 12) == 61
+      assert :binary.at(out, 5) == 1
+    end
+
+    test "cosine_topk: the nearest rows first, ties to the lower index" do
+      row = fn i ->
+        for j <- 0..383, into: <<>>, do: <<if(j == i, do: 1.0, else: 0.0)::float-32-native>>
+      end
+
+      q = f64s(for j <- 0..383, do: if(j == 1, do: 1.0, else: 0.0))
+      m = row.(0) <> row.(1) <> row.(1) <> row.(2)
+      {:ok, {ids, scores}} = agree(Cosine.Kernels, :topk, [m, q, 3, 100])
+      assert for(<<i::64-signed-native <- ids>>, do: i) == [101, 102, 100]
+      assert for(<<s::float-64-native <- scores>>, do: s) == [1.0, 1.0, 0.0]
     end
   end
 
