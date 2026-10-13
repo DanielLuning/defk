@@ -18,10 +18,10 @@ runner and the suppressions.
 Needs `podman` (on macOS: `podman machine start`, at least 4 CPUs and 8 GiB).
 
 ```sh
-scripts/valgrind/run.sh                          # every test/*_test.exs, one at a time
-scripts/valgrind/run.sh test/alloc_test.exs      # chosen files (paths relative to the repo root)
-JOBS=2 scripts/valgrind/run.sh                   # two shards on two CPUs
-scripts/valgrind/planted/run.sh                  # self-test: must FAIL (see below)
+verify/valgrind/run.sh                           # every test/*_test.exs, one at a time
+verify/valgrind/run.sh test/alloc_test.exs       # chosen files (paths relative to the repo root)
+JOBS=2 verify/valgrind/run.sh                    # two shards on two CPUs
+verify/valgrind/planted/run.sh                   # self-test: must FAIL (see below)
 ```
 
 The first call builds the image `defk-valgrind` (about 2 minutes on 8 CPUs:
@@ -121,7 +121,7 @@ lives outside `test/`, so `mix test` never sees it.
 
 ## Full suite
 
-`JOBS=2 scripts/valgrind/run.sh` on an 8 CPU / 8 GiB podman machine (Apple
+`JOBS=2 verify/valgrind/run.sh` on an 8 CPU / 8 GiB podman machine (Apple
 Silicon, host not idle, so provisional): **52 minutes wall** for 76 files,
 about 97 minutes of one-CPU time. Zero memcheck errors and zero definite
 leaks over the 76 files (frame_tag_test's by-design leak suppressed). The

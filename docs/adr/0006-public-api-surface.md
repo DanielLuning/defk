@@ -30,7 +30,7 @@ Tiers:
 
 "Who uses it" counts files that mention the name, as of commit `ead50e0`:
 `test/` (incl. `test/support`), `examples/` (incl. `fuzzy_search`,
-`one_brc`, `release_debian`), `bench/`, `demo.exs`, and the user docs named
+`one_brc`, `release_debian`), `bench/` (incl. `demo.exs`), and the user docs named
 above.
 
 ## Decision
@@ -107,9 +107,9 @@ above.
 | `__defk_elixir_source__/0` (same condition) | generated `@doc`; `language.md`, README | 1 test | **unstable** | debugging output; the text changes with the emitter |
 | `__defk_source__/0` | generated `@doc`; `language.md`, README | tests 18 | **unstable** | debugging output (C text). Rename candidate |
 | `__defk_report__/0` | generated `@doc`; README, `fast-path-report.md`, `Defk.Report`; **missing from `language.md`'s table** | tests 3 | **unstable** | fact list grows; `Defk.Report.print/1` is the stable way in |
-| `__defk_lib__/0` | generated `@doc`; `language.md` | tests 8, `demo.exs`, `release_debian` | **unstable** | path moves with `defk-n8f` |
+| `__defk_lib__/0` | generated `@doc`; `language.md` | tests 8, `bench/demo.exs`, `release_debian` | **unstable** | path moves with `defk-n8f` |
 | `__defk_kernels__/0` | generated `@doc`; `language.md` | `test/support/properties.ex`, 1 test | **unstable** | signature maps; keys (`ret`, type atoms) not settled |
-| `__defk_stats__/0` | generated `@doc`; `language.md`, README | tests 15, `demo.exs`, 2 benches, 2 examples | **unstable** | semantics across reloads still open (`defk-9qv`) |
+| `__defk_stats__/0` | generated `@doc`; `language.md`, README | tests 15, `bench/demo.exs`, 2 benches, 2 examples | **unstable** | semantics across reloads still open (`defk-9qv`) |
 | `__defk_force_yields__/1` | generated `@doc`; `language.md` | tests 19 | **public** (testing) | the documented way to test every resume path; note it is module-wide, not per process |
 | `__defk_corrupt_tags__/1` | `@doc false` | `test/frame_tag_test.exs` | **hidden**, and generate only under `:test` | a fault-injection hook compiled into every production library; see open question 2 |
 | `__defk_load__/0` | `@doc false`, `@on_load` | `release_debian` README (prose) | **hidden** | loader; `@impl true` before a `defk` lands on it (`defk-ltt`) |

@@ -9,7 +9,7 @@
  *
  * Not modelled: processes, messages, GC (beyond moving input binaries
  * between calls, shim_move_binary), dirty schedulers, iolists, bignums.
- * See scripts/fuzz/README.md.
+ * See verify/fuzz/README.md.
  */
 #ifndef DEFK_NIF_SHIM_H
 #define DEFK_NIF_SHIM_H

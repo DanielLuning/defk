@@ -1,4 +1,4 @@
-# defk demo: `mix run demo.exs`
+# defk demo: `mix run bench/demo.exs` (from the repo root)
 # Answers: does defk get native speed, what does the boundary cost, and does it
 # keep the BEAM promises (preemption, isolation, cleanup)?
 

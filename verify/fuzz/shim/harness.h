@@ -1,6 +1,6 @@
 /*
  * The libFuzzer harness shared by every target (harness.c). A target (one
- * file in scripts/fuzz/targets/) names the kernel's NIF, turns the fuzzer's
+ * file in verify/fuzz/targets/) names the kernel's NIF, turns the fuzzer's
  * bytes into its arguments and checks a returned value; the harness does the
  * rest: load the library through its own nif_init(), call the NIF the way
  * the generated Elixir function does, follow enif_schedule_nif
