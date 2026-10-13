@@ -8,6 +8,7 @@
   "labels": [
     "ready-for-human"
   ],
+  "parent": "defk-w8r",
   "comments": [
     {
       "text": "Triage (defk-sgw plan): ready-for-human. Measurement work that needs a quiet machine and judgement about noise.",
@@ -18,5 +19,5 @@
   "status": "open",
   "title": "Make code-layout timing noise visible or stable",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:58Z"
+  "updated_at": "2026-10-13T19:08:09Z"
 }
