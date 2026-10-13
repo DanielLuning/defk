@@ -9,12 +9,12 @@
   "description": "Tier 2, after inflate. zstd decoding is FSE (tANS) and Huffman tables, a sequence execution loop, and a repeat-offset history; the reference decoder is plain C with SIMD only in hot copies, but the spec surface is several times inflate's (RFC 8878). Anchor: ezstd (Rustler), zstd NIFs; these run dirty for large inputs. Do it only after inflate's bit reader, table builders and growable output have proven themselves; reuse them.\n\nExpected verdict: poor on speed vs libzstd (which is heavily tuned), with the safety and yielding argument; the honest question for the entry is whether a bounded, bounds-checked zstd decoder is worth having for untrusted archives.\n\nScope: frame decoding without dictionaries; window sizes up to 8 MB; dictionaries raise.\n\nBlocked by the inflate ticket and defk-6ag.\n\nDone when: the decoder passes the zstd test corpus for the supported subset, fuzz agreement runs, the verdict is measured and recorded even if poor.",
   "id": "defk-52v.8",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "parent": "defk-52v",
   "priority": 4,
   "status": "open",
   "title": "zstd decode from scratch vs ezstd (follow-on to inflate)",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:42Z"
+  "updated_at": "2026-10-13T19:08:18Z"
 }
