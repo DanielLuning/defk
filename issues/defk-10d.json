@@ -8,9 +8,10 @@
   "labels": [
     "needs-triage"
   ],
+  "parent": "defk-vcx",
   "priority": 3,
   "status": "open",
   "title": "Compile errors carry their code as data",
   "type": "task",
-  "updated_at": "2026-10-12T07:37:22Z"
+  "updated_at": "2026-10-13T19:08:11Z"
 }
