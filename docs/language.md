@@ -1710,10 +1710,17 @@ iex> M.classify(11, 0)
 - **Limit:** a guard result outside `i64` (`n * n > 100` at `n = 2^40`, `abs`
   of the minimum, a `trunc` out of range) is no error in Elixir, which has
   bignums, so it does not fail the clause: it raises `ArithmeticError`, as the
-  same operation does outside a guard. When one guard has both a zero divisor
-  and such a result, evaluated without a short-circuit between them
-  (`rem(n, y) < n * n`), the kernel raises, where Elixir mode may fail the
-  clause for the zero divisor it reaches first.
+  same operation does outside a guard. A guard error wins over such a result:
+  a guard that reaches a zero divisor or an inf/NaN fails its clause even with
+  an overflow beside it, in either order (`rem(n, y) < n * n` and
+  `n * n > rem(n, y)` at `y = 0`), as in Elixir; only a guard whose sole
+  problem is the overflow raises. An overflowed value is not Elixir's value,
+  so it decides nothing: when it is the left side of an `and`/`or` (`n * n >
+  100 or rem(n, y) == 0`), or a divisor (`rem(5, n * n)`), the guard raises
+  `ArithmeticError` unless an error came first. The exception is an `and`
+  whose false fails the guard anyway (`n * n > 100 and rem(n, y) == 0`, at
+  the top of the guard or inside such an `and`): its right side runs, and an
+  error there fails the clause. Elixir mode does the same.
 
 ### Tuples from branches
 
@@ -2219,7 +2226,7 @@ bug.
 | `alloc/2` of more than 2^48 bytes | (the VM would abort) | `ArgumentError` "alloc/2: length too large" |
 | `alloc/2` of a size the allocator cannot provide | (the VM would abort) | `ArgumentError` "out of memory"; Elixir mode raises it from 2^47 bytes without trying |
 | a range whose last element is within one step of the `i64` limit, e.g. `0..9223372036854775807` | runs | `ArithmeticError` "range element ... is within one step of the i64 limit" before the loop starts, also when the loop would stop earlier |
-| an `i64` overflow inside a `case` guard (`n * n > 100`) | the guard is computed exactly | `ArithmeticError`. A zero divisor in a guard is no limit: it fails the clause, as in Elixir |
+| an `i64` overflow inside a `case` guard (`n * n > 100`) | the guard is computed exactly | `ArithmeticError`. A zero divisor in a guard is no limit: it fails the clause, as in Elixir, even beside an overflow; an overflow that decides an `and`/`or` or a divisor raises ([`case`](#case)) |
 | ordering booleans, comparing a boolean with a number | term order | compile error [`operand-type`](compile-errors.md#operand-type) |
 | `&&`, `\|\|`, `!` on non-boolean values | truthiness | compile error [`operand-type`](compile-errors.md#operand-type) |
 | recursion, direct or mutual | runs | compile error [`recursion`](compile-errors.md#recursion) |

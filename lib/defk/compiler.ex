@@ -1651,7 +1651,7 @@ defmodule Defk.Compiler do
     {[sa, sb], val(compare_c(op, va, vb, node), :bool)}
   end
 
-  defp lower_expr({op, _, [a, b]}, env) when op in [:and, :or, :&&, :||] do
+  defp lower_expr({op, m, [a, b]}, env) when op in [:and, :or, :&&, :||] do
     ref = make_ref()
     {sa, va} = lower_expr(a, env)
     {sb, vb} = srec_arm(ref, 0, fn -> lower_expr(b, env) end)
@@ -1662,7 +1662,7 @@ defmodule Defk.Compiler do
     if IO.iodata_length(sb) == 0 do
       # inline right side: its rows run with the statement after all
       srec_drop_frame(ref)
-      {sa, val("(#{va.c} #{cop} #{vb.c})", :bool)}
+      {sa, val(guard_short_circuit(va, vb, cop, m, env), :bool)}
     else
       # right side needs statements: keep short-circuit semantics explicitly
       tmp = fresh("sc", :bool)
@@ -1784,12 +1784,17 @@ defmodule Defk.Compiler do
         {:i64, va, vb} ->
           i64_arith(op, va, vb, env)
 
-        {:/, _, _} ->
-          val("defk_fdiv#{checked_float(env)}, #{to_f(va)}, #{to_f(vb)})", :f64)
-
         # a float result that is inf or NaN raises, as in Elixir (defk-i00)
         _ ->
-          val("defk_#{@float_ops[op]}#{checked_float(env)}, #{to_f(va)}, #{to_f(vb)})", :f64)
+          fun = Map.get(@float_ops, op, "fdiv")
+          fs = [val(to_f(va), :f64), val(to_f(vb), :f64)]
+
+          c =
+            guard_poison(fs, 2, env, fn [a, b] ->
+              "defk_#{fun}#{checked_float(env)}, #{a}, #{b})"
+            end)
+
+          val(c, :f64)
       end
 
     {[sa, sb], v}
@@ -1826,18 +1831,34 @@ defmodule Defk.Compiler do
   # overflow)
   defp int_div(f, a, b, node, env) do
     case {int_pair!(a, b, node), env} do
+      # in a case guard: a zero divisor is flagged, unless the divisor
+      # overflowed (guard_poison/4)
       {{:i64, a, b}, %{bad: bad, ovf: ovf}} when f == :div ->
         srec_addr(bad)
         srec_addr(ovf)
-        val("defk_div_i64_g(&#{bad}, &#{ovf}, #{a.c}, #{b.c})", :i64)
+
+        c =
+          guard_poison([a, b], 1, env, fn [a, b] ->
+            "defk_div_i64_g(&#{bad}, &#{ovf}, #{a}, #{b})"
+          end)
+
+        val(c, :i64)
 
       {{:i64, a, b}, %{bad: bad}} ->
         srec_addr(bad)
-        val("defk_rem_i64_g(&#{bad}, #{a.c}, #{b.c})", :i64)
+
+        val(
+          guard_poison([a, b], 1, env, fn [a, b] -> "defk_rem_i64_g(&#{bad}, #{a}, #{b})" end),
+          :i64
+        )
 
       {{:u64, a, b}, %{bad: bad}} ->
         srec_addr(bad)
-        val("defk_#{f}_u64_g(&#{bad}, #{a.c}, #{b.c})", :u64)
+
+        val(
+          guard_poison([a, b], 1, env, fn [a, b] -> "defk_#{f}_u64_g(&#{bad}, #{a}, #{b})" end),
+          :u64
+        )
 
       {{:i64, a, b}, _} ->
         val("defk_#{f}_i64(ctx, #{a.c}, #{b.c})", :i64)
@@ -5007,10 +5028,17 @@ defmodule Defk.Compiler do
   # guard is computed with flagged operations: `bad` is set by those errors,
   # and the guard is then false, as a whole (an error in the left of an `or`
   # fails the guard too, but an operand a short-circuit skips never runs).
-  # A result outside i64 is not an Elixir error (Elixir has no i64 limit), so
-  # it keeps raising: `ovf` is set, and the guard is replayed with the
-  # raising checks, which raise as the unguarded operation does. A guard with
-  # no operation that can fail lowers as written, with no flags.
+  # A result outside i64 is not an Elixir error (Elixir has no i64 limit):
+  # `ovf` is set, and the guard is replayed with the raising checks, which
+  # raise as the unguarded operation does. The guard error wins (defk-34l):
+  # Elixir fails such a guard whatever the exact value, so `bad` decides
+  # before `ovf`, in either order. An overflowed value is not Elixir's value,
+  # so it decides nothing (guard_poison/4): an error whose operands were
+  # computed from it is not flagged, and an and/or whose left side it decides
+  # raises (`stop`, set only while no error came first) unless the operand is
+  # an `and` whose false fails the guard anyway (guard_false_pos/1), whose
+  # right side then runs: its error fails the guard. A guard with no
+  # operation that can fail lowers as written, with no flags.
   # A case guard as a C condition. Lowered once with placeholder flags: when
   # no flag appears nothing can fail and that is the guard. Otherwise the
   # flags are real locals, reset on every evaluation. Inside a speculated
@@ -5018,42 +5046,138 @@ defmodule Defk.Compiler do
   # clauses with a guard that raises; elsewhere it replays this guard.
   @guard_bad "defk guard bad"
   @guard_ovf "defk guard ovf"
+  @guard_stop "defk guard stop"
 
   defp guard_expr(guard, env) do
-    gv = Map.merge(env, %{ovf: @guard_ovf, bad: @guard_bad})
+    guard = guard_false_pos(guard)
+    gv = Map.merge(env, %{ovf: @guard_ovf, bad: @guard_bad, stop: @guard_stop})
     {s, v} = lower_expr(guard, gv)
     0 = IO.iodata_length(s)
     bad? = String.contains?(v.c, "&" <> @guard_bad)
     ovf? = String.contains?(v.c, "&" <> @guard_ovf)
     outer = Map.get(env, :ovf)
-
-    bad = bad? && fresh("gbad", :bool)
-    ovf = if ovf? and outer == nil, do: fresh("govf", :bool), else: outer
-    c = v.c |> String.replace(@guard_bad, bad || "") |> String.replace(@guard_ovf, ovf || "")
+    {c, bad, ovf, stop} = guard_flags(v.c, ovf?, outer)
 
     cond do
       not (bad? or ovf?) ->
         {[], v}
 
-      outer != nil and not bad? ->
+      outer != nil and bad == false ->
         {[], val(c, :bool)}
 
+      # the select replays with a raising guard when its flag is set, so
+      # only an error matters here
       outer != nil ->
         g = fresh("guard", :bool)
         {[], val("(#{bad} = 0, #{g} = (#{c}), !#{bad} && #{g})", :bool)}
 
       true ->
-        g = fresh("guard", :bool)
+        {[], val(guard_decide(guard, env, c, bad, ovf? && ovf, stop), :bool)}
+    end
+  end
+
+  # The guard's C with its placeholder flags made locals (`bad`, `stop`) or
+  # the outer select's flag (`ovf`), each false when it cannot be set
+  defp guard_flags(c, ovf?, outer) do
+    stop? = String.contains?(c, @guard_stop)
+    bad = (String.contains?(c, "&" <> @guard_bad) or stop?) && fresh("gbad", :bool)
+    ovf = if ovf? and outer == nil, do: fresh("govf", :bool), else: outer
+    stop = stop? && fresh("gstop", :bool)
+
+    c =
+      c
+      |> String.replace(@guard_bad, bad || "")
+      |> String.replace(@guard_ovf, ovf || "")
+      |> String.replace(@guard_stop, stop || "")
+
+    {c, bad, ovf, stop}
+  end
+
+  # The guard `c` with its flags (each a local, or false when it cannot be
+  # set) decided: an error (not after a `stop`) fails it, else an overflow
+  # replays it with the raising checks, else its value.
+  defp guard_decide(guard, env, c, bad, ovf, stop) do
+    g = fresh("guard", :bool)
+    resets = [bad, ovf, stop] |> Enum.filter(& &1) |> Enum.map_join(", ", &"#{&1} = 0")
+    failed = if stop, do: "#{bad} && !#{stop}", else: bad
+
+    ok =
+      if ovf do
         {_, plain} = lower_expr(guard, env)
-        resets = Enum.map_join([bad, ovf] -- [false, nil], ", ", &"#{&1} = 0")
-        ok = if bad?, do: "!#{bad} && #{g}", else: g
+        "DEFK_UNLIKELY(#{ovf}) ? ((void)(#{plain.c}), 0) : #{g}"
+      else
+        g
+      end
 
-        ok =
-          if ovf?,
-            do: "DEFK_UNLIKELY(#{ovf}) ? ((void)(#{plain.c}), 0) : (#{ok})",
-            else: ok
+    ok = if bad, do: "#{failed} ? 0 : (#{ok})", else: ok
+    "(#{resets}, #{g} = (#{c}), #{ok})"
+  end
 
-        {[], val("(#{resets}, #{g} = (#{c}), #{ok})", :bool)}
+  # `va cop vb`. In a case guard (env.bad) whose left side may overflow, an
+  # overflowed left side does not decide which side runs (guard_expr): an
+  # `and` whose false fails the guard runs its right side (an error there
+  # fails the guard whatever the left side's exact value); any other sets
+  # `stop` unless an error came first, and the guard raises the overflow.
+  defp guard_short_circuit(va, vb, cop, m, env) do
+    ovf = Map.has_key?(env, :bad) && env.ovf
+
+    if ovf && String.contains?(va.c, "&" <> ovf) do
+      l = fresh("gl", :bool)
+      saved = fresh("gsave", :bool)
+      poisoned = fresh("gpoison", :bool)
+
+      left =
+        "(#{saved} = #{ovf}, #{ovf} = 0, #{l} = #{va.c}, #{poisoned} = #{ovf}, #{ovf} |= #{saved}, "
+
+      if cop == "&&" and m[:defk_false_pos] do
+        left <> "(#{l} || #{poisoned}) && #{vb.c})"
+      else
+        left <> "#{poisoned} ? ((#{env.bad} || (#{env.stop} = 1)), 0) : (#{l} #{cop} #{vb.c}))"
+      end
+    else
+      "(#{va.c} #{cop} #{vb.c})"
+    end
+  end
+
+  # The `and` nodes of a guard whose false fails the guard: the root and,
+  # through them, the operands of an `and` there. Their meta carries
+  # :defk_false_pos, read by the and/or lowering under an overflow.
+  defp guard_false_pos({:and, m, [a, b]}),
+    do: {:and, [{:defk_false_pos, true} | m], [guard_false_pos(a), guard_false_pos(b)]}
+
+  defp guard_false_pos(other), do: other
+
+  # In a case guard (env.bad), the C of an operation `call` on the operands
+  # `vs` whose result depends on whether any of the `watched` (a suffix of
+  # `vs`) was computed with an overflow: a divisor's zero, a float result's
+  # finiteness. When one was, the operation is skipped (its result is
+  # poisoned, the overflow already flagged): an overflowed value is not
+  # Elixir's, so its error is not Elixir's either. The overflow flag is saved,
+  # cleared around the watched operands and restored, the operands evaluated
+  # in order into temporaries. Elsewhere, or with no overflow possible in the
+  # watched operands, the operation as written.
+  defp guard_poison(vs, watched, env, call) do
+    {pre, post} = Enum.split(vs, length(vs) - watched)
+    ovf = Map.has_key?(env, :bad) && env.ovf
+
+    if ovf && Enum.any?(post, &String.contains?(&1.c, "&" <> ovf)) do
+      tmps = Enum.map(vs, &fresh("gop", &1.t))
+      {tpre, tpost} = Enum.split(tmps, length(pre))
+      saved = fresh("gsave", :bool)
+      poisoned = fresh("gpoison", :bool)
+      assign = fn ts, xs -> Enum.zip_with(ts, xs, &"#{&1} = #{&2.c}, ") end
+
+      [
+        "(",
+        assign.(tpre, pre),
+        "#{saved} = #{ovf}, #{ovf} = 0, ",
+        assign.(tpost, post),
+        "#{poisoned} = #{ovf}, #{ovf} |= #{saved}, ",
+        "#{poisoned} ? 0 : #{call.(tmps)})"
+      ]
+      |> IO.iodata_to_binary()
+    else
+      call.(Enum.map(vs, & &1.c))
     end
   end
 
