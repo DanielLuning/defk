@@ -11,9 +11,15 @@
     "needs-triage"
   ],
   "parent": "defk-30c",
+  "comments": [
+    {
+      "text": "Decision (maintainer, 2026-10-13): keep examples/fuzzy_search/lib/fuzzy_search/kernels.ex in mix test (cheap, real yielding kernel); the app's own tests (Plug, Bandit, /usr/share/dict/words) run only in mix defk.examples (defk-30c.3), not in mix ci.",
+      "timestamp": "2026-10-13T14:01:19Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "fuzzy_search in CI: keep kernels.ex as a test fixture, move the app's tests out",
   "type": "task",
-  "updated_at": "2026-10-13T12:53:18Z"
+  "updated_at": "2026-10-13T14:01:19Z"
 }
