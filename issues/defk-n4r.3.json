@@ -7,6 +7,7 @@
     "defk-n4r.6"
   ],
   "created": "2026-10-09T18:40:51Z",
+  "defer_until": "2026-11-15",
   "description": "A kernel needs to name a byte range (a station name inside a chunk, a chunk inside a file) without copying it, pass it to a helper kernel, and sometimes return it.\n\nProposed: `slice(a, start, len) :: [T]` for any array a. Native: a view {data + start*esz, len} with a bounds check start \u003e= 0, len \u003e= 0, start + len \u003c= len(a) (raise Enum.OutOfBoundsError like a[i]). Elixir meaning: binary_part(a, start*esz, len*esz), which raises ArgumentError on bad bounds, so Elixir mode must raise the kernel's exception module instead (Ops.slice). A slice of an owned array is not owned (it cannot be returned or written). A slice of an input array can be returned once returning input arrays lands (defk-gqk): natively via enif_make_sub_binary over the original term, so the caller gets a sub-binary and no copy.\n\nDesign questions to settle before coding (why this is needs-triage):\n- Range facts: a slice's length is a new array variable with len_lo/len_lb facts from `len`; writes through a slice of an alloc'd array: allowed or not? (Simplest: not, in this iteration.)\n- Does a slice survive a yield? Views are rebuilt from argv on every entry (defk_bind), so a slice must be re-derived from its base array after resume: emit it as a (base, start, len) triple in the frame, not a raw pointer. Same for the misaligned-copy case.\n- Interaction with defk-auo (array value semantics): a slice aliases its base; if writes become copy-on-alias, slices of owned arrays need the same treatment.\n\nBlocked by defk-gqk (arrays through branches / returning input arrays) for the return path only; views as local values can land first.\n\nDone when: slice works as a local value and as a helper-kernel argument, survives forced yields (resume tests), agrees with Elixir mode under the agreement properties, and returning a slice of an input array yields a sub-binary with no copy (checked with :erlang.binary_referenced? style tests or binary.referenced_byte_size).",
   "id": "defk-n4r.3",
   "labels": [
@@ -20,8 +21,8 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "deferred",
   "title": "Sub-array views: slice(a, start, len) as a zero-copy [T] value",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:14Z"
+  "updated_at": "2026-10-13T19:08:43Z"
 }
