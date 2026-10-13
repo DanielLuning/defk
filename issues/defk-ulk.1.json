@@ -17,11 +17,15 @@
     {
       "text": "Research landed on branch defk-ulk.1/simd-research (0592fd9): docs/research/simd.md, tools in bench/simd/ (CC wrapper per level; no lib/ change), performance.md 6.14, 6.15 and a 7.1 note.\n\nFindings (M4 Pro, Apple clang 21, loaded machine, provisional):\n- Vectorisation: 24 of 200 catalogue loops vectorise, identical loop by loop and width at default (apple-m1), generic, armv8.2-a and -mcpu=native. Blockers: loop-carried recurrences (hashes, CRC, DFA, Myers) are most; then early exits from remaining checks, gathers (codecs), early-exit-by-design loops, branchy bodies.\n- arm64 timing, 42 kernels, interleaved, 3 runs: native and armv8.2-a within about ±3% of default everywhere. -mcpu=generic: sort_i64 0.78x, cosine/keccak 0.93x, SHA-256 1.18x faster. -mtune=generic alone reproduces it and -march=armv8-a alone does not, so it is tuning, not features.\n- x86-64 (remarks only): SSE2 14 loops vectorised, v2 16, v3/v4 20 at double width; ws_mask's main loop vectorises only at v3+; sum, dot and cosine never vectorise on x86 (no ordered reductions).\n- Bit-exactness: 331 agreement/float tests pass with kernels built at generic, armv8.2-a and native. The 42 kernels agree with Elixir mode and with the default build at every level. No FMA at any level, including x86-64-v3/v4, under -ffp-contract=off; the contract=on control shows FMAs. No FPCR/MXCSR use.\n- Gaps: no flag emits CRC32/SHA/SHA3 instructions. CRC32C needs a builtin (14x gap). UTF-8, base64/hex and substring search need vector values.\n- Recommendation, in order: ulk.4 (crc32c) first; then ulk.5 (ceiling study); then the x86 timing run; ulk.2 only if x86 v3 gains are real (arm64 says no; consider -mtune separately); ulk.3 last.\n\nNOT DONE (why the ticket stays open): x86-64 timings, which need real hardware. On an x86-64 Linux box with clang:\n  mix deps.get; uptime; SIMD_CC=clang mix run bench/simd/time.exs 9 /tmp/simd-x86.etf\n  SIMD_CC=clang bench/simd/agree_levels.sh\n  (optional, on AVX-512: SIMD_LEVELS=\"default:,v4:-march=x86-64-v4\" SIMD_CC=clang mix run bench/simd/time.exs 9)\nRecord lscpu, the clang version and the load, then fill the 'Not measured: x86-64 timings' table in simd.md.",
       "timestamp": "2026-10-11T13:01:35Z"
+    },
+    {
+      "text": "Deferred with the epic. What remains is only the x86-64 timing run on real hardware (commands in the comment above); the research doc and its recommendation are on main.",
+      "timestamp": "2026-10-13T19:08:38Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Research: vectorisation headroom and what target levels buy",
   "type": "task",
-  "updated_at": "2026-10-11T13:09:08Z"
+  "updated_at": "2026-10-13T19:08:38Z"
 }
