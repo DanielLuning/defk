@@ -50,6 +50,7 @@ end
 defmodule Defk.AllocTest do
   use ExUnit.Case, async: true
   import Defk.Test.Frames
+  import Defk.TestKit, only: [i64s: 1]
   use Defk.Properties
   alias Defk.AllocTest.K
 
@@ -175,8 +176,6 @@ defmodule Defk.AllocTest do
     assert native == outcome(fn -> K.__defk_elixir__(fun, args) end), "#{fun}#{inspect(args)}"
     native
   end
-
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
 
   defp outcome(f) do
     {:ok, f.()}

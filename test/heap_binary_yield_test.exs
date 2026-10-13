@@ -40,15 +40,13 @@ end
 defmodule Defk.HeapBinaryYieldTest do
   use ExUnit.Case, async: true
   import Defk.Test.Frames
+  import Defk.TestKit
 
   alias Defk.HeapBinaryYieldTest.K
 
   @timeout 30_000
   # ~150 ms of yields at every safepoint: far longer than the forced GC needs
   @reps 8_000_000
-
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
-  defp f64s(list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
 
   defp heap_binary_inputs do
     a = i64s([1, 2, 3, 4])
@@ -75,25 +73,20 @@ defmodule Defk.HeapBinaryYieldTest do
 
   test "heap-binary inputs agree with Elixir mode while the kernel yields" do
     {a, b, c} = heap_binary_inputs()
-    K.__defk_force_yields__(true)
 
-    try do
-      y0 = K.__defk_stats__().yields
-      assert K.weigh(a, b, c, 2_000) == closed_form(2_000)
-      assert K.__defk_stats__().yields > y0, "the kernel never yielded"
+    forced(K, fn ->
+      {res, count} = yields(K, fn -> K.weigh(a, b, c, 2_000) end)
+      assert res == closed_form(2_000)
+      assert count > 0, "the kernel never yielded"
       assert K.weigh(a, b, c, 2_000) == K.__defk_elixir__(:weigh, [a, b, c, 2_000])
-    after
-      K.__defk_force_yields__(false)
-    end
+    end)
   end
 
   test "a forced GC between two steps of a yielding kernel keeps the result correct" do
     {a, b, c} = heap_binary_inputs()
     expected = closed_form(@reps)
 
-    K.__defk_force_yields__(true)
-
-    try do
+    forced(K, fn ->
       parent = self()
       y0 = K.__defk_stats__().yields
 
@@ -134,22 +127,6 @@ defmodule Defk.HeapBinaryYieldTest do
       # the kernel kept yielding after the GC between its steps
       wait_until(fn -> K.__defk_stats__().yields > after_gc end)
       assert_frames_live(K)
-    after
-      K.__defk_force_yields__(false)
-    end
-  end
-
-  defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + @timeout) do
-    cond do
-      f.() ->
-        :ok
-
-      System.monotonic_time(:millisecond) > deadline ->
-        flunk("timed out")
-
-      true ->
-        Process.sleep(1)
-        wait_until(f, deadline)
-    end
+    end)
   end
 end

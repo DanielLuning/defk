@@ -209,6 +209,8 @@ defmodule Defk.CaseInTest do
   use ExUnit.Case, async: false
   use ExUnitProperties
 
+  import Defk.TestKit
+
   alias Defk.CaseInTest.K
   alias Defk.CaseInTest.Twin
   alias Defk.Generators, as: G
@@ -354,18 +356,8 @@ defmodule Defk.CaseInTest do
   defp ite(false), do: 0
 
   describe "compile errors" do
-    defp compile_error(body, ret \\ "i64") do
-      src = """
-      defmodule Defk.CaseInTest.Bad#{System.unique_integer([:positive])} do
-        use Defk
-        defk bad(x :: i64, f :: f64, b :: bool) :: #{ret} do
-          #{body}
-        end
-      end
-      """
-
-      Exception.message(assert_raise(CompileError, fn -> Code.compile_string(src) end))
-    end
+    defp compile_error(body, ret \\ "i64"),
+      do: reject(__MODULE__, kernel("x :: i64, f :: f64, b :: bool", ret, body, "bad"))
 
     defp guard_error(guard) do
       compile_error("case x do\nn when #{guard} -> 1\n_ -> 2\nend")

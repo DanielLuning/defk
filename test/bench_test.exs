@@ -8,6 +8,7 @@ defmodule Defk.BenchTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
+  import Defk.TestKit, only: [defk_result: 1, restore_env_on_exit: 1]
 
   alias Defk.Bench
   alias Defk.Bench.TickGap
@@ -30,8 +31,7 @@ defmodule Defk.BenchTest do
       capture_io(fn -> send(parent, {:r, Bench.report(Keyword.merge(base, opts))}) end)
 
     assert_received {:r, r}
-    json = out |> String.split("\n") |> Enum.find(&String.starts_with?(&1, "DEFK_RESULT "))
-    {r, out, JSON.decode!(String.replace_prefix(json, "DEFK_RESULT ", ""))}
+    {r, out, defk_result(out)}
   end
 
   # The timed fun allocates enough garbage to force minor GCs.
@@ -301,14 +301,7 @@ defmodule Defk.BenchTest do
   # defk-96f.1: sanitized kernels are slower and optimised differently, so a
   # verdict measured on them would be wrong. Refused before anything runs.
   test "report refuses to measure in the sanitizer build mode" do
-    saved = System.get_env("DEFK_SANITIZE")
-
-    on_exit(fn ->
-      if saved,
-        do: System.put_env("DEFK_SANITIZE", saved),
-        else: System.delete_env("DEFK_SANITIZE")
-    end)
-
+    restore_env_on_exit(["DEFK_SANITIZE"])
     System.put_env("DEFK_SANITIZE", "address")
     parent = self()
 

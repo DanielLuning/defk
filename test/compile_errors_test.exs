@@ -5,19 +5,20 @@ defmodule Defk.CompileErrorsTest do
   # module without the errors an earlier one causes.
   use ExUnit.Case, async: true
 
-  @dir Path.join(System.tmp_dir!(), "defk_compile_errors_test")
+  import Defk.TestKit
 
-  # the examples and rewrites of every code, compiled concurrently:
+  # the examples and rewrites of every code, compiled concurrently (a
+  # distinct key each, so no two tasks compile one module):
   # %{code => {example_result, rewrite_result}}
   setup_all do
-    File.mkdir_p!(@dir)
-
     results =
       Defk.Errors.codes()
       |> Enum.filter(& &1.example)
       |> Task.async_stream(
         fn e ->
-          {e.code, {compile(e.example, "Ex", e.code), compile(e.rewrite, "Rw", e.code)}}
+          {e.code,
+           {compile(__MODULE__, e.example, key: {e.code, :example}),
+            compile(__MODULE__, e.rewrite, key: {e.code, :rewrite})}}
         end,
         timeout: :infinity,
         ordered: false
@@ -26,37 +27,6 @@ defmodule Defk.CompileErrorsTest do
 
     %{results: results}
   end
-
-  # Compile `body` (kernels) in a module from a file, so errors have source
-  # lines. Returns :ok or the CompileError message. The name comes from the
-  # code, not a counter: the same name and source on the next run hit the
-  # build cache, where a new library costs a C compile and a first dlopen.
-  defp compile(body, tag, code \\ nil) do
-    mod = "Defk.CompileErrorsTest.M#{tag}#{stable_id({code, body})}"
-    path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-
-    indented =
-      body |> String.split("\n") |> Enum.map_join("\n", &if(&1 == "", do: "", else: "  " <> &1))
-
-    File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{indented}\nend\n")
-
-    try do
-      Code.compile_file(path)
-      :ok
-    rescue
-      e in CompileError -> Exception.message(e)
-    end
-  end
-
-  defp stable_id(term),
-    do: :erlang.md5(:erlang.term_to_binary(term)) |> Base.encode16() |> binary_part(0, 12)
-
-  defp codes(msg),
-    do:
-      Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg)
-      |> Enum.map(&Enum.at(&1, 1))
-
-  defp whats(msg), do: Regex.scan(~r/^error: (.*)$/m, msg) |> Enum.map(&Enum.at(&1, 1))
 
   # permanent and planned in words
   defp assert_kind(:subset, what), do: assert(what =~ "not in the kernel subset")
@@ -123,7 +93,7 @@ defmodule Defk.CompileErrorsTest do
 
   describe "format" do
     test "a rejection prints Elixir's frame, why, hint and the code" do
-      msg = compile("defk f(x :: i64) :: i64 do\n  m = %{a: x}\n  x\nend", "Fmt")
+      msg = compile(__MODULE__, "defk f(x :: i64) :: i64 do\n  m = %{a: x}\n  x\nend")
       [_head, block] = String.split(msg, "\n\n", parts: 2)
       file = Regex.run(~r/└─ (\S+):5:9: /, block) |> Enum.at(1)
       mod = Regex.run(~r/: (Defk\.CompileErrorsTest\.\w+)\.f\/1/, block) |> Enum.at(1)
@@ -161,6 +131,7 @@ defmodule Defk.CompileErrorsTest do
     test "the six prototype cases" do
       msg =
         compile(
+          __MODULE__,
           """
           defk map(x :: i64) :: i64 do
             m = %{a: x}
@@ -189,8 +160,7 @@ defmodule Defk.CompileErrorsTest do
           defk add(x :: i64, y :: f64) :: i64 do
             x + y
           end
-          """,
-          "Six"
+          """
         )
 
       assert msg =~ ~r/^\S+: cannot compile \S+: 6 kernel compile errors\n/
@@ -249,6 +219,7 @@ defmodule Defk.CompileErrorsTest do
     test "every rejection in a module, sorted by line, without cascades" do
       msg =
         compile(
+          __MODULE__,
           """
           defk helper(x :: i64) :: i64 do
             x + ("one" <> "two")
@@ -270,8 +241,7 @@ defmodule Defk.CompileErrorsTest do
           defk g(x :: i64) :: i64 do
             bad_head(x) + 1
           end
-          """,
-          "Many"
+          """
         )
 
       # helper's string once (not again where f inlines helper); m, y, z and w
@@ -285,7 +255,7 @@ defmodule Defk.CompileErrorsTest do
     test "the body of a for rejected for its shape is checked too (HexDocs attempt 1)" do
       src = File.read!("docs/cold-tests/hexdocs-entropy/attempt1.ex.txt")
       body = src |> String.split("\n") |> Enum.slice(4..-3//1) |> Enum.join("\n")
-      msg = compile(body, "Attempt1")
+      msg = compile(__MODULE__, body)
 
       # n is poisoned by the byte_size rejection, so the for's range is
       # abandoned and its body is still lowered; the inner reduce's init is
@@ -297,8 +267,8 @@ defmodule Defk.CompileErrorsTest do
     test "errors in a rejected for's body are reported once, next to for-collect" do
       msg =
         compile(
-          "defk f(a :: [f64], n :: i64) :: [f64] do\n  for i <- 0..(n - 1) do\n    m = %{a: i}\n    m + a[i]\n  end\nend",
-          "ForBody"
+          __MODULE__,
+          "defk f(a :: [f64], n :: i64) :: [f64] do\n  for i <- 0..(n - 1) do\n    m = %{a: i}\n    m + a[i]\n  end\nend"
         )
 
       assert codes(msg) == ~w(for-collect unsupported-map)
@@ -307,8 +277,8 @@ defmodule Defk.CompileErrorsTest do
     test "a for rejected for its shape whose body is valid reports only for-collect" do
       msg =
         compile(
-          "defk f(a :: [f64], n :: i64) :: [f64] do\n  for i <- 0..(n - 1) do\n    y = a[i] * 2.0\n    y + 1.0\n  end\nend",
-          "ForValid"
+          __MODULE__,
+          "defk f(a :: [f64], n :: i64) :: [f64] do\n  for i <- 0..(n - 1) do\n    y = a[i] * 2.0\n    y + 1.0\n  end\nend"
         )
 
       assert codes(msg) == ["for-collect"]
@@ -317,8 +287,8 @@ defmodule Defk.CompileErrorsTest do
     test "a for rejected over a poisoned generator source only reports for-collect besides the poisoning error" do
       msg =
         compile(
-          "defk f(n :: i64) :: i64 do\n  m = %{a: n}\n  r = for x <- m do\n    x + 1\n  end\n  0\nend",
-          "ForPoison"
+          __MODULE__,
+          "defk f(n :: i64) :: i64 do\n  m = %{a: n}\n  r = for x <- m do\n    x + 1\n  end\n  0\nend"
         )
 
       assert codes(msg) == ~w(unsupported-map for-collect)
@@ -326,7 +296,7 @@ defmodule Defk.CompileErrorsTest do
 
     test "at most 10 are shown" do
       body = Enum.map_join(1..12, "\n", &"  v#{&1} = :a#{&1}")
-      msg = compile("defk f(x :: i64) :: i64 do\n#{body}\n  x\nend", "Cap")
+      msg = compile(__MODULE__, "defk f(x :: i64) :: i64 do\n#{body}\n  x\nend")
       assert msg =~ ": 12 kernel compile errors\n"
       assert Enum.count_until(codes(msg), 11) == 10
       assert msg =~ ~r/\n\n2 more not shown; fix these first$/
@@ -335,6 +305,7 @@ defmodule Defk.CompileErrorsTest do
     test "mutual recursion is reported once" do
       msg =
         compile(
+          __MODULE__,
           """
           defk ping(n :: i64) :: i64 do
             if n > 0, do: pong(n - 1), else: 0
@@ -343,8 +314,7 @@ defmodule Defk.CompileErrorsTest do
           defk pong(n :: i64) :: i64 do
             ping(n)
           end
-          """,
-          "Rec"
+          """
         )
 
       assert codes(msg) == ["recursion"]
@@ -359,14 +329,14 @@ defmodule Defk.CompileErrorsTest do
     test "an aliased unsupported module is rejected under its real name" do
       msg =
         compile(
+          __MODULE__,
           """
           alias Enum, as: E
 
           defk f(a :: [i64]) :: i64 do
             E.map(a)
           end
-          """,
-          "Alias"
+          """
         )
 
       assert whats(msg) == ["Enum.map/1 is not in the kernel subset"]
@@ -375,27 +345,9 @@ defmodule Defk.CompileErrorsTest do
 
   describe "targeted hints for first-write forms" do
     defp rejection(body, sig \\ "a :: [f64], x :: i64, n :: i64", ret \\ "f64") do
-      msg =
-        compile(
-          "defk f(#{sig}) :: #{ret} do\n#{body |> String.split("\n") |> Enum.map_join("\n", &("  " <> &1))}\nend",
-          "Hint"
-        )
-
+      msg = reject(__MODULE__, kernel(sig, ret, body))
       assert [_] = codes(msg), msg
       msg
-    end
-
-    defp indent(src),
-      do:
-        src |> String.split("\n") |> Enum.map_join("\n", &if(&1 == "", do: "", else: "  " <> &1))
-
-    defp rewrite(msg) do
-      [_, rw] = Regex.run(~r/^hint: .*:\n\n((?:    .*\n|\n)+)\(defk/m, msg)
-
-      rw
-      |> String.split("\n")
-      |> Enum.map_join("\n", &String.replace_prefix(&1, "    ", ""))
-      |> String.trim_trailing()
     end
 
     test "|> gets the nested call" do
@@ -446,7 +398,7 @@ defmodule Defk.CompileErrorsTest do
       assert rewrite(msg) ==
                "out = alloc(f64, n)\n\nfor w <- 0..(n - 1)//1 do\n  out[w] = w * 2.0\nend\n\nout"
 
-      assert compile("defk f(n :: i64) :: [f64] do\n#{indent(rewrite(msg))}\nend", "Rw") == :ok
+      assert compile(__MODULE__, kernel("n :: i64", "[f64]", rewrite(msg))) == :ok
     end
 
     test "a for over a range takes its element type from the body" do
@@ -476,7 +428,7 @@ defmodule Defk.CompileErrorsTest do
     test "a for that is the returned [u8] allocs the declared element type" do
       msg = rejection("for x <- a, do: x", "a :: [u8]", "[u8]")
       assert rewrite(msg) =~ "out = alloc(u8, len(a))"
-      assert compile("defk f(a :: [u8]) :: [u8] do\n#{indent(rewrite(msg))}\nend", "Rw") == :ok
+      assert compile(__MODULE__, kernel("a :: [u8]", "[u8]", rewrite(msg))) == :ok
 
       # bound to a name that is returned
       msg = rejection("out = for x <- a, do: x\nout", "a :: [u8]", "[u8]")
@@ -532,11 +484,11 @@ defmodule Defk.CompileErrorsTest do
     end
 
     test "a list or String.t type says how the data crosses" do
-      msg = compile("defk f(xs :: list(f64)) :: f64 do\n  0.0\nend", "Hint")
+      msg = compile(__MODULE__, "defk f(xs :: list(f64)) :: f64 do\n  0.0\nend")
       assert codes(msg) == ["unknown-type"]
       assert msg =~ "a list is passed as a packed array"
 
-      msg = compile("defk f(d :: [u8]) :: String.t() do\n  d\nend", "Hint")
+      msg = compile(__MODULE__, "defk f(d :: [u8]) :: String.t() do\n  d\nend")
       assert codes(msg) == ["unknown-type"]
       assert msg =~ "text is a [u8]"
     end

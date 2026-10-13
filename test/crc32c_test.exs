@@ -85,6 +85,7 @@ defmodule Defk.Crc32cTest do
   use ExUnitProperties
 
   import Bitwise
+  import Defk.TestKit, only: [forced: 2]
 
   alias Defk.Crc32cTest.K
   alias Defk.Crc32cTest.Portable, as: P
@@ -212,17 +213,14 @@ defmodule Defk.Crc32cTest do
     :rand.seed(:exsss, {7, 8, 9})
     bins = for n <- [0, 9, 1000, 300_001, 2_000_003], do: :rand.bytes(n)
     expect = Enum.map(bins, &ref_msg/1)
-    K.__defk_force_yields__(true)
 
-    try do
+    forced(K, fn ->
       y0 = K.__defk_stats__().yields
       assert Enum.map(bins, &K.crc_msg/1) == expect
       assert Enum.map(bins, &K.crc_msg32/1) == expect
       for bin <- Enum.take(bins, 4), do: Defk.Test.assert_agrees(K, :crc_msg, [bin])
       assert K.__defk_stats__().yields - y0 > 0
-    after
-      K.__defk_force_yields__(false)
-    end
+    end)
   end
 
   test "the instruction on this CPU, the table with DEFK_PORTABLE_BUILTINS, the same values" do
@@ -250,15 +248,11 @@ defmodule Defk.Crc32cTest do
       assert P.crc_msg(bin) == ref_msg(bin)
     end
 
-    P.__defk_force_yields__(true)
-
-    try do
+    forced(P, fn ->
       bin = :rand.bytes(2_000_001)
       y0 = P.__defk_stats__().yields
       assert P.crc_msg(bin) == Defk.Crc32cTest.K.crc_msg(bin)
       assert P.__defk_stats__().yields - y0 > 0
-    after
-      P.__defk_force_yields__(false)
-    end
+    end)
   end
 end

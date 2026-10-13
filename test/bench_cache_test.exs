@@ -9,6 +9,7 @@ defmodule Defk.BenchCacheTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
+  import Defk.TestKit, only: [restore_env_on_exit: 1]
 
   alias Defk.Bench.Cache
 
@@ -17,12 +18,8 @@ defmodule Defk.BenchCacheTest do
   @moduletag :tmp_dir
 
   setup %{tmp_dir: dir} do
-    saved = Map.new(@vars, &{&1, System.get_env(&1)})
+    restore_env_on_exit(@vars)
     Enum.each(@vars, &System.delete_env/1)
-
-    on_exit(fn ->
-      for {k, v} <- saved, do: if(v, do: System.put_env(k, v), else: System.delete_env(k))
-    end)
 
     script = Path.join(dir, "ex.exs")
     File.write!(script, "# baseline v1\n")

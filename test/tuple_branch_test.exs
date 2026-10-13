@@ -131,13 +131,12 @@ defmodule Defk.TupleBranchTest do
   use Defk.Properties
 
   import Defk.Test
+  import Defk.TestKit
 
   alias Defk.TupleBranchTest.{K, Select}
 
   @big 1_099_511_627_776
   @max 9_223_372_036_854_775_807
-
-  defp i64s(xs), do: G.pack(:i64, xs)
 
   test "if, cond and case with 2- and 3-tuples agree with Elixir" do
     for c <- [true, false], x <- [-7, 0, 5], y <- [3, -2] do
@@ -212,18 +211,9 @@ defmodule Defk.TupleBranchTest do
   end
 
   describe "compile errors" do
-    defp compile_error(body, ret \\ "i64") do
-      src = """
-      defmodule Defk.TupleBranchTest.Bad#{System.unique_integer([:positive])} do
-        use Defk
-        defk bad(x :: i64, f :: f64, a :: [i64], b :: [i64]) :: #{ret} do
-          #{body}
-        end
-      end
-      """
-
-      Exception.message(assert_raise(CompileError, fn -> Code.compile_string(src) end))
-    end
+    defp compile_error(body, ret \\ "i64"),
+      do:
+        reject(__MODULE__, kernel("x :: i64, f :: f64, a :: [i64], b :: [i64]", ret, body, "bad"))
 
     test "each element position has one type" do
       msg = compile_error("{p, q} = if x > 0, do: {x, f}, else: {f, f}\nq + p", "f64")

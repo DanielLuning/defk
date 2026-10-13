@@ -5,6 +5,7 @@ defmodule Defk.ExamplesTaskTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
+  import Defk.TestKit, only: [defk_result: 1, restore_env_on_exit: 1]
 
   alias Defk.Examples
 
@@ -37,14 +38,8 @@ defmodule Defk.ExamplesTaskTest do
 
   describe "check-only mode" do
     setup do
-      saved = System.get_env("DEFK_CHECK_ONLY")
+      restore_env_on_exit(["DEFK_CHECK_ONLY"])
       System.put_env("DEFK_CHECK_ONLY", "1")
-
-      on_exit(fn ->
-        if saved,
-          do: System.put_env("DEFK_CHECK_ONLY", saved),
-          else: System.delete_env("DEFK_CHECK_ONLY")
-      end)
     end
 
     defp report(opts) do
@@ -54,8 +49,7 @@ defmodule Defk.ExamplesTaskTest do
         capture_io(fn -> send(parent, {:r, Defk.Bench.report(opts)}) end)
 
       assert_received {:r, r}
-      [_, json] = Regex.run(~r/^DEFK_RESULT (.*)$/m, out)
-      {r, out, JSON.decode!(json)}
+      {r, out, defk_result(out)}
     end
 
     defp boom, do: fn -> flunk("timed in check-only mode") end

@@ -20,6 +20,7 @@ end
 defmodule Defk.ConcurrentTest do
   use ExUnit.Case, async: true
   import Defk.Test.Frames
+  import Defk.TestKit
 
   alias Defk.ConcurrentTest.K
 
@@ -64,22 +65,18 @@ defmodule Defk.ConcurrentTest do
 
     # the same again with a yield at every safepoint, so the callers interleave
     # at their densest
-    K.__defk_force_yields__(true)
-
-    try do
+    forced(K, fn ->
       n = 50_000
       ref = reference(n)
-      y1 = K.__defk_stats__().yields
       specs = List.duplicate({n, ref}, @callers)
+      {results, count} = yields(K, fn -> run_all(specs) end)
 
-      for {n2, got, expected} <- run_all(specs) do
+      for {n2, got, expected} <- results do
         assert got == expected, "work(#{n2}) under forced yields"
       end
 
-      assert K.__defk_stats__().yields > y1, "no call yielded"
-    after
-      K.__defk_force_yields__(false)
-    end
+      assert count > 0, "no call yielded"
+    end)
 
     assert_frames_live(K)
   end

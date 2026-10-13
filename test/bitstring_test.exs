@@ -203,14 +203,14 @@ defmodule Defk.BitstringTest do
   import Defk.Test.Frames
   use Defk.Properties
 
+  import Defk.TestKit,
+    only: [codes: 1, f64s: 1, forced: 2, i64s: 1, reject: 2, wait_until: 2, yields: 2]
+
   alias Defk.BitstringTest.K
 
   @timeout 10_000
 
   defp agrees(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
-
-  defp i64s(list), do: G.pack(:i64, list)
-  defp f64s(list), do: G.pack(:f64, list)
 
   # what pack/2 gives, built in Elixir
   defp packed(xs, n), do: for(x <- xs, into: <<>>, do: <<x::size(n)>>)
@@ -418,14 +418,11 @@ defmodule Defk.BitstringTest do
 
     test "a signed build grows across forced yields" do
       xs = for i <- 1..20_000, do: rem(i * 37, 128) - 64
-      K.__defk_force_yields__(true)
 
-      try do
+      forced(K, fn ->
         assert {:ok, packed} = agrees(:pack_signed, [i64s(xs), 7])
         assert packed == for(x <- xs, into: <<>>, do: <<x::signed-7>>)
-      after
-        K.__defk_force_yields__(false)
-      end
+      end)
     end
 
     property "(width, value) pairs, in range or just outside, agree with Elixir" do
@@ -460,39 +457,32 @@ defmodule Defk.BitstringTest do
   describe "the runtime contract" do
     test "an output that grows across forced yields" do
       xs = for i <- 0..199_999, do: rem(i * 7919, 8192)
-      K.__defk_force_yields__(true)
 
-      try do
-        y0 = K.__defk_stats__().yields
-        out = K.pack(i64s(xs), 13)
-        assert K.__defk_stats__().yields > y0 + 10, "the kernel never yielded"
+      forced(K, fn ->
+        {out, n} = yields(K, fn -> K.pack(i64s(xs), 13) end)
+        assert n > 10, "the kernel never yielded"
         assert out == packed(xs, 13)
         assert bit_size(out) == 13 * 200_000
 
         assert agrees(:pack, [i64s(Enum.take(xs, 20_000)), 13]) ==
                  {:ok, packed(Enum.take(xs, 20_000), 13)}
-      after
-        K.__defk_force_yields__(false)
-      end
+      end)
     end
 
     @tag :erlang_memory
     test "a process killed mid-build frees the buffer" do
       # 32 MB of output when done
       xs = i64s(List.duplicate(12_345, 4_000_000))
-      K.__defk_force_yields__(true)
 
-      try do
+      forced(K, fn ->
         :erlang.garbage_collect()
         base = :erlang.memory(:binary)
         kill_mid_build(xs, base)
 
         # the frame, and the buffer it owned, are gone
         assert_frames_live(K)
-        wait_until(fn -> :erlang.memory(:binary) < base + 8_000_000 end)
-      after
-        K.__defk_force_yields__(false)
-      end
+        wait_until(fn -> :erlang.memory(:binary) < base + 8_000_000 end, @timeout)
+      end)
     end
 
     # Spawns the build and kills it once a 16 MB buffer is built. Under heavy load
@@ -503,7 +493,7 @@ defmodule Defk.BitstringTest do
       ref = Process.monitor(pid)
 
       # suspended between two steps with a buffer of at least 16 MB built
-      wait_until(fn -> :erlang.memory(:binary) > base + 16_000_000 end, 1)
+      wait_until(fn -> :erlang.memory(:binary) > base + 16_000_000 end, @timeout)
 
       if Process.alive?(pid) do
         Process.exit(pid, :kill)
@@ -512,7 +502,7 @@ defmodule Defk.BitstringTest do
         assert_receive {:DOWN, ^ref, :process, ^pid, _}, @timeout
         assert attempts > 1, "the kernel finished before it could be killed, every time"
         assert_frames_live(K)
-        wait_until(fn -> :erlang.memory(:binary) < base + 8_000_000 end)
+        wait_until(fn -> :erlang.memory(:binary) < base + 8_000_000 end, @timeout)
         kill_mid_build(xs, base, attempts - 1)
       end
     end
@@ -556,35 +546,12 @@ defmodule Defk.BitstringTest do
     test "a long series under forced yields" do
       vs = Enum.scan(1..50_000, 100.0, fn i, acc -> Float.round(acc + :math.cos(i) * 0.25, 3) end)
       expect = Defk.GorillaReference.compress(vs)
-      K.__defk_force_yields__(true)
-
-      try do
-        assert K.gorilla(f64s(vs)) == expect
-      after
-        K.__defk_force_yields__(false)
-      end
+      forced(K, fn -> assert K.gorilla(f64s(vs)) == expect end)
     end
   end
 
   describe "compile errors" do
-    @dir Path.join(System.tmp_dir!(), "defk_bitstring_test")
-
-    defp rejected(body) do
-      File.mkdir_p!(@dir)
-      mod = "Defk.BitstringTest.E#{System.unique_integer([:positive])}"
-      path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-      File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{body}\nend\n")
-
-      try do
-        Code.compile_file(path)
-        flunk("#{body} compiled")
-      rescue
-        e in CompileError -> Exception.message(e)
-      end
-    end
-
-    defp codes(msg),
-      do: Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg) |> Enum.map(&Enum.at(&1, 1))
+    defp rejected(body), do: reject(__MODULE__, body)
 
     defp appends(seg, ret \\ "bitstring"),
       do: "defk f(x :: i64) :: #{ret} do\n  acc = <<>>\n  #{seg}\nend"
@@ -676,21 +643,4 @@ defmodule Defk.BitstringTest do
     unary_then: [args: StreamData.fixed_list([G.i64(-3..200), G.i64()])],
     gorilla: [args: StreamData.fixed_list([G.array(:f64)])]
   )
-
-  defp wait_until(f, sleep \\ 5),
-    do: wait_until(f, sleep, System.monotonic_time(:millisecond) + @timeout)
-
-  defp wait_until(f, sleep, deadline) do
-    cond do
-      f.() ->
-        :ok
-
-      System.monotonic_time(:millisecond) > deadline ->
-        flunk("timed out")
-
-      true ->
-        Process.sleep(sleep)
-        wait_until(f, sleep, deadline)
-    end
-  end
 end

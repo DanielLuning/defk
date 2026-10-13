@@ -6,7 +6,7 @@ defmodule Defk.CompileRewritesTest do
   # compiles. Also: a compiler crash is never hidden behind a rejection.
   use ExUnit.Case, async: true
 
-  @dir Path.join(System.tmp_dir!(), "defk_compile_rewrites_test")
+  import Defk.TestKit, only: [compile: 3, kernel: 3, rewrite: 1]
 
   # {construct, params, return type, body template, :rewrite | :none}
   @cases [
@@ -62,17 +62,15 @@ defmodule Defk.CompileRewritesTest do
   ]
 
   setup_all do
-    File.mkdir_p!(@dir)
-
     results =
       @cases
       |> Task.async_stream(
         fn {construct, params, ret, template, _} = c ->
-          msg = compile({c, :construct}, params, ret, String.replace(template, "@@", construct))
+          msg = compile_f({c, :construct}, params, ret, String.replace(template, "@@", construct))
           rw = if is_binary(msg), do: rewrite(msg)
 
           fixed =
-            if rw, do: compile({c, :rewrite}, params, ret, String.replace(template, "@@", rw))
+            if rw, do: compile_f({c, :rewrite}, params, ret, String.replace(template, "@@", rw))
 
           {c, {msg, rw, fixed}}
         end,
@@ -84,44 +82,9 @@ defmodule Defk.CompileRewritesTest do
     %{results: results}
   end
 
-  # The name comes from the case, not a counter: the same name and source on
-  # the next run hit the build cache, where a new library costs a C compile
-  # and a first dlopen. `key` is unique per compile, so no two tasks define
-  # one module at the same time.
-  defp compile(key, params, ret, body) do
-    id = :erlang.md5(:erlang.term_to_binary({key, body})) |> Base.encode16() |> binary_part(0, 12)
-    mod = "Defk.CompileRewritesTest.M#{id}"
-    path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-
-    body =
-      body |> String.split("\n") |> Enum.map_join("\n", &if(&1 == "", do: "", else: "    " <> &1))
-
-    File.write!(
-      path,
-      "defmodule #{mod} do\n  use Defk\n\n  defk f(#{params}) :: #{ret} do\n#{body}\n  end\nend\n"
-    )
-
-    try do
-      Code.compile_file(path)
-      :ok
-    rescue
-      e in CompileError -> Exception.message(e)
-    end
-  end
-
-  # the rewrite under the hint, unindented; nil without one
-  defp rewrite(msg) do
-    case Regex.run(~r/^hint: .*:\n\n((?:    .*\n|\n)+)\(defk/m, msg) do
-      [_, rw] ->
-        rw
-        |> String.split("\n")
-        |> Enum.map_join("\n", &String.replace_prefix(&1, "    ", ""))
-        |> String.trim_trailing()
-
-      nil ->
-        nil
-    end
-  end
+  # `key` is unique per compile, so no two tasks define one module at once
+  defp compile_f(key, params, ret, body),
+    do: compile(__MODULE__, kernel(params, ret, body), key: key)
 
   describe "generated rewrites" do
     for {construct, params, _ret, template, expect} = c <- @cases do

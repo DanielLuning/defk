@@ -397,6 +397,7 @@ defmodule Defk.AllocUnzeroedTest do
   # this module's own.
   use ExUnit.Case, async: true
   import Defk.Test.Frames
+  import Defk.TestKit
   use Defk.Properties
 
   alias Defk.AllocUnzeroedTest.{K, Shapes}
@@ -404,19 +405,14 @@ defmodule Defk.AllocUnzeroedTest do
 
   defp agree(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
 
-  defp kernel_c(name) do
-    [_ | chunks] = String.split(K.__defk_c_source__(), "/* ---- ")
-    Enum.find(chunks, &String.starts_with?(&1, "#{name}/")) || flunk("no kernel #{name}")
-  end
-
   # each kernel here has one alloc: zeroed (in strips, or at once when
   # small), or not zeroed at all
   defp zeroed?(name) do
-    c = kernel_c(name)
+    c = kernel_c(K, name)
     c =~ "defk_zero_strip(" or c =~ ~r/defk_alloc_(?!raw_)\w+\(ctx, /
   end
 
-  defp raw?(name), do: kernel_c(name) =~ "defk_alloc_raw_" and not zeroed?(name)
+  defp raw?(name), do: kernel_c(K, name) =~ "defk_alloc_raw_" and not zeroed?(name)
 
   @accepted [:dirty, :scale, :encode16, :by_len, :raise_mid, :slow_fill, :two_outputs]
   @near_misses [
@@ -435,9 +431,6 @@ defmodule Defk.AllocUnzeroedTest do
     :two_of_three,
     :mentions
   ]
-
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
-  defp f64s(list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
 
   describe "the generated C" do
     test "a loop writing every element first: no zeroing" do
@@ -477,18 +470,17 @@ defmodule Defk.AllocUnzeroedTest do
     end
 
     test "under forced yields, a resume in the middle of the writes" do
-      K.__defk_force_yields__(true)
+      {_, count} =
+        yields(K, fn ->
+          forced(K, fn ->
+            n = 10_000
+            K.dirty(8 * n)
+            assert {:ok, _} = agree(:slow_fill, [n])
+            assert {:raise, %ArgumentError{}} = agree(:raise_mid, [n, n - 3])
+          end)
+        end)
 
-      try do
-        y0 = K.__defk_stats__().yields
-        n = 10_000
-        K.dirty(8 * n)
-        assert {:ok, _} = agree(:slow_fill, [n])
-        assert {:raise, %ArgumentError{}} = agree(:raise_mid, [n, n - 3])
-        assert K.__defk_stats__().yields > y0
-      after
-        K.__defk_force_yields__(false)
-      end
+      assert count > 0
 
       assert_frames_live(K)
     end

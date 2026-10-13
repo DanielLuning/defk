@@ -164,6 +164,8 @@ defmodule Defk.RangeCopyTest do
   use ExUnit.Case, async: false
   use Defk.Properties
 
+  import Defk.TestKit
+
   alias Defk.RangeCopyTest.{K, NoYield}
 
   # DEFK_COPY_STRIP in priv/defk_runtime.h
@@ -310,12 +312,10 @@ defmodule Defk.RangeCopyTest do
     expect = NoYield.big(n, 2 * @strip + 3, 3, @strip + 2)
     assert K.big(n, 2 * @strip + 3, 3, @strip + 2) == expect
 
-    K.__defk_force_yields__(true)
-
-    try do
-      y0 = K.__defk_stats__().yields
-      assert apply(K, :big, args) == expect
-      assert K.__defk_stats__().yields - y0 > 8
+    forced(K, fn ->
+      {res, n_yields} = yields(K, fn -> apply(K, :big, args) end)
+      assert res == expect
+      assert n_yields > 8
 
       # overlapping moves within one array, either way, over strip boundaries
       bin = :crypto.strong_rand_bytes(n)
@@ -325,9 +325,7 @@ defmodule Defk.RangeCopyTest do
         assert K.move_self(bin, at, from, k) == ref_copy(bin, at, bin, from, k)
         assert K.move_owned(bin, at, from, k) == ref_copy(bin, at, bin, from, k)
       end
-    after
-      K.__defk_force_yields__(false)
-    end
+    end)
 
     # copy_back with an offset one byte over a strip boundary, and a long run
     for {at, off, k} <- [{@strip + 1, 1, 2 * @strip}, {2 * @strip, @strip + 7, @strip}] do
@@ -347,26 +345,7 @@ defmodule Defk.RangeCopyTest do
 
   # ------------------------------------------------------------ rejections --
 
-  @dir Path.join(System.tmp_dir!(), "defk_range_copy_test")
-
-  defp rejection(body, sig) do
-    File.mkdir_p!(@dir)
-    mod = "Defk.RangeCopyTest.Rej#{System.unique_integer([:positive])}"
-    path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-
-    File.write!(path, """
-    defmodule #{mod} do
-      use Defk
-
-      defk f(#{sig}) :: i64 do
-        #{body}
-      end
-    end
-    """)
-
-    e = assert_raise CompileError, fn -> Code.compile_file(path) end
-    Exception.message(e)
-  end
+  defp rejection(body, sig), do: reject(__MODULE__, kernel(sig, "i64", body))
 
   test "mismatched element types and float positions are rejected" do
     msg = rejection("a = copy(a, 0, b, 0, 1)\nlen(a)", "a :: [u8], b :: [f64]")
