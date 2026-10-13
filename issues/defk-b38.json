@@ -14,9 +14,10 @@
   "labels": [
     "ready-for-agent"
   ],
+  "parent": "defk-o08",
   "priority": 3,
   "status": "open",
   "title": "Symbolic bounds: facts from conditions and raising guards, and the report's missing-fact hint",
   "type": "task",
-  "updated_at": "2026-10-12T10:58:06Z"
+  "updated_at": "2026-10-13T19:08:04Z"
 }
