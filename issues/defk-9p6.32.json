@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-13T22:06:39Z",
   "created": "2026-10-13T21:57:01Z",
   "description": "Maintainer (2026-10-13): the pages that present results are hard to scan. examples/README.md holds two tables whose cells run to 300 characters of mixed numbers, conditions and guidance; docs/verdict.md's Workload results tables carry nine columns before the verdict is visible; the snapshot the runner prints is in alphabetical order with the verdict in the fourth column.\n\nDo: lead every results page with a compact scoreboard (verdict mark first, then the job, the speedup over the best Elixir and against the package's NIF, one short note), sorted by verdict and speedup, from the 2026-10-13 quiet snapshot. Move the per-example prose (what was tried, traps, crossovers, guidance) below the scoreboard into one short block per example, trimmed of the loaded-run number ranges the snapshot supersedes. Make the runner's --snapshot table print in the same order with the same marks, so the next refresh drops in. Keep the measurement rules and the verdict rules where they are.\n\nDone when: a reader finds the good, marginal and poor results on each page without reading a cell, the numbers on the pages are the snapshot's, and mix ci is green.",
   "id": "defk-9p6.32",
@@ -10,8 +11,8 @@
   ],
   "parent": "defk-9p6",
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Results pages: scoreboard first, verdict visible at a glance",
   "type": "task",
-  "updated_at": "2026-10-13T21:57:01Z"
+  "updated_at": "2026-10-13T22:06:39Z"
 }
