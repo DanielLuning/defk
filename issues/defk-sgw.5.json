@@ -26,11 +26,15 @@
     {
       "text": "Per review of wave 1: defk-ds0's evidence (packages gcc+libc6-dev minimum / build-essential, sizes, build times, runtime image needs no compiler) is in examples/release_debian/README.md and must be carried into the verdict's Runtime contract / Limitations; also defk-n8f (.so not shipped in releases).",
       "timestamp": "2026-10-07T14:47:02Z"
+    },
+    {
+      "text": "Draft landed (2026-10-14). Every section of docs/verdict.md is filled; the conclusion applies the rule and comes out at 'grow into a library', with the frame that most NIFs wrap libraries and BIF-backed jobs lose. Ready for the final session (defk-sgw.6, human): accept or amend the conclusion, then close the map (defk-dtw).",
+      "timestamp": "2026-10-13T22:11:54Z"
     }
   ],
   "priority": 1,
   "status": "in_progress",
   "title": "Write the verdict: guide, runtime contract, devex, limitations",
   "type": "task",
-  "updated_at": "2026-10-13T22:08:22Z"
+  "updated_at": "2026-10-13T22:11:54Z"
 }
