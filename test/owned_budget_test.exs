@@ -2,9 +2,12 @@
 # buffer a call makes lives until the kernel returns, so one in a loop body
 # keeps a buffer per iteration. A call raises ArgumentError "out of memory"
 # once its live owned bytes would pass `use Defk, max_owned:` (default: half
-# of physical memory), instead of growing until the OS kills the node. It is
-# a limit of native code only: Elixir mode garbage-collects the old binaries
-# and succeeds.
+# of physical memory), instead of growing until the OS kills the node.
+# Elixir mode enforces the same budget on alloc/2 (defk-bh3): it counts the
+# bytes every alloc/2 of the call asks for, against the native library's
+# max_owned, and raises the same message. It does not see value-semantics
+# copies or bitstring buffers, so for those it garbage-collects the old
+# binaries and succeeds where native raises.
 
 defmodule Defk.OwnedBudgetTest.K do
   # 8 KiB: eight 1 KiB buffers fit, the ninth does not
@@ -48,10 +51,19 @@ defmodule Defk.OwnedBudgetTest.K do
       acc -> <<acc::bitstring, band(i, 255)::size(8)>>
     end
   end
+
+  # a called kernel's allocations count against the caller's call
+  defk alloc_twice(k :: i64) :: i64 do
+    alloc_loop(4, k) + alloc_loop(4, k)
+  end
 end
 
 defmodule Defk.OwnedBudgetTest.Default do
   use Defk
+
+  defk one_alloc(n :: i64) :: i64 do
+    len(alloc(u8, n))
+  end
 
   defk alloc_loop(n :: i64, k :: i64) :: i64 do
     for i <- 0..(n - 1)//1, reduce: 0 do
@@ -93,23 +105,49 @@ defmodule Defk.OwnedBudgetTest do
     assert Default.alloc_loop(100, 1024) == Enum.sum(0..99)
   end
 
+  # native and Elixir mode raise the same ArgumentError, message included;
+  # returns the message
+  defp same_raise(mod, fun, args) do
+    native =
+      assert_raise ArgumentError, fn ->
+        Defk.ElixirMode.with_mode(:native, fn -> apply(mod, fun, args) end)
+      end
+
+    elixir = assert_raise ArgumentError, fn -> mod.__defk_elixir__(fun, args) end
+    assert native.message == elixir.message, "#{fun}#{inspect(args)}"
+    native.message
+  end
+
   test "an alloc in a loop raises out of memory past the budget, at the exact buffer" do
     # 8 x 1 KiB fit exactly; the ninth passes 8 KiB
     assert K.alloc_loop(8, 128) == Enum.sum(0..7)
     assert K.alloc_loop(8, 128) == elixir(:alloc_loop, [8, 128])
-    assert_raise ArgumentError, @oom, fn -> K.alloc_loop(9, 128) end
-    # Elixir mode garbage-collects the old binaries: the limit is native only
-    assert elixir(:alloc_loop, [9, 128]) == Enum.sum(0..8)
+    assert same_raise(K, :alloc_loop, [9, 128]) =~ @oom
     # one buffer larger than the whole budget
-    assert_raise ArgumentError, ~r/^out of memory \(allocating 8200 bytes/, fn ->
-      K.alloc_loop(1, 1025)
-    end
+    assert same_raise(K, :alloc_loop, [1, 1025]) =~ ~r/^out of memory \(allocating 8200 bytes/
+  end
+
+  test "Elixir mode's budget is the native library's max_owned" do
+    # rejected before anything is allocated, in both modes
+    max = Default.__defk_stats__().max_owned
+
+    assert same_raise(Default, :one_alloc, [max + 1]) =~
+             ~r/^out of memory \(allocating #{max + 1}/
+
+    assert Default.__defk_elixir__(:one_alloc, [1024]) == 1024
+  end
+
+  test "a called kernel's allocations count against the same call in both modes" do
+    assert K.alloc_twice(128) == 2 * Enum.sum(0..3)
+    assert elixir(:alloc_twice, [128]) == 2 * Enum.sum(0..3)
+    assert same_raise(K, :alloc_twice, [129]) =~ ~r/^out of memory \(allocating 1032 bytes/
   end
 
   test "a copy in a loop raises out of memory past the budget" do
     a = i64s(Enum.to_list(1..128))
     assert K.copy_loop(a, 3) == elixir(:copy_loop, [a, 3])
     assert_raise ArgumentError, @oom, fn -> K.copy_loop(a, 1000) end
+    # Elixir mode counts alloc/2 only: it garbage-collects the old copies
     # a write in a `for` body is kept for the next iteration: b[0] is the
     # previous i (1, the input's, at i = 0), a[0] is i
     assert elixir(:copy_loop, [a, 1000]) == 1 + Enum.sum(for i <- 1..999, do: 2 * i - 1)
@@ -118,20 +156,30 @@ defmodule Defk.OwnedBudgetTest do
 
   test "a returned array is counted while the kernel runs, and a call under the budget agrees" do
     assert K.fill(1024) == i64s(Enum.to_list(0..1023))
-    assert_raise ArgumentError, ~r/^out of memory \(allocating 8200 bytes/, fn -> K.fill(1025) end
+    assert K.fill(1024) == elixir(:fill, [1024])
+    assert same_raise(K, :fill, [1025]) =~ ~r/^out of memory \(allocating 8200 bytes/
   end
 
   test "a bitstring accumulator's growth is counted" do
     small = K.bits(1000)
     assert small == elixir(:bits, [1000])
     assert_raise ArgumentError, ~r/^out of memory/, fn -> K.bits(10_000) end
+    # not in Elixir mode, which builds the bitstring as Elixir does
+    assert elixir(:bits, [10_000]) == for(i <- 0..9_999, into: <<>>, do: <<rem(i, 256)>>)
   end
 
   test "the count is per call: a call after a raise starts from zero" do
     for _ <- 1..3 do
-      assert_raise ArgumentError, @oom, fn -> K.alloc_loop(100, 128) end
+      assert same_raise(K, :alloc_loop, [100, 128]) =~ @oom
       assert K.alloc_loop(8, 128) == Enum.sum(0..7)
+      assert elixir(:alloc_loop, [8, 128]) == Enum.sum(0..7)
     end
+
+    # Elixir mode leaves nothing behind in the process
+    assert Enum.filter(
+             Process.get_keys(),
+             &(is_atom(&1) and String.starts_with?(Atom.to_string(&1), "defk"))
+           ) == []
   end
 
   test "under forced yields the count survives every resume and frames are freed" do

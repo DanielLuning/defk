@@ -17,6 +17,13 @@ defmodule Defk.ElixirMode do
     * wrong-typed arguments raise `ArgumentError`, as the kernel does
     * `alloc/2` over 2^48 bytes raises `ArgumentError` ("length too large"),
       and from 2^47 bytes ("out of memory"), as the kernel does
+    * `alloc/2` raises the kernel's "out of memory (... past max_owned, M
+      bytes)" `ArgumentError` once the bytes the call's `alloc/2` calls
+      (called kernels' included) ask for would pass the native library's
+      `max_owned`, before building the binary. Native code also counts
+      value-semantics copies, bitstring accumulator buffers and aligned
+      copies of misaligned inputs, which Elixir mode does not see, so there
+      native code can raise where Elixir mode succeeds, never the reverse
     * a range whose last element is within one step of the i64 limit raises
       `ArithmeticError` before its loop starts, as the kernel does
     * float operations that would give inf or NaN raise `ArithmeticError`
@@ -151,7 +158,10 @@ defmodule Defk.ElixirMode do
             [unquote_splicing(vs)] =
               Defk.ElixirMode.Ops.args!(args, unquote(Macro.escape(sig.params)))
 
-            unquote(fun_name(sig.name))(unquote_splicing(vs))
+            # the call's owned-buffer budget is the native library's
+            Defk.ElixirMode.Ops.owned_call(__defk_stats__().max_owned, fn ->
+              unquote(fun_name(sig.name))(unquote_splicing(vs))
+            end)
           end
         end
       end
