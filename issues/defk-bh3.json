@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-13T10:53:45Z",
@@ -15,8 +15,8 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "agreement_test can abort the VM: Elixir mode builds multi-GiB zero binaries (seed 5 on an 8 GiB host: binary_alloc cannot allocate 8589934592 bytes)",
   "type": "bug",
-  "updated_at": "2026-10-13T11:17:51Z"
+  "updated_at": "2026-10-13T11:18:17Z"
 }
