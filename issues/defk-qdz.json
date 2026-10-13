@@ -14,9 +14,10 @@
   "labels": [
     "ready-for-agent"
   ],
+  "parent": "defk-o08",
   "priority": 3,
   "status": "open",
   "title": "Symbolic bounds: linear facts from arithmetic, min/max, ranges and alloc lengths",
   "type": "task",
-  "updated_at": "2026-10-12T10:58:05Z"
+  "updated_at": "2026-10-13T19:08:04Z"
 }
