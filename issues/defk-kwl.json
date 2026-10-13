@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-12T21:15:16Z",
@@ -9,8 +9,8 @@
     "needs-triage"
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Aliased builtin calls in a kernel (alias Defk.Bits; Bits.clz(x)) are rejected as unsupported calls",
   "type": "bug",
-  "updated_at": "2026-10-12T21:15:16Z"
+  "updated_at": "2026-10-13T07:20:26Z"
 }
