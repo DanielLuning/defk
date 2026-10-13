@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-63k"
   ],
@@ -28,8 +28,8 @@
     }
   ],
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Fault containment: turn a kernel fault into an exception for the calling process",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:13Z"
+  "updated_at": "2026-10-13T19:23:55Z"
 }
