@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-5fc",
     "defk-7dm",
@@ -29,8 +29,8 @@
     }
   ],
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Write the verdict: guide, runtime contract, devex, limitations",
   "type": "task",
-  "updated_at": "2026-10-12T09:52:05Z"
+  "updated_at": "2026-10-13T22:08:22Z"
 }
