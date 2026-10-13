@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-13T10:53:41Z",
@@ -9,8 +9,8 @@
     "needs-triage"
   ],
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Runtime header portability: enif_get_int64 pointer type (Homebrew LLVM error) and __sigsetjmp returns_twice on glibc (clang raise crashes the node)",
   "type": "bug",
-  "updated_at": "2026-10-13T10:53:45Z"
+  "updated_at": "2026-10-13T10:54:06Z"
 }
