@@ -8,6 +8,7 @@
   "labels": [
     "ready-for-human"
   ],
+  "parent": "defk-vcx",
   "comments": [
     {
       "text": "Kept by the maintainer (triaged during defk-djy.5).",
@@ -22,5 +23,5 @@
   "status": "open",
   "title": "Bitstring accumulator: little-endian, float and binary segments, and reading a bitstring (when a workload needs them)",
   "type": "task",
-  "updated_at": "2026-10-11T21:24:16Z"
+  "updated_at": "2026-10-13T19:08:10Z"
 }
