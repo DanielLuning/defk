@@ -2,13 +2,14 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-13T18:31:14Z",
   "created": "2026-10-13T18:06:02Z",
   "description": "Review of all 80 test files (2026-10-13, five parallel readers, key claims re-checked). Exact duplicates are few (~15); the larger problem is drift: one temp-module compile helper under five names in ~25 files, codes/whats/kernel_c/i64s/f64s/wait_until copied across 4-17 files, ~22 files hand-roll forced yields instead of assert_agrees(forced_yields: true). mix ci does not catch it: ex_dna scans lib/ only (on test/ it finds 26 clones), its min mass (30) misses small helpers, and no tool sees semantic duplicates.",
   "id": "defk-zdm",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "[EPIC] Test suite drift: duplicated tests, copied helpers, and a CI gate",
   "type": "epic",
-  "updated_at": "2026-10-13T18:06:02Z"
+  "updated_at": "2026-10-13T18:31:14Z"
 }
