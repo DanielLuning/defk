@@ -5,11 +5,13 @@
   "created": "2026-10-12T09:51:26Z",
   "description": "Why: docs/research/nx-boundary.md argues from source, not measurement, that defk fits where Nx doesn't: sequential loops with early exit (Nx has only while with a stop flag), small inputs and high call rates (jit cache lookup, a GenServer lock per EXLA device, a dirty-scheduler hop), inputs whose length changes per call (compile per shape) and preemption (EXLA runs one uninterruptible dirty NIF). Its 'Gaps and open questions' names the missing measurement: one early-exit kernel written in Elixir, defk and defn+EXLA. The scope page now says these cases are not measured against EXLA yet. The only EXLA numbers so far are cosine_topk (EXLA 6-8x faster than defk on a whole-tensor job, provisional) and defk-7tk (matmul, pending).\n\nThe goal is to find the line, not to beat Nx: where EXLA wins, that is the result.\n\nScope:\n1. One early-exit job written three ways: optimised Elixir, a kernel, and defn with while + compiler: EXLA. Candidates: first index where a running sum crosses a threshold, trial division to the first divisor (count_primes_early's prime?), or edit distance with a cutoff. Pick one where a stop flag in while is the natural defn form.\n2. A size sweep from tiny (tens of elements) to large (millions), with the crossover reported in both directions (defk vs EXLA, defk vs Elixir) via Defk.Bench sweep:.\n3. Concurrency: N processes calling at once (the EXLA host lock vs kernels on normal schedulers), and the tick gap on one scheduler (responsiveness: true).\n4. Variable length: inputs of changing length per call, with EXLA compile time reported separately and with the bucket-padding workaround as a fair EXLA variant.\n5. Record the findings in docs/performance.md and update nx-boundary.md's inferences that are now measured.\n\nDone when: the example runs under examples/run_all.exs with an expected verdict against the Elixir baseline, the EXLA comparison is reported beside it (native: or an extra line), the crossovers and the concurrency/tick-gap numbers are in the header and the README row, and docs/scope.md's 'not measured against EXLA yet' sentence is replaced by the numbers. Related: defk-7tk.",
   "id": "defk-9p6.29",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-9p6",
   "priority": 3,
   "status": "open",
   "title": "Example: early-exit loop and small-input crossover against Nx defn + EXLA",
   "type": "task",
-  "updated_at": "2026-10-12T09:51:26Z"
+  "updated_at": "2026-10-13T19:08:21Z"
 }
