@@ -935,18 +935,28 @@ defmodule Defk.ValueSemanticsTest do
       for {{^kernel, _}, _, {:copy, :copied, why}} <- K.__defk_report__(), do: why
     end
 
-    test "writes in place when the other branch reads the array" do
-      for k <- @in_branch do
+    # no copy note and no copy in the C, for each kernel
+    defp assert_in_place(kernels) do
+      for k <- kernels do
         assert copy_notes(k) == [], "#{k}: #{inspect(copy_notes(k))}"
         assert copies(kernel_c(K, k)) == 0, "#{k}"
       end
     end
 
-    test "still copies when the buffer before the call is read later" do
-      for k <- @still_copied do
+    # a copy note and a copy in the C, for each kernel
+    defp assert_copied(kernels) do
+      for k <- kernels do
         assert [_ | _] = copy_notes(k), "#{k}"
         assert copies(kernel_c(K, k)) > 0, "#{k}"
       end
+    end
+
+    test "writes in place when the other branch reads the array" do
+      assert_in_place(@in_branch)
+    end
+
+    test "still copies when the buffer before the call is read later" do
+      assert_copied(@still_copied)
     end
 
     test "the reproduction is linear: one buffer, however long the loop" do
@@ -967,17 +977,11 @@ defmodule Defk.ValueSemanticsTest do
     @chosen_copied [:halt_on_alias, :halt_on_outer, :cond_after_arm]
 
     test "writes in place when the condition reads it and the other tail returns it" do
-      for k <- @chosen do
-        assert copy_notes(k) == [], "#{k}: #{inspect(copy_notes(k))}"
-        assert copies(kernel_c(K, k)) == 0, "#{k}"
-      end
+      assert_in_place(@chosen)
     end
 
     test "still copies when the buffer before the call is read later" do
-      for k <- @chosen_copied do
-        assert [_ | _] = copy_notes(k), "#{k}"
-        assert copies(kernel_c(K, k)) > 0, "#{k}"
-      end
+      assert_copied(@chosen_copied)
     end
 
     test "agrees with Elixir mode, also under forced yields" do
@@ -1007,17 +1011,11 @@ defmodule Defk.ValueSemanticsTest do
     @once_copied [:range_old_after, :range_second_gen, :range_walks, :range_filter]
 
     test "writes in place: the range and init are evaluated before the first write" do
-      for k <- @once do
-        assert copy_notes(k) == [], "#{k}: #{inspect(copy_notes(k))}"
-        assert copies(kernel_c(K, k)) == 0, "#{k}"
-      end
+      assert_in_place(@once)
     end
 
     test "still copies when the buffer before the loop is read while it runs or after it" do
-      for k <- @once_copied do
-        assert [_ | _] = copy_notes(k), "#{k}"
-        assert copies(kernel_c(K, k)) > 0, "#{k}"
-      end
+      assert_copied(@once_copied)
     end
 
     test "agrees with Elixir mode, also under forced yields" do
@@ -1060,10 +1058,7 @@ defmodule Defk.ValueSemanticsTest do
       assert {:ok, _} = agree(:rebind_reduce, [i64s(Enum.to_list(1..16))])
       assert {:ok, _} = agree(:rebind_tuple, [5])
 
-      for k <- @rebound do
-        assert copy_notes(k) == [], "#{k}: #{inspect(copy_notes(k))}"
-        assert copies(kernel_c(K, k)) == 0, "#{k}"
-      end
+      assert_in_place(@rebound)
     end
 
     test "the caller's arrays are copied, and stay unchanged" do

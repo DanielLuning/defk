@@ -391,11 +391,8 @@ defmodule Defk.NonFiniteTest do
     refute c =~ "defk_fdiv_s(&"
   end
 
-  # DEFK_STRIP: positions in the first strip, at its end and in the next one
+  # DEFK_STRIP: flat loops run in strips of 2048
   @strip 2048
-
-  defp positions(n),
-    do: Enum.uniq(for p <- [0, 1, @strip - 1, @strip, @strip + 1, n - 1], p < n, do: p)
 
   defp with_bad(n, at, bad, fill \\ 0.5),
     do: pack(for i <- 0..(n - 1), do: if(i == at, do: bad, else: fill))
@@ -405,7 +402,7 @@ defmodule Defk.NonFiniteTest do
 
     try do
       # short loops (one plain loop, < DEFK_STRIP trips) and strips
-      for n <- [100, 2 * @strip + 3], p <- positions(n) do
+      for n <- [100, 2 * @strip + 3], p <- G.strip_positions(n) do
         non_finite(:scale, [with_bad(n, p, 1.0e308), 10.0])
         e = non_finite_input(:scale, [with_bad(n, p, :nan), 1.0])
         assert e.message =~ "at index #{p}"
@@ -463,7 +460,7 @@ defmodule Defk.NonFiniteTest do
   # the update sits under the filter's branch, and the sum's inf never
   # reaches a return check: only the update's own check can raise (defk-zj8)
   test "a filtered accumulator overflowing in a flagged strip raises at the operation" do
-    for n <- [100, 2 * @strip + 3], p <- positions(n) do
+    for n <- [100, 2 * @strip + 3], p <- G.strip_positions(n) do
       non_finite(:filtered_sumsq, [with_bad(n, p, 1.0e308, -1.0)])
       non_finite(:filtered_sumsq, [with_bad(n, p, 1.0e200, 1.0e154)])
     end
@@ -516,7 +513,7 @@ defmodule Defk.NonFiniteTest do
     # its own errors are the index ones and a NaN or inf at a[i]
     try do
       for n <- [100, 2 * @strip + 3],
-          p <- positions(n),
+          p <- G.strip_positions(n),
           gap <- [1, @strip],
           q = p + gap,
           q < n,
@@ -542,7 +539,11 @@ defmodule Defk.NonFiniteTest do
       assert {:ok, x} = agrees(:gather, [a, mixed_ix(n, []), 2])
       assert x == n * 1.0
 
-      for n <- [100, 2 * @strip + 3], p <- positions(n), gap <- [1, @strip], q = p + gap, q < n do
+      for n <- [100, 2 * @strip + 3],
+          p <- G.strip_positions(n),
+          gap <- [1, @strip],
+          q = p + gap,
+          q < n do
         big = with_bad(n, -1, nil, 0.5)
 
         for {k1, k2} <- [
@@ -603,7 +604,7 @@ defmodule Defk.NonFiniteTest do
   test "rolling mean_std raises its first error: a NaN read before the read past the end" do
     rolling = fn x, w -> Defk.Test.assert_agrees(Rolling.Kernels, :mean_std, [x, w]) end
 
-    for n <- [100, 2 * @strip + 3], p <- positions(n), p < n - 1 do
+    for n <- [100, 2 * @strip + 3], p <- G.strip_positions(n), p < n - 1 do
       # w = -1 reads x[i + 1]: past the end at i = n - 1, after the NaN
       assert {:raise, %ArgumentError{}} = rolling.(with_bad(n, p, :nan), -1)
       assert {:raise, %ArithmeticError{}} = rolling.(with_bad(n, p, 1.0e200), -1)
