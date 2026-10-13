@@ -39,6 +39,7 @@ end
 defmodule Defk.RaiseCleanupTest do
   use ExUnit.Case, async: false
   import Defk.Test.Frames
+  import Defk.TestKit
 
   alias Defk.RaiseCleanupTest.K
 
@@ -72,9 +73,7 @@ defmodule Defk.RaiseCleanupTest do
 
     # the promoted frame: forced yields, so the frame is a resource when the
     # raise happens and defk_finish runs on the promoted frame
-    K.__defk_force_yields__(true)
-
-    try do
+    forced(K, fn ->
       y0 = K.__defk_stats__().yields
       promotions1 = K.__defk_stats__().promotions
 
@@ -86,9 +85,7 @@ defmodule Defk.RaiseCleanupTest do
 
       assert K.__defk_stats__().yields > y0, "the kernel never yielded"
       assert K.__defk_stats__().promotions > promotions1, "the frame was never promoted"
-    after
-      K.__defk_force_yields__(false)
-    end
+    end)
 
     # the resource frames are garbage in this process now
     :erlang.garbage_collect(self())

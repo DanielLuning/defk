@@ -27,24 +27,14 @@ end
 
 defmodule Defk.FrameTagTest do
   use ExUnit.Case, async: false
+  import Defk.Test.Frames
+  import Defk.TestKit
 
   alias Defk.FrameTagTest.K
 
   # The frames of a rejected resume are never reclaimed by the destructor (it
   # skips them, leaving frames_live alone), so assert on deltas.
   defp live, do: K.__defk_stats__().frames_live
-
-  # a frame's destructor runs once the process that held its term is collected
-  defp settle(want, tries \\ 100) do
-    :erlang.garbage_collect()
-    got = live()
-
-    cond do
-      got == want -> got
-      tries == 0 -> got
-      true -> Process.sleep(10) && settle(want, tries - 1)
-    end
-  end
 
   test "the tag is emitted and checked at step entry" do
     src = K.__defk_c_source__()
@@ -54,47 +44,39 @@ defmodule Defk.FrameTagTest do
 
   test "normal resume passes the tag check" do
     live0 = live()
-    K.__defk_force_yields__(true)
-
-    try do
-      assert K.sum(100) == 5050
-    after
-      K.__defk_force_yields__(false)
-    end
-
-    assert settle(live0) == live0
+    forced(K, fn -> assert K.sum(100) == 5050 end)
+    assert_frames_live(K, live0)
     assert K.__defk_stats__().promotions > 0
   end
 
   test "a frame with a foreign tag fails cleanly in the step function and the destructor" do
     live0 = live()
-    K.__defk_force_yields__(true)
-    K.__defk_corrupt_tags__(true)
 
-    try do
-      # raised from the first resume, before the frame is read
-      for _ <- 1..20 do
-        assert_raise ArgumentError, ~r/foreign layout/, fn -> K.sum(100) end
+    forced(K, fn ->
+      K.__defk_corrupt_tags__(true)
+
+      try do
+        # raised from the first resume, before the frame is read
+        for _ <- 1..20 do
+          assert_raise ArgumentError, ~r/foreign layout/, fn -> K.sum(100) end
+        end
+
+        # let the destructors run on the rejected frames (a frame's destructor
+        # runs once the process that held its term is collected): they must
+        # not crash
+        :erlang.garbage_collect()
+        assert_frames_live(K, live0 + 20)
+      after
+        K.__defk_corrupt_tags__(false)
       end
-
-      # let the destructors run on the rejected frames: they must not crash
-      settle(live0 + 20)
-    after
-      K.__defk_corrupt_tags__(false)
-      K.__defk_force_yields__(false)
-    end
+    end)
 
     # the destructor left the foreign frames alone: no cleanup, no counter
-    assert settle(live0 + 20) == live0 + 20
+    :erlang.garbage_collect()
+    assert_frames_live(K, live0 + 20)
 
     # the VM is alive and untampered frames work again
     assert K.sum(10) == 55
-    K.__defk_force_yields__(true)
-
-    try do
-      assert K.sum(10) == 55
-    after
-      K.__defk_force_yields__(false)
-    end
+    forced(K, fn -> assert K.sum(10) == 55 end)
   end
 end

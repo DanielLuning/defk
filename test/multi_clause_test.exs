@@ -204,13 +204,13 @@ end
 defmodule Defk.MultiClauseTest do
   use Defk.Case, async: false
   import Defk.Test.Frames
+  # kernel_c/2 here is an entry kernel's C function, not the kit's section
+  import Defk.TestKit, except: [kernel_c: 2]
   use Defk.Properties
 
   alias Defk.MultiClauseTest.{K, Ref}
 
   defp agrees(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
-
-  defp i64s(list), do: G.pack(:i64, list)
 
   # the exception of `f.()`, or flunk
   defp raised(f) do
@@ -395,9 +395,8 @@ defmodule Defk.MultiClauseTest do
     test "no clause matching after yields raises, and the bits built so far are freed" do
       bits = for i <- 1..50_000, do: rem(i * 7, 3) |> min(1)
       expect = for b <- bits, into: <<>>, do: <<b::1>>
-      K.__defk_force_yields__(true)
 
-      try do
+      forced(K, fn ->
         y0 = K.__defk_stats__().yields
         assert K.flags(i64s(bits)) == expect
         assert K.__defk_stats__().yields > y0 + 10, "the kernel never yielded"
@@ -408,9 +407,7 @@ defmodule Defk.MultiClauseTest do
                  %FunctionClauseError{module: K, function: :flag, arity: 2}
 
         assert K.__defk_stats__().yields > y1 + 10, "the kernel never yielded"
-      after
-        K.__defk_force_yields__(false)
-      end
+      end)
 
       assert agrees(:flags, [i64s([1, 0, 1])]) == {:ok, <<1::1, 0::1, 1::1>>}
 
@@ -445,39 +442,20 @@ defmodule Defk.MultiClauseTest do
   end
 
   describe "compile errors" do
-    @dir Path.join(System.tmp_dir!(), "defk_multi_clause_test")
-
-    defp rejected(body) do
-      File.mkdir_p!(@dir)
-      mod = "Defk.MultiClauseTest.E#{System.unique_integer([:positive])}"
-      path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-      File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{body}\nend\n")
-
-      try do
-        Code.compile_file(path)
-        flunk("#{body} compiled")
-      rescue
-        e in CompileError -> Exception.message(e)
-      end
-    end
-
-    defp codes(msg),
-      do: Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg) |> Enum.map(&Enum.at(&1, 1))
-
     test "clauses without a head" do
-      msg = rejected("defk f(0), do: 1\ndefk f(x), do: x")
+      msg = reject(__MODULE__, "defk f(0), do: 1\ndefk f(x), do: x")
       assert codes(msg) == ["clause-head"], msg
       assert msg =~ "f/1 has clauses but no head", msg
       assert msg =~ "defk f(x :: i64) :: i64", msg
 
-      msg = rejected("defk f(0), do: 1\ndefk f(x :: i64) :: i64\ndefk f(x), do: x")
+      msg = reject(__MODULE__, "defk f(0), do: 1\ndefk f(x :: i64) :: i64\ndefk f(x), do: x")
       assert codes(msg) == ["clause-head"], msg
       assert msg =~ "comes before the head of f/1", msg
     end
 
     test "binary and list clause patterns are reported, and the head hint does not guess i64" do
       msg =
-        rejected("""
+        reject(__MODULE__, """
         defk decode(<<>>, 0, 0, acc), do: Enum.reverse(acc)
         defk decode(<<b, rest::binary>>, val, shift, acc), do: decode(rest, val + b, shift + 7, acc)
         """)
@@ -489,34 +467,36 @@ defmodule Defk.MultiClauseTest do
       assert msg =~ "defk decode(x1 :: [u8], val :: i64, shift :: i64, acc :: i64) :: type", msg
       refute msg =~ "x1 :: i64", msg
 
-      msg = rejected("defk f([a | t]), do: a\ndefk f([]), do: 0")
+      msg = reject(__MODULE__, "defk f([a | t]), do: a\ndefk f([]), do: 0")
       assert "clause-pattern" in codes(msg), msg
       assert msg =~ "list pattern", msg
       assert msg =~ "defk f(x1 :: type) :: type", msg
     end
 
     test "types in a clause" do
-      msg = rejected("defk f(x :: i64) :: i64\ndefk f(x :: i64) :: i64, do: x")
+      msg = reject(__MODULE__, "defk f(x :: i64) :: i64\ndefk f(x :: i64) :: i64, do: x")
       assert codes(msg) == ["clause-types"], msg
       assert msg =~ "types go on the head", msg
 
-      msg = rejected("defk f(x :: i64, y :: i64) :: i64\ndefk f(0, y :: i64), do: y")
+      msg = reject(__MODULE__, "defk f(x :: i64, y :: i64) :: i64\ndefk f(0, y :: i64), do: y")
       assert codes(msg) == ["clause-types"], msg
 
-      msg = rejected("defk f(x :: i64) :: i64\ndefk f(x) :: i64, do: x")
+      msg = reject(__MODULE__, "defk f(x :: i64) :: i64\ndefk f(x) :: i64, do: x")
       assert codes(msg) == ["clause-types"], msg
     end
 
     test "options on a clause, a head without clauses, two heads" do
-      msg = rejected("defk f(x :: i64) :: i64\ndefk f(x), yield: false, do: x")
+      msg = reject(__MODULE__, "defk f(x :: i64) :: i64\ndefk f(x), yield: false, do: x")
       assert codes(msg) == ["unknown-option"], msg
       assert msg =~ "options go on the head", msg
 
-      msg = rejected("defk f(x :: i64) :: i64")
+      msg = reject(__MODULE__, "defk f(x :: i64) :: i64")
       assert codes(msg) == ["no-body"], msg
       assert msg =~ "f/1 has a head but no clauses", msg
 
-      msg = rejected("defk f(x :: i64) :: i64\ndefk f(x :: i64) :: i64\ndefk f(x), do: x")
+      msg =
+        reject(__MODULE__, "defk f(x :: i64) :: i64\ndefk f(x :: i64) :: i64\ndefk f(x), do: x")
+
       assert codes(msg) == ["duplicate-kernel"], msg
     end
 
@@ -531,20 +511,20 @@ defmodule Defk.MultiClauseTest do
             {"defk f(true, _), do: 1", "never matches"},
             {"defk f(_, 1), do: 1", "never matches"}
           ] do
-        msg = rejected(head <> clause)
+        msg = reject(__MODULE__, head <> clause)
         assert codes(msg) == ["clause-pattern"], msg
         assert msg =~ what, msg
       end
     end
 
     test "a head parameter's name is not bound in a clause that names it otherwise" do
-      msg = rejected("defk f(x :: i64, y :: i64) :: i64\ndefk f(a, _), do: a + y")
+      msg = reject(__MODULE__, "defk f(x :: i64, y :: i64) :: i64\ndefk f(a, _), do: a + y")
       assert codes(msg) == ["undefined-variable"], msg
       assert msg =~ "undefined variable y", msg
     end
 
     test "a single kernel without a return type is still kernel-head" do
-      msg = rejected("defk f(x :: i64), do: x")
+      msg = reject(__MODULE__, "defk f(x :: i64), do: x")
       assert codes(msg) == ["kernel-head"], msg
     end
   end

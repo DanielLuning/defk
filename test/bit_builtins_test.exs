@@ -56,6 +56,8 @@ defmodule Defk.BitBuiltinsTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
+  import Defk.TestKit, only: [kernel: 3, reject: 2]
+
   alias Defk.BitBuiltinsTest.K
   alias Defk.Generators, as: G
 
@@ -130,26 +132,7 @@ defmodule Defk.BitBuiltinsTest do
     end
   end
 
-  @dir Path.join(System.tmp_dir!(), "defk_bit_builtins_test")
-
-  defp rejection(body, sig) do
-    File.mkdir_p!(@dir)
-    mod = "Defk.BitBuiltinsTest.Bad#{System.unique_integer([:positive])}"
-    path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-
-    File.write!(path, """
-    defmodule #{mod} do
-      use Defk
-
-      defk f(#{sig}) :: i64 do
-        #{body}
-      end
-    end
-    """)
-
-    e = assert_raise CompileError, fn -> Code.compile_file(path) end
-    Exception.message(e)
-  end
+  defp rejection(body, sig), do: reject(__MODULE__, kernel(sig, "i64", body))
 
   test "operands must be integers" do
     for {body, sig, takes} <- [

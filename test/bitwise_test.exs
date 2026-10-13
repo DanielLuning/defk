@@ -128,6 +128,7 @@ defmodule Defk.BitwiseTest do
   use Defk.Properties
 
   import Bitwise
+  import Defk.TestKit
 
   alias Defk.BitwiseTest.{Deprecated, K, Lookup, Wide}
 
@@ -265,31 +266,7 @@ defmodule Defk.BitwiseTest do
 
   # ------------------------------------------------------------ rejections --
 
-  @dir Path.join(System.tmp_dir!(), "defk_bitwise_test")
-
-  defp rejection(body, sig) do
-    File.mkdir_p!(@dir)
-    mod = "Defk.BitwiseTest.Rej#{System.unique_integer([:positive])}"
-    path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-
-    File.write!(path, """
-    defmodule #{mod} do
-      use Defk
-
-      defk f(#{sig}) :: i64 do
-        #{body}
-      end
-    end
-    """)
-
-    e = assert_raise CompileError, fn -> Code.compile_file(path) end
-    Exception.message(e)
-  end
-
-  defp codes(msg),
-    do: Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg) |> Enum.map(&Enum.at(&1, 1))
-
-  defp whats(msg), do: Regex.scan(~r/^error: (.*)$/m, msg) |> Enum.map(&Enum.at(&1, 1))
+  defp rejection(body, sig), do: reject(__MODULE__, kernel(sig, "i64", body))
 
   test "a float operand is an operand-type error" do
     msg = rejection("band(x, 1)", "x :: f64")

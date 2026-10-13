@@ -153,6 +153,7 @@ end
 defmodule Defk.ElementTypesTest do
   use ExUnit.Case, async: true
   use Defk.Properties
+  import Defk.TestKit
 
   alias Defk.ElementTypesTest.{K, Mix}
 
@@ -175,8 +176,6 @@ defmodule Defk.ElementTypesTest do
 
   defp i16s(xs), do: for(x <- xs, into: <<>>, do: <<x::signed-16-native>>)
   defp i32s(xs), do: for(x <- xs, into: <<>>, do: <<x::signed-32-native>>)
-  defp i64s(xs), do: for(x <- xs, into: <<>>, do: <<x::signed-64-native>>)
-  defp f64s(xs), do: for(x <- xs, into: <<>>, do: <<x::float-64-native>>)
   defp f32s(xs), do: for(x <- xs, into: <<>>, do: f32(x))
 
   defp f32(:inf), do: <<0x7F800000::32-native>>
@@ -339,23 +338,17 @@ defmodule Defk.ElementTypesTest do
     assert out16 == i16s(for i <- 0..(n - 1), do: i - 2000)
   end
 
-  defp strips(force?) do
-    K.__defk_force_yields__(force?)
-
-    try do
-      for n <- [100, 2 * @strip + 3], p <- positions(n), do: fails_at(n, p)
-      passes(2 * @strip + 3)
-    after
-      K.__defk_force_yields__(false)
-    end
+  defp strips do
+    for n <- [100, 2 * @strip + 3], p <- positions(n), do: fails_at(n, p)
+    passes(2 * @strip + 3)
   end
 
   test "loops raise at the first failing element, at any position" do
-    strips(false)
+    strips()
   end
 
   test "loops raise at the first failing element under forced yields" do
-    strips(true)
+    forced(K, &strips/0)
   end
 
   test "PCM mixing clips to i16 and agrees with Elixir mode" do
@@ -369,13 +362,7 @@ defmodule Defk.ElementTypesTest do
 
     n = 2 * @strip + 3
     big = i16s(for i <- 0..(n - 1), do: rem(i * 7919, 65_536) - 32_768)
-    Mix.__defk_force_yields__(true)
-
-    try do
-      assert {:ok, _} = Defk.Test.assert_agrees(Mix, :mix, [big, big])
-    after
-      Mix.__defk_force_yields__(false)
-    end
+    assert {:ok, _} = assert_agrees_yielding(Mix, :mix, [big, big])
   end
 
   test "the clamp's range facts drop the i16 write check" do

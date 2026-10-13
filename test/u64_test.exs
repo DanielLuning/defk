@@ -249,6 +249,7 @@ defmodule Defk.U64Test do
   use Defk.Properties
 
   import Bitwise
+  import Defk.TestKit
 
   alias Defk.U64Test.K
 
@@ -575,26 +576,23 @@ defmodule Defk.U64Test do
       scale: K.scale(bin, 3)
     }
 
-    K.__defk_force_yields__(true)
+    {got, n} =
+      yields(K, fn ->
+        forced(K, fn ->
+          %{
+            fnv: K.fnv1a64(bytes),
+            hsum: K.hsum(bin),
+            total: K.total(bin),
+            count: K.count_hash(bytes),
+            until: K.hash_until(bytes, 300),
+            mm: K.murmur3_128(bytes, 7),
+            scale: K.scale(bin, 3)
+          }
+        end)
+      end)
 
-    try do
-      y0 = K.__defk_stats__().yields
-
-      got = %{
-        fnv: K.fnv1a64(bytes),
-        hsum: K.hsum(bin),
-        total: K.total(bin),
-        count: K.count_hash(bytes),
-        until: K.hash_until(bytes, 300),
-        mm: K.murmur3_128(bytes, 7),
-        scale: K.scale(bin, 3)
-      }
-
-      assert K.__defk_stats__().yields - y0 > 0
-      assert got == expect
-    after
-      K.__defk_force_yields__(false)
-    end
+    assert n > 0
+    assert got == expect
   end
 
   # -------------------------------------------------------------- Defk.Bits --
@@ -678,29 +676,7 @@ defmodule Defk.U64Test do
 
   # ------------------------------------------------------------ rejections --
 
-  @dir Path.join(System.tmp_dir!(), "defk_u64_test")
-
-  defp rejection(body, sig, ret \\ "u64") do
-    File.mkdir_p!(@dir)
-    mod = "Defk.U64Test.Rej#{System.unique_integer([:positive])}"
-    path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-
-    File.write!(path, """
-    defmodule #{mod} do
-      use Defk
-
-      defk f(#{sig}) :: #{ret} do
-        #{body}
-      end
-    end
-    """)
-
-    e = assert_raise CompileError, fn -> Code.compile_file(path) end
-    Exception.message(e)
-  end
-
-  defp codes(msg),
-    do: Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg) |> Enum.map(&Enum.at(&1, 1))
+  defp rejection(body, sig, ret \\ "u64"), do: reject(__MODULE__, kernel(sig, ret, body))
 
   test "mixing a u64 with an i64 that may be negative outside a mask is rejected with the mask as the fix" do
     msg = rejection("h * 31 + x", "h :: u64, x :: i64")
