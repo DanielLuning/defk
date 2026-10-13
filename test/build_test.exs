@@ -34,9 +34,52 @@ defmodule Defk.BuildTest do
     assert Defk.Build.cache_key(@src) == Defk.Build.cache_key(@src)
   end
 
+  describe "the compiler on macOS with CC unset (defk-h30)" do
+    # xcrun's answers, by argument list
+    defp xcrun(clang, sdk) do
+      fn
+        "xcrun", ["-f", "clang"], _ -> {clang <> "\n", 0}
+        "xcrun", ["--show-sdk-path"], _ -> {sdk <> "\n", 0}
+      end
+    end
+
+    setup do
+      clang =
+        Path.join(System.tmp_dir!(), "defk-fake-clang-#{System.unique_integer([:positive])}")
+
+      File.write!(clang, "")
+      on_exit(fn -> File.rm(clang) end)
+      %{clang: clang}
+    end
+
+    test "resolves clang and the SDK once, instead of the cc shim per compile", %{clang: clang} do
+      assert Defk.Build.resolve_cc({:unix, :darwin}, xcrun(clang, "/sdk")) ==
+               {clang, ["-isysroot", "/sdk"]}
+    end
+
+    test "falls back to cc when xcrun is missing, fails, or names no file", %{clang: clang} do
+      missing = fn _, _, _ -> raise ErlangError, original: :enoent end
+      fails = fn _, _, _ -> {"xcrun: error: unable to find utility", 72} end
+
+      for cmd <- [missing, fails, xcrun(clang <> "-gone", "/sdk"), xcrun(clang, "")] do
+        assert Defk.Build.resolve_cc({:unix, :darwin}, cmd) == {"cc", []}
+      end
+    end
+
+    test "other systems run cc as before" do
+      no_call = fn _, _, _ -> flunk("ran a command") end
+      assert Defk.Build.resolve_cc({:unix, :linux}, no_call) == {"cc", []}
+    end
+  end
+
   describe "environment" do
     setup do
       restore_env_on_exit(["CC", "ERTS_INCLUDE_DIR"])
+    end
+
+    test "an explicit CC runs as given, with no SDK argument" do
+      System.put_env("CC", "gcc-14")
+      assert Defk.Build.compiler() == {"gcc-14", []}
     end
 
     test "a missing compiler raises the actionable error and leaves no .so" do
