@@ -15,11 +15,15 @@
     {
       "text": "From defk-8i4 (DP+early cutoff in both backends, provisional busy-machine numbers): elixir 112→60 ms/query, defk 20.6→14.1, blocking 20.6→13.4. Quiet re-measure should also: re-run loadgen (README under-load table predates the cutoff), and check the yielding-vs-blocking cost, which moved from -2% to +4.7-4.9% (~55 yields/query). See also defk-l2g (Myers in plain Elixir ~18 ms).",
       "timestamp": "2026-10-07T13:31:13Z"
+    },
+    {
+      "text": "Quiet re-measure 2026-10-13 (load 3-6, no builds; 8dfe357). verify.exs x5: elixir 59.9-61.4, defk 13.6-13.8, blocking 13.1-13.3 ms -\u003e 4.4x. yield_cost x5: +3.5-4.5% at ~55 yields/query. Same with DEFK_SLICE_US=10000000 (0.2-0.4 yields/query): +3.6-4.7%, so the yields are free. The pre-cut-off kernel (49637b5^) on today's compiler: -1.6..-3.4% (yielding faster), as in defk-nua -\u003e no compiler regression to bisect; the +4% came with defk-8i4's reduce_while row loop: per-row safepoint (row loop holds the DP loop, no strips), resume check, strip copy of the DP loop (defk-w8l class). 27-28 vs 21 ms was load noise. Loadgen x3 (another session's mix ci overlapped 4 earlier runs; discarded): elixir 126-130 req/s, defk 652-663, blocking 676-693; /health p99 9.6-12.1 / 9.8-11.7 / 75-82 ms. Docs: fuzzy_search README, examples/README row, performance.md 1.6 + 6.4, 8.2 open question removed.",
+      "timestamp": "2026-10-13T11:08:01Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Re-measure fuzzy_search: defk 27 ms vs 21 ms blocking",
   "type": "bug",
-  "updated_at": "2026-10-13T10:54:01Z"
+  "updated_at": "2026-10-13T11:08:01Z"
 }
