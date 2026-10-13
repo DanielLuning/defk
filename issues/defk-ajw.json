@@ -10,9 +10,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Deferred 2026-10-13: gated on the verdict (defk-sgw.5) and named there only, per defk-dtw.11.",
+      "timestamp": "2026-10-13T19:08:39Z"
+    }
+  ],
   "priority": 4,
   "status": "open",
   "title": "Precompiled kernel artefacts for Hex libraries that ship kernels (cc_precompiler style)",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:20Z"
+  "updated_at": "2026-10-13T19:08:39Z"
 }
