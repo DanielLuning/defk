@@ -23,11 +23,15 @@
     {
       "text": "Follow-up on main: the 'instruction on this CPU' test depended on test order (another test could call the portable library first, fixing it to :instruction before DEFK_PORTABLE_BUILTINS was set). The first call now happens in setup_all with the variable set.",
       "timestamp": "2026-10-11T14:07:22Z"
+    },
+    {
+      "text": "Deferred with the epic. The crc32c builtin, its dispatch, tests and docs are on main; what remains is the x86-64 speedup number on real hardware.",
+      "timestamp": "2026-10-13T19:08:39Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Prototype: hardware-instruction builtins with exact meanings (crc32c first)",
   "type": "task",
-  "updated_at": "2026-10-11T14:07:22Z"
+  "updated_at": "2026-10-13T19:08:39Z"
 }
