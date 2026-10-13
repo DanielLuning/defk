@@ -58,10 +58,11 @@ defmodule Defk.Build do
 
     unless File.exists?(base <> ".so") do
       File.write!(base <> ".c", src)
-      cc = System.get_env("CC", "cc")
+      {cc, pre} = compiler()
 
       args =
-        @cflags ++
+        pre ++
+          @cflags ++
           sanitize_flags(modes) ++
           ["-I", erts_include(), "-I", @priv, "-o", base <> ".so", base <> ".c"] ++
           if(match?({:unix, :darwin}, :os.type()), do: ~w(-undefined dynamic_lookup), else: [])
@@ -70,6 +71,61 @@ defmodule Defk.Build do
     end
 
     base
+  end
+
+  @doc false
+  # The compiler to run and the arguments it needs first (defk-h30). An
+  # explicit CC runs as given. With CC unset, macOS's `cc` is an xcrun shim
+  # that looks up the toolchain and the SDK on every call: about 95 ms of a
+  # 120 ms kernel compile. So the clang it runs and the SDK it passes are
+  # resolved once per VM. The cache key still names `cc` and its version
+  # (cache_key/1): it is the same compiler, so no cached library is rebuilt.
+  @spec compiler() :: {String.t(), [String.t()]}
+  def compiler do
+    case System.get_env("CC") do
+      nil -> resolved_cc()
+      cc -> {cc, []}
+    end
+  end
+
+  defp resolved_cc do
+    key = {__MODULE__, :resolved_cc}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        resolved = resolve_cc(:os.type(), &System.cmd/3)
+        :persistent_term.put(key, resolved)
+        resolved
+
+      resolved ->
+        resolved
+    end
+  end
+
+  @doc false
+  # `cmd` is System.cmd/3, or a test's stand-in. Any failure falls back to
+  # the plain `cc`, which then works or fails exactly as before.
+  @spec resolve_cc(tuple(), (String.t(), [String.t()], keyword() -> {String.t(), integer()})) ::
+          {String.t(), [String.t()]}
+  def resolve_cc({:unix, :darwin}, cmd) do
+    with {:ok, clang} <- xcrun(cmd, ["-f", "clang"]),
+         true <- File.regular?(clang),
+         {:ok, sdk} when sdk != "" <- xcrun(cmd, ["--show-sdk-path"]) do
+      {clang, ["-isysroot", sdk]}
+    else
+      _ -> {"cc", []}
+    end
+  end
+
+  def resolve_cc(_os, _cmd), do: {"cc", []}
+
+  defp xcrun(cmd, args) do
+    case cmd.("xcrun", args, stderr_to_stdout: true) do
+      {out, 0} -> {:ok, String.trim(out)}
+      _ -> :error
+    end
+  rescue
+    ErlangError -> :error
   end
 
   @doc """
@@ -314,7 +370,9 @@ defmodule Defk.Build do
         @remark_flags ++ ["-I", erts_include(), "-I", @priv, "-c", "-o", obj, c]
 
     try do
-      case System.cmd(System.get_env("CC", "cc"), args, stderr_to_stdout: true) do
+      {cc, pre} = compiler()
+
+      case System.cmd(cc, pre ++ args, stderr_to_stdout: true) do
         {out, 0} -> {:ok, out}
         {out, _} -> {:error, out}
       end

@@ -2013,6 +2013,39 @@ per entry kernel, counted after lowering and before the C compiler runs.
 - **Source:** `defk-6ag`, [`lib/defk/inline_size.ex`](https://github.com/DanielLuning/defk/blob/main/lib/defk/inline_size.ex), [`test/inline_size_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/inline_size_test.exs), [`argon2.exs`](https://github.com/DanielLuning/defk/blob/main/examples/argon2.exs) (the draft reconstructed from its header and 6.20).
 - **Status:** sizes measured; timings provisional.
 
+### 6.28 Building a new kernel library: skip the `cc` shim on macOS; the first load is the serial cost
+
+A kernel module whose library is not in the build cache costs a C compile
+and a first `dlopen` of a file macOS has not seen. With `CC` unset, `cc` is
+an `xcrun` shim that looks up the toolchain and the SDK on every call; since
+`defk-h30`, the build (`lib/defk/build.ex`) resolves the clang it runs and the SDK path once per
+VM and calls clang with `-isysroot` (an explicit `CC` runs as given).
+
+- **Numbers:**
+  - one kernel compile, 12 serial: `cc` 1.43 s, the resolved clang 0.30 s
+    (about 95 ms of each ~120 ms compile is the shim);
+  - a cold `mix test` (empty `_build/test/defk`, 1719 tests), two
+    interleaved pairs: `CC=cc` (the shim, the old path) 77.4 s and 77.5 s,
+    resolved 50.7 s and 50.3 s;
+  - a warm `mix test`: ~20 s either way, as no kernel is compiled.
+- **The serial cost that remains:** the first `dlopen` of a new library takes
+  100-260 ms here (macOS checks a binary it has not seen), against ~20 ms for
+  a library already opened once. The code server loads modules, and runs
+  their `on_load`, one at a time, so these first loads queue: a cold run
+  stays below one busy core (66% CPU before, 99% after, on 12 cores).
+- **What didn't help, or isn't needed:** the libraries of the shim and the
+  resolved clang differ byte for byte, but two runs of the same `cc` differ
+  as much (the link UUID and the code signature); the machine code is
+  identical, so the cache key still names `cc` and its version and no cached
+  library is rebuilt.
+- **Test-suite consequence:** a test that compiles a kernel module at run
+  time names it by its source, never `System.unique_integer` (`defk-dwa`):
+  a new name is a new library every run, a compile and a first load each.
+- **Conditions:** M4 Pro, Apple clang 21, Xcode 27, OTP 29, Elixir 1.20.2;
+  load averages 4-12 during the cold runs, so provisional.
+- **Source:** `defk-h30`, `defk-dwa`, [`lib/defk/build.ex`](https://github.com/DanielLuning/defk/blob/main/lib/defk/build.ex) (`compiler/0`, `resolve_cc/2`), [`test/build_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/build_test.exs).
+- **Status:** provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
