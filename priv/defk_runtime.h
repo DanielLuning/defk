@@ -10,7 +10,14 @@
 #ifndef DEFK_RUNTIME_H
 #define DEFK_RUNTIME_H
 
+/* before any system header: dl_iterate_phdr and REG_RIP (fault containment) */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
+
 #include <erl_nif.h>
+#include <dlfcn.h>
+#include <signal.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <math.h>
@@ -43,6 +50,7 @@ extern int __sigsetjmp(struct __jmp_buf_tag __env[1], int __savemask) __attribut
 #define DEFK_E_RESUME 6    /* a resume missed its safepoint (a defk bug); RuntimeError */
 #define DEFK_E_RUNTIME 7   /* RuntimeError: a kernel's raise "msg" */
 #define DEFK_E_FUN_CLAUSE 8 /* FunctionClauseError: module\0function in umsg (module ulen bytes), arity in err_index */
+#define DEFK_E_FAULT 9     /* RuntimeError: a hardware fault inside kernel native code (a defk bug), contained */
 #define DEFK_E_USER 16     /* flag on a kind: a kernel's own raise, message in umsg/ulen */
 
 #define DEFK_LIKELY(x) __builtin_expect(!!(x), 1)
@@ -1771,8 +1779,22 @@ static void defk_clock_init(defk_clock *c, defk_ctx *ctx) {
   c->ctx = ctx;
 }
 
+#ifdef DEFK_FAULT_HOOKS
+/* testing (defk-7dm): the next clock read faults on purpose; see defk_inject_fault */
+static _Atomic int defk_inject_fault = 0;
+static void defk_inject_fault_now(int kind);
+#endif
+
 __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c, int64_t budget) {
   c->budget = budget;
+#ifdef DEFK_FAULT_HOOKS
+  /* kind + 256 * (clock reads to let pass first) */
+  int inj = atomic_load_explicit(&defk_inject_fault, memory_order_relaxed);
+  if (DEFK_UNLIKELY(inj)) {
+    if (inj >= 256) atomic_store(&defk_inject_fault, inj - 256);
+    else defk_inject_fault_now(inj);
+  }
+#endif
   if (atomic_load_explicit(&defk_force_yields, memory_order_relaxed)) return 0;
   ErlNifTime now = enif_monotonic_time(ERL_NIF_USEC);
   ErlNifTime dt = now - c->last;
@@ -1849,7 +1871,8 @@ static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
   int kind = ctx->err & ~DEFK_E_USER;
   const char *mod = kind == DEFK_E_ARITH    ? "Elixir.ArithmeticError"
                     : kind == DEFK_E_OOB    ? "Elixir.Enum.OutOfBoundsError"
-                    : kind == DEFK_E_RESUME || kind == DEFK_E_RUNTIME ? "Elixir.RuntimeError"
+                    : kind == DEFK_E_RESUME || kind == DEFK_E_RUNTIME || kind == DEFK_E_FAULT
+                        ? "Elixir.RuntimeError"
                                                 : "Elixir.ArgumentError";
   ERL_NIF_TERM msg;
   const char *text = user ? ctx->umsg : ctx->msg;
@@ -1889,6 +1912,295 @@ static inline void *defk_frame_of(ErlNifEnv *env, ERL_NIF_TERM t, size_t size, E
   *exc = enif_raise_exception(env, map);
   return NULL;
 }
+
+/* ---- fault containment (defk-7dm) ---------------------------------------- */
+
+/*
+ * A kernel never faults by construction (every access is checked or proven,
+ * the subset has no pointers), so a SIGSEGV, SIGBUS, SIGILL or SIGFPE inside
+ * kernel code is a defk bug. Without this section it kills the node, as any
+ * NIF crash does. With it, a fault is turned into a RuntimeError for the
+ * calling process when, and only when, all of these hold:
+ *
+ *   - the signal is synchronous (si_code > 0: raised by the faulting
+ *     instruction, not sent with kill), on the thread that runs the kernel;
+ *   - a kernel call of this library is running on this thread
+ *     (defk_cur_ctx, set by the generated guard_k* around run_k*);
+ *   - the faulting PC is inside this library's own executable segment.
+ *
+ * Then the handler records the fault in the call's ctx and siglongjmps to
+ * guard_k*'s sigsetjmp, exactly as a bounds check raises: the NIF releases
+ * the call's owned buffers and raises. That is sound because kernel code
+ * never touches the BEAM heap or holds a lock mid-compute: its only state is
+ * registers, its C frame and ctx->owned, and terms are built only at return.
+ *
+ * Anything else is chained to the handler that was installed before this
+ * library's (ERTS's own, another kernel library's, or the default action), so
+ * a fault in ERTS, in libc called from a kernel (memcpy, libm: a longjmp out
+ * of an allocator or a lock would corrupt it), in another NIF, or in this
+ * library while no kernel runs kills the node as it did before. A wild write
+ * that happens not to fault is not a fault and cannot be contained; the
+ * verification tooling (verify/, DEFK_SANITIZE) is what finds those.
+ *
+ * ERTS coexistence (OTP PR #7174): a NIF may install its own handlers if it
+ * behaves. The handler is installed once per library image at load (and
+ * upgrade), with SA_ONSTACK (ERTS's scheduler threads run handlers on an
+ * alternate stack and so must we), SA_SIGINFO and SA_NODEFER (sigsetjmp(jb, 0)
+ * saves no mask, so the signal must not be blocked when we longjmp out). The
+ * previous sigaction is saved and chained.
+ *
+ * Unmapping an image whose handler is still in the chain would leave a
+ * dangling handler, so an image leaves the chain or stays mapped:
+ *   - unload (the module was purged as old code, no new code took over; no
+ *     kernel of the image runs any more): if its handler is the installed
+ *     one, the saved previous handler is put back; otherwise a library loaded
+ *     later holds a pointer to ours in its own saved "previous", so the image
+ *     pins itself in memory (dlopen on itself with RTLD_NODELETE) and its
+ *     handler, whose defk_cur_ctx is NULL forever, only chains on;
+ *   - upgrade (new code of the same module loaded this image): ERTS never
+ *     calls the old image's unload, and its suspended kernels keep running in
+ *     it until the purge, so the new image pins the old one through the
+ *     priv_data ERTS hands over (defk_fault_state, checked by a magic) and
+ *     leaves its handler in the chain.
+ * The pinned images cost their .so size each, only for modules that are
+ * reloaded or purged: the price of never calling into an unmapped handler.
+ *
+ * Cost: two thread-local stores per call (guard_k*), nothing per iteration.
+ * sigaction is process-wide, so one kernel library protects the kernels of
+ * its own image only; the chain reaches every loaded library's handler.
+ * Windows is not covered (no sigaction; a documented limitation).
+ */
+
+#define DEFK_FAULT_MAGIC 0x6b66616c75746431ULL /* "defk fault" state marker in priv_data */
+
+typedef struct {
+  uint64_t magic;
+  void (*handler)(int, siginfo_t *, void *);
+  struct sigaction prev[4];
+  int installed;
+} defk_fault_state;
+
+static __thread defk_ctx *defk_cur_ctx = NULL; /* the call running on this thread */
+static uintptr_t defk_text_lo = 0, defk_text_hi = 0; /* this image's executable range */
+static const int defk_fault_sigs[4] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE};
+static void defk_fault_handler(int sig, siginfo_t *si, void *uc);
+static defk_fault_state defk_fault = {DEFK_FAULT_MAGIC, defk_fault_handler, {{{0}}}, 0};
+
+static int defk_fault_idx(int sig) {
+  for (int i = 0; i < 4; i++)
+    if (defk_fault_sigs[i] == sig) return i;
+  return -1;
+}
+
+static const char *defk_fault_name(int sig) {
+  return sig == SIGSEGV ? "segmentation fault" : sig == SIGBUS ? "bus error"
+         : sig == SIGILL ? "illegal instruction" : sig == SIGFPE ? "arithmetic fault" : "fault";
+}
+
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <mach-o/getsect.h>
+/* the __TEXT segment of the image that holds this code */
+static void defk_text_range_init(void) {
+  Dl_info info;
+  if (!dladdr((void *)&defk_fault_handler, &info) || !info.dli_fbase) return;
+  unsigned long size = 0;
+  uint8_t *seg = getsegmentdata((const struct mach_header_64 *)info.dli_fbase, "__TEXT", &size);
+  if (!seg || !size) return;
+  defk_text_lo = (uintptr_t)seg;
+  defk_text_hi = (uintptr_t)seg + size;
+}
+static uintptr_t defk_fault_pc(void *uc) {
+  ucontext_t *u = (ucontext_t *)uc;
+#if defined(__aarch64__)
+  return (uintptr_t)u->uc_mcontext->__ss.__pc;
+#elif defined(__x86_64__)
+  return (uintptr_t)u->uc_mcontext->__ss.__rip;
+#else
+  (void)u;
+  return 0;
+#endif
+}
+#elif defined(__linux__)
+#include <link.h>
+#include <ucontext.h>
+/* the executable PT_LOAD segment of the object that holds this code */
+static int defk_phdr_cb(struct dl_phdr_info *info, size_t size, void *data) {
+  (void)size;
+  uintptr_t me = (uintptr_t)data;
+  for (int i = 0; i < info->dlpi_phnum; i++) {
+    const ElfW(Phdr) *ph = &info->dlpi_phdr[i];
+    if (ph->p_type != PT_LOAD || !(ph->p_flags & PF_X)) continue;
+    uintptr_t lo = info->dlpi_addr + ph->p_vaddr, hi = lo + ph->p_memsz;
+    if (me >= lo && me < hi) {
+      defk_text_lo = lo;
+      defk_text_hi = hi;
+      return 1;
+    }
+  }
+  return 0;
+}
+static void defk_text_range_init(void) { dl_iterate_phdr(defk_phdr_cb, (void *)&defk_fault_handler); }
+static uintptr_t defk_fault_pc(void *uc) {
+  ucontext_t *u = (ucontext_t *)uc;
+#if defined(__aarch64__)
+  return (uintptr_t)u->uc_mcontext.pc;
+#elif defined(__x86_64__)
+  return (uintptr_t)u->uc_mcontext.gregs[REG_RIP];
+#else
+  (void)u;
+  return 0;
+#endif
+}
+#else
+static void defk_text_range_init(void) {}
+static uintptr_t defk_fault_pc(void *uc) { (void)uc; return 0; }
+#endif
+
+/* hand the signal to whatever was installed before this library's handler */
+static void defk_fault_chain(int sig, siginfo_t *si, void *uc) {
+  int i = defk_fault_idx(sig);
+  struct sigaction *p = i >= 0 ? &defk_fault.prev[i] : NULL;
+  if (p && (p->sa_flags & SA_SIGINFO) && p->sa_sigaction) {
+    p->sa_sigaction(sig, si, uc);
+    return;
+  }
+  if (p && !(p->sa_flags & SA_SIGINFO) && p->sa_handler != SIG_DFL && p->sa_handler != SIG_IGN) {
+    p->sa_handler(sig);
+    return;
+  }
+  /* the default action: put it back and return, so the faulting instruction
+     re-executes and the process dies with the signal, as before defk-7dm */
+  struct sigaction dfl;
+  memset(&dfl, 0, sizeof dfl);
+  dfl.sa_handler = SIG_DFL;
+  sigemptyset(&dfl.sa_mask);
+  sigaction(sig, &dfl, NULL);
+}
+
+static __thread int defk_in_fault_handler = 0;
+
+static void defk_fault_handler(int sig, siginfo_t *si, void *uc) {
+  /* Re-entered on the same thread: a fault inside a handler, or a cycle in
+     the chain. Never loop or recurse: put the default action back and let
+     the fault re-execute, so the node dies as it would without us. */
+  if (defk_in_fault_handler) {
+    struct sigaction dfl;
+    memset(&dfl, 0, sizeof dfl);
+    dfl.sa_handler = SIG_DFL;
+    sigemptyset(&dfl.sa_mask);
+    sigaction(sig, &dfl, NULL);
+    return;
+  }
+  defk_in_fault_handler = 1;
+  defk_ctx *ctx = defk_cur_ctx;
+  uintptr_t pc = defk_fault_pc(uc);
+  if (ctx && si && si->si_code > 0 && pc >= defk_text_lo && pc < defk_text_hi) {
+    defk_in_fault_handler = 0;
+    defk_cur_ctx = NULL;
+    snprintf(ctx->msg, sizeof ctx->msg,
+             "defk bug: %s inside kernel native code (signal %d, code %d, address %p, pc +0x%lx); "
+             "the call was aborted and the node kept running",
+             defk_fault_name(sig), sig, (int)si->si_code, si->si_addr,
+             (unsigned long)(pc - defk_text_lo));
+    ctx->err = DEFK_E_FAULT;
+    siglongjmp(ctx->jb, 1); /* SA_NODEFER: the signal is not blocked here */
+  }
+  /* cleared before chaining: the next handler may longjmp away and never
+     return here (another library containing its own kernel's fault) */
+  defk_in_fault_handler = 0;
+  defk_fault_chain(sig, si, uc);
+}
+
+static void defk_fault_install(void) {
+  /* The same image loaded again (the same .so: ERTS dlopens it once more and
+     gets the same statics, as a reloaded module with unchanged code does, or
+     an image pinned in memory) is already in the chain. Installing it again
+     would save its own handler, or a chain that leads back to it, as the
+     "previous" one: a cycle that spins on the first fault. `installed`
+     means "in the chain"; only a retire that put the previous handler back
+     clears it. */
+  if (defk_fault.installed) return;
+  defk_text_range_init();
+  if (defk_text_lo == defk_text_hi) return; /* no range: contain nothing, chain everything */
+  for (int i = 0; i < 4; i++) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = defk_fault_handler;
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_NODEFER;
+    sigemptyset(&sa.sa_mask);
+    if (sigaction(defk_fault_sigs[i], &sa, &defk_fault.prev[i]) != 0)
+      memset(&defk_fault.prev[i], 0, sizeof defk_fault.prev[i]);
+  }
+  defk_fault.installed = 1;
+}
+
+/* keep the image that holds `handler` mapped for the life of the process */
+static void defk_fault_pin(void (*handler)(int, siginfo_t *, void *)) {
+  Dl_info info;
+  if (dladdr((void *)handler, &info) && info.dli_fname)
+    dlopen(info.dli_fname, RTLD_NOW | RTLD_NOLOAD | RTLD_NODELETE);
+}
+
+/* unload: take this image's handler out of the chain if it is the head, else pin the image */
+static void defk_fault_retire(void) {
+  if (!defk_fault.installed) return;
+  int pinned = 0;
+  for (int i = 0; i < 4; i++) {
+    struct sigaction cur;
+    if (sigaction(defk_fault_sigs[i], NULL, &cur) != 0) continue;
+    if ((cur.sa_flags & SA_SIGINFO) && cur.sa_sigaction == defk_fault_handler) {
+      sigaction(defk_fault_sigs[i], &defk_fault.prev[i], NULL);
+    } else if (!pinned) {
+      defk_fault_pin(defk_fault_handler);
+      pinned = 1;
+    }
+  }
+  /* out of the chain only if nothing was left pointing at this handler */
+  defk_fault.installed = pinned;
+}
+
+/* upgrade: the image this one replaces stays in the chain, so keep it mapped */
+static void defk_fault_pin_old(void *old_priv) {
+  defk_fault_state *old = (defk_fault_state *)old_priv;
+  if (old && old->magic == DEFK_FAULT_MAGIC && old->installed && old->handler) defk_fault_pin(old->handler);
+}
+
+#ifdef DEFK_FAULT_HOOKS
+/* testing: fault on purpose at a clock read (1 segv, 2 illegal instruction,
+   3 integer division by zero, 4 segv inside libc: not contained), after
+   letting `kind / 256` clock reads pass; a negative kind faults in the NIF
+   itself, outside any kernel call: not contained */
+__attribute__((noinline)) static void defk_inject_fault_now(int kind) {
+  atomic_store(&defk_inject_fault, 0);
+  volatile int *bad = (volatile int *)(uintptr_t)8;
+  volatile int64_t zero = 0;
+  switch (kind) {
+  case 1: *bad = 1; break;
+#if defined(__aarch64__)
+  case 2: __asm__ volatile(".inst 0x00000000"); break;
+#elif defined(__x86_64__)
+  case 2: __asm__ volatile("ud2"); break;
+#else
+  case 2: __builtin_trap(); break;
+#endif
+  case 3: zero = 1 / zero; break;
+  case 4: memset((void *)(uintptr_t)8, 0, 64); break;
+  default: break;
+  }
+}
+static ERL_NIF_TERM defk_inject_fault_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+  int kind;
+  if (!enif_get_int(env, argv[0], &kind)) return enif_make_badarg(env);
+  if (kind < 0) { /* fault right here, in this library but outside any kernel call: not contained */
+    defk_inject_fault_now(-kind);
+    return enif_make_atom(env, "survived");
+  }
+  atomic_store(&defk_inject_fault, kind);
+  return enif_make_atom(env, "ok");
+}
+#endif
 
 /* ---- stats + load hooks -------------------------------------------------- */
 
@@ -1948,17 +2260,27 @@ static int defk_open_rt(ErlNifEnv *env, ErlNifResourceFlags flags) {
   return defk_frame_rt ? 0 : 1;
 }
 static int defk_load(ErlNifEnv *env, void **priv, ERL_NIF_TERM info) {
-  (void)priv;
   (void)info;
   defk_max_owned_init();
+  defk_fault_install();
+  *priv = &defk_fault;
   return defk_open_rt(env, ERL_NIF_RT_CREATE);
 }
 static int defk_upgrade(ErlNifEnv *env, void **priv, void **old, ERL_NIF_TERM info) {
-  (void)priv;
-  (void)old;
   (void)info;
   defk_max_owned_init();
+  defk_fault_pin_old(old ? *old : NULL);
+  defk_fault_install();
+  *priv = &defk_fault;
   return defk_open_rt(env, ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER);
+}
+/* the module was purged as old code and no new code took it over (ERTS does
+   not call this for an upgraded image); frames it still owns keep the image
+   loaded until they are gone (defk-nbl) */
+static void defk_unload(ErlNifEnv *env, void *priv) {
+  (void)env;
+  (void)priv;
+  defk_fault_retire();
 }
 
 /*

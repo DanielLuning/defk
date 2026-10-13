@@ -89,14 +89,22 @@ state between calls. State travels as values, binaries in and new binaries
 out ([ADR 0001](https://github.com/DanielLuning/defk/blob/main/docs/adr/0001-state-travels-as-binaries.md));
 kernel-owned state is being explored in ticket `defk-sve`.
 
-**Where isolation stops today.** A crash in a kernel's native code, such as a
-segmentation fault, would be a bug in defk's compiler or runtime, not in your
-kernel. Like any NIF crash, it takes the whole node down. defk prevents
-crashes by construction (checked accesses, no pointers in the subset) and
-tests for them (agreement properties, forced yields, hostile arguments), but
-does not yet contain one. Turning such a crash into an exception in the
-calling process is ticket `defk-7dm`, still open; the
-[scope page](../scope.md#not-yet-planned) lists it.
+**A fault in kernel code is an exception too.** A crash in a kernel's
+native code, such as a segmentation fault, would be a bug in defk's compiler
+or runtime, not in your kernel: defk prevents it by construction (checked
+accesses, no pointers in the subset) and tests for it (agreement properties,
+forced yields, hostile arguments, sanitizers, fuzzing). If one happens
+anyway, the runtime turns it into a `RuntimeError` in the calling process
+whose message starts with "defk bug" and names the signal and the address,
+after the kernel's buffers are freed; the node keeps running. File it, do
+not rescue it.
+
+**Where isolation stops.** The runtime contains a fault only inside the
+kernel's own code while the kernel runs. A fault in the C library or in the
+VM itself (also when a kernel called into them), a wild write that happens
+not to fault, or a corrupted C stack still takes the whole node down, as any
+NIF crash does; so does a fault on Windows, where the mechanism does not
+exist.
 
 ## 3. Cleanup: a dead process frees its kernel's memory
 
@@ -130,6 +138,8 @@ still running old Erlang code.
 - Agreement of every kernel with its Elixir mode, on edge values and
   generated inputs, and with a forced yield at every safepoint (see
   [Testing kernels](testing.md)).
-- `test/resume_test.exs`, `test/upgrade_test.exs` and the
-  `bench/tick_gap.exs` and `bench/yield_cost.exs` measurements, described in
-  the [design decisions](https://github.com/DanielLuning/defk/blob/main/docs/project.md#design-decisions-the-benchmarks-validated).
+- `test/resume_test.exs`, `test/upgrade_test.exs`,
+  `test/fault_containment_test.exs` (faults injected into a kernel, in the
+  VM and in a child VM) and the `bench/tick_gap.exs` and
+  `bench/yield_cost.exs` measurements, described in the
+  [design decisions](https://github.com/DanielLuning/defk/blob/main/docs/project.md#design-decisions-the-benchmarks-validated).

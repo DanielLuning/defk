@@ -607,9 +607,10 @@ defmodule Defk do
     end
   end
 
-  # `__defk_corrupt_tags__/1` deliberately breaks the frame-tag check, so it
-  # is generated only when the user's module compiles under MIX_ENV=test
-  # (scripts without Mix never get it).
+  # `__defk_corrupt_tags__/1` deliberately breaks the frame-tag check and
+  # `__defk_inject_fault__/1` makes a kernel fault on purpose, so they are
+  # generated only when the user's module compiles under MIX_ENV=test
+  # (scripts without Mix never get them).
   defp fault_hooks? do
     Defk.Build.mix_project?() and Mix.env() == :test
   end
@@ -620,6 +621,8 @@ defmodule Defk do
     quote do
       @doc false
       def __defk_corrupt_tags__(_on), do: :erlang.nif_error(:defk_not_loaded)
+      @doc false
+      def __defk_inject_fault__(_kind), do: :erlang.nif_error(:defk_not_loaded)
     end
   end
 

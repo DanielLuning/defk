@@ -177,13 +177,18 @@ defmodule Defk.DocsChecksTest do
     end
 
     # what a kernel module with Elixir mode exports, less the hidden ones
-    # (ADR-0006: the loader, the native entry points, the test-only fault hook)
+    # (ADR-0006: the loader, the native entry points, the test-only fault hooks)
     defp exported do
       for {name, arity} <- Examples.Kernels.__info__(:functions),
           s = Atom.to_string(name),
           String.starts_with?(s, "__defk_"),
           not String.starts_with?(s, "__defk_native_"),
-          name not in [:__defk_load__, :__defk_load_nif__, :__defk_corrupt_tags__],
+          name not in [
+            :__defk_load__,
+            :__defk_load_nif__,
+            :__defk_corrupt_tags__,
+            :__defk_inject_fault__
+          ],
           do: "#{name}/#{arity}"
     end
 

@@ -207,13 +207,21 @@ release, then raise — never the reverse.
 
 ## 5. Signals and fault containment
 
-**Today, a kernel fault is a node crash.** `erl_nif`: "A native function that
-crashes will crash the whole VM." defk's runtime and its generated code
-install no signal handlers: `priv/defk_runtime.h` and the emitted C use
-`sigsetjmp`/`siglongjmp` only for in-call errors (§4).
-Containment is currently prevention-by-construction plus evidence (the threat
-list `defk-5fc`, the alloc overflow `defk-gtv`, differential checks
-`defk-63k`).
+**A NIF fault is a node crash; a kernel fault is an exception.** `erl_nif`:
+"A native function that crashes will crash the whole VM." defk's first line
+is prevention-by-construction plus evidence (the threat list `defk-5fc`, the
+alloc overflow `defk-gtv`, differential checks `defk-63k`, the sanitizer and
+Valgrind runs and the fuzzing under `verify/`). Since `defk-7dm`
+([ADR-0009](adr/0009-fault-containment.md)) there is a second line: each
+kernel library installs a handler for `SIGSEGV`/`SIGBUS`/`SIGILL`/`SIGFPE`
+at load, and a synchronous fault whose PC is inside that library's own code,
+while one of its kernels runs on the faulting thread, becomes a
+`RuntimeError` ("defk bug: segmentation fault inside kernel native code
+...") in the calling process: the handler `siglongjmp`s to the guard's
+`sigsetjmp` (§4), the NIF frees the call's owned buffers and raises. Any
+other fault (ERTS, libc called from a kernel, another NIF, the library
+outside a call) is chained to the previous handler and kills the node as
+before; a wild write that does not fault is not contained.
 
 **OTP's contract for NIF-local signal use.** From PR #7174 ("jit: Refactor
 `sigaltstack(2)` handling", merged for OTP-27):
@@ -231,13 +239,42 @@ run handlers on an alternate signal stack — a NIF-local handler that wants
 the same protection must set `SA_ONSTACK` itself, and must save and restore
 the previous `sigaction` (chaining if it was not `SIG_DFL`).
 
-**The defk spike is not decided.** `defk-7dm` proposes installing
-`sigaction` for `SIGSEGV`/`SIGBUS`/`SIGILL`/`SIGFPE` around kernel execution,
-with a fault whose PC is inside a loaded defk `.so` turned into a raise for
-the calling process, and any other fault re-raised so the node dies as today.
-**Placeholder: `defk-7dm` is open and blocked; its accept/reject decision
-lands here when it closes (ADR-0003 is created then).** Treat everything
-above as the current state, not a plan.
+**How defk's handler keeps to that contract** (the comment above
+`defk_fault_handler` in `priv/defk_runtime.h` is the full account):
+
+- installed once per library image, in `defk_load` and `defk_upgrade`, with
+  `SA_SIGINFO | SA_ONSTACK | SA_NODEFER` (`SA_NODEFER` because the guard's
+  `sigsetjmp(jb, 0)` saves no mask, so the signal must not stay blocked after
+  the longjmp); the previous `sigaction` is saved and chained;
+- the running call is a thread-local set by the generated guard function,
+  the library's code range comes from its `__TEXT` segment (macOS,
+  `getsegmentdata`) or its executable `PT_LOAD` (Linux, `dl_iterate_phdr`),
+  and the PC from the `ucontext`;
+- `sigaction` is process-wide and the chain reaches every library's
+  handler, so a fault in an older library's kernel passes the newer
+  libraries' handlers (each one checks its own range) before its own
+  contains it;
+- an image never leaves a dangling handler: at unload it restores the
+  previous handler if its own is still the installed one, else it pins
+  itself with `dlopen(..., RTLD_NOLOAD | RTLD_NODELETE)`; at upgrade the new
+  image pins the old one through the `priv_data` ERTS hands to `upgrade`
+  (ERTS never calls an upgraded image's `unload`, and the old image's
+  suspended kernels run until the purge). On macOS dyld never unmaps an image
+  with thread-local storage anyway, so purged kernel libraries stay mapped
+  there, pin or no pin; on Linux the pin is what keeps the chain valid.
+- cost: one thread-local lookup and two stores per call (12.5-12.7 ns to
+  12.7-13.2 ns per scalar call, ADR-0009); nothing per iteration.
+
+`test/fault_containment_test.exs` injects faults at a clock read
+(`__defk_inject_fault__/1`, a test-only hook like `__defk_corrupt_tags__/1`)
+and checks both the contained cases and, in a child VM, the cases that must
+still kill the node. Windows (no `sigaction`) is a documented limitation.
+
+**The out-of-process alternative, measured.** A port program (or an
+`erl_interface` C node) would isolate even a wild write, at two pipe
+transfers per call: `bench/port_roundtrip.exs` records what that floor costs
+against a kernel call by input size (`docs/performance.md` 7.10), so the
+verdict can say when a port is the better boundary.
 
 **Debugging a fault.** OTP's *Debugging NIFs and Port Drivers* page is the
 reference: a debug emulator build, Address Sanitizer, Valgrind, and `rr`
