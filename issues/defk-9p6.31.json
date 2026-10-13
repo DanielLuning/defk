@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-13T19:13:52Z",
+  "description": "Found in the 2026-10-13 focus review. The measured results live in three places that drift: the README bullet list ('Where defk looks like it helps'), the two tables in examples/README.md (about 300 lines of hand-written ranges, one row per example, many marked provisional), and the scoreboard that mix defk.examples --bench --snapshot prints. examples/README.md itself says the scoreboard, not the tables, is the source of truth.\n\nDo: make the snapshot the one source. Either generate the examples/README.md tables (and the README bullets) from the stored --snapshot output with a mix task and a docs-check test (as docs/compile-errors.md is generated from Defk.Errors, see docs/agents/generated-docs.md), or shrink the hand-written tables to one line per example (job, expected verdict, link) and point at the snapshot for numbers. Keep the per-example notes about what was tried on the Elixir side: they belong in each script's header, not in the table. Coordinate with defk-sgw.4 (the frozen snapshot for docs/verdict.md uses the same output) and defk-yzw (the README refresh).\n\nDone when: a number appears in at most one hand-maintained place, and a test or the generator keeps the README tables equal to the snapshot.",
+  "id": "defk-9p6.31",
+  "labels": [],
+  "parent": "defk-9p6",
+  "priority": 3,
+  "status": "open",
+  "title": "One source for the catalog results: the scoreboard snapshot, not hand-written tables",
+  "type": "task",
+  "updated_at": "2026-10-13T19:13:52Z"
+}
