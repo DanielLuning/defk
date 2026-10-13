@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-13T12:53:01Z",
+  "description": "Maintainer (2026-10-13): mix ci compiles only 6 example scripts' kernels (Defk.Catalog) plus fuzzy_search's kernels.ex; ~25 examples are never compiled in CI, so a compiler change can break e.g. lz4 or keccak with CI green. Only examples/run_all.exs (manual, benchmarks) runs them.\n\nGoal: (1) mix test runs a selected few examples that test the compiler output: fast ones, covering different compiler areas; no example whose expected verdict is poor/out_of_scope. (2) Running all other examples moves to its own task, outside mix ci. (3) Decide what to do with fuzzy_search, a whole app.",
+  "id": "defk-30c",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Examples in CI: a fast compiler-coverage subset in mix test, everything else in its own task",
+  "type": "epic",
+  "updated_at": "2026-10-13T12:53:01Z"
+}
