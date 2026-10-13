@@ -8,6 +8,7 @@
   "labels": [
     "needs-triage"
   ],
+  "parent": "defk-w8r",
   "comments": [
     {
       "text": "The Valgrind container (defk-96f.3) is ready to become a Linux job here (release-time, not per-CI). Also add CC=clang on glibc to the matrix: defk-o52 crashes on the first raise without its fix.",
@@ -18,5 +19,5 @@
   "status": "open",
   "title": "Run the test suite on Linux (x86-64 and aarch64) and record one Linux measurement run",
   "type": "task",
-  "updated_at": "2026-10-13T10:53:48Z"
+  "updated_at": "2026-10-13T19:08:09Z"
 }
