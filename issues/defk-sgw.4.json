@@ -16,6 +16,7 @@
   "blocks": [
     "defk-sgw.5"
   ],
+  "closed_at": "2026-10-13T21:48:26Z",
   "created": "2026-10-06T09:13:19Z",
   "description": "Decided in 'What must docs/verdict.md contain to count as done?' (defk-dtw.4) and 'How are kernels checked against Elixir mode?' (defk-dtw.16).\n\n- On a quiet machine (record load average): the deep differential run (~10k per property in a :peer node) and the ASan/UBSan run from defk-63k; record seed and date in Method.\n- Then examples/run_all.exs, best of N with spread, and generate the Workload results table (one row per target workload: workload verdict on the optimised baseline, NIF, responsiveness, Nx where relevant) from its DEFK_RESULT output (defk-9p6.10). Record machine, OTP, Elixir and commit.\n\nHITL: needs a quiet machine and a human to judge it quiet. Done when the table is in docs/verdict.md tied to a commit at which run_all.exs is green.",
   "id": "defk-sgw.4",
@@ -30,8 +31,8 @@
     }
   ],
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Freeze the workload-results snapshot on a quiet machine",
   "type": "task",
-  "updated_at": "2026-10-13T20:51:51Z"
+  "updated_at": "2026-10-13T21:48:26Z"
 }
