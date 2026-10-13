@@ -5,6 +5,7 @@
     "defk-sgw.4",
     "defk-yzw"
   ],
+  "closed_at": "2026-10-13T11:08:02Z",
   "created": "2026-10-05T15:08:11Z",
   "description": "During defk-jaj, fuzzy_search verify measured defk ~27-28 ms vs ~21 ms for the blocking (yield: false) version, on both main and the branch, on a heavily loaded machine (load avg 30+). The defk-nua README note records 20 ms yielding vs 20 ms yield: false. Either load noise or an earlier regression (candidates: defk-5s3 flat-loop safepoints, defk-j3h 250us slice, defk-jp3/7q5 selects, defk-jaj inlining + DEFK_STRIP 512-\u003e2048). Done when re-measured on a quiet machine; if the gap is real, bisect to the commit and fix or document.",
   "id": "defk-klw",
@@ -22,8 +23,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Re-measure fuzzy_search: defk 27 ms vs 21 ms blocking",
   "type": "bug",
-  "updated_at": "2026-10-13T11:08:01Z"
+  "updated_at": "2026-10-13T11:08:02Z"
 }
