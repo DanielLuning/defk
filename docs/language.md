@@ -2112,6 +2112,13 @@ including ordinary `def`s of the kernel's own module, are not callable
   `ArgumentError`, `Enum.OutOfBoundsError`, `CaseClauseError`, and
   `RuntimeError` from a kernel's own [`raise`](#raise)), after the
   kernel's own buffers are freed. Catch it like any other.
+- **A fault is an exception.** A hardware fault inside a kernel's native code
+  (a segmentation fault, an illegal instruction) cannot come from a kernel
+  you wrote: it is a defk bug. The runtime turns it into a `RuntimeError`
+  whose message starts with "defk bug", in the calling process, with the
+  buffers freed; the node keeps running. A fault outside the kernel's own
+  code (in the C library or the VM, also when called from a kernel) still
+  kills the node ([the runtime contract](guides/runtime-contract.md)).
 - **Process death.** A process killed while its kernel is suspended between
   steps frees the kernel's frame, arrays and bitstring buffers
   (`__defk_stats__().frames_live` goes back down; `bench/demo.exs` shows it).
