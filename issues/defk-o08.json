@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-13T19:07:54Z",
+  "description": "Groups the range-fact tickets that implement ADR-0007 (docs/adr/0007-symbolic-bounds.md). Each child removes a bounds or overflow check that a catalog kernel still pays, found while building the target workloads (PCM mixing, cosine top-k, rolling stats). A range fact never changes a kernel's meaning: with every fact forgotten, the kernel returns and raises the same (CONTEXT.md).\n\nOrder: the core move onto ADR-0007's representation (defk-u1u, after defk-fun) comes first; linear facts (defk-qdz) and condition facts (defk-b38) build on it; the proof tickets (defk-pic, defk-siy, defk-9za, defk-n7k, defk-pvt) each close one catalog gap; the flagged-strip tickets (defk-5qk, defk-agp) and unzeroed alloc (defk-i5r) are independent.\n\nDone when: every child is closed or recorded as not worth it, and the fast-path report of the catalog kernels named in the children no longer lists the bounds check in question.",
+  "id": "defk-o08",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Symbolic bounds: prove more indices in range (ADR-0007)",
+  "type": "epic",
+  "updated_at": "2026-10-13T19:07:54Z"
+}
