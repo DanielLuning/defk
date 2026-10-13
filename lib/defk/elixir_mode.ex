@@ -859,24 +859,76 @@ defmodule Defk.ElixirMode do
   end
 
   # The guard's expression calls Ops (an i64 limit has no guard form), so it
-  # runs outside a real guard, with Elixir's guard rule applied by hand: an
-  # error fails the guard (false) and the next clause is tried. Only an error
-  # Elixir itself would raise does: a zero divisor, a float result of inf. An
-  # i64 limit (Ops.limit?/1) is no Elixir error and is raised, as the kernel does.
+  # runs outside a real guard, with Elixir's guard rule applied by hand
+  # (Defk.ElixirMode.Guard): an error Elixir itself would raise (a zero
+  # divisor, a float result of inf) fails the guard (false) and the next
+  # clause is tried, even beside an i64 limit; a limit alone raises, as the
+  # kernel does (defk-34l).
   defp guard_expr(guard, env) do
     {q, _} = expr(guard, env)
 
     if fallible?(guard) do
       quote generated: true do
-        try do
-          unquote(q)
-        rescue
-          e in ArithmeticError ->
-            if Defk.ElixirMode.Ops.limit?(e), do: reraise(e, __STACKTRACE__), else: false
-        end
+        Defk.ElixirMode.Guard.run(fn -> unquote(guarded(q, true)) end)
       end
     else
       q
+    end
+  end
+
+  # The guard's code with its operations through Defk.ElixirMode.Guard,
+  # which poisons a limit's value instead of raising. `false_pos?`: whether
+  # the value false here fails the guard (the root and the operands of an
+  # `and` there), where an `and` with a poisoned left side runs its right
+  # side (an error there fails the guard) and is poisoned; any other and/or
+  # with a poisoned left side raises the first limit.
+  defp guarded({op, _, [a, b]}, false_pos?) when op in [:and, :or] do
+    inner? = false_pos? and op == :and
+    right = guarded(b, inner?)
+
+    poisoned =
+      if inner?,
+        do: quote(generated: true, do: then(unquote(right), fn _ -> :defk_poison end)),
+        else: quote(generated: true, do: Defk.ElixirMode.Guard.stop())
+
+    {short, other} = if op == :and, do: {false, true}, else: {true, false}
+
+    quote generated: true do
+      case unquote(guarded(a, inner?)) do
+        :defk_poison -> unquote(poisoned)
+        unquote(short) -> unquote(short)
+        unquote(other) -> unquote(right)
+      end
+    end
+  end
+
+  defp guarded({:not, _, [a]}, _false_pos?),
+    do: quote(generated: true, do: Defk.ElixirMode.Guard.not_(unquote(guarded(a, false))))
+
+  defp guarded({op, _, [a, b]}, _false_pos?)
+       when op in [:==, :!=, :===, :!==, :<, :>, :<=, :>=] do
+    quote generated: true do
+      Defk.ElixirMode.Guard.cmp(
+        unquote(op),
+        unquote(guarded(a, false)),
+        unquote(guarded(b, false))
+      )
+    end
+  end
+
+  defp guarded({op, _, [_ | _] = args}, _false_pos?) when op in [:+, :-, :*, :/],
+    do: guarded_call(Kernel, op, args)
+
+  defp guarded({{:., _, [mod, fun]}, _, args}, _false_pos?) when is_list(args),
+    do: guarded_call(mod, fun, args)
+
+  defp guarded(q, _false_pos?), do: q
+
+  defp guarded_call(mod, fun, args) do
+    args = Enum.map(args, &guarded(&1, false))
+
+    quote generated: true do
+      Defk.ElixirMode.Guard.call(unquote(mod), unquote(fun), unquote(args))
     end
   end
 
