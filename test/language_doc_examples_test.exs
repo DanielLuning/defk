@@ -28,7 +28,6 @@ defmodule Defk.LanguageDocExamplesTest do
   setup_all do
     File.mkdir_p!(@dir)
     isolated = Task.async(fn -> Defk.LanguageDoc.Isolated.run(@isolated, @dir) end)
-    announce_skips()
 
     compiled =
       @examples
@@ -40,23 +39,6 @@ defmodule Defk.LanguageDocExamplesTest do
       |> Map.new(fn {:ok, r} -> r end)
 
     %{compiled: compiled, isolated: Task.await(isolated, :infinity)}
-  end
-
-  # one short summary, so the fragments stay visible: a line per reason
-  defp announce_skips do
-    lines =
-      for {why, skips} <-
-            Enum.group_by(@examples, fn {_, ex} -> ex.check end, fn {path, ex} ->
-              "#{path}:#{ex.line}"
-            end),
-          match?({:skip, _}, why),
-          do: "  #{elem(why, 1)}\n    #{Enum.join(skips, " ")}"
-
-    IO.puts([
-      "defk-example skips (",
-      to_string(length(lines)),
-      " reasons):\n" | Enum.intersperse(lines, "\n")
-    ])
   end
 
   defp compiled?(%{check: check}),
