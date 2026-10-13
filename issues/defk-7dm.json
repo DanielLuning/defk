@@ -12,6 +12,7 @@
   "labels": [
     "ready-for-human"
   ],
+  "parent": "defk-sgw",
   "comments": [
     {
       "text": "Docs target: findings feed docs/beam-nifs.md section 5, ticket defk-7w2 (placeholder section until this spike decides).",
@@ -30,5 +31,5 @@
   "status": "open",
   "title": "Fault containment: turn a kernel fault into an exception for the calling process",
   "type": "task",
-  "updated_at": "2026-10-13T06:57:46Z"
+  "updated_at": "2026-10-13T19:08:13Z"
 }
