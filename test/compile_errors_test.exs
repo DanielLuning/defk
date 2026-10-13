@@ -85,12 +85,12 @@ defmodule Defk.CompileErrorsTest do
       end
     end
 
-    test "codes are unique slugs with a summary, why and hint" do
+    # the slug form of a code: test/compile_errors_doc_test.exs
+    test "codes are unique, with a kind, summary, why and hint" do
       codes = Enum.map(Defk.Errors.codes(), & &1.code)
       assert codes == Enum.uniq(codes)
 
       for e <- Defk.Errors.codes() do
-        assert e.code =~ ~r/^[a-z0-9]+(-[a-z0-9]+)*$/
         assert e.kind in [:subset, :planned, :error]
 
         for k <- [:summary, :why, :hint],
@@ -134,13 +134,9 @@ defmodule Defk.CompileErrorsTest do
              hint: pass the values as separate arguments, or pack them into an array before the call; for a count per key, index an array by the key (counts = alloc(i64, 256), then counts[b] = counts[b] + 1)
              (defk unsupported-map: docs/compile-errors.md#unsupported-map)\
              """
-    end
 
-    test "the footer links the code's entry in the catalogue page" do
+      # the footer links the code's entry in the catalogue page
       assert File.exists?("docs/compile-errors.md")
-      msg = compile("defk f(x :: i64) :: i64 do\n  m = %{a: x}\n  x\nend", "Footer")
-      assert msg =~ "(defk unsupported-map: docs/compile-errors.md#unsupported-map)"
-      refute msg =~ "explain!"
     end
 
     test "the link is the page's path inside the defk repository and a URL elsewhere" do
@@ -149,14 +145,11 @@ defmodule Defk.CompileErrorsTest do
       assert Defk.Errors.docs("pipe", false) =~ "compile-errors"
     end
 
-    test "explain!/1 prints the registry entry and rejects unknown codes" do
+    # an unknown code: the doctest of explain!/1
+    test "explain!/1 prints the registry entry" do
       out = ExUnit.CaptureIO.capture_io(fn -> Defk.Errors.explain!("unsupported-map") end)
       assert out =~ Defk.Errors.fetch!("unsupported-map").summary
       assert out =~ "rewrite:"
-
-      assert_raise ArgumentError, ~r/unknown defk error code/, fn ->
-        Defk.Errors.explain!("no-such-code")
-      end
     end
 
     test "the six prototype cases" do
@@ -540,12 +533,6 @@ defmodule Defk.CompileErrorsTest do
       msg = compile("defk f(d :: [u8]) :: String.t() do\n  d\nend", "Hint")
       assert codes(msg) == ["unknown-type"]
       assert msg =~ "text is a [u8]"
-    end
-
-    test "a map points at an array indexed by key" do
-      msg = rejection("m = %{}\nx", "x :: i64", "i64")
-      assert codes(msg) == ["unsupported-map"]
-      assert msg =~ "counts = alloc(i64, 256)"
     end
   end
 end

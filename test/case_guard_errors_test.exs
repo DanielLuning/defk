@@ -503,8 +503,6 @@ defmodule Defk.CaseGuardErrorsTest do
       assert K.rem_guard(5, 0) == 2
       assert K.div_guard(5, 0) == 2
       assert K.fdiv_guard(5, 0) == 2
-      assert K.then_match(5, 0) == 2
-      assert K.then_match(-5, 0) == 3
       assert K.sel_guard(5, 0) == 4
       assert K.sel_second(5, 0) == 7
 
@@ -532,6 +530,8 @@ defmodule Defk.CaseGuardErrorsTest do
     end
 
     test "an error is followed by the next matching clause" do
+      assert K.then_match(5, 0) == 2
+      assert K.then_match(-5, 0) == 3
       assert K.then_match(7, 0) == 2
       assert K.then_match(-7, 0) == 3
       assert K.then_match(8, 7) == 1

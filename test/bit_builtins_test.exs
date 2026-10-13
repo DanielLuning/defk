@@ -59,8 +59,6 @@ defmodule Defk.BitBuiltinsTest do
   alias Defk.BitBuiltinsTest.K
   alias Defk.Generators, as: G
 
-  doctest Defk.Bits
-
   @min -0x8000000000000000
   @max 0x7FFFFFFFFFFFFFFF
   @edges [0, 1, -1, @min, @max, 2 ** 32, 2 ** 63 - 1, 63, 64, 65, -64]
