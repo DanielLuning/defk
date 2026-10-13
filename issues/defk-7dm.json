@@ -20,11 +20,15 @@
     {
       "text": "Fault containment becomes load-bearing with the from-scratch decoders in defk-52v (lz4/snappy defk-52v.3, inflate/PNG defk-52v.7, zstd defk-52v.8, JPEG defk-52v.12): they parse attacker-controlled bytes, and the safety claim in each ticket is 'raises, never crashes the VM'. The fuzz-agreement runs in those tickets are the evidence this ticket needs.",
       "timestamp": "2026-10-09T19:47:44Z"
+    },
+    {
+      "text": "Alternative to weigh (not yet considered in the repo): run a kernel outside the VM instead of containing faults inside it. OTP's erl_interface (ei, OTP 29.1.1, https://www.erlang.org/doc/apps/erl_interface/ei_users_guide.html) is the C library for port programs and C nodes: it encodes and decodes the external term format (ei_x_*) and lets a C program act as a distributed node (ei_connect, ei_send/ei_receive, ei_rpc). Defk-generated C linked into a port program or C node would give real OS-process isolation: a fault or a wild write that never faults kills only that process, which signal-based containment cannot cover (see point 3's residual). Cost: every call copies its arguments and result through the external term format and makes an OS process round trip; ei is only guaranteed compatible within one OTP release unless ei_set_compat_rel() is used. Inside a NIF ei is the wrong tool, because enif_* already works on the live terms. Inference, not measured: for small high-rate calls (about 12 ns per scalar kernel call today, defk-25s) the round trip likely erases the win; for the defk-52v decoders on large attacker-controlled inputs it might not. Worth one measurement (port round trip vs NIF call across input sizes) before the accept/reject decision, so the verdict can say when to choose a port backend over signal containment.",
+      "timestamp": "2026-10-13T06:57:46Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Fault containment: turn a kernel fault into an exception for the calling process",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:44Z"
+  "updated_at": "2026-10-13T06:57:46Z"
 }
