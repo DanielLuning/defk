@@ -12,9 +12,15 @@
     "needs-triage"
   ],
   "parent": "defk-30c",
+  "comments": [
+    {
+      "text": "From defk-30c.4: include the fuzzy_search app's tests: (cd examples/fuzzy_search \u0026\u0026 mix deps.get \u0026\u0026 mix test), 7 tests, ~10 s. Needs /usr/share/dict/words.",
+      "timestamp": "2026-10-13T14:02:22Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Own task that runs every other example: mix defk.examples",
   "type": "task",
-  "updated_at": "2026-10-13T12:53:18Z"
+  "updated_at": "2026-10-13T14:02:22Z"
 }
