@@ -9,12 +9,12 @@
   "description": "Tier 2, late. A baseline (non-progressive) JPEG decoder is Huffman decoding of DC/AC coefficients, dequantisation, an 8x8 integer IDCT, and YCbCr upsampling: about a thousand lines of C in stb_image, all loops over bytes and integers. libjpeg-turbo is SIMD-tuned, so the speed verdict is expected poor; the entry exists for the safety story (JPEG parsers are a classic CVE source) and for Nerves/embedded where libvips is absent. Progressive JPEG raises.\n\nReuse the inflate ticket's bit reader and Huffman table builders. Output raw RGB [u8] plus width, height. Vectors: decode a corpus with libjpeg (via vix) and compare pixel-exact against the kernel (both use the same integer IDCT? No: libjpeg's IDCT variants differ; compare against stb_image's integer IDCT output, or allow +-1 per channel and document it).\n\nBlocked by the inflate ticket, defk-6ag (code size), defk-ivt (zigzag and IDCT constants).\n\nDone when: a corpus decodes with the agreed tolerance, fuzz agreement runs without a VM crash, the verdict is recorded even if poor.",
   "id": "defk-52v.12",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "parent": "defk-52v",
   "priority": 4,
   "status": "open",
   "title": "Baseline JPEG decode from scratch (after inflate; untrusted-input decoder)",
   "type": "task",
-  "updated_at": "2026-10-09T19:47:43Z"
+  "updated_at": "2026-10-13T19:08:19Z"
 }
