@@ -40,9 +40,10 @@ What a kernel promises:
   Elixir (Elixir mode), so tests can check the two agree.
 - **The runtime contract.** A long kernel yields to its scheduler, so it
   never starves other processes. An error in it is an ordinary exception in
-  the calling process. If the process dies while its kernel is suspended,
-  everything the kernel allocated is freed. A kernel suspended across a
-  reload of its module finishes in the code it started in.
+  the calling process, and so is a fault inside its native code (a defk
+  bug): the node keeps running. If the process dies while its kernel is
+  suspended, everything the kernel allocated is freed. A kernel suspended
+  across a reload of its module finishes in the code it started in.
 - **Checked memory access.** Every array read and write is bounds-checked; the
   compiler leaves a check out only where it proves the index in range.
 
@@ -132,9 +133,6 @@ yet" in the compile error.
 - SIMD and builds for a specific CPU: research and prototypes first, then
   how to choose between a portable build and a faster one for one
   architecture (defk-ulk).
-- Turning a crash inside a kernel's native code (which would be a defk bug)
-  into an exception in the calling process instead of a node crash; today
-  such a crash takes the node down, as any NIF crash does (defk-7dm).
 - A Hex release, which waits for the project's verdict (defk-sgw.5,
   defk-djy.8).
 

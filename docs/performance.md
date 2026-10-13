@@ -2046,6 +2046,30 @@ VM and calls clang with `-isysroot` (an explicit `CC` runs as given).
 - **Source:** `defk-h30`, `defk-dwa`, [`lib/defk/build.ex`](https://github.com/DanielLuning/defk/blob/main/lib/defk/build.ex) (`compiler/0`, `resolve_cc/2`), [`test/build_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/build_test.exs).
 - **Status:** provisional.
 
+### 6.29 Fault containment costs one thread-local lookup per call; two lookups cost 2.5 ns
+
+The fault handler (ADR-0009) needs to know which call runs on the faulting
+thread, so the generated guard function stores the call's context in a
+thread-local before the body and clears it after. On macOS arm64 a
+`__thread` variable in a dylib is a call to `tlv_get_addr` per access, not
+a register-relative load: the first version, with two accesses, cost 2.5 ns
+per call; taking the address once (`defk_ctx **slot = &defk_cur_ctx`) and
+storing through it twice brought it within noise.
+
+- **Numbers** (ns per call, one process, 10M calls, five rounds, interleaved
+  `main` / branch / branch, load 3.9-4.0 on 12 cores):
+  - `inc/1` (a scalar kernel, no loop): `main` 12.5-12.7; two lookups
+    14.5-15.5; one lookup 12.7-13.2;
+  - `spin(10)` (one short loop): `main` 43.6-44.1; two lookups 42.6-44.5;
+    one lookup 42.1-44.8;
+  - an Elixir function call beside them: 2.5-2.8.
+- **Nothing per iteration:** the handler is installed once per library at
+  load; the range check and the chain run only when a signal arrives.
+- **Conditions:** M4 Pro, Apple clang, OTP 29, Elixir 1.20.2, shared host.
+- **Source:** `defk-7dm` (the measurement script is in the ticket's comment),
+  [`test/fault_containment_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/fault_containment_test.exs).
+- **Status:** provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -2233,6 +2257,42 @@ blocked scheduler) are what it adds.
 - **Source:** [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs), [`sat-solver.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/sat-solver.md), `defk-52v.15`.
 - **Status:** provisional.
 
+### 7.10 A port program as the isolation boundary costs 8 us per call and 2-4 GB/s; a kernel call costs 13 ns
+
+Running a kernel's C outside the VM (a port program, or an `erl_interface`
+C node) isolates even a wild write that never faults, which in-VM fault
+containment (ADR-0009) cannot. The floor of that design is two pipe
+transfers per call. `bench/port_roundtrip.exs` measures it against a kernel
+call that reads one byte of the binary (zero-copy: its cost does not grow
+with the size), with a port program that answers 8 bytes (`ack`: one copy
+in) or the whole binary (`echo`: one copy each way, as a kernel returning an
+output array would).
+
+- **Numbers** (us per call, best of five rounds, one process, default VM):
+
+  | input | kernel call | port, ack | port, echo |
+  |---|---|---|---|
+  | 8 B | 0.013 | 7.75 | 8.00 |
+  | 1 KB | 0.014 | 8.34 | 8.41 |
+  | 64 KB | 0.016 | 27.7 | 38.4 |
+  | 1 MB | 0.017 | 263 | 402 |
+  | 16 MB | 0.016 | 4,430 | 7,262 |
+
+- **What it means:** the port boundary is 600x a kernel call at small
+  sizes and moves bytes at 2.5-4 GB/s one way (a kernel's input is a view).
+  It pays only where one call does far more than 8 us of work per call and
+  far more than ~0.25 us of work per KB moved: a password hash (argon2,
+  20-90 ms per call, small arguments) would not notice it; the LZ4 and
+  Snappy decoders (0.04 ms per 64 KB block, 0.18 ms per 4 MB) would spend
+  1-5x their whole runtime in the pipe; a scalar or small-input kernel loses
+  by three orders of magnitude. A C node adds term encoding on top of these
+  numbers. So the verdict can say: a port backend is a deployment choice
+  for long, coarse calls on untrusted input, never the default boundary.
+- **Conditions:** M4 Pro, macOS, OTP 29, Elixir 1.20.2, `cc -O2` port
+  program, load 3.0-3.3 on 12 cores (quiet by the catalog's rule, one run).
+- **Source:** [`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs), [`bench/port_echo.c`](https://github.com/DanielLuning/defk/blob/main/bench/port_echo.c), `defk-7dm`.
+- **Status:** one quiet run; rerun with `defk-sgw.4`'s snapshot if the verdict cites it.
+
 ---
 
 ## 8. Myths we disproved and open questions
@@ -2315,4 +2375,5 @@ example or close a workload ticket, add its entries and its line here.
   `defk-wnu`, `defk-9p6.24`, `defk-9p6.27`, `defk-m4b`, `defk-klw`,
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
-  `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`.
+  `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`,
+  `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)).
