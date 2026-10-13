@@ -8,9 +8,15 @@
   "labels": [
     "needs-triage"
   ],
+  "comments": [
+    {
+      "text": "Decision (maintainer, 2026-10-13): do both — bound the sizes the agreement properties generate, AND add one size limit that Elixir mode and native mode both enforce (raise above it, same error in both modes).",
+      "timestamp": "2026-10-13T11:17:51Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "agreement_test can abort the VM: Elixir mode builds multi-GiB zero binaries (seed 5 on an 8 GiB host: binary_alloc cannot allocate 8589934592 bytes)",
   "type": "bug",
-  "updated_at": "2026-10-13T10:53:48Z"
+  "updated_at": "2026-10-13T11:17:51Z"
 }
