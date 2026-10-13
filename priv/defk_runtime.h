@@ -1796,12 +1796,14 @@ __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c
 
 /*
  * A resume must reach the safepoint it yielded at before anything else yields
- * or the kernel returns: the dispatch case that gets there clears F->resume.
- * A missing or wrong case re-runs the kernel from an earlier point instead,
- * which silently recomputes, and under forced yields restarts it at every
- * yield so it never finishes (defk-juw). Generated code checks F->resume only
- * where it yields and after a resumed run returns, never inside a loop. `at`
- * is the safepoint that yielded instead, or 0 if the kernel returned.
+ * or the kernel returns: only the safepoint's arrival label, in front of its
+ * own loop, clears F->resume, and each dispatch level matches only the depth
+ * the level above handed on (defk-yqo). A missing or wrong case re-runs the
+ * kernel from an earlier point instead, which silently recomputes, and under
+ * forced yields restarts it at every yield so it never finishes (defk-juw).
+ * Generated code checks F->resume only where it yields and after a resumed
+ * run returns, never inside a loop. `at` is the safepoint that yielded
+ * instead, or 0 if the kernel returned.
  */
 __attribute__((cold, unused)) static void defk_lost_resume(defk_ctx *ctx, int from, int at) {
   ctx->err = DEFK_E_RESUME;
