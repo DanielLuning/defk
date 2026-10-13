@@ -8,11 +8,11 @@
   "description": "Why: defk-dtw.11 settled the C-compiler stance: a toolchain at build time is acceptable for app developers (like elixir_make packages), and 'the named way out for Hex library authors is precompiled artefacts in the cc_precompiler / rustler_precompiled style (built per target in CI, downloaded and checked by hash; defk's hash-keyed build cache fits this), named in the verdict only, nothing built in this map.' Nothing tracks building it. A library that uses defk internally would today force every user of that library to have a C compiler. defk-djy.8 (Hex readiness) makes defk itself publishable but does not cover libraries built on it.\n\nGated on the verdict: only worth doing if defk-sgw.5 concludes 'grow into a library'.\n\nScope:\n1. Design: how a library declares its targets, how the kernel libraries are built per target in CI (the build cache key already holds the C source hash, runtime, flags, ERTS version and compiler; which parts must match at download time), how a user's build finds and verifies a downloaded artefact (checksum file in the package, as rustler_precompiled does), and the fallback to a local build when no artefact matches. Interaction with defk-n8f's ebin layout and with defk-ulk's architecture builds (portable vs target levels).\n2. A prototype on one small library with two targets.\n3. An ADR recording the shape (or why not).\n\nDone when: the ADR is written and the prototype shows a library's user compiling with no C compiler on a supported target, with checksum verification and the local-build fallback tested.",
   "id": "defk-ajw",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "priority": 4,
   "status": "open",
   "title": "Precompiled kernel artefacts for Hex libraries that ship kernels (cc_precompiler style)",
   "type": "task",
-  "updated_at": "2026-10-12T09:52:05Z"
+  "updated_at": "2026-10-13T19:08:20Z"
 }
