@@ -15,6 +15,7 @@
     "defk-djy.8",
     "defk-sgw.6"
   ],
+  "closed_at": "2026-10-13T22:11:54Z",
   "created": "2026-10-06T09:13:19Z",
   "description": "Fill the remaining sections of docs/verdict.md (defk-dtw.4) from the evidence:\n- 'Should I use defk for X?': job-type guide (Elixir / defk / Nx / Rustler) from the workload rows and the NIF survey (defk-dtw.1), plus the traps list (poor_list_data, poor_tiny_calls, out_of_scope_word_count).\n- Runtime contract: one row per promise (preemption, cleanup on process death, hot code upgrade, errors as exceptions) with linked test/bench and measured figure, the threat list (defk-5fc), and the never-take-down-the-BEAM evidence.\n- Developer experience: the three-part bar with evidence (error catalogue, docs/language.md and its divergence page, the one rule consistent with every listed divergence: zero), plus the cold-test log.\n- Limitations and what would change the verdict: one machine, cross-compiling, the C compiler stance (defk-dtw.11: elixir_make for apps, cc_precompiler-style for libraries, the mix release record), plus 'Where defk could grow' (expansion candidates from defk-dtw.5).\n- Conclusion: a 3-5 sentence draft applying the pre-registered go/no-go rule; it may argue against the rule's outcome only explicitly.\n\nDone when every section meets its bar from defk-dtw.4 and the draft is ready for the final session.",
   "id": "defk-sgw.5",
@@ -33,7 +34,7 @@
     }
   ],
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Write the verdict: guide, runtime contract, devex, limitations",
   "type": "task",
   "updated_at": "2026-10-13T22:11:54Z"
