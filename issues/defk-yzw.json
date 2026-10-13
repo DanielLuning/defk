@@ -11,9 +11,15 @@
     "ready-for-human"
   ],
   "parent": "defk-w8r",
+  "comments": [
+    {
+      "text": "Done in the defk-sgw.4 quiet-machine session (2026-10-13, commit 3bf0bec, otherwise idle M4 Pro, load 3.1-3.3): bench/demo.exs, tick_gap.exs and yield_cost.exs rerun; docs/project.md results snapshot and README 'Where defk helps / where Elixir is the right choice' rewritten from the catalog snapshot in docs/verdict.md. The yield: false worst gap is now 554 ms (was 867 in the table). Not done here: rewriting every number in the examples/README.md table; that table becomes generated from the snapshot under defk-9p6.31.",
+      "timestamp": "2026-10-13T21:45:03Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Refresh README results table and demo numbers on a quiet machine",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:09Z"
+  "updated_at": "2026-10-13T21:45:03Z"
 }
