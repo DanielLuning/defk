@@ -34,7 +34,7 @@ in `CONTEXT.md`.
 | Compile error codes and format | `lib/defk/errors.ex` |
 | C build, cached by source hash | `lib/defk/build.ex` |
 | Fast-path report: margin notes, clang's vectorisation remarks | `lib/defk/report.ex` |
-| Elixir mode: kernel bodies as plain Elixir | `lib/defk/elixir_mode.ex`, `lib/defk/elixir_mode/ops.ex` |
+| Elixir mode: kernel bodies as plain Elixir | `lib/defk/elixir_mode.ex`, `lib/defk/elixir_mode/ops.ex`, `lib/defk/elixir_mode/guard.ex` (case guards) |
 | Measurement and the DEFK_RESULT line for examples | `lib/defk/bench.ex` |
 | The builtin list shared by the compiler, Elixir mode and the error registry | `lib/defk/builtins.ex` |
 | Agreement helpers for tests | `lib/defk/test.ex`, `lib/defk/ex_unit/case.ex` |

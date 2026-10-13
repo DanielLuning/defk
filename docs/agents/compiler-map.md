@@ -69,7 +69,8 @@ lowering declares as it emits; defk-ch4), not from the C text.
   classes) the compiler keeps at `ctx.lowering.copies`.
 - `lib/defk/compiler/ctx.ex`: the ctx struct itself.
 - `lib/defk/clauses.ex`: multi-clause heads and patterns.
-- `lib/defk/elixir_mode.ex`: the Elixir compilation of kernels (tests only).
+- `lib/defk/elixir_mode.ex`: the Elixir compilation of kernels (tests only);
+  `lib/defk/elixir_mode/guard.ex` evaluates a case guard that can fail.
 - `lib/defk/inline_size.ex`: the code-size warning (defk-6ag).
 - `lib/defk/bench.ex`: measurement (`report/1`, `settle/0`); rules in
   `examples/README.md` and AGENTS.md.
