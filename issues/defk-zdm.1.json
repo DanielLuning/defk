@@ -2,14 +2,15 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-13T18:18:39Z",
   "created": "2026-10-13T18:06:03Z",
   "description": "compile_errors_test.exs:101 second assertion (every registry code is used) scans lib/defk/errors.ex itself, so it always passes; 18 codes live in rewrites.ex/clauses.ex/build.ex. elixir_mode_test.exs:697 is stale (defk-auo landed). sincos_test.exs:192 comment is stale (exp/pow overflow raises; non_finite_test shows it) - check whether the narrowed generators are still needed. impl_test.exs:86 name says bitstring, test has none. adaptive_slice_test.exs:114 never checks the hint or yields. Done when each test asserts what its name says and the registry test fails when a code is unused.",
   "id": "defk-zdm.1",
   "labels": [],
   "parent": "defk-zdm",
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Test defects: a test that cannot fail, stale and weak tests",
   "type": "task",
-  "updated_at": "2026-10-13T18:13:34Z"
+  "updated_at": "2026-10-13T18:18:39Z"
 }
