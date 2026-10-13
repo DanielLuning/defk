@@ -13,7 +13,7 @@ Defk.Report.print(Examples.Kernels)
 ```
 
 ```text
-dot/2  lib/examples.ex:18
+dot/2  test/support/examples.ex:18
   18 |   defk dot(a :: [f64], b :: [f64]) :: f64 do
   19 |     n = min(len(a), len(b))
   20 |

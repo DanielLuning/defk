@@ -1,10 +1,10 @@
 #!/bin/bash
-# libFuzzer runs of the decoder kernels outside the VM (scripts/fuzz/README.md).
+# libFuzzer runs of the decoder kernels outside the VM (verify/fuzz/README.md).
 #
-#   scripts/fuzz/run.sh                         # the release set: every target, both strip settings
-#   scripts/fuzz/run.sh lz4_block_decode        # chosen targets
-#   FUZZ_TIME=600 STRIPS=small scripts/fuzz/run.sh snappy_decode
-#   REPRO=tmp/fuzz/artifacts/lz4_block_decode.small/crash-... STRIPS=small scripts/fuzz/run.sh lz4_block_decode
+#   verify/fuzz/run.sh                          # the release set: every target, both strip settings
+#   verify/fuzz/run.sh lz4_block_decode         # chosen targets
+#   FUZZ_TIME=600 STRIPS=small verify/fuzz/run.sh snappy_decode
+#   REPRO=tmp/fuzz/artifacts/lz4_block_decode.small/crash-... STRIPS=small verify/fuzz/run.sh lz4_block_decode
 #
 # Environment:
 #   FUZZ_TIME   seconds of fuzzing per target and strip setting (default 60)
@@ -15,7 +15,7 @@
 #                          strip boundaries and the yielding run yields at
 #                          every safepoint it passes
 #   OUT         build, corpus, artefact and log directory (default tmp/fuzz,
-#               git-ignored); not inside scripts/fuzz
+#               git-ignored); not inside verify/fuzz
 #   PLANT       a sed expression applied to a copy of the generated C before
 #               it is compiled (the self-test, planted.sh); the repo is not
 #               touched
@@ -80,7 +80,7 @@ ERTS=$(erl -noshell -eval 'io:format("~s/erts-~s/include", [code:root_dir(), erl
 [ -f "$ERTS/erl_nif.h" ] || die "no erl_nif.h in $ERTS"
 
 case "$OUT" in /*) ;; *) OUT="$root/$OUT" ;; esac
-case "$OUT/" in "$here"/*) die "OUT must not be inside scripts/fuzz" ;; esac
+case "$OUT/" in "$here"/*) die "OUT must not be inside verify/fuzz" ;; esac
 
 targets=${*:-$ALL_TARGETS}
 for t in $targets; do source_of "$t" >/dev/null || die "unknown target $t (known: $ALL_TARGETS)"; done
@@ -181,7 +181,7 @@ for t in $targets; do
     if [ "$st" = FINDING ]; then
       echo "fuzz: $run: FINDING (exit $rc); first report:" >&2
       grep -m1 -A14 -E 'ERROR: (AddressSanitizer|LeakSanitizer|libFuzzer)|runtime error:|defk-fuzz:' "$log" >&2
-      echo "fuzz: reproduce: REPRO=$art STRIPS=$strips scripts/fuzz/run.sh $t" >&2
+      echo "fuzz: reproduce: REPRO=$art STRIPS=$strips verify/fuzz/run.sh $t" >&2
     fi
   done
 done
