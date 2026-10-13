@@ -1703,7 +1703,11 @@ typedef struct {
   defk_ctx *ctx;         /* the call's slice state */
 } defk_clock;
 
+/* overridable like DEFK_STRIP: the fuzz targets' small-strips build sets 1,
+   so a short input yields at every safepoint (scripts/fuzz, defk-96f.4) */
+#ifndef DEFK_BUDGET0
 #define DEFK_BUDGET0 256
+#endif
 
 /*
  * Wall-clock time charged as one full timeslice (100% of a process's
