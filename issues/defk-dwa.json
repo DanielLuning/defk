@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-13T18:06:02Z",
+  "description": "Done in this session (2026-10-13). Noise: unused wait_until/2 (concurrent, raise_cleanup), the charlist deprecation warning in binary_literals (now captured), the defk-example skip list printed by language_doc_examples. Speed: the code server loads modules one at a time, and each new kernel .so costs a C compile plus a 100-260 ms first dlopen on macOS; compile_errors, compile_rewrites and value_semantics named runtime modules with System.unique_integer, so 115 new libraries per run. Now names come from a content hash and the build cache hits. alloc_zero, alloc_unzeroed and release_layout are async (no shared state). Done when: mix test prints only the header and result, warm run ~20 s.",
+  "id": "defk-dwa",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Test suite: clean output and 49 s -\u003e 20 s (stable names for runtime-compiled kernels, async where safe)",
+  "type": "task",
+  "updated_at": "2026-10-13T18:06:02Z"
+}
