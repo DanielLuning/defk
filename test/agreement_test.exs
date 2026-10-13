@@ -115,18 +115,31 @@ defmodule Defk.AgreementTest.Catalog do
 
   # gray_blur(rgb, w, h): byte_size(rgb) == 3 * w * h mostly; also any bytes
   # with any small sides, and sides whose product overflows, is negative, or
-  # is at or past the alloc limit
+  # is at or past the alloc limit.
+  #
+  # gray_blur_band allocates rows * w bytes, and with these sides the bands
+  # blur_band/1 draws keep rows within -7..5. Each w is therefore
+  # small or at least 2^47 in magnitude: every request is tiny, negative,
+  # overflows, or is rejected before anything is allocated (out of memory
+  # from 2^47 bytes, length too large past 2^48), never one a real allocator
+  # might grant. A side of 2^31 asked for 8 GiB with a 4-row band and aborted
+  # the VM on an 8 GiB host (defk-bh3), so the products below put the large
+  # factor in h.
   @hostile_sides [
     {@max, 2},
     {2, @max},
     {@min, -1},
     {@min, 1},
     {-1, 5},
-    {2 ** 31, 2 ** 31},
-    {2 ** 24, 2 ** 24},
-    {2 ** 24 + 1, 2 ** 24},
+    # w * h = 2^62
+    {2 ** 16, 2 ** 46},
+    # w * h = 2^48, the alloc limit (out of memory), and just past it
+    {2 ** 8, 2 ** 40},
+    {2 ** 8 + 1, 2 ** 40},
+    # w alone at 2^47: out of memory without trying, for any 1- or 2-row band
+    {2 ** 47, 1},
     {2 ** 62, 4},
-    {-(2 ** 31), 2 ** 31}
+    {-(2 ** 16), 2 ** 46}
   ]
 
   defp blur(max_side) do
