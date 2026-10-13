@@ -247,7 +247,7 @@ defmodule Defk.ResumeTest do
   # exhausts memory: each restart re-runs alloc/2 and keeps the binary until
   # the kernel ends, which got the VM OOM-killed in about 25 s (defk-juw).
   # The tests take about a second. DEFK_TIMEOUT_SCALE stretches the backstop
-  # for a slow emulator (scripts/valgrind runs about 50x slower).
+  # for a slow emulator (verify/valgrind runs about 50x slower).
   @moduletag timeout: 10_000 * String.to_integer(System.get_env("DEFK_TIMEOUT_SCALE", "1"))
 
   alias Defk.ResumeTest.K

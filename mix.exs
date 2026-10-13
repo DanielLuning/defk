@@ -24,7 +24,7 @@ defmodule Defk.MixProject do
   def application, do: [extra_applications: [:logger]]
 
   defp elixirc_paths(:test), do: ["lib", "dev", "test/support"]
-  # demo.exs and bench/ use the example kernels; deps compile as :prod and skip them.
+  # bench/ (incl. demo.exs) uses the example kernels; deps compile as :prod and skip them.
   # dev/ holds the repo-only Mix tasks (mix defk.examples, later mix defk.verify):
   # never compiled for a dependent, never in the Hex package (defk-30c.3).
   defp elixirc_paths(:dev),
@@ -103,7 +103,7 @@ defmodule Defk.MixProject do
     [
       main: "readme",
       source_ref: "v#{@version}",
-      # the example kernels compile in :dev for demo.exs and bench/, not as API
+      # the example kernels compile in :dev for bench/ (incl. demo.exs), not as API
       filter_modules: fn mod, _meta ->
         mod != Examples.Kernels and not String.starts_with?(inspect(mod), "Mix.Tasks.Defk.")
       end,
@@ -194,7 +194,7 @@ defmodule Defk.MixProject do
     [
       docs: ["docs", &docs_links/1],
       # the byte-identical gate (defk-mif): DEFK_DUMP_C=<dir> mix dump_c
-      dump_c: ["compile --force", "run scripts/dump_c.exs"],
+      dump_c: ["compile --force", "run dev/dump_c.exs"],
       ci: [
         "compile --warnings-as-errors",
         "format --check-formatted",

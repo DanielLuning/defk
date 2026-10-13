@@ -271,7 +271,7 @@ defmodule Defk.Generators do
     frequency([{6, integer(lo..hi)}, {3, member_of([0, 1, -1, lo, hi, lo + 1, hi - 1])}])
   end
 
-  @doc "`bin`, or the same bytes as a sub-binary one byte into a larger binary (as demo.exs does)."
+  @doc "`bin`, or the same bytes as a sub-binary one byte into a larger binary (as bench/demo.exs does)."
   def maybe_unaligned(gen) do
     bind(gen, fn bin -> member_of([bin, unaligned(bin)]) end)
   end

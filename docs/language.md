@@ -2114,7 +2114,7 @@ including ordinary `def`s of the kernel's own module, are not callable
   kernel's own buffers are freed. Catch it like any other.
 - **Process death.** A process killed while its kernel is suspended between
   steps frees the kernel's frame, arrays and bitstring buffers
-  (`__defk_stats__().frames_live` goes back down; `demo.exs` shows it).
+  (`__defk_stats__().frames_live` goes back down; `bench/demo.exs` shows it).
 - **Hot code upgrade.** A kernel suspended across a reload of its module
   finishes in the library it started in. A second reload (or `:code.purge/1`)
   before it finishes kills it, like any process running old Erlang code

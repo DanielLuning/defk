@@ -30,7 +30,7 @@ on the same machine, because Valgrind does not build on this macOS; its own
 header gives the conditions.
 
 The material that was checked: `DEFK_DUMP_C=… mix dump_c` (93 files, 11 MB of
-C: every test kernel module and every top-level example; `scripts/dump_c.exs`),
+C: every test kernel module and every top-level example; `dev/dump_c.exs`),
 and three small scratch kernels written for planting bugs (`scale/2` over
 `[f64]`, `flip/2` over `[u8]`, a masked reduce). Nothing in the repo was
 edited; all experiments ran in a scratch directory, below `$S`.
