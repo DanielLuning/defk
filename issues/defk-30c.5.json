@@ -12,9 +12,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-30c",
+  "comments": [
+    {
+      "text": "Done (merge ba48fae): Defk.Bench.Cache in lib/defk/bench/cache.ex; key = kernel .beam MD5s + Defk.Build.cache_key(\"\") + MD5 of script and Code.required_files() (cdcl_sat_per_call requires cdcl_sat.exs) + Mix.install mix.lock + Bench/TickGap/Cache MD5 + OTP/Elixir + arch/CPU/cores/schedulers + report name (name#n for a repeated name). Quiet = 1-min load before and after \u003c= cores/4 (3.0 on 12), DEFK_BENCH_QUIET_LOAD overrides; no numeric quiet limit existed in the docs before. Reuse printed at every level (user request): task start line, per-example 'CACHED: n of m', script 'REUSED, NOT MEASURED', scoreboard list, --snapshot row mark; a miss names the changed key parts. Verified: test/bench_cache_test.exs (10 tests); end to end rolling_stats twice -\u003e reused; appended comment to defk_runtime.h -\u003e re-measured; load 3.69 -\u003e not stored. Also merged defk-30c.3 (it was closed but never merged) and fixed its broken Check-only sentence in Defk.Bench's moduledoc.",
+      "timestamp": "2026-10-13T16:51:46Z"
+    }
+  ],
   "priority": 3,
   "status": "closed",
   "title": "Benchmark result cache for mix defk.examples --bench: skip re-measuring an example whose inputs are unchanged",
   "type": "task",
-  "updated_at": "2026-10-13T16:51:37Z"
+  "updated_at": "2026-10-13T16:51:46Z"
 }
