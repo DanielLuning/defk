@@ -10,11 +10,15 @@
     {
       "text": "Research defk-dtw.20 (branch research/string-workloads, docs/research/string-workloads.md) confirms the sequencing: every text workload needs w38 -\u003e constants (ivt, n4r.5) -\u003e word loads (n4r.2) -\u003e writable array params (n4r.4); sub-array views (n4r.3) are needed by 1BRC alone among the top three. Two findings to carry into n4r.1 and n4r.6: the BEAM scans at 0.5-10 GB/s already, so a kernel that only finds delimiters lands marginal; the 13x gap in Elixir is per-row term creation (sub-binaries, Map.update), which the kernel removes only by consuming the fields into a packed table. The Elixir baseline must therefore avoid per-row sub-binaries where it can (integer parsing by byte matching, no :binary.split per line).",
       "timestamp": "2026-10-09T18:52:55Z"
+    },
+    {
+      "text": "Deferred 2026-10-13 (focus review): expansion work waits until the verdict closes (defk-sgw.6). The date is a placeholder; the trigger is defk-sgw.6 closing. Nothing is dropped: bw ready hides deferred issues, bw list --all shows them.",
+      "timestamp": "2026-10-13T19:08:37Z"
     }
   ],
   "priority": 2,
   "status": "open",
   "title": "1BRC: parse and aggregate a 1-billion-row text file with kernels",
   "type": "epic",
-  "updated_at": "2026-10-09T18:52:55Z"
+  "updated_at": "2026-10-13T19:08:37Z"
 }
