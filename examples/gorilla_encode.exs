@@ -26,7 +26,7 @@
 # call. The sweep varies the block size from 100 to 1M points, each size
 # timed over ~1M points (one block of that size encoded 1M / size times).
 #
-# DEFK_RESULT lines (run_all.exs reads the first; the script checks both):
+# DEFK_RESULT lines (mix defk.examples reads the first; the script checks both):
 #   1. gorilla_encode     100-point blocks, the workload verdict, with the
 #                         NIF as `native`, the sweep and responsiveness
 #                         (1M points, one call per side)

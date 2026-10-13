@@ -14,7 +14,7 @@
 #   elixir examples/lz4_snappy_decode.exs                # checks + tables + two reports
 #   LZ_NIF_OPT=1 elixir examples/lz4_snappy_decode.exs   # the NIFs rebuilt with -O3/-O2
 #
-# DEFK_RESULT lines, in this order (run_all.exs reads the first):
+# DEFK_RESULT lines, in this order (mix defk.examples reads the first):
 #   1. snappy_decode     64 KB JSON-like block: defk vs the best Elixir;
 #                        snappyer reported as `native`
 #   2. lz4_block_decode  the same 64 KB block in LZ4: defk vs the best Elixir;

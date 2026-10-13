@@ -23,7 +23,7 @@ end
 
 try do
   Code.compile_string(attempt, "word_count_kernel.ex")
-  IO.puts("unexpected: the kernel compiled")
+  raise "unexpected: the kernel compiled (this example expects a compile error)"
 rescue
   e in CompileError -> IO.puts("defk compiler says: " <> Exception.message(e))
 end

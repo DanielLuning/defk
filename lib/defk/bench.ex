@@ -15,7 +15,7 @@ defmodule Defk.Bench do
 
   Every example calls `report/1` once. It checks that the Elixir and defk
   implementations agree, times both, prints a short table, and ends with one
-  machine-readable line that `examples/run_all.exs` collects:
+  machine-readable line that the repo's examples runner (mix defk.examples) collects:
 
       DEFK_RESULT {"example":"rolling_stats","expected":"good","verdict":"good",...}
 
@@ -35,6 +35,11 @@ defmodule Defk.Bench do
   for a tie at 1x; the 2x line is the bar for native code), so the flip
   carried no information. The sweep's `crossover` keeps the plain 2x.
     * `out_of_scope` - defk cannot express the use case at all: use Elixir
+
+  **Check-only mode.** With `DEFK_CHECK_ONLY=1` in the environment, `report/1`
+  runs only the example's `:check` (no timing, no verdict).
+  the repo's examples runner (mix defk.examples) uses it by default, so an example's correctness can be
+  checked on a loaded machine.
 
   A `good` verdict only counts once the Elixir side is `baseline: :optimized`.
   Until then the runner shows it as provisional.
@@ -89,7 +94,7 @@ defmodule Defk.Bench do
     * `:check` (required with `:defk`) - zero-arity fun returning true when
       both versions agree, or `:none` to skip the check explicitly. `:none`
       requires a `:reason`; the report prints `correct    skipped (<reason>)`,
-      records `"correct": "skipped"`, and `examples/run_all.exs` lists every
+      records `"correct": "skipped"`, and the repo's examples runner (mix defk.examples) lists every
       skipped entry
     * `:reason` - one sentence explaining the outcome (required for
       `:out_of_scope` and for `check: :none`)
@@ -122,6 +127,60 @@ defmodule Defk.Bench do
   """
   @spec report(keyword()) :: map()
   def report(opts) do
+    if check_only?(), do: check_only(opts), else: measure(opts)
+  end
+
+  @doc false
+  # Check-only mode (mix defk.examples, defk-30c.3): `DEFK_CHECK_ONLY=1` in
+  # the environment makes every `report/1` run the example's `:check` and
+  # nothing else: no timed run, no Elixir baseline run, no `:native`,
+  # `:sweep` or `:responsiveness`, no verdict. The result still carries the
+  # `DEFK_RESULT` line (`"check_only": true`, `"verdict": null`) so a runner
+  # reads `correct` the same way. The sanitizer build mode is allowed here:
+  # nothing is timed.
+  def check_only?, do: System.get_env("DEFK_CHECK_ONLY") in ["1", "true"]
+
+  defp check_only(opts) do
+    name = Keyword.fetch!(opts, :name)
+    expected = Keyword.fetch!(opts, :expected)
+    baseline = Keyword.get(opts, :baseline, :first_pass)
+
+    baseline in [:first_pass, :optimized] ||
+      raise ArgumentError, "baseline must be :first_pass or :optimized"
+
+    check = check_fun(opts)
+
+    correct =
+      cond do
+        not Keyword.has_key?(opts, :defk) -> true
+        check == :skipped -> :skipped
+        true -> check.()
+      end
+
+    result = %{
+      example: name,
+      expected: expected,
+      baseline: baseline,
+      reason: Keyword.get(opts, :reason),
+      correct: correct,
+      check_only: true,
+      verdict: nil
+    }
+
+    IO.puts("")
+
+    case correct do
+      :skipped -> IO.puts("  correct    skipped (#{result.reason})  [check only, not timed]")
+      c -> IO.puts("  correct    #{c}  [check only, not timed]")
+    end
+
+    IO.puts("\nDEFK_RESULT " <> JSON.encode!(result))
+    # the returned map claims the expected verdict: scripts assert their own
+    # verdicts after `report/1`, and nothing was measured to contradict them
+    %{result | verdict: expected}
+  end
+
+  defp measure(opts) do
     refuse_sanitized!()
     name = Keyword.fetch!(opts, :name)
     expected = Keyword.fetch!(opts, :expected)

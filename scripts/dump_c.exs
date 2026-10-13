@@ -63,7 +63,7 @@ examples =
   Path.wildcard("examples/*.exs")
   |> Enum.reject(fn f ->
     base = Path.basename(f)
-    base == "run_all.exs" or String.starts_with?(base, "_")
+    String.starts_with?(base, "_")
   end)
   |> Enum.sort()
 
