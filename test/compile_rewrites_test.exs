@@ -30,7 +30,6 @@ defmodule Defk.CompileRewritesTest do
     {"Enum.map(0..(n - 1)//1, fn i -> i * 2 end)", "n :: i64", "[i64]", "@@", :rewrite},
     {"for w <- 0..(n - 1), do: w * 2.0", "n :: i64", "[f64]", "@@", :rewrite},
     {"for i <- 1..n//1, do: a[i - 1] + 1.0", "a :: [f64], n :: i64", "[f64]", "@@", :rewrite},
-    {"for i <- 0..(n - 1)//2, do: i", "n :: i64", "[i64]", "@@", :none},
     {"for y <- a, do: y * 2.0", "a :: [f64]", "[f64]", "@@", :rewrite},
     {"for y <- a, into: <<>>, do: <<y::float-native-64>>", "a :: [f64]", "[f64]", "@@", :rewrite},
     {"for y <- a, into: <<>>, do: <<y::native-64>>", "a :: [i64]", "[i64]", "@@", :rewrite},

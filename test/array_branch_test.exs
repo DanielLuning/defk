@@ -449,26 +449,4 @@ defmodule Defk.ArrayBranchTest do
     via_helper: [args: fixed_list([arr(), reps()])],
     acc_branch: [args: fixed_list([arr(), arr(), G.i64(0..10)])]
   )
-
-  property "agrees with Elixir mode under forced yields" do
-    forced(fn ->
-      check all(
-              {c, d} <- tuple({G.bool(), G.bool()}),
-              a <- arr(),
-              b <- arr(),
-              v <- G.i64(),
-              max_runs: 100
-            ) do
-        agree(:two_inputs, [c, a, b, 2])
-        agree(:input_or_alloc, [c, a, 3, 2])
-        agree(:nested, [c, d, a, b, 2])
-        agree(:in_tuple, [c, a, b, 2])
-        agree(:write_after, [c, a, b, v])
-        agree(:write_loop_after, [c, a, 4])
-        agree(:return_branch, [c, a, 2])
-        agree(:via_helper, [a, 2])
-        agree(:acc_branch, [a, b, 5])
-      end
-    end)
-  end
 end

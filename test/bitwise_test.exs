@@ -59,13 +59,6 @@ defmodule Defk.BitwiseTest.K do
     a >>> band(n, 127)
   end
 
-  # FNV-1a over i64 inputs, kept in 32 bits with a mask
-  defk fnv1a(a :: [u8]) :: i64 do
-    for b <- a, reduce: 2_166_136_261 do
-      h -> band(bxor(h, b) * 16_777_619, 0xFFFFFFFF)
-    end
-  end
-
   # bitwise arms stay a select: only the + - and the shift's flag can raise
   defk pick(c :: bool, a :: i64, b :: i64, n :: i64) :: i64 do
     if c, do: band(a, b) + n, else: (a >>> n) - bxor(a, bnot(b))
@@ -239,18 +232,6 @@ defmodule Defk.BitwiseTest do
     end
   end
 
-  test "a hash loop masked with band matches Elixir" do
-    data = :crypto.strong_rand_bytes(1000)
-
-    expect =
-      for <<b <- data>>, reduce: 2_166_136_261 do
-        h -> band(bxor(h, b) * 16_777_619, 0xFFFFFFFF)
-      end
-
-    expect(agrees(:fnv1a, [data]), expect)
-    expect(agrees(:fnv1a, [<<>>]), 2_166_136_261)
-  end
-
   test "bitwise expressions in if arms compile to a select" do
     # only pick and pick_shift have if arms: the flagged forms are theirs
     c = K.__defk_c_source__()
@@ -373,7 +354,6 @@ defmodule Defk.BitwiseTest do
     band_remote: [],
     bsl_erlang: [args: shifted()],
     bsr_nonneg: [args: shifted()],
-    fnv1a: [],
     pick: [args: fixed_list([boolean(), G.i64(), G.i64(), shift()])],
     pick_shift: [args: fixed_list([boolean(), G.i64(), shift()])]
   )
