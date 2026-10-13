@@ -9,7 +9,7 @@
   "description": "Found in defk-hki. The range-fact machinery (in_bounds?/3, add_facts/sub_facts) has no facts from a guarding condition: in rolling mean_std, old = if i \u003e= w, do: x[i - w], else: 0.0 keeps a bounds check that i \u003e= w half-proves (0 \u003c= i - w); the other half needs w \u003e= 0, which needs a fact from an earlier guard or the caller. defk-hki got mean_std within 10% another way (flagged strips, seen_later/1), so this is for the bounds checks themselves: they would drop in both the flagged and the unflagged form. Scope: comparisons of an i64 local or loop counter with another i64 value in an if/cond condition narrow lo/hi or lb/ub in the taken branch. Done when x[i - w] under if i \u003e= w and w \u003e= 1 established by an earlier guard (e.g. a raise when w \u003c 1) drops its bounds check, with a test, and the fast-path report's 'nothing proves' text names the missing fact correctly.",
   "id": "defk-9za",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "parent": "defk-o08",
   "comments": [
@@ -30,5 +30,5 @@
   "status": "open",
   "title": "Carry conditional facts from a guarding if into its branches (i \u003e= w makes i - w \u003e= 0)",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:05Z"
+  "updated_at": "2026-10-13T19:08:16Z"
 }
