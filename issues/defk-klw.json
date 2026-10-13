@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-sgw.4",
@@ -18,8 +18,8 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Re-measure fuzzy_search: defk 27 ms vs 21 ms blocking",
   "type": "bug",
-  "updated_at": "2026-10-12T10:12:07Z"
+  "updated_at": "2026-10-13T10:54:01Z"
 }
