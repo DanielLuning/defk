@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-96f.2"
@@ -12,8 +12,8 @@
   ],
   "parent": "defk-96f",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Sanitizer build mode in Defk.Build (ASan/UBSan), part of the cache key, never used for benchmarks",
   "type": "task",
-  "updated_at": "2026-10-13T11:18:38Z"
+  "updated_at": "2026-10-13T11:42:16Z"
 }
