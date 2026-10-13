@@ -1,5 +1,6 @@
 defmodule Defk.YieldFalseStripTest do
   use ExUnit.Case, async: true
+  import Defk.TestKit, only: [i64s: 1]
 
   # defk-5dd: a strip loop in a yield: false kernel computes v_rem_N, which
   # DEFK_SHORT(R) ignores under no-yield; it must still count as used, or
@@ -14,8 +15,6 @@ defmodule Defk.YieldFalseStripTest do
       end
     end
   end
-
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
 
   test "a yield: false strip loop compiles without set-but-not-used" do
     src = K.__defk_c_source__()

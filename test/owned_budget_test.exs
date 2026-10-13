@@ -79,24 +79,13 @@ defmodule Defk.OwnedBudgetTest do
   use ExUnit.Case, async: false
 
   import Defk.Test.Frames
+  import Defk.TestKit
 
   alias Defk.OwnedBudgetTest.{Default, K}
 
   @oom ~r/^out of memory \(allocating 1024 bytes would take this call's buffers past max_owned, 8192 bytes\)$/
 
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::signed-64-native>>)
-
   defp elixir(fun, args), do: K.__defk_elixir__(fun, args)
-
-  defp forced(fun) do
-    K.__defk_force_yields__(true)
-
-    try do
-      fun.()
-    after
-      K.__defk_force_yields__(false)
-    end
-  end
 
   test "the budget is the module's max_owned, and half of physical memory by default" do
     assert K.__defk_stats__().max_owned == 8192
@@ -183,11 +172,11 @@ defmodule Defk.OwnedBudgetTest do
   end
 
   test "under forced yields the count survives every resume and frames are freed" do
-    forced(fn ->
-      y0 = K.__defk_stats__().yields
+    forced(K, fn ->
       # 8 iterations of zeroing in strips and loop back-edges, each a yield
-      assert K.alloc_loop(8, 128) == Enum.sum(0..7)
-      assert K.__defk_stats__().yields > y0
+      {res, count} = yields(K, fn -> K.alloc_loop(8, 128) end)
+      assert res == Enum.sum(0..7)
+      assert count > 0
       assert_raise ArgumentError, @oom, fn -> K.alloc_loop(9, 128) end
       assert_raise ArgumentError, @oom, fn -> K.alloc_loop(9, 128) end
       assert K.alloc_loop(8, 128) == Enum.sum(0..7)

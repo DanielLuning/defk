@@ -233,24 +233,9 @@ defmodule Defk.EarlyExitTest do
   alias Defk.EarlyExitTest.K
 
   use Defk.Properties
+  import Defk.TestKit
 
   @moduletag timeout: 120_000
-
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
-  defp f64s(list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
-
-  # yielding with every clock read forced to yield; asserts it did yield
-  defp forced(mod, fun) do
-    mod.__defk_force_yields__(true)
-
-    try do
-      y0 = mod.__defk_stats__().yields
-      res = fun.()
-      {res, mod.__defk_stats__().yields - y0}
-    after
-      mod.__defk_force_yields__(false)
-    end
-  end
 
   describe "early exit" do
     test "nested reduce_while: each halt ends only its own fold" do
@@ -263,7 +248,10 @@ defmodule Defk.EarlyExitTest do
 
     test "halt at every point, including right after a forced yield" do
       n = 700
-      {results, yields} = forced(K, fn -> for stop <- 1..(n + 1), do: K.nest3(n, stop) end)
+
+      {results, yields} =
+        yields(K, fn -> forced(K, fn -> for stop <- 1..(n + 1), do: K.nest3(n, stop) end) end)
+
       assert yields > 0
       assert results == for(stop <- 1..(n + 1), do: K.ex_nest3(n, stop))
     end
@@ -273,7 +261,7 @@ defmodule Defk.EarlyExitTest do
       expect = K.ex_sum_first_divs(20_000)
       assert K.sum_first_divs(20_000) == expect
       assert K.sum_first_divs_nb(20_000) == expect
-      {got, yields} = forced(K, fn -> K.sum_first_divs(20_000) end)
+      {got, yields} = yields(K, fn -> forced(K, fn -> K.sum_first_divs(20_000) end) end)
       assert got == expect and yields > 0
     end
 
@@ -304,7 +292,7 @@ defmodule Defk.EarlyExitTest do
         expect = Enum.find_index(0..9_999, &(&1 >= t)) || -1
         assert K.find_at_least(a, t) == expect
         assert K.find_at_least_nb(a, t) == expect
-        {got, yields} = forced(K, fn -> K.find_at_least(a, t) end)
+        {got, yields} = yields(K, fn -> forced(K, fn -> K.find_at_least(a, t) end) end)
         assert got == expect
         if t > 2 * 2_048, do: assert(yields > 0, "strip path never yielded for t=#{t}")
       end
@@ -313,7 +301,7 @@ defmodule Defk.EarlyExitTest do
 
       expect = K.find_many_nb(a, 300)
       assert K.find_many(a, 300) == expect
-      {got, yields} = forced(K, fn -> K.find_many(a, 300) end)
+      {got, yields} = yields(K, fn -> forced(K, fn -> K.find_many(a, 300) end) end)
       assert got == expect and yields > 0
     end
 
@@ -346,12 +334,14 @@ defmodule Defk.EarlyExitTest do
         assert e.index == len
       end
 
-      {got, y1} = forced(K, fn -> K.sum_until(a, len, len + 50) end)
+      {got, y1} = yields(K, fn -> forced(K, fn -> K.sum_until(a, len, len + 50) end) end)
       assert got == ref.(len)
 
       {e, y2} =
-        forced(K, fn ->
-          assert_raise(Enum.OutOfBoundsError, fn -> K.sum_until(a, len + 1, len + 50) end)
+        yields(K, fn ->
+          forced(K, fn ->
+            assert_raise(Enum.OutOfBoundsError, fn -> K.sum_until(a, len + 1, len + 50) end)
+          end)
         end)
 
       assert e.index == len and y1 > 0 and y2 > 0
@@ -413,18 +403,8 @@ defmodule Defk.EarlyExitTest do
   end
 
   describe "compile errors" do
-    defp compile_error(body, ret \\ "i64") do
-      src = """
-      defmodule Defk.EarlyExitTest.Bad#{System.unique_integer([:positive])} do
-        use Defk
-        defk bad(x :: i64, f :: f64, b :: bool) :: #{ret} do
-          #{body}
-        end
-      end
-      """
-
-      Exception.message(assert_raise(CompileError, fn -> Code.compile_string(src) end))
-    end
+    defp compile_error(body, ret \\ "i64"),
+      do: reject(__MODULE__, kernel("x :: i64, f :: f64, b :: bool", ret, body, "bad"))
 
     test "reduce_while" do
       assert compile_error("Enum.reduce_while(1..x, 0, fn i, acc -> acc + i end)") =~

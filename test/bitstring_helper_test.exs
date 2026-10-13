@@ -138,11 +138,11 @@ defmodule Defk.BitstringHelperTest do
   import Defk.Test.Frames
   use Defk.Properties
 
+  import Defk.TestKit, only: [codes: 1, forced: 2, i64s: 1, reject: 2, yields: 2]
+
   alias Defk.BitstringHelperTest.K
 
   defp agrees(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
-
-  defp i64s(list), do: G.pack(:i64, list)
 
   # the anchor's multi-clause dod_bits, in plain Elixir with signed segments
   defp dod_ref(acc, 0), do: <<acc::bitstring, 0::1>>
@@ -285,20 +285,17 @@ defmodule Defk.BitstringHelperTest do
       xs = Enum.map(0..9, &rem(&1 * 5, 8))
       n = 20_000
       expect = for x <- xs, _ <- 1..n, into: <<>>, do: <<x::3>>
-      K.__defk_force_yields__(true)
 
-      try do
-        y0 = K.__defk_stats__().yields
-        assert K.runs(i64s(xs), n) == expect
-        assert K.__defk_stats__().yields > y0 + 10, "the kernel never yielded"
+      forced(K, fn ->
+        {res, y} = yields(K, fn -> K.runs(i64s(xs), n) end)
+        assert res == expect
+        assert y > 10, "the kernel never yielded"
 
-        y1 = K.__defk_stats__().yields
         b = for _ <- 1..n, into: <<1::1, 0::1>>, do: <<5::3>>
-        assert K.run_beside(5, n) == {<<1::1, 0::1, 1::1>>, b}
-        assert K.__defk_stats__().yields > y1 + 1, "the kernel never yielded"
-      after
-        K.__defk_force_yields__(false)
-      end
+        {res, y} = yields(K, fn -> K.run_beside(5, n) end)
+        assert res == {<<1::1, 0::1, 1::1>>, b}
+        assert y > 1, "the kernel never yielded"
+      end)
 
       assert agrees(:runs, [i64s(xs), 2_000]) ==
                {:ok, for(x <- xs, _ <- 1..2_000, into: <<>>, do: <<x::3>>)}
@@ -310,24 +307,7 @@ defmodule Defk.BitstringHelperTest do
   end
 
   describe "compile errors" do
-    @dir Path.join(System.tmp_dir!(), "defk_bitstring_helper_test")
-
-    defp rejected(body) do
-      File.mkdir_p!(@dir)
-      mod = "Defk.BitstringHelperTest.E#{System.unique_integer([:positive])}"
-      path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-      File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{body}\nend\n")
-
-      try do
-        Code.compile_file(path)
-        flunk("#{body} compiled")
-      rescue
-        e in CompileError -> Exception.message(e)
-      end
-    end
-
-    defp codes(msg),
-      do: Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg) |> Enum.map(&Enum.at(&1, 1))
+    defp rejected(body), do: reject(__MODULE__, body)
 
     test "a kernel taking a bitstring that no kernel calls is an entry kernel" do
       msg =

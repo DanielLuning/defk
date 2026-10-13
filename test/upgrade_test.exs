@@ -14,6 +14,7 @@
 
 defmodule Defk.UpgradeTest do
   use ExUnit.Case, async: false
+  import Defk.TestKit
 
   # long enough (~0.5 s) that a kernel almost always completes the run only
   # after start_suspended has suspended it, with an easy closed form for the
@@ -125,20 +126,6 @@ defmodule Defk.UpgradeTest do
       end
 
       start_suspended(mod, retries - 1)
-    end
-  end
-
-  defp wait_until(f, deadline \\ System.monotonic_time(:millisecond) + @timeout) do
-    cond do
-      f.() ->
-        :ok
-
-      System.monotonic_time(:millisecond) > deadline ->
-        flunk("timed out")
-
-      true ->
-        Process.sleep(1)
-        wait_until(f, deadline)
     end
   end
 

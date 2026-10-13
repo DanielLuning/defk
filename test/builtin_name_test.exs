@@ -27,27 +27,13 @@ end
 defmodule Defk.BuiltinNameTest do
   use ExUnit.Case, async: true
 
+  import Defk.TestKit, only: [compile: 2]
+
   alias Defk.BuiltinNameTest.K
-
-  @dir Path.join(System.tmp_dir!(), "defk_builtin_name_test")
-
-  defp compile(body) do
-    File.mkdir_p!(@dir)
-    mod = "Defk.BuiltinNameTest.M#{System.unique_integer([:positive])}"
-    path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-    File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{body}\nend\n")
-
-    try do
-      Code.compile_file(path)
-      :ok
-    rescue
-      e in CompileError -> Exception.message(e)
-    end
-  end
 
   test "a kernel named like a builtin at its arity is rejected with a rename hint" do
     msg =
-      compile("""
+      compile(__MODULE__, """
       defk copy_back(out :: [u8], op :: i64, off :: i64, ln :: i64) :: [u8] do
         out
       end
@@ -68,7 +54,7 @@ defmodule Defk.BuiltinNameTest do
 
   test "each clashing kernel is one error" do
     msg =
-      compile("""
+      compile(__MODULE__, """
       defk popcount(x :: i64) :: i64, do: x
       defk clz(x :: i64, w :: i64) :: i64, do: x
       defk crc32c(c :: i64, x :: i64, w :: i64) :: i64, do: c

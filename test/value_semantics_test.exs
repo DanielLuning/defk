@@ -786,21 +786,11 @@ end
 defmodule Defk.ValueSemanticsTest do
   use ExUnit.Case, async: true
   use Defk.Properties
+  import Defk.TestKit, only: [compile: 2, f64s: 1, forced: 2, i64s: 1, kernel_c: 2]
 
   alias Defk.ValueSemanticsTest.K
 
-  @dir Path.join(System.tmp_dir!(), "defk_value_semantics_test")
-
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
-  defp f64s(list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
-
   defp agree(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
-
-  # the generated C of kernel `name` in `mod`
-  defp kernel_c(mod, name) do
-    [_ | chunks] = String.split(mod.__defk_c_source__(), "/* ---- ")
-    Enum.find(chunks, &String.starts_with?(&1, "#{name}/")) || flunk("no kernel #{name}")
-  end
 
   defp copies(c), do: length(String.split(c, "defk_copy_")) - 1
 
@@ -966,13 +956,9 @@ defmodule Defk.ValueSemanticsTest do
       assert agree(:read_after_if, [2, true]) == {:ok, 1}
       assert agree(:read_after_in_stmt, [2, true]) == {:ok, 1}
 
-      K.__defk_force_yields__(true)
-
-      try do
+      forced(K, fn ->
         for k <- @in_branch, do: agree(k, [2_000])
-      after
-        K.__defk_force_yields__(false)
-      end
+      end)
     end
   end
 
@@ -1006,17 +992,13 @@ defmodule Defk.ValueSemanticsTest do
       assert agree(:halt_on_outer, [5]) == {:ok, 6}
       assert agree(:cond_after_arm, [true]) == {:ok, 21}
 
-      K.__defk_force_yields__(true)
-
-      try do
+      forced(K, fn ->
         for k <- @chosen ++ [:halt_on_alias], m <- [-1, 7, 2_000] do
           assert {:ok, _} = agree(k, [2_000, m])
         end
 
         assert agree(:halt_on_outer, [2_000]) == {:ok, 2_001}
-      after
-        K.__defk_force_yields__(false)
-      end
+      end)
     end
   end
 
@@ -1055,9 +1037,7 @@ defmodule Defk.ValueSemanticsTest do
       # in place, the filter would stop at st[0] = 2
       assert agree(:range_filter, [5]) == {:ok, 6}
 
-      K.__defk_force_yields__(true)
-
-      try do
+      forced(K, fn ->
         for k <- [:range_bound, :range_init], m <- [-1, 7, 2_000] do
           assert {:ok, _} = agree(k, [2_000, m])
         end
@@ -1068,9 +1048,7 @@ defmodule Defk.ValueSemanticsTest do
 
         for k <- [:range_top, :range_old_after, :range_walks],
             do: assert({:ok, _} = agree(k, [7]))
-      after
-        K.__defk_force_yields__(false)
-      end
+      end)
     end
   end
 
@@ -1107,9 +1085,7 @@ defmodule Defk.ValueSemanticsTest do
       ranks = i64s(for k <- 0..(n - 1), do: rem(k * 31, 50))
       a = i64s(Enum.to_list(1..n))
 
-      K.__defk_force_yields__(true)
-
-      try do
+      forced(K, fn ->
         for {f, args} <- [
               hll_update: [regs, idx, ranks],
               snapshot_loop: [a],
@@ -1119,34 +1095,16 @@ defmodule Defk.ValueSemanticsTest do
             ] do
           assert {:ok, _} = agree(f, args)
         end
-      after
-        K.__defk_force_yields__(false)
-      end
+      end)
 
       assert regs == :binary.copy(<<0>>, 1024)
     end
   end
 
   describe "compile errors" do
-    defp compile(body) do
-      File.mkdir_p!(@dir)
-      # named by the source, so the next run hits the build cache
-      id = :erlang.md5(body) |> Base.encode16() |> binary_part(0, 12)
-      mod = "Defk.ValueSemanticsTest.M#{id}"
-      path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-      File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{body}\nend\n")
-
-      try do
-        Code.compile_file(path)
-        :ok
-      rescue
-        e in CompileError -> Exception.message(e)
-      end
-    end
-
     test "a helper that writes a parameter it doesn't return" do
       msg =
-        compile("""
+        compile(__MODULE__, """
           defk emit(out :: [i64], at :: i64) :: i64 do
             out[at] = 1
             at + 1
@@ -1166,7 +1124,7 @@ defmodule Defk.ValueSemanticsTest do
 
     test "a written parameter bound again to a new array (defk-3z5)" do
       msg =
-        compile("""
+        compile(__MODULE__, """
           defk g(a :: [i64]) :: [i64] do
             a[0] = 1
             a = alloc(i64, 4)
@@ -1186,7 +1144,7 @@ defmodule Defk.ValueSemanticsTest do
 
     test "a written parameter bound again from a helper's new array" do
       msg =
-        compile("""
+        compile(__MODULE__, """
           defk fresh(a :: [i64]) :: [i64] do
             b = alloc(i64, len(a))
             b[0] = a[0]
@@ -1212,7 +1170,7 @@ defmodule Defk.ValueSemanticsTest do
 
     test "a written parameter bound again from a reduce loop that replaces it" do
       msg =
-        compile("""
+        compile(__MODULE__, """
           defk g(a :: [i64]) :: [i64] do
             a[0] = 1
 
@@ -1237,7 +1195,7 @@ defmodule Defk.ValueSemanticsTest do
 
     test "a written parameter returned under another name is fine" do
       assert :ok ==
-               compile("""
+               compile(__MODULE__, """
                  defk step(a :: [i64]) :: [i64] do
                    a[0] = a[0] + 1
                    a
@@ -1257,7 +1215,7 @@ defmodule Defk.ValueSemanticsTest do
 
     test "an array bound again in a loop body and read after the loop" do
       msg =
-        compile("""
+        compile(__MODULE__, """
           defk f(n :: i64) :: [i64] do
             prev = alloc(i64, n)
             cur = alloc(i64, n)
@@ -1277,7 +1235,7 @@ defmodule Defk.ValueSemanticsTest do
 
     test "bound again in a loop body but not read after it is fine" do
       assert :ok ==
-               compile("""
+               compile(__MODULE__, """
                  defk f(n :: i64) :: i64 do
                    a = alloc(i64, n)
 

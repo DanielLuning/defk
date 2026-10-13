@@ -128,6 +128,8 @@ end
 defmodule Defk.RaiseTest do
   use ExUnit.Case, async: true
 
+  import Defk.TestKit
+
   alias Defk.RaiseTest.K
 
   defp agrees(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
@@ -216,17 +218,7 @@ defmodule Defk.RaiseTest do
   end
 
   describe "rejections" do
-    defp compile_error(body) do
-      src = """
-      defmodule Defk.RaiseTest.M#{System.unique_integer([:positive])} do
-        use Defk
-
-        #{body}
-      end
-      """
-
-      Exception.message(assert_raise(CompileError, fn -> Code.compile_string(src) end))
-    end
+    defp compile_error(body), do: reject(__MODULE__, body)
 
     test "an interpolated or computed message" do
       msg =

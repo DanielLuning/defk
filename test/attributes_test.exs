@@ -115,19 +115,14 @@ defmodule Defk.AttributesTest do
   use ExUnit.Case, async: true
   use Defk.Properties
 
+  import Defk.TestKit, only: [codes: 1, forced: 2, i64s: 1, kernel_c: 2, reject: 2, whats: 1]
+
   alias Defk.AttributesTest.K
 
   @table for i <- 0..255, into: <<>>, do: <<rem(i * 37 + 11, 256)>>
   @alphabet "0123456789bcdefghjkmnpqrstuvwxyz"
 
   defp agrees(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
-  defp i64s(list), do: G.pack(:i64, list)
-
-  # the C of one kernel in the module's generated source
-  defp kernel_c(name) do
-    [_, c] = String.split(K.__defk_c_source__(), "/* ---- #{name}/", parts: 2)
-    c |> String.split("/* ---- ", parts: 2) |> hd()
-  end
 
   test "integer and float attributes in arithmetic" do
     assert K.clip(40_000) == 32_767
@@ -143,7 +138,7 @@ defmodule Defk.AttributesTest do
     expect = Enum.sum(for h <- hs, do: Bitwise.band(h, 255) * 3)
     assert K.masked_sum(i64s(hs)) == expect
     agrees(:masked_sum, [i64s(hs)])
-    refute kernel_c("masked_sum") =~ "defk_get_"
+    refute kernel_c(K, "masked_sum") =~ "defk_get_"
   end
 
   test "a binary attribute is a [u8] whose masked read keeps no bounds check" do
@@ -151,7 +146,7 @@ defmodule Defk.AttributesTest do
     expect = Enum.sum(for h <- hs, do: :binary.at(@table, Bitwise.band(h, 255)))
     assert K.table_sum(i64s(hs)) == expect
     agrees(:table_sum, [i64s(hs)])
-    refute kernel_c("table_sum") =~ "defk_get_"
+    refute kernel_c(K, "table_sum") =~ "defk_get_"
   end
 
   test "attributes as case literals and in guards" do
@@ -184,13 +179,7 @@ defmodule Defk.AttributesTest do
         Bitwise.band(acc * 31 + :binary.at(@table, Bitwise.band(i, 255)), 0xFFFFFFFF)
       end)
 
-    K.__defk_force_yields__(true)
-
-    try do
-      assert K.table_rounds(10_000) == expect
-    after
-      K.__defk_force_yields__(false)
-    end
+    forced(K, fn -> assert K.table_rounds(10_000) == expect end)
 
     agrees(:table_rounds, [10_000])
   end
@@ -229,27 +218,7 @@ defmodule Defk.AttributesTest do
   end
 
   describe "compile errors" do
-    @dir Path.join(System.tmp_dir!(), "defk_attributes_test")
-
-    # Compiles `body` in a fresh module from a file; the CompileError message.
-    defp rejected(body) do
-      File.mkdir_p!(@dir)
-      mod = "Defk.AttributesTest.E#{System.unique_integer([:positive])}"
-      path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-      File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{body}\nend\n")
-
-      try do
-        Code.compile_file(path)
-        flunk("#{body} compiled")
-      rescue
-        e in CompileError -> Exception.message(e)
-      end
-    end
-
-    defp codes(msg),
-      do: Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg) |> Enum.map(&Enum.at(&1, 1))
-
-    defp whats(msg), do: Regex.scan(~r/^error: (.*)$/m, msg) |> Enum.map(&Enum.at(&1, 1))
+    defp rejected(body), do: reject(__MODULE__, body)
 
     defp kernel(attr, expr, sig \\ "i :: i64", ret \\ "i64"),
       do: "#{attr}\n\ndefk f(#{sig}) :: #{ret} do\n  #{expr}\nend"

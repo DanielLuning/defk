@@ -273,20 +273,13 @@ end
 defmodule Defk.ArrayAccumulatorTest do
   use ExUnit.Case, async: true
   use Defk.Properties
+  import Defk.TestKit
 
   alias Defk.ArrayAccumulatorTest.K
 
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
-  defp f64s(list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
   defp ints(bin), do: for(<<x::64-signed-native <- bin>>, do: x)
 
   defp agree(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
-
-  # the generated C of kernel `name`
-  defp kernel_c(name) do
-    [_ | chunks] = String.split(K.__defk_c_source__(), "/* ---- ")
-    Enum.find(chunks, &String.starts_with?(&1, "#{name}/")) || flunk("no kernel #{name}")
-  end
 
   defp copies(c), do: length(String.split(c, "defk_copy_")) - 1
 
@@ -383,13 +376,13 @@ defmodule Defk.ArrayAccumulatorTest do
   describe "where copies are" do
     test "none in the 1BRC-shaped loops, the histogram or swapped rows" do
       for k <- [:histogram, :histogram_from, :written_after, :aggregate, :brc, :pascal, :scaled] do
-        assert copies(kernel_c(k)) == 0, "#{k}"
+        assert copies(kernel_c(K, k)) == 0, "#{k}"
       end
     end
 
     test "once for an initial array another binding still reads, before the loop" do
       for k <- [:alias_outside, :doubled, :same_init, :prefix] do
-        c = kernel_c(k)
+        c = kernel_c(K, k)
         assert copies(c) == 1, "#{k}"
         # the kernel's loop, not the loop that zeroes the alloc (defk-ktw)
         [before_loop, _] = String.split(c, "/* defk:loop ", parts: 2)
@@ -398,7 +391,7 @@ defmodule Defk.ArrayAccumulatorTest do
     end
 
     test "at the write after an alias in the body" do
-      assert copies(kernel_c(:alias_in_body)) == 1
+      assert copies(kernel_c(K, :alias_in_body)) == 1
     end
   end
 
@@ -411,9 +404,7 @@ defmodule Defk.ArrayAccumulatorTest do
       keys = i64s(for k <- 1..n, do: rem(k * 31, 50) + 1)
       temps = i64s(for k <- 1..n, do: rem(k * 17, 1999) - 999)
 
-      K.__defk_force_yields__(true)
-
-      try do
+      forced(K, fn ->
         for {f, args} <- [
               histogram: [bytes],
               histogram_from: [bytes, 100],
@@ -426,9 +417,7 @@ defmodule Defk.ArrayAccumulatorTest do
             ] do
           assert {:ok, _} = agree(f, args)
         end
-      after
-        K.__defk_force_yields__(false)
-      end
+      end)
     end
   end
 

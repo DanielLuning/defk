@@ -40,16 +40,11 @@ end
 
 defmodule Defk.AdaptiveSliceTest do
   use ExUnit.Case, async: true
+  import Defk.TestKit
 
   alias Defk.AdaptiveSliceTest.{K, Off}
 
   defp ex_spin(n), do: Enum.reduce(0..(n - 1)//1, 0, &rem(&2 * 31 + &1, 1_000_003))
-
-  defp yields(f) do
-    y0 = K.__defk_stats__().yields
-    r = f.()
-    {r, K.__defk_stats__().yields - y0}
-  end
 
   defp collect_hints(to, acc) do
     receive do
@@ -86,8 +81,8 @@ defmodule Defk.AdaptiveSliceTest do
 
     pairs =
       for _ <- 1..5 do
-        {lone, y_lone} = yields(fn -> K.__defk_native_spin__(n, 0) end)
-        {crowded, y_crowded} = yields(fn -> K.__defk_native_spin__(n, 5) end)
+        {lone, y_lone} = yields(K, fn -> K.__defk_native_spin__(n, 0) end)
+        {crowded, y_crowded} = yields(K, fn -> K.__defk_native_spin__(n, 5) end)
         assert lone == crowded
         {y_lone, y_crowded}
       end
@@ -109,13 +104,7 @@ defmodule Defk.AdaptiveSliceTest do
       assert K.__defk_native_spin__(n, :crowded) == want
     end
 
-    K.__defk_force_yields__(true)
-
-    try do
-      assert K.__defk_native_spin__(5000, 1) == ex_spin(5000)
-    after
-      K.__defk_force_yields__(false)
-    end
+    forced(K, fn -> assert K.__defk_native_spin__(5000, 1) == ex_spin(5000) end)
   end
 
   test "the kernel's function passes the run-queue length as the hint" do

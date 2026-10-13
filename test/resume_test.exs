@@ -238,9 +238,7 @@ defmodule Defk.ResumeTest do
   alias FuzzySearch.Kernels, as: F
 
   use Defk.Properties
-
-  defp i64s(list), do: for(x <- list, into: <<>>, do: <<x::64-signed-native>>)
-  defp f64s(list), do: for(x <- list, into: <<>>, do: <<x::float-64-native>>)
+  import Defk.TestKit, except: [kernel_c: 2]
 
   # synthetic catalog in the fuzzy_search layout: one blob plus an offset table
   defp catalog(n) do
@@ -295,12 +293,10 @@ defmodule Defk.ResumeTest do
         mod.__defk_force_yields__(unquote(mode) == :forced)
 
         try do
-          y0 = mod.__defk_stats__().yields
-          got = yielding.()
-          yields = mod.__defk_stats__().yields - y0
+          {got, count} = yields(mod, yielding)
 
           assert got == blocking.(), "#{name}: yielding result differs from yield: false"
-          assert yields > 0, "#{name}: never yielded, so resume was not tested"
+          assert count > 0, "#{name}: never yielded, so resume was not tested"
         after
           mod.__defk_force_yields__(false)
         end
@@ -312,9 +308,12 @@ defmodule Defk.ResumeTest do
       n = if unquote(mode) == :forced, do: 300, else: 30_000
 
       try do
-        y0 = K.__defk_stats__().yields
-        e = assert_raise Enum.OutOfBoundsError, fn -> K.calls_raise(n, n - 1) end
-        assert K.__defk_stats__().yields - y0 > 0, "never yielded before the error"
+        {e, count} =
+          yields(K, fn ->
+            assert_raise Enum.OutOfBoundsError, fn -> K.calls_raise(n, n - 1) end
+          end)
+
+        assert count > 0, "never yielded before the error"
         assert e == assert_raise(Enum.OutOfBoundsError, fn -> K.calls_raise_nb(n, n - 1) end)
         assert K.calls_raise(n, n + 1) == K.calls_raise_nb(n, n + 1)
       after
@@ -416,9 +415,7 @@ defmodule Defk.ResumeTest do
   # Runs the broken kernel under forced yields, bounded well below the 10 s
   # backstop: without the runtime check it never finishes.
   defp run_lost({mod, kernel}) do
-    mod.__defk_force_yields__(true)
-
-    try do
+    forced(mod, fn ->
       {pid, ref} =
         spawn_monitor(fn ->
           exit(
@@ -437,9 +434,7 @@ defmodule Defk.ResumeTest do
           Process.exit(pid, :kill)
           flunk("a lost resume did not raise within 2 s")
       end
-    after
-      mod.__defk_force_yields__(false)
-    end
+    end)
   end
 
   test "recursion through kernel calls is rejected at compile time" do

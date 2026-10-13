@@ -90,14 +90,11 @@ defmodule Defk.BinaryLiteralsTest do
   use ExUnit.Case, async: true
   use Defk.Properties
 
+  import Defk.TestKit, only: [codes: 1, forced: 2, kernel_c: 2, reject: 2]
+
   alias Defk.BinaryLiteralsTest.K
 
   defp agrees(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
-
-  defp kernel_c(name) do
-    [_, c] = String.split(K.__defk_c_source__(), "/* ---- #{name}/", parts: 2)
-    c |> String.split("/* ---- ", parts: 2) |> hd()
-  end
 
   test "a string literal is indexed" do
     assert K.char_at(0) == ?h
@@ -111,8 +108,8 @@ defmodule Defk.BinaryLiteralsTest do
     assert K.hex_digit(11) == ?b
     assert K.hex_digit(-1) == ?f
     for x <- [0, 11, 16, -1], do: agrees(:hex_digit, [x])
-    refute kernel_c("hex_digit") =~ "defk_get_u8("
-    assert kernel_c("char_at") =~ "defk_get_u8("
+    refute kernel_c(K, "hex_digit") =~ "defk_get_u8("
+    assert kernel_c(K, "char_at") =~ "defk_get_u8("
   end
 
   test "len of a literal, UTF-8 bytes and integer segments" do
@@ -155,13 +152,7 @@ defmodule Defk.BinaryLiteralsTest do
         Bitwise.band(acc * 31 + :binary.at("0123456789abcdef", Bitwise.band(i, 15)), 0xFFFFFFFF)
       end)
 
-    K.__defk_force_yields__(true)
-
-    try do
-      assert K.lit_rounds(10_000) == expect
-    after
-      K.__defk_force_yields__(false)
-    end
+    forced(K, fn -> assert K.lit_rounds(10_000) == expect end)
 
     agrees(:lit_rounds, [10_000])
   end
@@ -190,24 +181,7 @@ defmodule Defk.BinaryLiteralsTest do
   end
 
   describe "compile errors" do
-    @dir Path.join(System.tmp_dir!(), "defk_binary_literals_test")
-
-    defp rejected(body) do
-      File.mkdir_p!(@dir)
-      mod = "Defk.BinaryLiteralsTest.E#{System.unique_integer([:positive])}"
-      path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-      File.write!(path, "defmodule #{mod} do\n  use Defk\n\n#{body}\nend\n")
-
-      try do
-        Code.compile_file(path)
-        flunk("#{body} compiled")
-      rescue
-        e in CompileError -> Exception.message(e)
-      end
-    end
-
-    defp codes(msg),
-      do: Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg) |> Enum.map(&Enum.at(&1, 1))
+    defp rejected(body), do: reject(__MODULE__, body)
 
     defp kernel(expr, ret \\ "i64"),
       do: "defk f(i :: i64) :: #{ret} do\n  #{expr}\nend"

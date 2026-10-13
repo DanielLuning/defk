@@ -72,6 +72,8 @@ defmodule Defk.WordLoadsTest do
   use ExUnit.Case, async: true
   use Defk.Properties
 
+  import Defk.TestKit
+
   alias Defk.WordLoadsTest.{K, Proven, Short}
 
   @max_i64 0x7FFFFFFFFFFFFFFF
@@ -187,31 +189,7 @@ defmodule Defk.WordLoadsTest do
 
   # ------------------------------------------------------------ rejections --
 
-  @dir Path.join(System.tmp_dir!(), "defk_word_loads_test")
-
-  defp rejection(body, sig) do
-    File.mkdir_p!(@dir)
-    mod = "Defk.WordLoadsTest.Rej#{System.unique_integer([:positive])}"
-    path = Path.join(@dir, "#{String.replace(mod, ".", "_")}.ex")
-
-    File.write!(path, """
-    defmodule #{mod} do
-      use Defk
-
-      defk f(#{sig}) :: i64 do
-        #{body}
-      end
-    end
-    """)
-
-    e = assert_raise CompileError, fn -> Code.compile_file(path) end
-    Exception.message(e)
-  end
-
-  defp codes(msg),
-    do: Regex.scan(~r/^\(defk ([a-z0-9-]+)[:;] /m, msg) |> Enum.map(&Enum.at(&1, 1))
-
-  defp whats(msg), do: Regex.scan(~r/^error: (.*)$/m, msg) |> Enum.map(&Enum.at(&1, 1))
+  defp rejection(body, sig), do: reject(__MODULE__, kernel(sig, "i64", body))
 
   test "a load from an array that is not [u8], or at a float offset, is rejected" do
     msg = rejection("u64_le(a, 0)", "a :: [f64]")
