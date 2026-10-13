@@ -2,7 +2,8 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [
-    "defk-30c.2"
+    "defk-30c.2",
+    "defk-30c.3"
   ],
   "created": "2026-10-13T12:53:15Z",
   "description": "For every examples/*.exs (and fuzzy_search kernels.ex): measure compile time and agreement-check time without the benchmark (quiet machine; mark loaded runs provisional), and map which compiler areas its kernels exercise (e.g. floats/-ffp-contract, u64, bitstring accumulator, raise, multi-clause case, yields/resume, unzeroed alloc, 2-D indices, kernel-to-kernel inlining, hardware builtins like crc32c, elided bounds checks, value-semantics copies). Choose a small set of fast examples that together cover the areas; exclude every example whose expected verdict is :poor or :out_of_scope. Record the table and the choice (with reasons) in the ticket and in examples/README.md. No code change beyond measurement scripts in scratch.",
