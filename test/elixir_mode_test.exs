@@ -664,11 +664,9 @@ defmodule Defk.ElixirModeTest do
       for n <- [0, 1, 2, 7], do: agree(K, :mixed, [n, 0.5]) && agree(K, :coerced, [n])
     end
 
-    test "Elixir mode applies the decided semantics where the kernel still diverges" do
-      # the kernel gives this until defk-auo lands; Elixir mode gives the decided result
-
-      # value semantics: b is not changed by the write to out (native: 4.0)
-      assert K.__defk_elixir__(:snapshot, [2.0]) == 2.0
+    test "value semantics: b keeps what it had when out is written, in both modes (defk-auo)" do
+      assert K.snapshot(2.0) == 2.0
+      agree(K, :snapshot, [2.0])
     end
 
     test "inf or NaN raises at the operation or the read, in both modes (defk-i00)" do

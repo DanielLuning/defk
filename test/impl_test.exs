@@ -83,7 +83,7 @@ defmodule Defk.ImplTest do
     refute err =~ "__defk_load__"
   end
 
-  test "works in Elixir mode and with a bitstring result" do
+  test "works in Elixir mode and on a yield: false kernel" do
     assert compile(5, """
            defmodule Defk.ImplTest.K5 do
              use Defk, elixir_mode: true
