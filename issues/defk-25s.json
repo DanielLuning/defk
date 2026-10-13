@@ -8,9 +8,10 @@
   "labels": [
     "needs-triage"
   ],
+  "parent": "defk-w8r",
   "priority": 3,
   "status": "open",
   "title": "Measure and cut the base per-call cost of a scalar kernel (12 ns vs Elixir's 1.6 ns)",
   "type": "task",
-  "updated_at": "2026-10-12T09:52:03Z"
+  "updated_at": "2026-10-13T19:08:07Z"
 }
