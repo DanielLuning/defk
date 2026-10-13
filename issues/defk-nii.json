@@ -8,6 +8,7 @@
   "labels": [
     "ready-for-agent"
   ],
+  "parent": "defk-vcx",
   "comments": [
     {
       "text": "Triage (defk-sgw plan): needs-triage. Enum.reduce/3 is agent-ready on its own; the find_index story (no nil) is an undecided design question. Split reduce/3 off if a workload needs it first.",
@@ -22,5 +23,5 @@
   "status": "open",
   "title": "Support Enum.reduce/3 and find_index-style forms",
   "type": "task",
-  "updated_at": "2026-10-11T21:24:13Z"
+  "updated_at": "2026-10-13T19:08:10Z"
 }
