@@ -410,6 +410,17 @@ defmodule Defk do
       unquote(lib_defs)
       @doc false
       def __defk_c_source__, do: unquote(c_src)
+
+      # Mix's compile.elixir asks every module this on every compile (defk-srh):
+      # the build inputs read from the environment (the C compiler, the include
+      # dir) are baked in, so a change recompiles the module. Raw values, so
+      # set-versus-unset counts; harmless outside Mix.
+      @doc false
+      def __mix_recompile__? do
+        System.get_env("CC") != unquote(System.get_env("CC")) or
+          System.get_env("ERTS_INCLUDE_DIR") != unquote(System.get_env("ERTS_INCLUDE_DIR"))
+      end
+
       @doc false
       def __defk_report__, do: unquote(Macro.escape(report))
       @doc false
