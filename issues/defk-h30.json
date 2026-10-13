@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-13T18:44:00Z",
   "created": "2026-10-13T17:40:40Z",
   "description": "Problem: on macOS, Defk.Build runs `cc` (CC unset) for every kernel library it builds. /usr/bin/cc is an xcrun shim: each call looks up the active toolchain and the SDK before clang starts. Measured 2026-10-13 (M4 Pro, Apple clang 21, a typical generated kernel): 12 serial compiles took 1.43 s with `cc` and 0.30 s with the clang binary that `xcrun -f clang` names. So about 95 ms of each ~120 ms compile is the shim, and the clang compile itself is about 25 ms. A cold cache (a new clone, a changed defk_runtime.h or compiler) pays this for every kernel module: in tests, in `mix compile`, and in Defk.define at runtime.\n\nContext: the shim also supplies the SDK. A direct clang call without it fails with \"'sys/types.h' file not found\". `xcrun --show-sdk-path` gives the path, to pass as `-isysroot` (or set SDKROOT for the child). Defk.Build already memoises `cc --version` in :persistent_term (cc_version/1). The cache key (cache_key/1) holds CC and the version string. A resolved path must not change the key for the same compiler, or must change it in a way that every user gets once only.\n\nConstraints: an explicit CC (Homebrew LLVM, gcc, a wrapper) is used as given, with no resolution. When xcrun fails or is missing, fall back to plain `cc`. Linux is unchanged. The test env and the cache must agree on the same key with or without the resolution.\n\nDone when: with CC unset on macOS, a kernel build calls the resolved clang with -isysroot, resolved once per VM; a cold `mix test` (empty _build/test/defk, after `mix compile --force`) is measured before and after, with the numbers in docs/performance.md; tests cover the explicit-CC and missing-xcrun paths.",
   "id": "defk-h30",
@@ -9,8 +10,8 @@
     "ready-for-agent"
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Skip the xcrun shim per C compile on macOS: resolve clang and the SDK once per VM",
   "type": "task",
-  "updated_at": "2026-10-13T18:34:03Z"
+  "updated_at": "2026-10-13T18:44:00Z"
 }
