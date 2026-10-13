@@ -1018,7 +1018,7 @@ def spin(n), do: __defk_native_spin__(n, :erlang.statistics(:total_run_queue_len
   per key 0.085 ms for 1k keys, the batch 0.048-0.055 ms). These figures
   disagree (see 8.2, open questions).
 - **Conditions:** results snapshot "noisy, single runs"; ws_masking under load.
-- **Source:** [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot-m-series-mac-otp-29-elixir-120-noisy-single-runs), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs).
+- **Source:** [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs).
 - **Status:** measured; ws_masking provisional.
 
 <!-- defk-example run: packed = <<1.0::float-64-native>>; readings = [1.0, 2.0] | defs: defmodule Clamp.Kernels do def clamp_all(packed), do: packed; def clamp(x, lo, hi), do: x |> max(lo) |> min(hi) end -->
@@ -1265,7 +1265,7 @@ names each kept bounds check and the fact that would drop it. See
   (binary comprehension), defk 0.58, C 0.64; `dot` Elixir 12.2 (list), defk
   0.50, C 0.50. `count_primes(1M)`: Elixir 1400 ms, defk 180, C 186.
 - **Conditions:** "noisy, single runs".
-- **Source:** [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot-m-series-mac-otp-29-elixir-120-noisy-single-runs), `bench/native.c`.
+- **Source:** [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot), `bench/native.c`.
 - **Status:** measured. Later runs give `dot` ~0.56 and `sum` 0.50-0.53 ns/elem (`defk-jlk`).
 
 ### 6.2 Write loops whose indices the compiler can prove in range
