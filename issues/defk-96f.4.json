@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-96f",
+  "comments": [
+    {
+      "text": "Done in ec298a1 (branch defk-96f.4/libfuzzer-decoders, not merged). scripts/fuzz/: erl_nif shim (real terms, ref-counted resources, schedule_nif, raise; all 24 enif_* the LzSnappy library imports plus get_double/ulong/atom, make_double, realloc_binary, getenv) + harness that loads the library via its nif_init() and runs each input straight and yielding at every clock read (frames promoted, input binaries moved between steps). Oracles: both runs agree, only ArgumentError, per-target value checks, no frame/resource outlives the call, LSan per input (ASAN_OPTIONS=detect_leaks=1, off by default on macOS). C generated from examples/lz4_snappy_decode.exs by gen_c.exs (current compiler). run.sh: FUZZ_TIME per target, STRIPS=release|small (small = DEFK_STRIP=8, ZERO/COPY_STRIP=64, DEFK_BUDGET0=1; BUDGET0 made #ifndef in priv/defk_runtime.h), artefacts in tmp/fuzz. Seeds: 10 snappy + 12 lz4 from snappyer/lz4_erl (seeds.exs). Release set 60 s each, all clean, load 6-9 (provisional): lz4 release 2.01M inputs ~33k/s, lz4 small 345k ~5.7k/s, snappy release 1.99M ~32.6k/s, snappy small 682k ~11.2k/s (2 kernel calls per input). planted.sh (unchecked token read): heap-buffer-overflow in run_k1_lz4_block_decode after ~3k inputs, 3-4 s wall; planted leak found by LSan on the seeds. No BUG found. Missing decoders (no targets yet): inflate/PNG defk-52v.7, zstd defk-52v.8, baseline JPEG defk-52v.12.",
+      "timestamp": "2026-10-13T14:31:59Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "libFuzzer targets for the decoder kernels (outside the VM, erl_nif shim)",
   "type": "task",
-  "updated_at": "2026-10-13T14:01:24Z"
+  "updated_at": "2026-10-13T14:31:59Z"
 }
