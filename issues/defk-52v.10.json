@@ -6,6 +6,7 @@
   ],
   "blocks": [],
   "created": "2026-10-09T19:47:33Z",
+  "defer_until": "2026-11-15",
   "description": "Tier 2, lower value than argon2id because bcrypt is CPU-bound with a 4 KB state, not memory-hard, and bcrypt_elixir's dirty-scheduler cost is small per hash; still common (Phoenix defaults), and the same yield and kill-cleanup story applies. Blowfish key schedule with the EksBlowfishSetup cost loop (2^cost iterations), the four 256-entry S-boxes and the P-array as module attributes (4 KB of constants: the first real test of defk-ivt with large binary attributes), and the 64-byte Base64 variant bcrypt uses for its output string (Elixir side).\n\nVectors: the OpenBSD test vectors and bcrypt_elixir's outputs. Expected verdict: marginal (parity with reference C), with the runtime-contract measurements beside.\n\nNeeds: defk-w38, defk-ivt (large binary attributes), defk-n4r.4, the builtins ticket (rotates not needed; u32 masked arithmetic is). Blocked by the argon2id ticket to reuse its harness and governance text.\n\nDone when: vectors pass, agreement with bcrypt_elixir holds for cost 4-12, verdict recorded.",
   "id": "defk-52v.10",
   "labels": [
@@ -13,8 +14,8 @@
   ],
   "parent": "defk-52v",
   "priority": 4,
-  "status": "open",
+  "status": "deferred",
   "title": "bcrypt from scratch vs bcrypt_elixir (after argon2id)",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:18Z"
+  "updated_at": "2026-10-13T19:08:41Z"
 }
