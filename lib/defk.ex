@@ -557,6 +557,10 @@ defmodule Defk do
     fallback = String.to_charlist(Path.rootname(fallback))
 
     quote do
+      # Mix recompiles the module when the library is gone. A module whose
+      # library is missing cannot load, so __mix_recompile__?/0 never runs.
+      @external_resource unquote(List.to_string(fallback) <> ".so")
+
       defp __defk_lib_base__ do
         case :code.lib_dir(unquote(app)) do
           dir when is_list(dir) -> :filename.join(dir, unquote(rel))
