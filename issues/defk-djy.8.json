@@ -20,11 +20,15 @@
     {
       "text": "Moved from defk-djy to defk-sgw: it is gated on the verdict (defk-sgw.5), and as a djy child it made bw roll that blocker up to the whole docs epic, hiding defk-djy.17 from bw ready.",
       "timestamp": "2026-10-12T10:12:06Z"
+    },
+    {
+      "text": "Picked up 2026-10-14 after defk-sgw.5 landed. Two inputs only the maintainer can give before the package can build: the license (no LICENSE file exists; mix hex.build refuses without :licenses) and the package name (the ticket says it is gated with the verdict). The rest is mechanical: package/0 with description, files (lib, priv/defk_runtime.h, mix.exs, README, LICENSE, CHANGELOG), links; a CHANGELOG with a version policy; README links as absolute URLs for hex.pm; mix hex.build as a CI step; the errors @url_base switch at release time (defk-djy.6 note). Waiting for the two answers.",
+      "timestamp": "2026-10-13T22:12:34Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Hex package metadata and publishing readiness",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:17Z"
+  "updated_at": "2026-10-13T22:12:34Z"
 }
