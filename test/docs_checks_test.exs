@@ -183,7 +183,7 @@ defmodule Defk.DocsChecksTest do
           s = Atom.to_string(name),
           String.starts_with?(s, "__defk_"),
           not String.starts_with?(s, "__defk_native_"),
-          name not in [:__defk_load__, :__defk_corrupt_tags__],
+          name not in [:__defk_load__, :__defk_load_nif__, :__defk_corrupt_tags__],
           do: "#{name}/#{arity}"
     end
 
