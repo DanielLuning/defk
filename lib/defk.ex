@@ -103,6 +103,23 @@ defmodule Defk do
       `:native`.
     * `CC` names the C compiler (default `cc`), and `ERTS_INCLUDE_DIR` builds
       against another ERTS's headers, as in elixir_make.
+    * `DEFK_SANITIZE` builds the kernels with sanitizers, to check the
+      generated C for memory errors and undefined behaviour (never for
+      production or benchmarks: `Defk.Bench.report/1` refuses to run in this
+      mode). It is a comma-separated list of `address` (AddressSanitizer),
+      `undefined` (UndefinedBehaviorSanitizer, stopping at the first report)
+      and `trap` (UBSan with no runtime: a report is a `SIGTRAP`, with no
+      message); each adds `-g -fno-omit-frame-pointer`. The mode is part of
+      the library's cache key and its file name
+      (`<Module>-<key>-san-<modes>.so`), so a normal build never reuses a
+      sanitized library or the reverse. A module of a Mix app compiles in this
+      mode only with a build path of its own (`MIX_BUILD_PATH`), so the
+      normal `_build/<env>` never gets a sanitized library. Under `address`,
+      the bytes of slack ERTS allocates past an `alloc/2` result are poisoned,
+      so a one-byte overrun is reported on a stock emulator too. An `address`
+      library needs the ASan runtime in the VM (OTP's `asan` emulator, or
+      `-env DYLD_INSERT_LIBRARIES` / `LD_PRELOAD` with `+Mea min`); an
+      `undefined` one loads its runtime itself.
     * The C source and the library are written to
       `_build/<env>/defk/<Module>-<key>.{c,so}`; a module of a Mix app also
       gets a copy of the library in its app's `ebin/`, which it loads from
@@ -449,15 +466,7 @@ defmodule Defk do
       @doc false
       def __defk_c_source__, do: unquote(c_src)
 
-      # Mix's compile.elixir asks every module this on every compile (defk-srh):
-      # the build inputs read from the environment (the C compiler, the include
-      # dir) are baked in, so a change recompiles the module. Raw values, so
-      # set-versus-unset counts; harmless outside Mix.
-      @doc false
-      def __mix_recompile__? do
-        System.get_env("CC") != unquote(System.get_env("CC")) or
-          System.get_env("ERTS_INCLUDE_DIR") != unquote(System.get_env("ERTS_INCLUDE_DIR"))
-      end
+      unquote(recompile_def())
 
       @doc false
       def __defk_report__, do: unquote(Macro.escape(report))
@@ -470,6 +479,24 @@ defmodule Defk do
       unquote(corrupt_tags)
       unquote_splicing(stubs)
       unquote_splicing(elixir_mode)
+    end
+  end
+
+  # Mix's compile.elixir asks every module __mix_recompile__? on every compile
+  # (defk-srh): the build inputs read from the environment (the C compiler,
+  # the include dir, the sanitizer mode: defk-96f.1) are baked in, so a change
+  # recompiles the module. Raw values, so set-versus-unset counts; harmless
+  # outside Mix.
+  @build_env ["CC", "ERTS_INCLUDE_DIR", "DEFK_SANITIZE"]
+
+  defp recompile_def do
+    baked = for var <- @build_env, do: {var, System.get_env(var)}
+
+    quote do
+      @doc false
+      def __mix_recompile__? do
+        Enum.any?(unquote(baked), fn {var, value} -> System.get_env(var) != value end)
+      end
     end
   end
 

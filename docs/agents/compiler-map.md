@@ -54,7 +54,9 @@ lowering declares as it emits; defk-ch4), not from the C text.
 - `lib/defk.ex`: the `defk` macro, options (`max_owned`, `yield`,
   `adaptive_slice`), `@impl` handling, `lib_defs/1`.
 - `lib/defk/build.ex`: C compiler invocation, cache key, where the `.so`
-  lives (`placement!/3`: app ebin vs absolute path), `mix_project?/0`.
+  lives (`placement!/3`: app ebin vs absolute path), `mix_project?/0`, the
+  sanitizer build mode (`sanitize/0`, `DEFK_SANITIZE`; its C side is
+  `defk_poison_slack` in the runtime header).
 - `lib/defk/errors.ex`: the error registry (code, why, fix); `reference/0`
   and `scope/1` feed the generated docs — after changing it, follow
   `docs/agents/generated-docs.md`. Rendering and location live in
