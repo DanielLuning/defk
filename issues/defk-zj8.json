@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-12T18:55:19Z",
@@ -9,8 +9,8 @@
     "needs-triage"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Flagged strips: a conditionally updated float accumulator's check may be suppressed with no strip-end test (possible divergence)",
   "type": "bug",
-  "updated_at": "2026-10-12T18:55:19Z"
+  "updated_at": "2026-10-13T07:29:50Z"
 }
