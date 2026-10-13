@@ -26,6 +26,54 @@ size the script declares; "vs native" is defk against the anchor package's
 own NIF; the tick gap is the worst wait of a 1 ms ticker on one scheduler
 while each side runs once (the idle floor on this machine is about 2 ms).
 
+### Scoreboard
+
+One row per example, sorted by verdict and speedup. ✅ good (defk is at
+least 1.9× the best Elixir), 🟡 marginal (0.95–1.9×: use Elixir), ❌ poor,
+⛔ out of scope. **T** marks a target workload (a job reproduced from a named
+package and measured against its NIF); the others are supporting examples,
+which illustrate but do not count towards the verdict.
+
+| | | Example | The job | defk vs best Elixir | vs the package's NIF |
+|---|---|---|---|---|---|
+| ✅ | T | hashes | xxHash64 of 4 MB | **209×** | SipHash level with its NIF; CRC32C 0.9× of crc32cer |
+| ✅ | | fft | 4096-point FFT, FIR over audio | **73×** | – |
+| ✅ | T | blake | BLAKE2b-512 of 64 KB | **32×** | 1.02× blake2_elixir |
+| ✅ | T | matmul | 256×256 f64 | **19×** | 151× Nx binary backend (EXLA expected to win) |
+| ✅ | | image_ops | resize 1080p → 480×270 | **14×** | – |
+| ✅ | T | cdcl_sat | Crux's scenario enumeration, 109 vars | **13×** | 4.2× picosat |
+| ✅ | T | cosine_topk | top-10 of 100k × 384 f32 | **13×** | 3.1× vettore (Nx + EXLA 6–8× faster than defk) |
+| ✅ | | rolling_stats | 1M readings, 12 chunks | **11×** | – |
+| ✅ | | geohash_crc | encode 100k points | **11×** | – |
+| ✅ | T | hll_update_many | 100k hashes into p = 14 | **10×** | 7.3× the Rust NIF |
+| ✅ | T | pcm_mix | 4 streams, 10 ms chunks | **8.6×** | 1.9× NativeAdder |
+| ✅ | | byte_histogram | 16 MB, 12 chunks | **7.8×** | – |
+| ✅ | | image_blur | 1080p, 12 bands | **7.3×** | – |
+| ✅ | T | keccak | 10k × 32 B per call | **7.0×** | 0.64× ex_keccak |
+| ✅ | T | codecs | base64 of 1 MB | **6.9×** | 4.3× fast64 |
+| ✅ | | sort_u64_keys | 1M packed keys | **6.2×** | – |
+| ✅ | T | lz4_snappy_decode | Snappy block of 64 KB | **5.0×** | 2.5× snappyer as installed |
+| ✅ | | per_pair_distance | 50k pairs, one call each | **4.0×** | – |
+| ✅ | | geo_nearest | 10 nearest of 500k | **3.3×** | – |
+| ✅ | | monte_carlo_rtp | 100M spins | **3.0×** | – |
+| ✅ | T | cdcl_sat_per_call | one solve per call, 26–28 vars | **2.8×** | 1.7× picosat |
+| ✅ | T | gorilla_encode | 100-point blocks | **2.4×** | 3.9× gorilla_stream |
+| 🟡 | T | batched_levenshtein | 234k words, 12 chunks | 1.7× | 13.6× ex_strsim per pair |
+| 🟡 | | poor_substring_search | 64-byte needle in 16 MB | 1.1× | – |
+| 🟡 | | utf8_valid | 16 MB | 1.05× | – |
+| 🟡 | T | ws_masking | 125-byte frames | 1.0× | 0.87× bandit_native |
+| ❌ | | hash_chain | 10M SHA-256 steps | 0.55× | – |
+| ❌ | | poor_tiny_calls | one call per element | 0.28× | – |
+| ❌ | T | argon2 | argon2_elixir's defaults | 0.25× | lane for lane level |
+| ❌ | | poor_list_data | data as a list | 0.08× | – |
+| ⛔ | | out_of_scope_word_count | strings in, a map out | – | – |
+
+The fuzzy_search app is not a scoreboard row: its 7 tests pass, and its own
+measurement (4.4× per query, `/health` p99 10–12 ms against 75–82 ms behind
+a blocking NIF) is in `examples/README.md`.
+
+### Measured figures
+
 **Target workloads** (jobs reproduced from a named package, measured
 against its Elixir version and its NIF):
 
