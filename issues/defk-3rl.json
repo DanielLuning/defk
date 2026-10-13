@@ -8,6 +8,7 @@
   "labels": [
     "needs-triage"
   ],
+  "parent": "defk-vcx",
   "comments": [
     {
       "text": "The tape benchmark (defk-9p6.30) is a candidate workload for this: it can use a worst-case alloc + {array, count} today and measure whether that form costs enough to justify this construct. Same for defk-9p6.21.",
@@ -18,5 +19,5 @@
   "status": "open",
   "title": "Output arrays whose length depends on the data: a growable [i64] (when a workload needs it)",
   "type": "task",
-  "updated_at": "2026-10-12T09:52:11Z"
+  "updated_at": "2026-10-13T19:08:10Z"
 }
