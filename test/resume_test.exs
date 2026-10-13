@@ -223,6 +223,22 @@ defmodule Defk.ResumeTest.Lost do
   end
 end
 
+# a safepoint in an inner loop: resuming it goes through the outer loop's
+# dispatch first (defk-yqo)
+defmodule Defk.ResumeTest.LostNested do
+  use Defk
+
+  defk nested(n :: i64) :: i64 do
+    for i <- 1..3//1, reduce: 0 do
+      acc ->
+        acc +
+          for j <- 1..n//1, reduce: 0 do
+            b -> b + i * j
+          end
+    end
+  end
+end
+
 defmodule Defk.ResumeTest do
   use ExUnit.Case, async: false
 
@@ -346,14 +362,18 @@ defmodule Defk.ResumeTest do
   # never generates such a case, so each test breaks the generated C of
   # Defk.ResumeTest.Lost and builds it as another module: no test-only
   # option reaches the compiler.
-  @lost_case "case 2: defk_rs = F->resume = 0; goto defk_l2;\n"
+  # safepoint 2 (the second loop's) at dispatch depth 0: n * 256 + depth
+  @lost_case "case 512: goto defk_a2;\n"
   @lost_return "*result = enif_make_int64(env, v_acc_7);\n"
+  # LostNested: safepoint 1 is the inner loop's, reached through the outer
+  # loop (defk_l1) at depth 1
+  @nested_top "case 256: defk_rs = 257; goto defk_l1;\n"
 
   describe "a lost resume raises" do
     test "when the kernel yields at another safepoint first" do
       # missing case: the resume at safepoint 2 restarts the kernel, which
       # yields at safepoint 1 under forced yields
-      lost = lost_mutant(LostMissing, &String.replace(&1, @lost_case, ""))
+      lost = lost_mutant(Lost, LostMissing, [@lost_case], &String.replace(&1, @lost_case, ""))
 
       assert {:raised, %RuntimeError{message: msg}} = run_lost(lost)
 
@@ -364,24 +384,51 @@ defmodule Defk.ResumeTest do
     test "when the kernel returns without reaching the safepoint" do
       # wrong case: the resume at safepoint 2 jumps straight to the return
       lost =
-        lost_mutant(LostReturn, fn src ->
+        lost_mutant(Lost, LostReturn, [@lost_case, @lost_return], fn src ->
           src
-          |> String.replace(@lost_case, "case 2: goto defk_lost_ret;\n")
+          |> String.replace(@lost_case, "case 512: goto defk_lost_ret;\n")
           |> String.replace(@lost_return, "defk_lost_ret:;\n" <> @lost_return)
         end)
 
       assert {:raised, %RuntimeError{message: msg}} = run_lost(lost)
       assert msg =~ "defk bug: kernel resumed at safepoint 2 but returned without reaching it"
     end
+
+    test "when the dispatch jumps to another loop's label" do
+      # wrong label: the resume at safepoint 2 enters the first loop, which
+      # recomputes it; only safepoint 2's own arrival label clears the resume
+      lost =
+        lost_mutant(Lost, LostWrongLabel, [@lost_case], fn src ->
+          String.replace(src, @lost_case, "case 512: goto defk_l1;\n")
+        end)
+
+      assert {:raised, %RuntimeError{message: msg}} = run_lost(lost)
+      assert msg =~ "defk bug: kernel resumed at safepoint 2 but yielded at safepoint"
+    end
+
+    test "when the top-level case of a nested loop is missing" do
+      # the outer loop restarts from its first iteration; its own dispatch
+      # still sees safepoint 1 pending, but at depth 0, not the depth 1 it
+      # matches, so the inner loop does not take the resume
+      lost =
+        lost_mutant(LostNested, LostNestedTop, [@nested_top], fn src ->
+          String.replace(src, @nested_top, "")
+        end)
+
+      assert {:raised, %RuntimeError{message: msg}} = run_lost(lost)
+      assert msg =~ "defk bug: kernel resumed at safepoint 1 but"
+    end
   end
 
-  # Builds Defk.ResumeTest.Lost's C source, changed by `edit`, as the NIF of a
-  # new module `name` with a stub for each NIF, and returns the module and a
-  # function that calls the kernel.
-  defp lost_mutant(name, edit) do
-    src = Defk.ResumeTest.Lost.__defk_c_source__()
+  # Builds the C source of Defk.ResumeTest.<from>, changed by `edit`, as the
+  # NIF of a new module `name` with a stub for each NIF, and returns the
+  # module and a function that calls the kernel. `needles` must be in the
+  # source: the edit's anchors.
+  defp lost_mutant(from, name, needles, edit) do
+    from = Module.concat(Defk.ResumeTest, from)
+    src = from.__defk_c_source__()
 
-    assert String.contains?(src, @lost_case) and String.contains?(src, @lost_return),
+    assert Enum.all?(needles, &String.contains?(src, &1)),
            "the generated C changed shape; update the lost-resume tests"
 
     mod = Module.concat(Defk.ResumeTest, name)
@@ -389,7 +436,7 @@ defmodule Defk.ResumeTest do
     src =
       src
       |> edit.()
-      |> String.replace("ERL_NIF_INIT(Elixir.Defk.ResumeTest.Lost,", "ERL_NIF_INIT(#{mod},")
+      |> String.replace("ERL_NIF_INIT(#{from},", "ERL_NIF_INIT(#{mod},")
 
     lib = Defk.Build.build!(mod, src, __ENV__.file)
     nifs = Regex.scan(~r/\{"(\w+)", (\d+), (\w+), 0\}/, src, capture: :all_but_first)
