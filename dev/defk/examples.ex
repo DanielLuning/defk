@@ -63,20 +63,24 @@ defmodule Defk.Examples do
   end
 
   @doc """
+  Where `--bench` keeps its result cache (`Defk.Bench.Cache`, defk-30c.5):
+  outside git, one file per example script.
+  """
+  def bench_cache_dir, do: Path.join(Mix.Project.build_path(), "defk_bench")
+
+  @doc """
   Runs one example in its own `elixir` process. `mode` is `:check` or `:bench`;
   `timeout_s` is `nil` for none. Prints a heartbeat every 30 s of silence.
+  With `:bench`, the example's reports reuse cached results unless `fresh?`.
   """
-  @spec run_example(String.t(), :check | :bench, pos_integer() | nil) :: outcome()
-  def run_example(name, mode, timeout_s) do
+  @spec run_example(String.t(), :check | :bench, pos_integer() | nil, boolean()) :: outcome()
+  def run_example(name, mode, timeout_s, fresh? \\ false) do
     file = Path.join(root(), "examples/#{name}.exs")
 
     err_file =
       Path.join(System.tmp_dir!(), "defk_examples_#{System.unique_integer([:positive])}.err")
 
-    env = [
-      {~c"ERL_CRASH_DUMP", ~c"/dev/null"}
-      | if(mode == :check, do: [{~c"DEFK_CHECK_ONLY", ~c"1"}], else: [])
-    ]
+    env = [{~c"ERL_CRASH_DUMP", ~c"/dev/null"} | mode_env(mode, file, fresh?)]
 
     # stdout and stderr stay apart: a stderr write (a Logger line, a VM
     # warning) must not land inside a DEFK_RESULT line
@@ -87,6 +91,25 @@ defmodule Defk.Examples do
 
     err = read_and_rm(err_file)
     judge(name, mode, ran, secs, err)
+  end
+
+  # `false` unsets a variable the task's own environment may carry
+  defp mode_env(:check, _file, _fresh?) do
+    [
+      {~c"DEFK_CHECK_ONLY", ~c"1"},
+      {~c"DEFK_BENCH_CACHE_DIR", false},
+      {~c"DEFK_BENCH_SCRIPT", false},
+      {~c"DEFK_BENCH_FRESH", false}
+    ]
+  end
+
+  defp mode_env(:bench, file, fresh?) do
+    [
+      {~c"DEFK_CHECK_ONLY", false},
+      {~c"DEFK_BENCH_CACHE_DIR", String.to_charlist(bench_cache_dir())},
+      {~c"DEFK_BENCH_SCRIPT", String.to_charlist(file)},
+      {~c"DEFK_BENCH_FRESH", if(fresh?, do: ~c"1", else: false)}
+    ]
   end
 
   @doc "Runs the fuzzy_search app's own tests (`mix deps.get && mix test` in its directory)."
