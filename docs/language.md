@@ -249,9 +249,9 @@ At `mix compile`, when the module is compiled:
    environment variable) at `-O3`, with `-ffp-contract=off` (no fused
    multiply-add: float results stay bit-exact with Elixir) and hardening flags.
 3. The build is cached: `<key>` is a hash of the compiler flags, the C source,
-   the runtime header, the ERTS version, `ERTS_INCLUDE_DIR` when set, and the
-   compiler (`CC`) and its `--version` line. An unchanged module reuses its
-   library.
+   the runtime header, the ERTS version, `ERTS_INCLUDE_DIR` when set, the
+   compiler (`CC`) and its `--version` line, and the sanitizer mode
+   (`DEFK_SANITIZE`, below). An unchanged module reuses its library.
 4. `ERTS_INCLUDE_DIR` (the elixir_make convention) builds against another
    ERTS's `erl_nif.h` instead of the running one's.
 5. A module of a Mix app (compiled from the project's `elixirc_paths`) gets
@@ -261,6 +261,11 @@ At `mix compile`, when the module is compiled:
    Any other module (a script, `Code.compile_string/2`, a test file) loads it
    from the absolute build path.
 6. The module loads its library in an `@on_load` hook.
+7. `DEFK_SANITIZE` (`address`, `undefined`, `trap`, comma-separated) builds
+   the kernels with sanitizers, to check the generated C; the library is
+   named `<Module>-<key>-san-<modes>.so`, a Mix app's module needs a build
+   path of its own (`MIX_BUILD_PATH`), and `Defk.Bench.report/1` refuses
+   to run. Details: the `Defk` module's Configuration section.
 
 The C compiler runs on the build machine, at compile time only. If it cannot
 be run, the build fails with [`no-c-compiler`](compile-errors.md#no-c-compiler):

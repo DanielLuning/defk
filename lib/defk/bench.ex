@@ -57,6 +57,11 @@ defmodule Defk.Bench do
   is young, and a caller that builds its inputs per call pays that copy on
   both sides.
 
+  **Never in the sanitizer build mode.** `report/1` raises when
+  `DEFK_SANITIZE` is set (see `Defk`'s Configuration): sanitized kernels run
+  at a fraction of their speed and lose vectorisation, so a verdict measured
+  on them would be wrong.
+
   The measurement rules, and every example calling `report/1`, are in the
   catalog's
   [README](https://github.com/DanielLuning/defk/blob/main/examples/README.md).
@@ -117,6 +122,7 @@ defmodule Defk.Bench do
   """
   @spec report(keyword()) :: map()
   def report(opts) do
+    refuse_sanitized!()
     name = Keyword.fetch!(opts, :name)
     expected = Keyword.fetch!(opts, :expected)
     baseline = Keyword.get(opts, :baseline, :first_pass)
@@ -162,6 +168,22 @@ defmodule Defk.Bench do
 
     print(result)
     result
+  end
+
+  # The sanitizer build mode (defk-96f.1) is for checking the C, never for
+  # timing it: refuse before anything runs.
+  defp refuse_sanitized! do
+    case Defk.Build.sanitize() do
+      [] ->
+        :ok
+
+      modes ->
+        raise RuntimeError,
+              "Defk.Bench.report/1 refuses to measure in the sanitizer build mode " <>
+                "(DEFK_SANITIZE=#{Enum.join(modes, ",")}): sanitized kernels are much slower " <>
+                "and differently optimised, so the verdict would be wrong. Unset DEFK_SANITIZE " <>
+                "and use a normal build path to benchmark."
+    end
   end
 
   # `:check` is required whenever `:defk` is given (defk-k95): an unchecked
