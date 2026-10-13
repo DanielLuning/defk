@@ -9,9 +9,15 @@
   "id": "defk-zdm.3",
   "labels": [],
   "parent": "defk-zdm",
+  "comments": [
+    {
+      "text": "min_yields: done as Defk.TestKit.assert_agrees_yielding/4 in test/support, not as a Defk.Test.assert_agrees option: no public API change needed. Possible follow-ups from the converters: a forced_yields/2 (yields + forced, nested 7x in early_exit), i16s/i32s/f32s with :inf/:nan, a multi-line defk_results/1 for bench_cache.",
+      "timestamp": "2026-10-13T18:28:02Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Shared test helpers in test/support, and assert_agrees min_yields:",
   "type": "task",
-  "updated_at": "2026-10-13T18:20:13Z"
+  "updated_at": "2026-10-13T18:28:02Z"
 }
