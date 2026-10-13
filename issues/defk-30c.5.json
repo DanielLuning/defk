@@ -4,6 +4,7 @@
     "defk-30c.3"
   ],
   "blocks": [],
+  "closed_at": "2026-10-13T16:51:37Z",
   "created": "2026-10-13T14:24:26Z",
   "description": "Maintainer (2026-10-13): when iterating, skip the long example benchmarks whose kernels did not change.\n\nKey per example (all must match to reuse a stored result):\n- every kernel module's .beam MD5 (module_info(:md5)): covers the C source (compiled in as __defk_c_source__) and the generated Elixir wrappers (argument decoding, NIF call) that are part of the timing;\n- the library cache key inputs (Defk.Build: cflags, defk_runtime.h, cc + version, ERTS version, sanitizer mode);\n- the example script's hash (the Elixir baseline and inputs);\n- the script's Mix.install dependency versions (often the competing library);\n- Defk.Bench's own MD5, OTP and Elixir versions, and the machine (CPU model, core count).\n\nRules:\n- Store only quiet-machine results; a provisional (loaded) run is never reused, so it re-measures next time.\n- --bench reuses cached results by default and says which ones it reused; --bench --fresh measures everything. A --snapshot table marks reused rows (with their date).\n- Cache outside git (e.g. _build/\u003cenv\u003e/defk_bench/), one file per example.\n- Do NOT cache agreement/correctness checks (random draws add coverage each run; the build cache already skips the C compile) or compiler tests.\n\nTest: change only an example's Elixir baseline -\u003e re-measured; change nothing -\u003e reused; touch defk_runtime.h -\u003e all re-measured; a loaded run -\u003e not stored.",
   "id": "defk-30c.5",
@@ -12,8 +13,8 @@
   ],
   "parent": "defk-30c",
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Benchmark result cache for mix defk.examples --bench: skip re-measuring an example whose inputs are unchanged",
   "type": "task",
-  "updated_at": "2026-10-13T16:44:06Z"
+  "updated_at": "2026-10-13T16:51:37Z"
 }
