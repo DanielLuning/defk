@@ -24,6 +24,9 @@ defmodule Defk.Catalog do
     cosine_topk: [Cosine.Kernels]
   ]
 
+  @doc false
+  def scripts, do: Keyword.keys(@scripts)
+
   def load do
     @scripts
     |> Task.async_stream(&load_script/1, ordered: false, timeout: :infinity)

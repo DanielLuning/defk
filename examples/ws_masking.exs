@@ -40,7 +40,7 @@
 # frames), and reports the crossover. Responsiveness is one 16 MiB frame per
 # side on one scheduler.
 #
-# DEFK_RESULT lines (run_all.exs reads the first; the script checks both):
+# DEFK_RESULT lines (mix defk.examples reads the first; the script checks both):
 #   1. ws_masking        125 B frames, the workload verdict, with the NIF as
 #                        `native`, the sweep and responsiveness
 #   2. ws_masking_1mib   1 MiB frames

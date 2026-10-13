@@ -16,7 +16,7 @@
 #
 #   elixir examples/sort_u64_keys.exs
 #
-# examples/run_all.exs collects only the FIRST DEFK_RESULT line of a script,
+# mix defk.examples (--bench) collects only the FIRST DEFK_RESULT line of a script,
 # so sort_packed (the claim the catalog lists under "Where defk helps") is
 # printed first and sort_to_list second. Because the runner never sees the
 # second line, this script checks its own claim and exits 1 when sort_to_list

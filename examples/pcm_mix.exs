@@ -24,7 +24,7 @@
 # plus flush. The other size is 1 s chunks (one call). The sweep varies the
 # chunk from 1 ms to 1 s over the same 1 s of audio.
 #
-# DEFK_RESULT lines (run_all.exs reads the first; the script checks both):
+# DEFK_RESULT lines (mix defk.examples reads the first; the script checks both):
 #   1. pcm_mix     10 ms chunks, the workload verdict, with NativeAdder as
 #                  `native`, the chunk-size sweep, and responsiveness
 #   2. pcm_mix_1s  1 s chunks
