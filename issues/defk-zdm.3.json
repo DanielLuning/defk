@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-zdm.4"
+  ],
   "created": "2026-10-13T18:06:03Z",
   "description": "One temp-module compile/reject helper (stable md5 name, returns :ok or the CompileError message) with codes/1 and whats/1; one kernel_c/2 (one way to read generated C: __defk_c_source__); G.pack instead of 17 i64s / 9 f64s copies; one wait_until; one env save/restore; Defk.Examples.parse_results for DEFK_RESULT. Add a min_yields: option to Defk.Test.assert_agrees (public test API - needs a maintainer decision) so ~22 files drop hand-rolled __defk_force_yields__ try/after blocks and five yield counters. Done when the copies are gone and the suite passes.",
   "id": "defk-zdm.3",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Shared test helpers in test/support, and assert_agrees min_yields:",
   "type": "task",
-  "updated_at": "2026-10-13T18:06:03Z"
+  "updated_at": "2026-10-13T18:06:04Z"
 }

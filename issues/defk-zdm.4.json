@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-zdm.3"
+  ],
   "blocks": [],
   "created": "2026-10-13T18:06:03Z",
   "description": "mix ci runs ex_dna --max-clones 0 on lib/ only (default paths: 30 files). mix ex_dna test finds 26 clones (21 exact, 5 renamed); some are kernel fixtures repeated on purpose. Add test/ to the ci alias (separate threshold or --ignore for intended fixtures), consider --literal-mode abstract and a lower --min-mass for helpers. Semantic duplicates stay a review concern. Done when a new copied helper in test/ fails mix ci.",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "CI gate for test drift: ex_dna over test/",
   "type": "task",
-  "updated_at": "2026-10-13T18:06:03Z"
+  "updated_at": "2026-10-13T18:06:04Z"
 }
