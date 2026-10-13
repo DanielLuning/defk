@@ -235,4 +235,118 @@ defmodule Defk.AgreementTest.Catalog do
     search: [args: fuzzy(16), deep: [args: fuzzy(200), max_runs: 1_000]],
     search_blocking: [args: fuzzy(16), deep: [args: fuzzy(200), max_runs: 1_000]]
   )
+
+  # --- gorilla_encode, lz4_snappy_decode, hashes, hll_update_many, cosine_topk
+  # (defk-30c.2). Their arguments come from Defk.CatalogGenerators: the stock
+  # generators draw noise that the kernels reject at the first check, or sizes
+  # that make a run last minutes.
+
+  alias Defk.CatalogGenerators, as: CG
+
+  agreement(Gorilla.Kernels,
+    streams: [
+      args: CG.gorilla_points(30),
+      deep: [args: CG.gorilla_points(2100), max_runs: 300]
+    ]
+  )
+
+  # Snappy and LZ4 streams are built in Elixir (valid, then mutated), plus
+  # arbitrary bytes for the raise paths
+  agreement(LzSnappy.Kernels,
+    snappy_decode: [
+      args:
+        frequency([
+          {9, fixed_list([CG.snappy_stream()])},
+          {1, fixed_list([G.array(:u8, strip: false)])}
+        ]),
+      deep: [max_runs: 2_000]
+    ],
+    lz4_block_decode: [
+      args:
+        frequency([
+          {9, CG.lz4_args()},
+          {1, fixed_list([G.array(:u8, strip: false), integer(-2..100)])}
+        ]),
+      deep: [max_runs: 2_000]
+    ],
+    ext_len: [args: CG.ext_len_args()]
+  )
+
+  defp words, do: G.i64()
+  defp rot_args, do: fixed_list([words()])
+
+  agreement(Hashes.Kernels,
+    rotl1: [args: rot_args()],
+    rotl7: [args: rot_args()],
+    rotl11: [args: rot_args()],
+    rotl12: [args: rot_args()],
+    rotl13: [args: rot_args()],
+    rotl16: [args: rot_args()],
+    rotl17: [args: rot_args()],
+    rotl18: [args: rot_args()],
+    rotl21: [args: rot_args()],
+    rotl23: [args: rot_args()],
+    rotl27: [args: rot_args()],
+    rotl31: [args: rot_args()],
+    rotl32: [args: rot_args()],
+    rotl33: [args: rot_args()],
+    shr29: [args: rot_args()],
+    shr32: [args: rot_args()],
+    shr33: [args: rot_args()],
+    fmix64: [args: rot_args()],
+    xround: [args: fixed_list([words(), words()])],
+    xmerge: [args: fixed_list([words(), words()])],
+    crc_byte: [args: fixed_list([words(), integer(-1..4)])],
+    crc_shift: [args: rot_args()],
+    crc_t: [args: fixed_list([integer(-1..8), words()])],
+    crc_word: [
+      args:
+        bind(CG.window(40), fn b ->
+          fixed_list([constant(b), integer(-1..(byte_size(b) + 1))])
+        end)
+    ],
+    le_bytes: [
+      args:
+        bind(CG.window(24), fn b ->
+          fixed_list([
+            constant(b),
+            integer(-1..(byte_size(b) + 1)),
+            integer(-1..(byte_size(b) + 1))
+          ])
+        end)
+    ],
+    xxh64_at: [args: CG.at_args(100, [words()])],
+    xxh64: [args: fixed_list([CG.window(100), words()])],
+    xxh64_batch: [args: CG.batch_args(100, [words()])],
+    murmur3_batch: [args: CG.batch_args(60, [words()])],
+    murmur3_128: [args: fixed_list([CG.window(60), words()])],
+    siphash24_at: [args: CG.at_args(60, [words(), words()])],
+    siphash24: [args: fixed_list([CG.window(60), words(), words()])],
+    siphash24_batch: [args: CG.batch_args(60, [words(), words()])],
+    crc32c_at: [
+      args:
+        frequency([
+          {9, CG.at_args(100)},
+          {1,
+           bind(
+             CG.long_window(),
+             &fixed_list([constant(&1), integer(0..64), integer(6144..6200)])
+           )}
+        ]),
+      max_runs: 100
+    ],
+    crc32c: [
+      args: frequency([{9, fixed_list([CG.window(100)])}, {1, fixed_list([CG.long_window()])}])
+    ],
+    crc32c_batch: [args: CG.batch_args(100)],
+    crc32c_s8: [
+      args: frequency([{9, fixed_list([CG.window(100)])}, {1, fixed_list([CG.long_window()])}])
+    ]
+  )
+
+  agreement(Hll.Kernels, update_many: [args: CG.hll_args()])
+
+  agreement(Cosine.Kernels,
+    topk: [args: CG.cosine_args(6), deep: [args: CG.cosine_args(40), max_runs: 300]]
+  )
 end
