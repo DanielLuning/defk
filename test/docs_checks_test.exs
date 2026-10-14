@@ -26,9 +26,10 @@ defmodule Defk.DocsChecksTest do
   # ----------------------------------------------------------------- links --
 
   describe "links" do
+    # docs/performance.md is not an extra, but the extras link it
     test "every relative link in an extra resolves to a file and, where it names one, a heading" do
       broken =
-        for page <- LanguageDoc.extras(),
+        for page <- LanguageDoc.extras() ++ ["docs/performance.md"],
             target <- page |> File.read!() |> LanguageDoc.links(),
             reason = broken_link(page, target),
             do: "#{page}: (#{target}) #{reason}"
