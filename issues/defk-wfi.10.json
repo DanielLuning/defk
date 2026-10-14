@@ -9,9 +9,15 @@
   "id": "defk-wfi.10",
   "labels": [],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution: fixed, merged to main.\n- Cause: clang off macOS does not link a sanitizer runtime into a shared object, so the kernel library had undefined __ubsan_* (or __asan_*) symbols. The address test hid it for ASan: clang -print-file-name=libasan.so finds gcc's libasan.so, which the test preloaded and which filled the symbols.\n- Fix (lib/defk/build.ex, sanitize_flags/1): for clang off macOS and the address or undefined mode, add -shared-libsan and -Wl,-rpath,\u003cclang's runtime dir\u003e (from -print-libgcc-file-name --rtlib=compiler-rt; the loader does not search it). The flags are part of the cache key, so an old library is not reused.\n- Test: the address test now preloads the compiler's own runtime (libclang_rt.asan-\u003carch\u003e.so for clang, libasan.so for gcc): two ASan runtimes in one process abort ('Shadow memory range interleaves').\n- CI image: ci/setup-debian.sh installs llvm, for llvm-symbolizer on the PATH; without it clang's ASan reports have no function names (addr2line as the symbolizer hung on the BEAM binary).\n- Results: sanitize_test --include sanitize 14/14 on Linux aarch64 with clang and with gcc, and on macOS. macOS mix ci 1736/1736. Not run: x86-64 with --include sanitize (Rosetta; the :sanitize tests are excluded in CI).",
+      "timestamp": "2026-10-14T17:03:07Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "[BUG] Sanitizer undefined mode with clang on Linux: the kernel library does not load",
   "type": "bug",
-  "updated_at": "2026-10-14T16:43:23Z"
+  "updated_at": "2026-10-14T17:03:07Z"
 }
