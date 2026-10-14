@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-14T07:27:52Z",
+  "description": "Why: several examples have a crossover (ws_masking: 1 KiB; codecs, Snappy, per-call SAT) below which the optimised Elixir is as fast or faster than the kernel. A caller can switch by data today with one function clause, but no guide shows it. Discussed after the verdict (defk-sgw.6, 2026-10-14): no automatic switch in defk; document the user-side pattern.\n\nNote: the crossover in Defk.Bench is 'first size where defk is \u003e= 2x the optimised Elixir', not the break-even point, and the fast Elixir below it is the hand-written baseline (often another algorithm or a BIF), not the kernel's Elixir mode.\n\nScope:\n1. A section in docs/guides/measuring.md (or getting-started.md, whichever reads better): a guard clause such as\n   def mask(frame) when byte_size(frame) \u003c 1024, do: mask_elixir(frame)\n   def mask(frame), do: Kernels.mask(frame)\n   How to pick the threshold (a sweep on the target machine, a wide margin, thresholds move with machine and load), and that the Elixir clause needs an agreement test against the kernel (Defk.Test.assert_agrees or a property over both functions).\n2. Point at ws_masking as the worked case.\n3. HexDocs page: no ticket or ADR references (user-facing extra).\n\nDone when: the section exists, its code example runs in the docs checks, and mix ci is green.",
+  "id": "defk-vcx.1",
+  "labels": [],
+  "parent": "defk-vcx",
+  "priority": 3,
+  "status": "open",
+  "title": "Guide: call a kernel only above a size, with an Elixir clause below it",
+  "type": "task",
+  "updated_at": "2026-10-14T07:27:52Z"
+}
