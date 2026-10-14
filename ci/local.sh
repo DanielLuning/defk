@@ -34,7 +34,14 @@ rc=0
 for label in "${labels[@]}"; do
   grep -qx "$label" <<<"$all_labels" || { echo "unknown label: $label (known: $(echo $all_labels))" >&2; exit 2; }
   arch=${label#linux-}; arch=${arch%-*}; cc=${label##*-}
-  case $arch in x86_64) platform=linux/amd64 ;; aarch64) platform=linux/arm64 ;; *) echo "unknown arch: $arch" >&2; exit 2 ;; esac
+  # Rosetta cannot run the JIT's double-mapped code memory: the BEAM dies at
+  # boot (prim_tty: erlang:nif_error/1 undef) unless it maps it once
+  erl_flags=
+  case $arch in
+    x86_64) platform=linux/amd64 erl_flags="+JMsingle true" ;;
+    aarch64) platform=linux/arm64 ;;
+    *) echo "unknown arch: $arch" >&2; exit 2 ;;
+  esac
   image=defk-ci:$arch
 
   echo "== $label ($platform, CC=$cc)"
@@ -44,7 +51,7 @@ for label in "${labels[@]}"; do
     -v "$repo":/src:ro \
     -v "defk-ci-$label-deps":/work/deps -v "defk-ci-$label-build":/work/_build \
     -v "$repo/tmp/ci-result":/out \
-    -e CC="$cc" -e CI_PATH=podman -e CI_COMMIT="$commit" -e CI_DIRTY="$dirty" \
+    -e CC="$cc" -e CI_PATH=podman -e ERL_FLAGS="$erl_flags" -e CI_COMMIT="$commit" -e CI_DIRTY="$dirty" \
     "$image" bash -c '
       tar -C /src --null --ignore-failed-read -T /out/.files -cf - 2>/dev/null | tar -C /work -xf -
       cd /work && git init -q && git add -A &&

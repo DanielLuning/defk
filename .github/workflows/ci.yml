@@ -34,6 +34,8 @@ jobs:
       # .git, and the tests that read `git ls-files` fail
       - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
       - uses: actions/checkout@v7
+      # the workspace belongs to the runner's user, the job runs as root
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: ci/setup-debian.sh
       # act runs JavaScript actions inside the job container, which has no node
       - uses: actions/cache@v6

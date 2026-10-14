@@ -34,7 +34,8 @@ podman's works:
 brew install act
 export DOCKER_HOST=unix://$(podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}')
 act -j linux --matrix label:linux-aarch64-clang --container-architecture linux/arm64
-act -j linux --matrix label:linux-x86_64-gcc --container-architecture linux/amd64
+act -j linux --matrix label:linux-x86_64-gcc --container-architecture linux/amd64 \
+  --env ERL_FLAGS="+JMsingle true"
 ```
 
 Run act from a normal clone, not from a git worktree: act copies the
@@ -59,15 +60,28 @@ ci/local.sh                        # every Linux label
 ci/local.sh linux-x86_64-clang     # one label
 ```
 
-On Apple silicon arm64 runs natively and x86-64 runs under emulation:
-correct but slow, so never use an emulated run for timing.
+On Apple silicon arm64 runs natively and x86-64 runs under emulation,
+which must be Rosetta, not qemu:
+
+- Turn on Rosetta once: put `[machine]` / `rosetta = true` in
+  `~/.config/containers/containers.conf`, then `podman machine stop` and
+  `podman machine start`. `podman machine ssh -- ls /proc/sys/fs/binfmt_misc/`
+  then lists `rosetta` and no `qemu-x86_64`.
+- Under qemu the BEAM crashes in the test run (`qemu: uncaught target
+  signal 11`), and the failures do not match real hardware.
+- Under Rosetta the BEAM needs `+JMsingle true` (the JIT maps its code
+  memory once); without it, it dies at boot in `prim_tty`. `ci/local.sh`
+  sets it for the x86-64 labels; for act, pass it with `--env`.
+
+On 2026-10-14 the Rosetta runs gave the same failures as native x86-64 on
+GitHub, test for test. Emulated runs are still slow, so never use one for
+timing.
 
 ## Release evidence
 
 A release commit needs one passing run of every label, from any path. The
 result files are the evidence: each must say `result: pass`, name the
-release commit, and say `uncommitted changes: no` (a GitHub run says
-`unknown`, as its checkout has no `.git`; the commit is `GITHUB_SHA`).
+release commit, and say `uncommitted changes: no`.
 
 Valgrind (`verify/valgrind`) and the measurement run (`examples/run_all.exs`)
 are not part of CI. They run by hand at release time.
