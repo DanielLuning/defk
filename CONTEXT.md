@@ -15,6 +15,10 @@ _Avoid_: defk language, DSL
 **Runtime contract**:
 What a kernel promises the BEAM while it runs: preemption, isolation, cleanup on process death, and hot code upgrade. Its purpose is that a kernel can never starve or crash the BEAM: for any arguments it returns or raises, other processes keep running, and a crashing process takes only itself down. A kernel that can't keep this is worse than a port, however fast it is.
 
+**Stability promise**:
+The written guarantee, from `0.1.0`, about four surfaces: the kernel subset, the runtime contract, the public API and the error codes. Within a major version, a valid kernel keeps compiling and keeps its meaning, and a change to these surfaces needs a deprecation. New constructs are allowed: code that was a compile error may become a valid kernel.
+_Avoid_: API stability, compatibility guarantee
+
 **Contained fault**:
 A hardware fault (segmentation fault, bus error, illegal instruction, arithmetic fault) inside a kernel's own native code while the kernel runs, which the runtime turns into a `RuntimeError` in the calling process instead of a node crash. It is a defk bug by definition, never a limit: a kernel cannot fault by construction. A fault anywhere else (the VM, the C library, a kernel library outside a call) is not contained and kills the node as any NIF crash does.
 _Avoid_: caught crash, trapped segfault
