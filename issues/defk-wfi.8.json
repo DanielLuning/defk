@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-wfi.6"
+  ],
   "created": "2026-10-14T13:53:57Z",
   "description": "Found by the dual CI (defk-wfi.2), 2026-10-14. Seen under qemu x86-64 emulation (podman on Apple silicon); confirm on native x86-64 (GitHub Actions linux-x86_64-gcc) first.\n\nProblem: with CC=gcc on x86-64, when two checks in one statement can fail, the native kernel raises a different error from Elixir mode. Elixir's order is the specified one (test: 'an expression checked once raises the first error in Elixir's order'), so this breaks agreement (the one rule).\n\nEvidence, mix test test/non_finite_test.exs --seed 0, image hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713 + ci/setup-debian.sh:\n- x86-64 clang 19.1.7: 63/63 pass.\n- x86-64 gcc 14.2.0: 5 fail: 'an expression checked once raises the first error in Elixir's order', and the agreement properties of overflow_then_read, read_then_overflow, scatter, shifted_sum. Example: scatter (out[ix[i] * k] = a[i] * 2.0) native raised :non_finite_input, Elixir mode raised :overflow on ix[i] * k. read_then_overflow goes the other way, so it is not one fixed side-first order.\n- aarch64 gcc 14.2.0 (native): the full suite's 755 properties pass.\n\nSuspects: generated C that leaves the order of two checks unsequenced (C does not order the operands of = or of most operators), or gcc on x86-64 moving a check flag past another (the strip's flagged runs, defk-hki). Compare the generated C (mix dump_c) and gcc -O3 output for scatter on x86-64 and aarch64.\n\nDone when: the five tests pass with gcc on native x86-64, and the generated C sequences every pair of checks explicitly.",
   "id": "defk-wfi.8",
