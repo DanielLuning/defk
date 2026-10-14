@@ -1,0 +1,4 @@
+# gitleaks false positives. Fingerprint format: <commit>:<file>:<rule>:<line>.
+# examples/hashes.exs: sip_key is a fixed SipHash test key, not a credential.
+9ca06cc823479ac99b6a02bc5b530c7d0dfb1aa2:examples/hashes.exs:generic-api-key:741
+examples/hashes.exs:generic-api-key:866
