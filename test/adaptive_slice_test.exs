@@ -53,11 +53,25 @@ defmodule Defk.AdaptiveSliceTest do
     end
   end
 
-  # n whose uncrowded call runs at least `us` microseconds
+  # n whose uncrowded call runs at least `us` microseconds: timed after a
+  # warm-up, as the fastest of three, so a cold call or one slowed by the OS
+  # does not pick an n whose later calls run far shorter
   defp calibrate(n, us) do
-    {t, _} = :timer.tc(fn -> K.__defk_native_spin__(n, 0) end)
+    K.__defk_native_spin__(n, 0)
+    t = Enum.min(for _ <- 1..3, do: elem(:timer.tc(fn -> K.__defk_native_spin__(n, 0) end), 0))
     if t >= us, do: n, else: calibrate(n * 2, us)
   end
+
+  # {yields, microseconds} of one call
+  defp timed_yields(fun) do
+    {t, {_, y}} = :timer.tc(fn -> yields(K, fun) end)
+    {y, t}
+  end
+
+  # The yields a call of t microseconds is due: one per 250 us, or for a
+  # crowded call one per 50 us in its first millisecond
+  defp due(:lone, t), do: t / 250
+  defp due(:crowded, t), do: min(t, 1000) / 50 + max(t - 1000, 0) / 250
 
   test "only a yielding kernel's NIF takes the run-queue hint" do
     assert function_exported?(K, :__defk_native_spin__, 2)
@@ -78,21 +92,24 @@ defmodule Defk.AdaptiveSliceTest do
 
   test "a crowded hint yields more often in the call's first millisecond" do
     n = calibrate(50_000, 1_500)
+    assert K.__defk_native_spin__(n, 0) == K.__defk_native_spin__(n, 5)
 
     pairs =
       for _ <- 1..5 do
-        {lone, y_lone} = yields(K, fn -> K.__defk_native_spin__(n, 0) end)
-        {crowded, y_crowded} = yields(K, fn -> K.__defk_native_spin__(n, 5) end)
-        assert lone == crowded
-        {y_lone, y_crowded}
+        {timed_yields(fn -> K.__defk_native_spin__(n, 0) end),
+         timed_yields(fn -> K.__defk_native_spin__(n, 5) end)}
       end
 
-    # a 1.5 ms call: ~6 yields at 250 us; 50 us for the first 1 ms adds ~16.
-    # Summed over five pairs, so one call slowed by the OS does not decide.
-    {lone, crowded} = Enum.unzip(pairs)
+    # Yields follow the clock, so the extra yields a crowded call is due come
+    # from how long each call really ran, not from the calibration: a faster
+    # or slower machine moves the expectation with it. At least half of what
+    # is due, summed over five pairs, so one call slowed by the OS does not
+    # decide (a 1.5 ms call is due about 16 extra).
+    got = Enum.sum(for {{yl, _}, {yc, _}} <- pairs, do: yc - yl)
+    due = Enum.sum(for {{_, tl}, {_, tc}} <- pairs, do: due(:crowded, tc) - due(:lone, tl))
 
-    assert Enum.sum(crowded) >= Enum.sum(lone) + 25,
-           "lone #{inspect(lone)}, crowded #{inspect(crowded)}"
+    assert due >= 10, "calls too short to tell: #{inspect(pairs)}"
+    assert got >= due / 2, "#{got} extra yields, #{Float.round(due, 1)} due: #{inspect(pairs)}"
   end
 
   test "the slice never changes a result, also under forced yields" do

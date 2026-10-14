@@ -74,14 +74,20 @@ which must be Rosetta, not qemu:
   sets it for the x86-64 labels; for act, pass it with `--env`.
 
 On 2026-10-14 the Rosetta runs gave the same failures as native x86-64 on
-GitHub, test for test. Emulated runs are still slow, so never use one for
-timing.
+GitHub, test for test. Later the same day one Rosetta run of the full suite
+gave `0.0` where native code gives `-0.0` (a branch clang compiles to
+`maxsd`, whose signed-zero rule Rosetta did not keep that once); it did not
+reproduce, and native runners pass. Emulated runs are still slow, so never
+use one for timing.
 
 ## Release evidence
 
 A release commit needs one passing run of every label, from any path. The
 result files are the evidence: each must say `result: pass`, name the
-release commit, and say `uncommitted changes: no`.
+release commit, and say `uncommitted changes: no`. An x86-64 label run under
+Rosetta counts only when it passes; a failure there is checked on native
+x86-64 (the GitHub workflow) before it is called a bug.
 
-Valgrind (`verify/valgrind`) and the measurement run (`examples/run_all.exs`)
-are not part of CI. They run by hand at release time.
+Valgrind (`verify/valgrind`) and the measurement run (`ci/measure.sh`, or
+`.github/workflows/measure.yml` on a native runner) are not part of CI.
+They run by hand at release time.
