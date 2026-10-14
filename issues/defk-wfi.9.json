@@ -11,9 +11,15 @@
     "needs-triage"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution: fixed in the tests, merged to main.\n- Decision: per-target assertions. dot's test now expects :vectorized with a width on arm64 and :missed with 'reorder floating-point' on x86-64. The moved-cache test needs only some {:vectorize, _, _} fact; its equality check already compares every fact.\n- No docs change: docs/performance.md 6.17 already records it (arm64 vectorises in-order float reductions as ordered reductions; x86-64 at SSE2/v2/v3/v4 does not). For the Linux measurement run (defk-a1p): float reductions like sum, dot and cosine stay scalar on x86-64; partial sums vectorise on both.\n- Results: report_test 17/17 on macOS, Linux x86-64 clang (Rosetta; the remarks are compile-time, so exact), Linux aarch64 clang. macOS mix ci 1736/1736.",
+      "timestamp": "2026-10-14T16:22:57Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Fast-path report tests expect arm64 vectorisation facts; x86-64 clang does not vectorise dot",
   "type": "bug",
-  "updated_at": "2026-10-14T16:18:58Z"
+  "updated_at": "2026-10-14T16:22:57Z"
 }
