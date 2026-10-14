@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-wfi.4"
@@ -15,5 +15,5 @@
   "status": "open",
   "title": "Rename review: the public tier, the options, the builtins, the error codes",
   "type": "task",
-  "updated_at": "2026-10-14T13:18:01Z"
+  "updated_at": "2026-10-14T18:19:51Z"
 }
