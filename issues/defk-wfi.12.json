@@ -4,6 +4,7 @@
   "blocks": [
     "defk-wfi.6"
   ],
+  "closed_at": "2026-10-14T20:33:50Z",
   "created": "2026-10-14T20:03:49Z",
   "description": "Found while applying the 0.1.0 renames (defk-wfi.11). A kernel's length(a) is the builtin: the element count of an array, in constant time. Lint checks that treat length/1 as a walk over a list flag it in kernel code, e.g. the ex_slop plugin's ExSlop.Check.Refactor.LengthComparison on length(xs) \u003e 3 (Credo's own checks on length comparisons may do the same).\n\nDo: one short note in docs/language.md where length/1 is described (and the cheatsheet if it fits): in a kernel, length/1 of an array is constant time; a linter that flags it as a list walk is wrong there; bind it to a variable or disable that check for the line. Check whether Credo's default checks (for example Credo.Check.Warning.ExpensiveEmptyEnumCheck) also flag length(a) == 0 in a kernel, and name them if they do. No ticket ids or ADR links in the note (HexDocs rule).\n\nDone when: the note is in the language reference, mix ci is green.",
   "id": "defk-wfi.12",
@@ -18,7 +19,7 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Note in the language reference: lint checks may flag length/1 in a kernel",
   "type": "task",
   "updated_at": "2026-10-14T20:33:50Z"
