@@ -13,9 +13,15 @@
     "wayfinder:task"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution: done, merged to main. docs/guides/stability.md is in the HexDocs guides, linked from the README, docs/guides/runtime-contract.md and CHANGELOG.md's version policy. ADR-0010 accepted. The maintainer approved the text and its six choices: R1 a raise keeps its exception module and agreement reason, not its message; R2 0 counts as a major version (0.y releases are compatible; only 1.0 removes deprecated names); R3 two bug exceptions named in CHANGELOG.md (a fix that makes a kernel agree with Elixir; a fix that rejects a kernel the compiler cannot compile correctly); R4 supported Elixir/OTP/C compiler versions are outside the promise, rises named in CHANGELOG.md; R5 DEFK_SANITIZE is unstable; R6 a deprecation keeps the old name working until the next major, with a compile-time warning and a CHANGELOG.md entry.",
+      "timestamp": "2026-10-14T19:45:21Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Write the stability promise",
   "type": "task",
-  "updated_at": "2026-10-14T19:36:18Z"
+  "updated_at": "2026-10-14T19:45:21Z"
 }
