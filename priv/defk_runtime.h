@@ -276,7 +276,14 @@ static inline void defk_owned_check(defk_ctx *ctx, size_t bytes) {
  * §1. A normal build compiles DEFK_POISON_SLACK to nothing.
  */
 #ifdef DEFK_SANITIZE_ADDRESS
+/* gcc ships no allocator_interface.h, but its libasan exports the two
+ * functions (defk-wfi.7); the declarations are compiler-rt's */
+#if __has_include(<sanitizer/allocator_interface.h>)
 #include <sanitizer/allocator_interface.h>
+#else
+int __sanitizer_get_ownership(const volatile void *p);
+size_t __sanitizer_get_allocated_size(const volatile void *p);
+#endif
 #include <sanitizer/asan_interface.h>
 static void defk_poison_slack(const ErlNifBinary *b) {
   const char *chunk = (const char *)b->ref_bin;
