@@ -20,11 +20,15 @@
     {
       "text": "Expansion candidate 'kernel-owned resources' from ADR-0001 now has its exploration plan: epic defk-sve, with the exploration/probably-not line stated in its description.",
       "timestamp": "2026-10-09T19:47:44Z"
+    },
+    {
+      "text": "Closed by defk-sgw.6 (2026-10-14): verdict accepted, outcome go with no Hex release yet. Successor map: defk-wfi.",
+      "timestamp": "2026-10-14T06:05:55Z"
     }
   ],
   "priority": 1,
   "status": "open",
   "title": "Wayfinder: roadmap to a defk verdict (kernel subset, runtime contract, devex)",
   "type": "epic",
-  "updated_at": "2026-10-09T19:47:44Z"
+  "updated_at": "2026-10-14T06:05:55Z"
 }
