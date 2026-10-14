@@ -99,7 +99,9 @@ or NaN raises too. [Expressions](../language.md#4-expressions-and-operators)
 
 ### Builtins
 
-- `length`, `min`, `max`, `abs`
+- `length`, `min`, `max`, `abs` (`length(a)` of an array is constant time;
+  Credo warns on `length(a) == 0` as if it were a list: write
+  `n = length(a)` first; see [Builtins](../language.md#builtins))
 - `float`, `trunc`, `round`
 - `sqrt`, `exp`, `log`, `log2`, `log10`, `sin`, `cos`, `pow` (also `:math.sqrt/1`,
   `:math.log2/1` ...), bit for bit what `:math` gives

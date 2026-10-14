@@ -579,6 +579,15 @@ the kernel (`my_copy_back/4`). The same name at an arity the builtin does not ta
 `byte_size/1` and `tuple_size/1` are
 [`undefined-function`](compile-errors.md#undefined-function) with the hint to use `length/1`.
 
+**Linters and `length/1`.** In a kernel, `length(a)` reads the length the
+array carries; it does not walk anything. Linters read it as Elixir's
+`length/1` on a list. Credo's `Credo.Check.Warning.ExpensiveEmptyEnumCheck`
+warns on `length(a) == 0` and `length(a) > 0`, and `ex_slop`'s
+`ExSlop.Check.Refactor.LengthComparison` on any comparison of `length(a)`
+with a literal. Neither applies to a kernel. Bind the length first
+(`n = length(a)`, then `n == 0`), which neither check flags, or disable the
+check for that line with a `# credo:disable-for-next-line` comment naming it.
+
 Other `:math` functions are written from the builtins, or computed in
 Elixir. `log2` and `log10` call the same libm function as `:math.log2/1` and
 `:math.log10/1`, so they agree with `:math` bit for bit (not so
