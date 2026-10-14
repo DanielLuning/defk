@@ -344,16 +344,27 @@ docs. Full log, with the resolution of each point:
 What the evidence does not cover, what defk does not do, and what would
 change the verdict.
 
-**One machine.** Every figure is an Apple M4 Pro on macOS (arm64, Apple
-clang). The test suite has run on Linux once, inside a Debian container for
-the release build; x86-64 kernels have been compiled and checked, not timed
-(`defk-ulk.1`, `defk-ulk.4`); the fault handler's unload path has an
-untested branch on Linux (`defk-a1p`). A Linux run with different speedups
-or a failing test would move rows and could move the conclusion.
+**One machine for the snapshot.** Every figure in the snapshot is an Apple
+M4 Pro on macOS (arm64, Apple clang). Checked since (`defk-a1p`, after the
+verdict):
 
-**No spread.** The snapshot keeps the best of five runs per side and records
-no spread (`Defk.Bench.report/1` keeps the minimum only), so it falls short
-of the evidence bar's "best of N with spread"; see [Method](#method).
+- The test suite passes on every change on Linux x86-64 with clang and with
+  gcc, Linux arm64 with clang, and macOS arm64 (`ci/README.md`), the fault
+  handler's unload path included. The first Linux runs found four bugs,
+  all fixed (`defk-wfi.7` to `defk-wfi.10`).
+- The catalog was timed once on Linux x86-64, on a shared 2-vCPU runner
+  (`docs/performance.md` 6.31): 29 of 31 examples kept their verdicts, and
+  two improved (`hash_chain` poor to marginal; `batched_levenshtein`
+  marginal to good, on a word list a third the size). No row got worse.
+
+Not checked: timings on a quiet Linux machine with more cores, musl
+(Alpine), macOS on x86-64, Windows, and cross-compiling.
+
+**No spread in the snapshot.** The snapshot keeps the best of five runs per
+side and records no spread, so it falls short of the evidence bar's "best
+of N with spread"; see [Method](#method). `Defk.Bench.report/1` now records
+each side's median and slowest run (`defk-a1p`), so the next snapshot will
+meet it.
 
 **A C compiler at build time.** Settled for applications (`defk-dtw.11`):
 as for elixir_make packages, the build machine needs `cc` (`gcc libc6-dev`
