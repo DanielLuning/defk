@@ -233,6 +233,5 @@ they would in Elixir (native code ignores them), and
 that way.
 
 To check that a hot loop stays fast, not only correct, a test can assert on
-`Mod.__defk_report__/0`, the
-[fast-path report](https://github.com/DanielLuning/defk/blob/main/docs/fast-path-report.md)
-as data: which bounds checks were dropped, which loops vectorised.
+`Mod.__defk_report__/0`, the fast-path report (`Defk.Report`) as data:
+which bounds checks were dropped, which loops vectorised.

@@ -2,14 +2,9 @@
 
 defk exists to help Elixir, not to beat it. Before you use a kernel, measure
 whether it helps, and be ready for the answer to be "use Elixir". This guide
-is the workflow; the rules and the evidence behind them live in two places it
-links to:
-
-- [examples/README.md, "Measuring correctly"](https://github.com/DanielLuning/defk/blob/main/examples/README.md#measuring-correctly)
-  has the rules and the verdict table the project's example catalog uses.
-- [Performance on the BEAM](https://github.com/DanielLuning/defk/blob/main/docs/performance.md) collects what has been
-  measured so far: fast and slow Elixir spellings, BIFs that are already
-  native, schedulers, the cost of a call, and what makes a kernel fast.
+is the workflow. The rules the project's own example catalog follows, with
+its verdict table, are in
+[examples/README.md, "Measuring correctly"](https://github.com/DanielLuning/defk/blob/main/examples/README.md#measuring-correctly).
 
 ## The question
 
@@ -31,14 +26,11 @@ time the kernel:
 
 - try the standard library, Erlang BIFs and modules (`:binary`, `:crypto`,
   `:erlang.crc32/1`, ETS, `:atomics`) and established libraries: many byte
-  and number jobs are already native in OTP
-  ([section 3](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#3-bifs-and-otp-libraries-that-are-already-native));
-- try a better data layout or algorithm, and give the kernel the same one;
-- look up the job's kind in
-  [Fast Elixir on binaries and numbers](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#2-fast-elixir-on-binaries-and-numbers):
-  counting bytes, for instance, is "2.16 Counting bytes" there (16-bit
-  pairs into `:atomics`, not a map), and counting keys "2.12 Dense
-  counters";
+  and number jobs are already native in OTP (`:binary.match/2`, `:crypto`,
+  `:erlang.crc32/1`, `:unicode.characters_to_binary/1` for UTF-8);
+- try a better data layout or algorithm, and give the kernel the same one:
+  counting bytes, for instance, is fastest in Elixir as 16-bit pairs into
+  `:atomics`, not a map;
 - time the alternatives instead of assuming which is fastest, and write down
   what you tried.
 
@@ -56,22 +48,19 @@ is the kernel's meaning in Elixir, not the best Elixir solution.
 ## 3. Measure end to end, from the data the caller has
 
 - If the data arrives as a list, packing it into a binary is part of the
-  kernel's cost. It often costs more than the kernel
-  ([section 5](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#5-the-nif-boundary)).
+  kernel's cost. It often costs more than the kernel.
 - A call costs tens of nanoseconds or more. One kernel call per element
   inside `Enum.map/2` loses; batch the work into one call.
 - Keep shared data where a real application keeps it (`:persistent_term`,
   ETS), not on the benchmark process's heap, where garbage collection
-  inflates the Elixir time
-  ([section 1](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#1-measuring-honestly)).
+  inflates the Elixir time.
 - Compare like with like: one process against one call, or both sides split
   over all schedulers ([below](#comparing-over-all-schedulers)). Elixir
   split over a machine's schedulers often closes much of a one-call gap, so
   report both when the job could run in parallel.
 - When you split a kernel over schedulers, give each call a few milliseconds
   of work. Kernel calls shorter than about 1 ms started from
-  `Task.async_stream/3` stay on a few schedulers
-  ([section 4](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#4-parallelism-and-schedulers)).
+  `Task.async_stream/3` stay on a few schedulers.
 
 ## 4. A measuring script
 
@@ -200,9 +189,7 @@ Both sides add the partial sums in the same order, so they agree exactly
 (a split sum can differ from the one-call sum in the last bits). Give each
 chunk a few milliseconds of work at your real input size: kernel calls much
 shorter than that may stay on a few schedulers, so a
-small input understates what the kernel can do in parallel. What helps, and
-what Elixir gains from chunking, is in
-[Parallelism and schedulers](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#4-parallelism-and-schedulers).
+small input understates what the kernel can do in parallel.
 
 ## 5. Explain the number
 
@@ -210,13 +197,4 @@ When a kernel is slower than you expect, `Defk.Report.print(Mod)` prints
 each kernel's source with notes on what the compiler did to the hot path:
 which bounds checks stayed and why, which branches became selects, where the
 safepoints and copies are, and (with `use Defk, report: :full`) which loops
-the C compiler vectorised. See the
-[fast-path report](https://github.com/DanielLuning/defk/blob/main/docs/fast-path-report.md)
-and [Making a defk kernel fast](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#6-making-a-defk-kernel-fast).
-
-## 6. Record what you learned
-
-If you work on defk itself, add what a measurement taught you, including
-what didn't help, to [Performance on the BEAM](https://github.com/DanielLuning/defk/blob/main/docs/performance.md), with the
-numbers, the conditions (mark runs on a loaded machine provisional) and the
-source.
+the C compiler vectorised. `Defk.Report` describes each note.
