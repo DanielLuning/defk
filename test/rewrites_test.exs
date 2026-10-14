@@ -9,7 +9,7 @@ defmodule Defk.RewritesTest do
 
   alias Defk.Errors.Rewrites
 
-  @registered Enum.map(Defk.Errors.codes(), & &1.code)
+  @registered Enum.map(Defk.Errors.entries(), & &1.code)
 
   # a corpus across the call_rejection table and the construct rejections
   defp corpus do

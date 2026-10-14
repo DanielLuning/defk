@@ -100,7 +100,7 @@ defmodule Defk.RaiseTest.K do
   end
 
   defk in_reduce_while(a :: [i64]) :: i64 do
-    Enum.reduce_while(0..(len(a) - 1)//1, 0, fn i, acc ->
+    Enum.reduce_while(0..(length(a) - 1)//1, 0, fn i, acc ->
       if a[i] < 0, do: raise(ArgumentError, "negative element")
       if a[i] == 0, do: {:halt, acc}, else: {:cont, acc + a[i]}
     end)
@@ -257,7 +257,7 @@ defmodule Defk.RaiseTest do
       msg =
         compile_error("""
         defk f(a :: [i64]) :: i64 do
-          Enum.reduce_while(0..(len(a) - 1)//1, 0, fn i, acc ->
+          Enum.reduce_while(0..(length(a) - 1)//1, 0, fn i, acc ->
             if a[i] < 0, do: raise(ArgumentError, "no"), else: {:cont, acc + a[i]}
           end)
         end

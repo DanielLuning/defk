@@ -209,7 +209,7 @@ defmodule Gorilla.Kernels do
   # interleaved: p[2i] is timestamp i, p[2i + 1] the bits of value i (the
   # f64 read as an i64). Returns {bits, ts_bit_len, val_bit_len}.
   defk streams(p :: [i64]) :: {bitstring, i64, i64} do
-    n = div(len(p), 2)
+    n = div(length(p), 2)
     t0 = p[0]
     acc = <<>>
     acc = <<acc::bitstring, t0::64-signed>>

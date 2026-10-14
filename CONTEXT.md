@@ -57,7 +57,7 @@ A kernel local built only by appending integer segments, `acc = <<acc::bitstring
 _Avoid_: bit buffer, bit writer, growable output
 
 **Builtin**:
-A function the kernel subset ships (`len/1`, `clz/1`, `copy/5`, …), callable in a kernel without being defined there. Its typing and meaning are part of the kernel subset.
+A function the kernel subset ships (`length/1`, `clz/1`, `copy/5`, …), callable in a kernel without being defined there. Its typing and meaning are part of the kernel subset.
 _Avoid_: intrinsic, stdlib function
 
 **Raising guard**:

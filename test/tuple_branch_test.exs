@@ -104,7 +104,8 @@ defmodule Defk.TupleBranchTest.K do
         acc -> <<acc::bitstring, band(x, 1)::1>>
       end
 
-    if len(xs) > 3, do: {<<>>, 0}, else: {acc, bit_size(acc)}
+    n = length(xs)
+    if n > 3, do: {<<>>, 0}, else: {acc, bit_size(acc)}
   end
 end
 

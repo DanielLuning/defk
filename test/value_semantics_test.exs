@@ -29,7 +29,7 @@ defmodule Defk.ValueSemanticsTest.K do
   defk snapshot_loop(a :: [i64]) :: {i64, i64} do
     b = a
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       a[i] = band(a[i], 0xFFFF) * 2
     end
 
@@ -49,7 +49,7 @@ defmodule Defk.ValueSemanticsTest.K do
   end
 
   defk write_input_loop(a :: [f64]) :: [f64] do
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       a[i] = a[i] * 0.5
     end
 
@@ -67,7 +67,7 @@ defmodule Defk.ValueSemanticsTest.K do
 
   # HyperLogLog-style register update of an input array, no manual alloc+copy
   defk hll_update(regs :: [u8], idx :: [i64], ranks :: [i64]) :: [u8] do
-    for k <- 0..(min(len(idx), len(ranks)) - 1)//1 do
+    for k <- 0..(min(length(idx), length(ranks)) - 1)//1 do
       j = idx[k]
       regs[j] = max(regs[j], ranks[k])
     end
@@ -123,11 +123,11 @@ defmodule Defk.ValueSemanticsTest.K do
 
   # a helper writes its parameter and returns it
   defk fill(out :: [i64], v :: i64) :: {[i64], i64} do
-    for j <- 0..(len(out) - 1)//1 do
+    for j <- 0..(length(out) - 1)//1 do
       out[j] = v
     end
 
-    {out, len(out)}
+    {out, length(out)}
   end
 
   # the caller rebinds the result: the helper writes in place, no copy
@@ -183,7 +183,7 @@ defmodule Defk.ValueSemanticsTest.K do
   defk branch_in_loop(a :: [i64], c :: i64) :: {[i64], i64} do
     b = a
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       if rem(i, 2) == c do
         a[i] = -1
       end
@@ -583,7 +583,7 @@ defmodule Defk.ValueSemanticsTest.K do
 
     for _ <- 0..r//1, reduce: st0 do
       st ->
-        for k <- 0..(len(st) - 1)//1, reduce: st do
+        for k <- 0..(length(st) - 1)//1, reduce: st do
           st ->
             st[k] = st[k] + k
             st
@@ -750,7 +750,7 @@ defmodule Defk.ValueSemanticsTest.K do
   defk rebind_reduce(a :: [i64]) :: {[i64], [i64]} do
     mem = alloc(i64, 16)
 
-    for k <- 0..(min(len(a), 16) - 1)//1 do
+    for k <- 0..(min(length(a), 16) - 1)//1 do
       mem[k] = a[k]
     end
 
@@ -1141,7 +1141,7 @@ defmodule Defk.ValueSemanticsTest do
       msg =
         compile(__MODULE__, """
           defk fresh(a :: [i64]) :: [i64] do
-            b = alloc(i64, len(a))
+            b = alloc(i64, length(a))
             b[0] = a[0]
             b
           end

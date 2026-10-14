@@ -1,8 +1,8 @@
 # Range facts for constant multiples and quotients of array lengths
-# (defk-upc). In a hex encoder, out = alloc(u8, 2 * len(s)) and
-# out[2 * i], out[2 * i + 1] for i <= len(s) - 1: the facts on `2 * i`
-# relate it to 2 * len(s), the length of out records the same multiple, and
-# the index needs no bounds check. The hex decoder's div(len(s), 2) gives
+# (defk-upc). In a hex encoder, out = alloc(u8, 2 * length(s)) and
+# out[2 * i], out[2 * i + 1] for i <= length(s) - 1: the facts on `2 * i`
+# relate it to 2 * length(s), the length of out records the same multiple, and
+# the index needs no bounds check. The hex decoder's div(length(s), 2) gives
 # the reverse. A product or sum whose operands' facts bound it inside i64
 # (array lengths are below 2^61) needs no overflow check.
 #
@@ -24,7 +24,7 @@ defmodule Defk.ScaledFactsTest.K do
                  )>>
 
   defk encode16(s :: [u8]) :: [u8] do
-    n = len(s)
+    n = length(s)
     out = alloc(u8, 2 * n)
 
     for i <- 0..(n - 1)//1 do
@@ -37,7 +37,7 @@ defmodule Defk.ScaledFactsTest.K do
   end
 
   defk decode16(s :: [u8]) :: [u8] do
-    n = len(s)
+    n = length(s)
     _ = alloc(u8, if(rem(n, 2) == 0, do: 0, else: -1))
     m = div(n, 2)
     out = alloc(u8, m)
@@ -58,21 +58,21 @@ defmodule Defk.ScaledFactsTest.K do
   # three i64 per input element, one more at the end; the multiple on the
   # right, and with an offset
   defk spread3(a :: [i64]) :: [i64] do
-    out = alloc(i64, len(a) * 3 + 1)
+    out = alloc(i64, length(a) * 3 + 1)
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i * 3] = a[i]
       out[3 * i + 1] = a[i] * 2
       out[3 * i + 2] = 0
     end
 
-    out[3 * len(a)] = len(a)
+    out[3 * length(a)] = length(a)
     out
   end
 
   # every other element, from a quotient of the length
   defk evens(a :: [i64]) :: [i64] do
-    h = div(len(a) + 1, 2)
+    h = div(length(a) + 1, 2)
     out = alloc(i64, h)
 
     for i <- 0..(h - 1)//1 do
@@ -186,7 +186,7 @@ defmodule Defk.ScaledFactsTest do
   # ------------------------------------------------------ soundness --
 
   # a kernel writing out[idx] for i in 0..last, out = alloc(u8, size); size
-  # is an expression of len(a), last of len(a) or len(out), idx of i
+  # is an expression of length(a), last of length(a) or length(out), idx of i
   defp kernel(size, last, idx) do
     body =
       quote do
@@ -238,13 +238,13 @@ defmodule Defk.ScaledFactsTest do
        &[p * &1, p * &1 + c, div(p * &1 + c, q)]}
 
   # {size, last, idx, base}: each an {ast, ops} shape; base is :a when
-  # last is an expression of len(a), :out when of len(out)
+  # last is an expression of length(a), :out when of length(out)
   defp probe do
     StreamData.bind(StreamData.member_of([:a, :a, :out]), fn base ->
-      x = if base == :a, do: quote(do: len(a)), else: quote(do: len(out))
+      x = if base == :a, do: quote(do: length(a)), else: quote(do: length(out))
 
       StreamData.tuple({
-        shape(quote(do: len(a)), -3..7),
+        shape(quote(do: length(a)), -3..7),
         shape(x, -7..2),
         shape(quote(do: i), -3..4),
         StreamData.constant(base)
@@ -258,7 +258,7 @@ defmodule Defk.ScaledFactsTest do
 
   defp fits?(ops), do: Enum.all?(ops, &(&1 >= @i64_min and &1 <= @i64_max))
 
-  # every len(a) whose alloc succeeds: {len(a), len(out), last's operations}
+  # every length(a) whose alloc succeeds: {length(a), length(out), last's operations}
   defp lengths(size_v, last_v, base) do
     for l <- @lengths,
         fits?(size_v.(l)),
@@ -267,7 +267,7 @@ defmodule Defk.ScaledFactsTest do
         do: {l, n, last_v.(if base == :a, do: l, else: n)}
   end
 
-  # every (len(a), len(out), i) the loop reaches, with the index's
+  # every (length(a), length(out), i) the loop reaches, with the index's
   # operations; an index is monotonic in i, so i = 0 and i = last are the
   # extremes
   defp reached(size_v, last_v, idx_v, base) do
@@ -312,7 +312,7 @@ defmodule Defk.ScaledFactsTest do
     if not (c_of(kernel(size, last, idx)) =~ "defk_put_u8") do
       for {l, n, k, ops} <- reached(size_v, last_v, idx_v, base), fits?(ops) do
         assert List.last(ops) in 0..(n - 1)//1,
-               "out[#{Macro.to_string(idx)}] is unchecked, but for len(a) = #{l}, " <>
+               "out[#{Macro.to_string(idx)}] is unchecked, but for length(a) = #{l}, " <>
                  "i = #{k} it is #{List.last(ops)}, outside 0..#{n - 1} (#{shown(size, last)})"
       end
     end
@@ -325,7 +325,7 @@ defmodule Defk.ScaledFactsTest do
     if not (c =~ ~r/defk_(mul|add)_i64\(/) do
       for l <- @lengths, n = List.last(size_v.(l)), n in 0..@len_max//1 do
         assert fits?(size_v.(l)) and fits?(last_v.(if base == :a, do: l, else: n)),
-               "#{shown(size, last)} has no overflow check, but overflows for len(a) = #{l}"
+               "#{shown(size, last)} has no overflow check, but overflows for length(a) = #{l}"
       end
     end
 
@@ -334,7 +334,7 @@ defmodule Defk.ScaledFactsTest do
       for {l, _n, k, ops} <- reached(size_v, last_v, idx_v, base) do
         assert fits?(ops),
                "#{Macro.to_string(idx)} has no overflow check, but overflows for " <>
-                 "len(a) = #{l}, i = #{k} (#{shown(size, last)})"
+                 "length(a) = #{l}, i = #{k} (#{shown(size, last)})"
       end
     end
   end

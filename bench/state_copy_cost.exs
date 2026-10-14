@@ -14,7 +14,7 @@
 #   touch  the memcpy-equivalent: the state copied (the kernel's one
 #          defk_copy_u8: enif_alloc_binary + memcpy), one byte written,
 #          returned as a new binary; nothing else
-#   nop    the same call with the same argument returning len(state): the
+#   nop    the same call with the same argument returning length(state): the
 #          call and loop overhead, no copy
 #
 # copy = touch - nop, share = copy / full. An input binary is read in place
@@ -47,11 +47,11 @@ defmodule StateCopy.Kernels do
     state
   end
 
-  # Bloom filter over len(bits) * 8 bits (a power of two), k probes per key
+  # Bloom filter over length(bits) * 8 bits (a power of two), k probes per key
   # by double hashing (Kirsch-Mitzenmacher: h1 + i * h2) on one 64-bit hash:
   # real bit ops (bsl/bor/band) on byte-granular storage.
   defk bloom_add(bits :: [u8], hashes :: [u64], k :: i64) :: [u8] do
-    mask = len(bits) * 8 - 1
+    mask = length(bits) * 8 - 1
 
     for h <- hashes do
       h1 = band(h, 0xFFFFFFFF)
@@ -82,7 +82,7 @@ defmodule StateCopy.Kernels do
   end
 
   defk bloom_probe(bits :: [u8], hashes :: [u64], k :: i64) :: i64 do
-    mask = len(bits) * 8 - 1
+    mask = length(bits) * 8 - 1
 
     for h <- hashes, reduce: 0 do
       acc ->
@@ -100,7 +100,7 @@ defmodule StateCopy.Kernels do
   # The streaming shape: one block appended into a window at an offset (as
   # a zstd/xxh3 streaming state does), the window returned.
   defk window_append(win :: [u8], chunk :: [u8], off :: i64) :: [u8] do
-    for i <- 0..(len(chunk) - 1)//1 do
+    for i <- 0..(length(chunk) - 1)//1 do
       win[off + i] = chunk[i]
     end
 
@@ -115,7 +115,7 @@ defmodule StateCopy.Kernels do
 
   # The same call without a copy.
   defk nop(state :: [u8]) :: i64 do
-    len(state)
+    length(state)
   end
 end
 

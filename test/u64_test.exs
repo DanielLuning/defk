@@ -4,7 +4,7 @@
 # arithmetic, Elixir's exact result); the 64-bit mask gives a u64; a u64
 # mixed with an i64 that may be negative outside a mask is a compile error
 # pointing at the mask; a u64 used as an i64 is checked; and the Defk.Bits
-# builtins with a width (clz/2, ctz/2, rotl/3, rotr/3) and f64_to_u64/1.
+# builtins with a width (clz/2, ctz/2, rotl/3, rotr/3) and f64_bits/1.
 
 defmodule Defk.U64Test.K do
   use Defk
@@ -20,8 +20,8 @@ defmodule Defk.U64Test.K do
   defk(sub(a :: u64, b :: u64) :: u64, do: a - b)
   defk(mul(a :: u64, b :: u64) :: u64, do: a * b)
   defk(divrem(a :: u64, b :: u64) :: {u64, u64}, do: {div(a, b), rem(a, b)})
-  # a literal >= 0 next to a u64 is a u64, and so is len(a)
-  defk(inc(a :: u64, b :: [u8]) :: u64, do: a * 2 + 1 + len(b))
+  # a literal >= 0 next to a u64 is a u64, and so is length(a)
+  defk(inc(a :: u64, b :: [u8]) :: u64, do: a * 2 + 1 + length(b))
   defk(big_literal(a :: u64) :: u64, do: bxor(a, 0xCBF29CE484222325))
   defk(cmp(a :: u64, b :: i64) :: {bool, bool, bool, bool}, do: {a < b, a == b, a === b, b >= a})
   defk(cmpf(a :: u64, f :: f64) :: {bool, bool, bool}, do: {a < f, a == f, f <= a})
@@ -129,8 +129,8 @@ defmodule Defk.U64Test.K do
 
   # -- [u64] arrays
   defk scale(a :: [u64], k :: u64) :: [u64] do
-    out = alloc(u64, len(a))
-    for i <- 0..(len(a) - 1)//1, do: out[i] = band(a[i] * k, @mask64)
+    out = alloc(u64, length(a))
+    for i <- 0..(length(a) - 1)//1, do: out[i] = band(a[i] * k, @mask64)
     out
   end
 
@@ -147,7 +147,7 @@ defmodule Defk.U64Test.K do
 
   # -- hashes against published vectors
   defk murmur3_32(data :: [u8], seed :: i64) :: i64 do
-    n = len(data)
+    n = length(data)
     nb = div(n, 4)
 
     h =
@@ -191,7 +191,7 @@ defmodule Defk.U64Test.K do
 
   # MurmurHash3_x64_128
   defk murmur3_128(data :: [u8], seed :: u64) :: {u64, u64} do
-    n = len(data)
+    n = length(data)
     nb = div(n, 16)
 
     {h1, h2} =
@@ -240,8 +240,8 @@ defmodule Defk.U64Test.K do
   defk(rotr3(x :: u64, n :: i64, w :: i64) :: u64, do: Defk.Bits.rotr(x, n, w))
   defk(rotr3_i(x :: i64, n :: i64, w :: i64) :: i64, do: rotr(x, n, w))
   defk(popcount_u(x :: u64) :: i64, do: Defk.Bits.popcount(x))
-  defk(f64_bits(x :: f64) :: u64, do: f64_to_u64(x))
-  defk(f64_bits_i(x :: i64) :: u64, do: Defk.Bits.f64_to_u64(x))
+  defk(f64_bits_f(x :: f64) :: u64, do: f64_bits(x))
+  defk(f64_bits_i(x :: i64) :: u64, do: Defk.Bits.f64_bits(x))
 end
 
 defmodule Defk.U64Test do
@@ -617,7 +617,7 @@ defmodule Defk.U64Test do
            "#{fun}#{inspect(args)}"
   end
 
-  test "clz/2, ctz/2, rotl/3, rotr/3, popcount/1 and f64_to_u64/1 are their Elixir bodies" do
+  test "clz/2, ctz/2, rotl/3, rotr/3, popcount/1 and f64_bits/1 are their Elixir bodies" do
     ws = [-1, 0, 1, 7, 8, 31, 32, 33, 63, 64, 65]
     ns = [0, 1, -1, 13, 31, 32, 63, 64, 65, -64, @min, @max]
 
@@ -655,10 +655,10 @@ defmodule Defk.U64Test do
     for x <- @u64s, do: assert(outcome(:popcount_u, [x]) == {:ok, Defk.Bits.popcount(x)})
 
     for x <- [0.0, -0.0, 1.0, -2.5, 1.0e300, 5.0e-324, 2.2250738585072014e-308] do
-      assert outcome(:f64_bits, [x]) == {:ok, Defk.Bits.f64_to_u64(x)}
+      assert outcome(:f64_bits_f, [x]) == {:ok, Defk.Bits.f64_bits(x)}
     end
 
-    for x <- @i64s, do: assert(outcome(:f64_bits_i, [x]) == {:ok, Defk.Bits.f64_to_u64(x)})
+    for x <- @i64s, do: assert(outcome(:f64_bits_i, [x]) == {:ok, Defk.Bits.f64_bits(x)})
   end
 
   test "plain Elixir can call the Defk.Bits functions; bad arguments raise ArgumentError" do
@@ -680,13 +680,13 @@ defmodule Defk.U64Test do
 
   test "mixing a u64 with an i64 that may be negative outside a mask is rejected with the mask as the fix" do
     msg = rejection("h * 31 + x", "h :: u64, x :: i64")
-    assert codes(msg) == ["u64-mix"]
+    assert codes(msg) == ["u64-with-i64"]
     assert msg =~ "mixes a u64 with an i64 that may be negative"
     assert msg =~ "band(h * 31 + x, 0xFFFFFFFFFFFFFFFF)"
     assert msg =~ "inside band"
 
-    assert codes(rejection("bxor(h, x)", "h :: u64, x :: i64")) == ["u64-mix"]
-    assert codes(rejection("div(h, x)", "h :: u64, x :: i64")) == ["u64-mix"]
+    assert codes(rejection("bxor(h, x)", "h :: u64, x :: i64")) == ["u64-with-i64"]
+    assert codes(rejection("div(h, x)", "h :: u64, x :: i64")) == ["u64-with-i64"]
     assert codes(rejection("-h", "h :: u64")) == ["operand-type"]
     assert codes(rejection("bnot(h)", "h :: u64")) == ["operand-type"]
 
@@ -753,7 +753,7 @@ defmodule Defk.U64Test do
     rotr3: [args: fixed_list([G.u64(), G.i64(), G.i64(-1..65)])],
     rotr3_i: [args: fixed_list([G.i64(), G.i64(), G.i64(-1..65)])],
     popcount_u: [],
-    f64_bits: [],
+    f64_bits_f: [],
     f64_bits_i: []
   )
 end

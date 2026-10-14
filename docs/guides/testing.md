@@ -170,7 +170,7 @@ defmodule Grid do
   use Defk
 
   defk row_max_sum(cells :: [i64], width :: i64) :: i64 do
-    rows = div(len(cells), width)
+    rows = div(length(cells), width)
 
     for r <- 0..(rows - 1)//1, reduce: 0 do
       total ->

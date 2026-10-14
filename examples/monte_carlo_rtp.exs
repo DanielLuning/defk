@@ -169,13 +169,13 @@ defmodule RTP.Kernels do
     {out, h1, t1}
   end
 
-  # spins of the slot model. reels: 5 strips of len(reels)/5 symbols, lines:
+  # spins of the slot model. reels: 5 strips of length(reels)/5 symbols, lines:
   # 5 row offsets per payline, pays: symbol * 6 + run length -> credits.
   # Reel stops are :rand.uniform_s(n, state) - 1, rejection step included.
   defk simulate(reels :: [i64], lines :: [i64], pays :: [i64], h0 :: i64, t0 :: i64, spins :: i64) ::
          {i64, i64, i64, i64, i64} do
-    n = div(len(reels), 5)
-    nlines = div(len(lines), 5)
+    n = div(length(reels), 5)
+    nlines = div(length(lines), 5)
     limit = 288_230_376_151_711_744 - n
 
     # each strip followed by its first maxo stops, so a line reads

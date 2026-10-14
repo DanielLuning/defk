@@ -57,7 +57,7 @@ defmodule Defk.AgreementTest.Catalog do
   # does, so the computed values are compared too.
   defp f64s, do: one_of([G.f64(), G.f64(1.0e100)])
 
-  # mean_std(x, w): a window 1..len(x) mostly; also empty or negative
+  # mean_std(x, w): a window 1..length(x) mostly; also empty or negative
   # windows and the lengths n - w + 1 that overflow or exceed the alloc limit
   # (never one a real allocator would grant)
   defp rolling(f64, opts \\ []) do

@@ -14,7 +14,7 @@ defmodule Defk.ReportTest.K do
   end
 
   defk next_sum(a :: [i64]) :: i64 do
-    for i <- 0..(len(a) - 1)//1, reduce: 0 do
+    for i <- 0..(length(a) - 1)//1, reduce: 0 do
       acc -> acc + a[i + 1]
     end
   end
@@ -68,9 +68,9 @@ defmodule Defk.ReportTest.K do
 
   # no float operation: nothing to flag (defk-60q)
   defk spread(a :: [u8]) :: [u8] do
-    out = alloc(u8, 2 * len(a))
+    out = alloc(u8, 2 * length(a))
 
-    for j <- 0..(len(a) - 1)//1 do
+    for j <- 0..(length(a) - 1)//1 do
       out[2 * j] = a[j]
     end
 
@@ -83,7 +83,7 @@ defmodule Defk.ReportTest.Full do
 
   # Examples.Kernels.dot
   defk dot(a :: [f64], b :: [f64]) :: f64 do
-    n = min(len(a), len(b))
+    n = min(length(a), length(b))
 
     for i <- 0..(n - 1)//1, reduce: 0.0 do
       acc -> acc + a[i] * b[i]
@@ -139,7 +139,7 @@ defmodule Defk.ReportTest do
     end
 
     test "a loop with no float operation is not flagged" do
-      facts = facts(K, {:spread, 1}, "for j <- 0..(len(a) - 1)//1")
+      facts = facts(K, {:spread, 1}, "for j <- 0..(length(a) - 1)//1")
       assert [{:loop, :strips, why}] = for({:loop, _, _} = f <- facts, do: f)
       refute why =~ "flagged"
       refute Enum.any?(kernel_facts(K, {:spread, 1}), &match?({:nonfinite, _, _}, &1))
@@ -153,10 +153,10 @@ defmodule Defk.ReportTest do
       assert [{:bounds, :kept, at}] = facts(K, {:at, 2}, "    a[i]")
       assert at =~ "a[i]"
       assert at =~ "0 <= i"
-      assert at =~ "i < len(a)"
+      assert at =~ "i < length(a)"
 
       assert [{:bounds, :kept, next}] = facts(K, {:next_sum, 1}, "acc + a[i + 1]")
-      assert next =~ "i + 1 < len(a)"
+      assert next =~ "i + 1 < length(a)"
       refute next =~ "0 <="
     end
 

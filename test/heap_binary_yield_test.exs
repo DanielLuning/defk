@@ -18,17 +18,17 @@ defmodule Defk.HeapBinaryYieldTest.K do
     for r <- 1..reps//1, reduce: 0 do
       acc ->
         s =
-          for i <- 0..(len(a) - 1)//1, reduce: 0 do
+          for i <- 0..(length(a) - 1)//1, reduce: 0 do
             z -> z + a[i] * r
           end
 
         t =
-          for i <- 0..(len(b) - 1)//1, reduce: 0 do
+          for i <- 0..(length(b) - 1)//1, reduce: 0 do
             z -> z + b[i]
           end
 
         f =
-          for i <- 0..(len(c) - 1)//1, reduce: 0.0 do
+          for i <- 0..(length(c) - 1)//1, reduce: 0.0 do
             z -> z + c[i]
           end
 

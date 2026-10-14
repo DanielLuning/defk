@@ -25,7 +25,7 @@ defmodule Defk.AllocUnzeroedTest.Shapes do
   #   read      - each write adds the element's old value
   #   between   - a statement between the alloc and the loop: nil, one that
   #               mentions neither (:unrelated), one that rebinds n so the
-  #               range ends one early (:rebind), or len(out) (:mention)
+  #               range ends one early (:rebind), or length(out) (:mention)
   def shapes do
     :rand.seed(:exsss, {7, 11, 13})
 
@@ -77,7 +77,7 @@ defmodule Defk.AllocUnzeroedTest.Shapes do
   defp between(nil), do: nil
   defp between(:unrelated), do: quote(do: _ = n * 3)
   defp between(:rebind), do: quote(do: n = n - 1)
-  defp between(:mention), do: quote(do: _ = len(out))
+  defp between(:mention), do: quote(do: _ = length(out))
 
   defp write(s, c) do
     at = index(s.k, c)
@@ -136,15 +136,15 @@ defmodule Defk.AllocUnzeroedTest.K do
       a[i] = 255
     end
 
-    len(a)
+    length(a)
   end
 
   # ---- accepted: every element written before any read
 
   defk scale(a :: [f64], k :: f64) :: [f64] do
-    out = alloc(f64, len(a))
+    out = alloc(f64, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i] = a[i] * k
     end
 
@@ -152,7 +152,7 @@ defmodule Defk.AllocUnzeroedTest.K do
   end
 
   defk encode16(s :: [u8]) :: [u8] do
-    n = len(s)
+    n = length(s)
     out = alloc(u8, 2 * n)
 
     for i <- 0..(n - 1)//1 do
@@ -164,11 +164,11 @@ defmodule Defk.AllocUnzeroedTest.K do
     out
   end
 
-  # the range end as len of the new array
+  # the range end as length of the new array
   defk by_len(n :: i64) :: [i64] do
     out = alloc(i64, n)
 
-    for i <- 0..(len(out) - 1)//1 do
+    for i <- 0..(length(out) - 1)//1 do
       out[i] = i * i
     end
 
@@ -206,7 +206,7 @@ defmodule Defk.AllocUnzeroedTest.K do
   # two outputs written by one loop, other statements in between (the
   # shape of geohash_decode)
   defk two_outputs(a :: [f64]) :: {[f64], [f64]} do
-    n = len(a)
+    n = length(a)
     lo = alloc(f64, n)
     hi = alloc(f64, n)
 
@@ -378,12 +378,12 @@ defmodule Defk.AllocUnzeroedTest.K do
     out
   end
 
-  # the array is passed to len/1 in the body: any other mention keeps zeroing
+  # the array is passed to length/1 in the body: any other mention keeps zeroing
   defk mentions(n :: i64) :: [i64] do
     out = alloc(i64, n)
 
     for i <- 0..(n - 1)//1 do
-      out[i] = len(out)
+      out[i] = length(out)
     end
 
     out

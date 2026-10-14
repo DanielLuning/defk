@@ -1,6 +1,6 @@
 defmodule Defk.CompileErrorsTest do
   # Every error code's example is rejected with that code, and its rewrite
-  # compiles (Defk.Errors.codes/0). Also: the format of a compile error, the
+  # compiles (Defk.Errors.entries/0). Also: the format of a compile error, the
   # targeted hints for first-write forms, and collecting every rejection in a
   # module without the errors an earlier one causes.
   use ExUnit.Case, async: true
@@ -12,7 +12,7 @@ defmodule Defk.CompileErrorsTest do
   # %{code => {example_result, rewrite_result}}
   setup_all do
     results =
-      Defk.Errors.codes()
+      Defk.Errors.entries()
       |> Enum.filter(& &1.example)
       |> Task.async_stream(
         fn e ->
@@ -39,7 +39,7 @@ defmodule Defk.CompileErrorsTest do
     # Codes with `example: nil` come from the build environment, not from kernel
     # source (no-c-compiler), so no module body triggers them; test/build_test.exs
     # covers them.
-    for %{code: code} <- Defk.Errors.codes(), Defk.Errors.fetch!(code).example do
+    for %{code: code} <- Defk.Errors.entries(), Defk.Errors.fetch!(code).example do
       @code code
       test "#{code}: the example is rejected with it and the rewrite compiles", %{
         results: results
@@ -57,10 +57,10 @@ defmodule Defk.CompileErrorsTest do
 
     # the slug form of a code: test/compile_errors_doc_test.exs
     test "codes are unique, with a kind, summary, why and hint" do
-      codes = Enum.map(Defk.Errors.codes(), & &1.code)
+      codes = Enum.map(Defk.Errors.entries(), & &1.code)
       assert codes == Enum.uniq(codes)
 
-      for e <- Defk.Errors.codes() do
+      for e <- Defk.Errors.entries() do
         assert e.kind in [:subset, :planned, :error]
 
         for k <- [:summary, :why, :hint],
@@ -84,7 +84,7 @@ defmodule Defk.CompileErrorsTest do
         |> Regex.scan(src)
         |> MapSet.new(&Enum.at(&1, 1))
 
-      registry = MapSet.new(Defk.Errors.codes(), & &1.code)
+      registry = MapSet.new(Defk.Errors.entries(), & &1.code)
 
       assert MapSet.difference(used, registry) == MapSet.new(), "codes not in the registry"
       assert MapSet.difference(registry, used) == MapSet.new(), "registry codes no module uses"
@@ -192,7 +192,7 @@ defmodule Defk.CompileErrorsTest do
       assert msg =~ "29 │    x + y\n   │    ^^^^^\n"
 
       # rewrites from the developer's own code
-      assert msg =~ "    for i <- 0..(len(a) - 1)//1 do\n      out[i] = a[i] * 2.0\n    end\n"
+      assert msg =~ "    for i <- 0..(length(a) - 1)//1 do\n      out[i] = a[i] * 2.0\n    end\n"
       assert msg =~ "    trunc(x + y)    # or declare :: f64\n"
       refute msg =~ ~r/defk-[a-z0-9]{3}/
     end
@@ -247,7 +247,7 @@ defmodule Defk.CompileErrorsTest do
       # helper's string once (not again where f inlines helper); m, y, z and w
       # are poisoned, so their uses report nothing; bad_head's callers are silent
       assert codes(msg) ==
-               ~w(unsupported-string unsupported-map unknown-function unsupported-atom untyped-parameter)
+               ~w(unsupported-string unsupported-map undefined-function unsupported-atom untyped-parameter)
 
       assert msg =~ ": 5 kernel compile errors\n"
     end
@@ -260,7 +260,7 @@ defmodule Defk.CompileErrorsTest do
       # n is poisoned by the byte_size rejection, so the for's range is
       # abandoned and its body is still lowered; the inner reduce's init is
       # rejected and the pipe is one error, nothing in them is looked into
-      assert codes(msg) == ~w(unknown-function for-collect unsupported-map pipe)
+      assert codes(msg) == ~w(undefined-function for-collect unsupported-map pipe)
       assert msg =~ ": 4 kernel compile errors\n"
     end
 
@@ -367,7 +367,7 @@ defmodule Defk.CompileErrorsTest do
       msg = rejection("Enum.max(a)")
 
       assert rewrite(msg) ==
-               "for i <- 1..(len(a) - 1)//1, reduce: a[0] do\n  acc -> max(acc, a[i])\nend"
+               "for i <- 1..(length(a) - 1)//1, reduce: a[0] do\n  acc -> max(acc, a[i])\nend"
     end
 
     test "Enum.min over a list literal gets nested min/2" do
@@ -382,7 +382,7 @@ defmodule Defk.CompileErrorsTest do
 
       assert codes(msg) == ["generator-pattern"]
       assert msg =~ "read y = a[i] in the body"
-      assert rewrite(msg) == "i <- 0..(len(a) - 1)//1"
+      assert rewrite(msg) == "i <- 0..(length(a) - 1)//1"
     end
 
     test "for ..., into: gets alloc/2 writes" do
@@ -421,26 +421,26 @@ defmodule Defk.CompileErrorsTest do
 
     test "a for over an array gets the index loop, typed by the element" do
       msg = rejection("for x <- a, do: x + 1", "a :: [i64]", "[i64]")
-      assert rewrite(msg) =~ "out = alloc(i64, len(a))"
+      assert rewrite(msg) =~ "out = alloc(i64, length(a))"
       assert rewrite(msg) =~ "out[i] = a[i] + 1"
     end
 
     test "a for that is the returned [u8] allocs the declared element type" do
       msg = rejection("for x <- a, do: x", "a :: [u8]", "[u8]")
-      assert rewrite(msg) =~ "out = alloc(u8, len(a))"
+      assert rewrite(msg) =~ "out = alloc(u8, length(a))"
       assert compile(__MODULE__, kernel("a :: [u8]", "[u8]", rewrite(msg))) == :ok
 
       # bound to a name that is returned
       msg = rejection("out = for x <- a, do: x\nout", "a :: [u8]", "[u8]")
-      assert rewrite(msg) =~ "alloc(u8, len(a))"
+      assert rewrite(msg) =~ "alloc(u8, length(a))"
     end
 
     test "a returned for whose body does not fit the declared element keeps its own type" do
       msg = rejection("for x <- a, do: x * 0.5", "a :: [f64]", "[i64]")
-      assert rewrite(msg) =~ "out = alloc(f64, len(a))"
+      assert rewrite(msg) =~ "out = alloc(f64, length(a))"
       # not the returned value: the body's own type
       msg = rejection("y = for x <- a, do: x\n1", "a :: [u8]", "i64")
-      assert rewrite(msg) =~ "out = alloc(i64, len(a))"
+      assert rewrite(msg) =~ "out = alloc(i64, length(a))"
     end
 
     test "a for-collect without a rewrite keeps the generic hint" do
@@ -463,10 +463,10 @@ defmodule Defk.CompileErrorsTest do
       assert rewrite(msg) == "b0 = a[0]\nb1 = a[1]"
     end
 
-    test "reading a float's bits points at f64_to_u64" do
+    test "reading a float's bits points at f64_bits" do
       msg = rejection("<<b::64>> = <<y::float-64>>\nb", "y :: f64", "i64")
       assert codes(msg) == ["bitstring-match"]
-      assert msg =~ "b = f64_to_u64(y)"
+      assert msg =~ "b = f64_bits(y)"
     end
 
     test "a literal shift past u64 masks gets the mask hint" do
@@ -478,9 +478,9 @@ defmodule Defk.CompileErrorsTest do
 
     test "byte_size names the builtin, without the by-design wording" do
       msg = rejection("byte_size(a)", "a :: [u8]", "i64")
-      assert codes(msg) == ["unknown-function"]
+      assert codes(msg) == ["undefined-function"]
       assert whats(msg) == ["byte_size/1 is not a kernel builtin"]
-      assert rewrite(msg) == "len(a)"
+      assert rewrite(msg) == "length(a)"
     end
 
     test "a list or String.t type says how the data crosses" do

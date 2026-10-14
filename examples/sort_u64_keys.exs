@@ -49,7 +49,7 @@ defmodule Keys.Kernels do
   use Defk
 
   defk sort_i64(keys :: [i64]) :: [i64] do
-    n = len(keys)
+    n = length(keys)
     a = alloc(i64, n)
 
     for i <- 0..(n - 1)//1 do

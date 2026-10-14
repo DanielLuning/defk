@@ -1031,7 +1031,7 @@ Enum.map(readings, &Clamp.Kernels.clamp(&1, -10.0, 90.0))
 
 ### 5.2 A kernel that returns a bitstring costs ~0.1 us more per call than a scalar one
 
-- **Numbers:** returning `len(p)` as an `i64` 0.015-0.04 us per call; the
+- **Numbers:** returning `length(p)` as an `i64` 0.015-0.04 us per call; the
   same as a one-byte bitstring 0.12-0.17 us. ~5% of a 2.1 us Gorilla block
   encode. Suspect (not profiled): the owned buffer doubling from 64 bytes.
 - **Conditions:** best of 15 over 10k calls, under load.
@@ -1271,7 +1271,7 @@ names each kept bounds check and the fact that would drop it. See
 ### 6.2 Write loops whose indices the compiler can prove in range
 
 - **Numbers:** cosine top-k one call, 100k x 384: literal `@dim 384` 20 ms,
-  `dim = len(q)` 25 ms (every access kept its check). Range facts for `2 * i`
+  `dim = length(q)` 25 ms (every access kept its check). Range facts for `2 * i`
   (`defk-upc`): 1 MB hex encode 0.601 -> 0.333 ms, decode 0.644 -> 0.503 ms.
   `pcm_mix`: a variable block offset keeps two bounds checks in the sum loop,
   which then runs scalar and takes ~70% of the kernel (0.2-0.29 of 0.3-0.37
@@ -1283,14 +1283,14 @@ names each kept bounds check and the fact that would drop it. See
 <!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
 # proven: no bounds checks
-n = min(len(a), len(b))
+n = min(length(a), length(b))
 for i <- 0..(n - 1)//1, reduce: 0.0, do: (acc -> acc + a[i] * b[i])
 table[band(h, 255)]                 # into a 256-element alloc or attribute
 @dim 384                            # literal stride: m[r * @dim + j]
-out = alloc(i16, len(a))            # alloc with len(a), loop to min(len(a), len(b)) - 1
+out = alloc(i16, length(a))         # alloc with length(a), loop to min(length(a), length(b)) - 1
 # kept
-a[i + 1]                            # nothing proves i + 1 < len(a)
-bufs[j * m + i]                     # m = div(len(bufs), n): variable block offset (defk-siy)
+a[i + 1]                            # nothing proves i + 1 < length(a)
+bufs[j * m + i]                     # m = div(length(bufs), n): variable block offset (defk-siy)
 for ..., reduce: out do o -> o[2 * i] = a[i]; o end   # reduce accumulator drops alloc facts (defk-fun)
 ```
 
@@ -1512,7 +1512,7 @@ Since `defk-52v.2` the runtime rotates a 32-bit field as a `uint32_t`, so
 `rotr(x, n, 32)` with a literal `n` compiles to one `ror w`. The masked
 spelling `band(bsr(x, n) + bsl(x, 32 - n), 0xFFFFFFFF)` is checked-free but
 clang gives it a shift and a bit-field insert on a 64-bit register. For
-64-bit words `rotr64/2` is already one `ror`.
+64-bit words `rotr/2` is already one `ror`.
 
 - **Numbers:** BLAKE3 of 64 KB: masked spelling 79-80 us; `rotr(x, n, 32)`
   before the runtime change 95-98 us; after it 54-55 us, level with the
@@ -1639,7 +1639,7 @@ Mac. Nothing was timed.
 store. Counting bytes `i`, `i + 1`, `i + 2`, `i + 3` into four 256-entry
 tables and summing them at the end breaks that chain. For a loop over one
 window of a buffer, write the bounds as `lo = max(k * w, 0)` and
-`hi = min(lo + w, len(data))` so the reads are proven in range.
+`hi = min(lo + w, length(data))` so the reads are proven in range.
 
 - **Numbers:** 16 MB histogram, one call: one table 5.8-6.0 ms, four
   tables 3.6-3.7 ms (1.6x). Entropy of 4 KiB windows: one table and a
@@ -1655,7 +1655,7 @@ window of a buffer, write the bounds as `lo = max(k * w, 0)` and
 ```elixir
 # fast: four tables, proven window bounds
 lo = max(k * w, 0)
-hi = min(lo + w, len(data))
+hi = min(lo + w, length(data))
 for i <- lo..(hi - 4)//4 do
   a = data[i]; b = data[i + 1]; c = data[i + 2]; d = data[i + 3]
   h[a] = h[a] + 1; h[256 + b] = h[256 + b] + 1; h[512 + c] = h[512 + c] + 1; h[768 + d] = h[768 + d] + 1
@@ -1898,7 +1898,7 @@ end)
 
 Every `alloc/2` and every value-semantics copy is an owned binary that lives
 until the kernel returns; since `defk-4b2` each one also checks a per-call
-byte total against `max_owned` (one compare and one add per allocation,
+byte total against `max_owned_bytes` (one compare and one add per allocation,
 never per element), so a loop that keeps a buffer per iteration raises
 "out of memory" instead of growing until the OS kills the node.
 
@@ -1924,7 +1924,7 @@ for w <- 0..(n - 1)//1 do
   for c <- 0..255//1, do: h[c] = 0
   ...
 end
-# slow, and bounded only by max_owned: a new array every pass
+# slow, and bounded only by max_owned_bytes: a new array every pass
 for w <- 0..(n - 1)//1 do
   h = alloc(i64, 256)
   ...
@@ -1945,7 +1945,7 @@ always did.
   then a sum over `x` against the old workaround `if c, do: total(a), else:
   total(b)`: 75.4 against 76.0 ns at 64 elements, 2.15 against 2.17 us at
   4096, 498.0 against 498.4 us at 10^6. Returning an unwritten 4096-element
-  input: 24.7 ns, against 24.1 ns for a kernel returning `len(a)`. Under
+  input: 24.7 ns, against 24.1 ns for a kernel returning `length(a)`. Under
   forced yields (a yield at every safepoint, 194-1785 per call), walking an
   input through a branch's local against walking the parameter: 0.35 against
   0.37 ms (7-element heap binary), 0.22 against 0.23 ms (4096-element refc

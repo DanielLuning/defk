@@ -12,7 +12,7 @@ defmodule Defk.Planted.Hex do
   @hex "0123456789ABCDEF"
 
   defk encode16(s :: [u8]) :: [u8] do
-    n = len(s)
+    n = length(s)
     out = alloc(u8, 2 * n)
 
     for i <- 0..(n - 1)//1 do

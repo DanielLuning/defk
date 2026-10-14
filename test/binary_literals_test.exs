@@ -1,6 +1,6 @@
 # Binary literals in kernel bodies (defk-n4r.5): "abc" and <<1, 2, 3>> are a
 # read-only [u8] in static storage, as a binary module attribute is: indexed,
-# measured with len, walked by `for`, passed to a helper, compared byte by
+# measured with length, walked by `for`, passed to a helper, compared byte by
 # byte. Elixir mode is the binary itself.
 
 defmodule Defk.BinaryLiteralsTest.K do
@@ -15,7 +15,7 @@ defmodule Defk.BinaryLiteralsTest.K do
   end
 
   defk lens(k :: i64) :: i64 do
-    len("Hamburg") * 100 + len(<<1, 2, 3>>) * 10 + len("") + k
+    length("Hamburg") * 100 + length(<<1, 2, 3>>) * 10 + length("") + k
   end
 
   defk sum_literal(k :: i64) :: i64 do
@@ -32,10 +32,10 @@ defmodule Defk.BinaryLiteralsTest.K do
 
   # a byte-compare loop against a [u8] parameter
   defk starts_with?(s :: [u8], p :: [u8]) :: bool do
-    if len(p) > len(s) do
+    if length(p) > length(s) do
       false
     else
-      for i <- 0..(len(p) - 1)//1, reduce: true do
+      for i <- 0..(length(p) - 1)//1, reduce: true do
         acc -> acc and s[i] == p[i]
       end
     end
@@ -61,7 +61,7 @@ defmodule Defk.BinaryLiteralsTest.K do
   end
 
   defk empty_len(k :: i64) :: i64 do
-    len("") + len(<<>>) + k
+    length("") + length(<<>>) + k
   end
 
   defk empty_at(i :: i64) :: i64 do
@@ -112,7 +112,7 @@ defmodule Defk.BinaryLiteralsTest do
     assert kernel_c(K, "char_at") =~ "defk_get_u8("
   end
 
-  test "len of a literal, UTF-8 bytes and integer segments" do
+  test "length of a literal, UTF-8 bytes and integer segments" do
     assert K.lens(1) == 731
     agrees(:lens, [1])
     assert K.sum_literal(1) == ?a + ?b + ?c + 1
@@ -187,7 +187,7 @@ defmodule Defk.BinaryLiteralsTest do
       do: "defk f(i :: i64) :: #{ret} do\n  #{expr}\nend"
 
     test "interpolation is rejected with the rewrite hint" do
-      msg = rejected(kernel(~S|s = "a#{i}"| <> "\n  len(s)"))
+      msg = rejected(kernel(~S|s = "a#{i}"| <> "\n  length(s)"))
       assert codes(msg) == ["binary-literal"]
       assert msg =~ "interpolation"
 
@@ -199,7 +199,7 @@ defmodule Defk.BinaryLiteralsTest do
       for src <- [~S('abc'), ~S(~c"abc")] do
         # 'abc' also gets Elixir's deprecation warning for single quotes
         {msg, _warning} =
-          ExUnit.CaptureIO.with_io(:stderr, fn -> rejected(kernel("s = #{src}\n  len(s)")) end)
+          ExUnit.CaptureIO.with_io(:stderr, fn -> rejected(kernel("s = #{src}\n  length(s)")) end)
 
         assert codes(msg) == ["binary-literal"], msg
         assert msg =~ ~s(use a string literal, "abc")
@@ -208,7 +208,7 @@ defmodule Defk.BinaryLiteralsTest do
 
     test "other segments are rejected" do
       for seg <- ["1.5", "i", "300", "-1", "256", "1::16", "1::float", "\"ab\""] do
-        msg = rejected(kernel("s = <<#{seg}>>\n  len(s)"))
+        msg = rejected(kernel("s = <<#{seg}>>\n  length(s)"))
         assert codes(msg) == ["binary-literal"], "#{seg}: #{msg}"
         assert msg =~ "build it in Elixir and pass it as a [u8] parameter"
       end

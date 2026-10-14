@@ -16,22 +16,22 @@ defmodule Defk.AllocTest.K do
   end
 
   defk len_f64(n :: i64) :: i64 do
-    len(alloc(f64, n))
+    length(alloc(f64, n))
   end
 
   defk len_i64(n :: i64) :: i64 do
-    len(alloc(i64, n))
+    length(alloc(i64, n))
   end
 
   defk len_u8(n :: i64) :: i64 do
-    len(alloc(u8, n))
+    length(alloc(u8, n))
   end
 
   # the second alloc fails after the first one succeeded: its buffer is freed
   defk two(n :: i64) :: i64 do
     a = alloc(f64, 16)
     b = alloc(f64, n)
-    len(a) + len(b)
+    length(a) + length(b)
   end
 
   # indices at the extremes: the bounds check casts the index to unsigned, so

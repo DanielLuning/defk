@@ -114,7 +114,7 @@ defmodule Defk.Generators do
   def alloc_len(esz, small \\ 0..64) do
     over = div(@max_alloc_bytes, esz)
     # 2^47 bytes: out of memory without trying; one element less: past any
-    # host's max_owned (half of physical memory by default), so both modes
+    # host's max_owned_bytes (half of physical memory by default), so both modes
     # raise the budget's out of memory before allocating (defk-bh3)
     no_alloc = div(@no_alloc_bytes, esz)
 

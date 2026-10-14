@@ -15,7 +15,7 @@ defmodule Defk.ElementTypesTest.K do
   defk(atf32(a :: [f32], i :: i64) :: f64, do: a[i])
 
   defk lens(a :: [i16], b :: [i32], c :: [f32]) :: {i64, i64, i64} do
-    {len(a), len(b), len(c)}
+    {length(a), length(b), length(c)}
   end
 
   defk put16(v :: i64) :: [i16] do
@@ -82,9 +82,9 @@ defmodule Defk.ElementTypesTest.K do
 
   # f64 -> f32 in a flat loop: each write may overflow f32 (a flagged strip)
   defk narrow(a :: [f64]) :: [f32] do
-    out = alloc(f32, len(a))
+    out = alloc(f32, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i] = a[i]
     end
 
@@ -92,9 +92,9 @@ defmodule Defk.ElementTypesTest.K do
   end
 
   defk scalef32(a :: [f32], k :: f64) :: [f32] do
-    out = alloc(f32, len(a))
+    out = alloc(f32, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i] = a[i] * k
     end
 
@@ -102,9 +102,9 @@ defmodule Defk.ElementTypesTest.K do
   end
 
   defk widen(a :: [f32]) :: [f64] do
-    out = alloc(f64, len(a))
+    out = alloc(f64, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i] = a[i]
     end
 
@@ -113,9 +113,9 @@ defmodule Defk.ElementTypesTest.K do
 
   # i64 -> i16 with the range check on every write
   defk to16(a :: [i64]) :: [i16] do
-    out = alloc(i16, len(a))
+    out = alloc(i16, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i] = a[i]
     end
 
@@ -123,9 +123,9 @@ defmodule Defk.ElementTypesTest.K do
   end
 
   defk to32(a :: [i64]) :: [i32] do
-    out = alloc(i32, len(a))
+    out = alloc(i32, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i] = a[i]
     end
 
@@ -135,14 +135,14 @@ end
 
 # PCM mixing with clip prevention: the clamp's range facts prove every write
 # fits in i16, so the store has no check, and the loop vectorises like hand C
-# (the bounds are proven too: out has len(a) elements, i < min(len(a), len(b)))
+# (the bounds are proven too: out has length(a) elements, i < min(length(a), length(b)))
 defmodule Defk.ElementTypesTest.Mix do
   use Defk
 
   defk mix(a :: [i16], b :: [i16]) :: [i16] do
-    out = alloc(i16, len(a))
+    out = alloc(i16, length(a))
 
-    for i <- 0..(min(len(a), len(b)) - 1)//1 do
+    for i <- 0..(min(length(a), length(b)) - 1)//1 do
       out[i] = max(min(a[i] + b[i], 32_767), -32_768)
     end
 
@@ -373,7 +373,7 @@ defmodule Defk.ElementTypesTest do
     src = """
     defmodule Defk.ElementTypesTest.Bad do
       use Defk
-      defk f(a :: [u16]) :: i64, do: len(a)
+      defk f(a :: [u16]) :: i64, do: length(a)
     end
     """
 
@@ -383,7 +383,7 @@ defmodule Defk.ElementTypesTest do
     src = """
     defmodule Defk.ElementTypesTest.BadAlloc do
       use Defk
-      defk f(n :: i64) :: i64, do: len(alloc(u16, n))
+      defk f(n :: i64) :: i64, do: length(alloc(u16, n))
     end
     """
 

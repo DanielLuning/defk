@@ -30,11 +30,11 @@ defmodule Defk.ScopeDocTest do
 
   # the error codes linked in `text` (other links are sections of docs/language.md)
   defp codes_linked(text) do
-    all = MapSet.new(Defk.Errors.codes(), & &1.code)
+    all = MapSet.new(Defk.Errors.entries(), & &1.code)
     for [_, a] <- Regex.scan(~r/\(compile-errors\.md#([a-z0-9-]+)\)/, text), a in all, do: a
   end
 
-  defp codes(kind), do: for(%{kind: ^kind, code: code} <- Defk.Errors.codes(), do: code)
+  defp codes(kind), do: for(%{kind: ^kind, code: code} <- Defk.Errors.entries(), do: code)
 
   # top-level bullets, each with its continuation lines
   defp bullets(text) do

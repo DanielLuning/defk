@@ -16,7 +16,7 @@ defmodule Examples.Kernels do
 
   # indexed access: i provably in range for a and b, so a[i]/b[i] are unchecked
   defk dot(a :: [f64], b :: [f64]) :: f64 do
-    n = min(len(a), len(b))
+    n = min(length(a), length(b))
 
     for i <- 0..(n - 1)//1, reduce: 0.0 do
       acc -> acc + a[i] * b[i]
@@ -34,14 +34,14 @@ defmodule Examples.Kernels do
           {n1, mean1, m2 + d * (x - mean1)}
       end
 
-    {mean, m2 / len(a)}
+    {mean, m2 / length(a)}
   end
 
   # allocate + write + return a new packed array (zero-copy back to Elixir)
   defk scale(a :: [f64], k :: f64) :: [f64] do
-    out = alloc(f64, len(a))
+    out = alloc(f64, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i] = a[i] * k
     end
 
@@ -106,7 +106,7 @@ defmodule Examples.Kernels do
 
   # error paths
   defk oob(a :: [f64]) :: f64 do
-    a[len(a)]
+    a[length(a)]
   end
 
   defk overflow(a :: i64) :: i64 do

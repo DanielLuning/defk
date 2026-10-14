@@ -64,9 +64,9 @@ defmodule Defk.AttributesTest.K do
     end
   end
 
-  # indexed, measured with len, raises out of range like any array read
+  # indexed, measured with length, raises out of range like any array read
   defk char_at(i :: i64) :: i64 do
-    @alphabet[rem(i, len(@alphabet))]
+    @alphabet[rem(i, length(@alphabet))]
   end
 
   defk count_byte(s :: [u8], b :: i64) :: i64 do

@@ -372,7 +372,7 @@ defmodule HashChain.Source do
       # (0x80, zeros, the bit length big-endian), then one compression per
       # 64-byte block.
       defk sha256(msg :: [u8]) :: [u8] do
-        l = len(msg)
+        l = length(msg)
         nb = div(l + 8, 64) + 1
         p = alloc(u8, nb * 64)
 
@@ -427,7 +427,7 @@ defmodule HashChain.Source do
       # n <= 0 returns the seed, as Enum.reduce(1..n//1, seed, ...) does.
       defk sha256_chain(seed :: [u8], n :: i64) :: [u8] do
         first = sha256(seed)
-        out = alloc(u8, if(n <= 0, do: len(seed), else: 32))
+        out = alloc(u8, if(n <= 0, do: length(seed), else: 32))
         w = alloc(i64, 64)
         unquote_splicing(load_k())
         w[8] = 0x80000000
@@ -467,7 +467,7 @@ defmodule HashChain.Source do
         w[6] = s6
         w[7] = s7
 
-        for i <- 0..(len(seed) - 1)//1, n <= 0 do
+        for i <- 0..(length(seed) - 1)//1, n <= 0 do
           out[i] = seed[i]
         end
 
@@ -490,9 +490,9 @@ defmodule HashChain.Source do
 
         for i <- 0..63//1 do
           kb =
-            if len(key) > 64,
+            if length(key) > 64,
               do: if(i < 32, do: kh[i], else: 0),
-              else: if(i < len(key), do: key[i], else: 0)
+              else: if(i < length(key), do: key[i], else: 0)
 
           ipad[i] = bxor(kb, 0x36)
           opad[i] = bxor(kb, 0x5C)
@@ -503,7 +503,7 @@ defmodule HashChain.Source do
         unquote_splicing(elem(opad_step, 0))
         {o0, o1, o2, o3, o4, o5, o6, o7} = {unquote_splicing(elem(opad_step, 1))}
 
-        cl = len(client)
+        cl = length(client)
         # client, ':', up to 19 digits, 0x80 and the 8-byte length
         mbuf = alloc(u8, (div(cl + 20 + 8, 64) + 1) * 64)
 
@@ -562,7 +562,7 @@ defmodule HashChain.Source do
       # sha256_chain with the compression unrolled (compress_unrolled/2)
       defk sha256_chain_unrolled(seed :: [u8], n :: i64) :: [u8] do
         first = sha256(seed)
-        out = alloc(u8, if(n <= 0, do: len(seed), else: 32))
+        out = alloc(u8, if(n <= 0, do: length(seed), else: 32))
         w = alloc(i64, 8)
 
         {d0, d1, d2, d3, d4, d5, d6, d7} =
@@ -584,7 +584,7 @@ defmodule HashChain.Source do
         w[6] = d6
         w[7] = d7
 
-        for i <- 0..(len(seed) - 1)//1, n <= 0 do
+        for i <- 0..(length(seed) - 1)//1, n <= 0 do
           out[i] = seed[i]
         end
 

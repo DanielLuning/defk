@@ -40,14 +40,14 @@ defmodule Pairs.Kernels do
   use Defk
 
   defk lev(a :: [u8], b :: [u8]) :: i64 do
-    m = len(b)
+    m = length(b)
     row = alloc(i64, m + 1)
 
     for j <- 0..m//1 do
       row[j] = j
     end
 
-    for i <- 1..len(a)//1 do
+    for i <- 1..length(a)//1 do
       ch = a[i - 1]
       diag0 = row[0]
       row[0] = i
@@ -66,7 +66,7 @@ defmodule Pairs.Kernels do
 
   # Batched: string i is blob[offs[i] .. offs[i + 1]); pair k is strings 2k and 2k + 1.
   defk lev_batch(blob :: [u8], offs :: [i64], maxlen :: i64) :: [i64] do
-    pairs = div(len(offs) - 1, 2)
+    pairs = div(length(offs) - 1, 2)
     out = alloc(i64, pairs)
     row = alloc(i64, maxlen + 1)
 

@@ -49,7 +49,7 @@ defmodule Defk.MultiClauseTest.K do
   defk(one_dod_cond(dod :: i64) :: bitstring, do: dod_bits_cond(<<>>, dod))
 
   defk timestamps(ts :: [i64]) :: bitstring do
-    n = len(ts)
+    n = length(ts)
 
     if n == 0 do
       <<>>

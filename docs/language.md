@@ -91,7 +91,7 @@ defmodule Stats do
   use Defk
 
   defk dot(a :: [f64], b :: [f64]) :: f64 do
-    n = min(len(a), len(b))
+    n = min(length(a), length(b))
 
     for i <- 0..(n - 1)//1, reduce: 0.0 do
       acc -> acc + a[i] * b[i]
@@ -232,7 +232,7 @@ unstable (debugging output that may change in any version):
 | `__defk_report__/0` | the fast-path report as data, `[{kernel, line, fact}]` (see `Defk.Report`; `Defk.Report.print/1` prints it) |
 | `__defk_lib__/0` | the path of the compiled NIF library (`.so`) |
 | `__defk_kernels__/0` | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
-| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:, crc32c:, max_owned:}` (`crc32c` is `:instruction` or `:table`, the [crc32c](#hardware-builtins) implementation it picked at its first call, or `:not_called`; `max_owned` is the [owned-buffer budget](#the-owned-buffer-budget) in bytes) |
+| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:, crc32c:, max_owned_bytes:}` (`crc32c` is `:instruction` or `:table`, the [crc32c](#hardware-builtins) implementation it picked at its first call, or `:not_called`; `max_owned_bytes` is the [owned-buffer budget](#the-owned-buffer-budget) in bytes) |
 | `__defk_force_yields__/1` | testing: `true` makes this module's kernels yield at every clock read, so every resume path runs; `false` turns it off |
 | `__defk_elixir__/2` | Elixir mode: `Mod.__defk_elixir__(:name, args)` runs one call as plain Elixir (only where Elixir mode is compiled, see [section 10](#10-elixir-mode)) |
 | `__defk_elixir_source__/0` | the generated Elixir mode code (same condition) |
@@ -359,7 +359,7 @@ defk mean_var(a :: [f64]) :: {f64, f64} do
         {n1, mean1, m2 + d * (x - mean1)}
     end
 
-  {mean, m2 / len(a)}
+  {mean, m2 / length(a)}
 end
 ```
 
@@ -405,7 +405,7 @@ iex> M.mul(4611686018427387904, 2)
 Unary minus and `abs/1` of -2^63 overflow the same way.
 
 The check is left out where the compiler proves the result fits, as for
-`2 * i + 1` with `i <- 0..(len(a) - 1)//1` (array lengths are below 2^61).
+`2 * i + 1` with `i <- 0..(length(a) - 1)//1` (array lengths are below 2^61).
 That changes speed, never results.
 
 `div/2` and `rem/2` take two `i64` values
@@ -424,17 +424,17 @@ multiply.
 **Supported with restrictions.** A `u64` is an integer in 0..2^64 - 1: a
 `u64` parameter, result or `[u64]` element, a literal from 2^63 up,
 `band(x, 0xFFFFFFFFFFFFFFFF)` ([masked arithmetic](#masked-arithmetic)) and
-`f64_to_u64/1`. It holds a 64-bit hash with its top bit set as the
+`f64_bits/1`. It holds a 64-bit hash with its top bit set as the
 non-negative integer Elixir has.
 
 - `+`, `-`, `*`, `div`, `rem`, `min`, `max`, `band`, `bor` and `bxor` of two
   `u64` give a `u64`, Elixir's exact result. A result outside 0..2^64 - 1,
   `a - b` below 0 included, raises `ArithmeticError` "u64 overflow in 3 - 5"
   (a limit). `div` and `rem` by 0 raise as for `i64`.
-- An `i64` the compiler knows is `>= 0` (a literal, `len(a)`, a `[u8]`
+- An `i64` the compiler knows is `>= 0` (a literal, `length(a)`, a `[u8]`
   element, `band(x, 255)`, ...) is a `u64` next to a `u64`: `h * 31 + 1`.
 - Any other `i64` next to a `u64` outside a mask is
-  [`u64-mix`](compile-errors.md#u64-mix): no one type holds every result. Its hint moves the
+  [`u64-with-i64`](compile-errors.md#u64-with-i64): no one type holds every result. Its hint moves the
   arithmetic inside `band(..., 0xFFFFFFFFFFFFFFFF)`, where `i64` and `u64`
   mix freely.
 - `bsl`/`bsr` of a `u64` shift exactly (`bsr` is logical, as for any
@@ -553,7 +553,7 @@ the kernel (`my_copy_back/4`). The same name at an arity the builtin does not ta
 
 | Builtin | Takes | Gives | Raises |
 |---|---|---|---|
-| `len(a)` | an array | its number of elements, `i64` | |
+| `length(a)` | an array | its number of elements, `i64`, in constant time | |
 | `bit_size(b)` | a [bitstring](#the-bitstring-accumulator) | its number of bits, `i64` | |
 | `min(a, b)`, `max(a, b)` | two `i64`, two `u64` or two `f64` (not mixed) | the same type; when the two compare equal, the first argument, as Erlang does (`min(-0.0, 0.0)` is `-0.0`) | |
 | `abs(x)` | `i64`, `u64` or `f64` | the same type | `i64`: `ArithmeticError` for -2^63 |
@@ -571,15 +571,15 @@ the kernel (`my_copy_back/4`). The same name at an arity the builtin does not ta
 | `clz(x)`, `ctz(x)`, `popcount(x)` | an `i64` or `u64` | `i64` in 0..64: leading zeros, trailing zeros (64 for 0), set bits of the u64 pattern | see [Bit builtins](#bit-builtins) |
 | `clz(x, w)`, `ctz(x, w)` | an `i64` or `u64` x in 0..2^w - 1 and an `i64` width w in 1..64 | `i64` in 0..w: leading or trailing zeros of x as a w-bit value (w for 0) | `ArgumentError` for a width or x out of range |
 | `rotl(x, n, w)`, `rotr(x, n, w)` | an `i64` or `u64` x in 0..2^w - 1, an `i64` count, an `i64` width w in 1..64 | x's type: the w-bit value x rotated by n mod w | as `clz(x, w)`; an `i64` x whose result is above 2^63 - 1 raises `ArithmeticError` |
-| `rotl64(x, n)`, `rotr64(x, n)` | two `i64` | `i64`: the 64-bit pattern of `x` rotated by `band(n, 63)` | see [Bit builtins](#bit-builtins) |
-| `f64_to_u64(x)` | a number | `u64`: the IEEE 754 bits of `x` as a float | |
+| `rotl(x, n)`, `rotr(x, n)` | two `i64` | `i64`: the 64-bit pattern of `x` rotated by `band(n, 63)` | see [Bit builtins](#bit-builtins) |
+| `f64_bits(x)` | a number | `u64`: the IEEE 754 bits of `x` as a float | |
 | `crc32c(crc, x, w)` | an `i64` or `u64` crc in 0..2^32 - 1, an `i64` or `u64` x in 0..2^w - 1, an `i64` width w of 8, 16, 32 or 64 | `i64` in 0..2^32 - 1: one CRC32C step over the w/8 bytes of x, as `Defk.Bits.crc32c/3`. A hardware builtin: the CPU's instruction where it has one, a table otherwise, the same value | `ArgumentError` for a width or value out of range; see [Hardware builtins](#hardware-builtins) |
 | `u64_le(b, i)`, `u32_le`, `u16_le`, `u64_be`, `u32_be`, `u16_be` | a `[u8]` and an `i64` byte offset | `i64`: the unsigned word at `i` (`u64` as its signed bit pattern) | see [Word loads](#word-loads) |
 | `copy(out, at, src, from, n)` | two arrays of one element type and three `i64`: index, source index, length | `out` with `out[at..at+n-1]` replaced by `src[from..from+n-1]` | see [Range copies](#range-copies) |
 | `copy_back(out, at, off, n)` | an array and three `i64`: index, offset, length | `out` with `out[at + j] = out[at + j - off]` for `j` in `0..n-1`, in order (an LZ match) | see [Range copies](#range-copies) |
 
-`length/1`, `byte_size/1` and `tuple_size/1` are
-[`unknown-function`](compile-errors.md#unknown-function) with the hint to use `len/1`.
+`byte_size/1` and `tuple_size/1` are
+[`undefined-function`](compile-errors.md#undefined-function) with the hint to use `length/1`.
 
 Other `:math` functions are written from the builtins, or computed in
 Elixir. `log2` and `log10` call the same libm function as `:math.log2/1` and
@@ -619,11 +619,11 @@ x is a w-bit value, w is 1 to 64 and x is in 0..2^w - 1 (an `i64` or a
 Elixir functions do. `rotl`/`rotr` rotate by `n` modulo `w` (any `i64` n)
 and give x's type, so a 32-bit hash rotates as 32 bits in an `i64`
 (`rotl(k, 15, 32)` is MurmurHash3's `ROTL32(k, 15)`) and a 64-bit one in a
-`u64`. `f64_to_u64(x)` is the bits of a float, `<<b::64>> = <<x::float-64>>`.
+`u64`. `f64_bits(x)` is the bits of a float, `<<b::64>> = <<x::float-64>>`.
 (defk-wlu)
 
-`mulhi(a, b)`, `clz(x)`, `ctz(x)`, `popcount(x)`, `rotl64(x, n)` and
-`rotr64(x, n)` work on the u64 bit pattern of an `i64` (`clz`, `ctz` and
+`mulhi(a, b)`, `clz(x)`, `ctz(x)`, `popcount(x)`, `rotl(x, n)` and
+`rotr(x, n)` work on the u64 bit pattern of an `i64` (`clz`, `ctz` and
 `popcount` also take a `u64`) and return an `i64` (a pattern, so a value
 with the top bit set is negative):
 
@@ -635,7 +635,7 @@ with the top bit set is negative):
   (the C builtins are undefined there; the kernel guards it).
 - `popcount` counts set bits: 0 to 64. The three counts give the compiler the
   range 0..64.
-- `rotl64` and `rotr64` rotate the 64-bit pattern by `band(n, 63)`, so `n`
+- `rotl/2` and `rotr/2` rotate the 64-bit pattern by `band(n, 63)`, so `n`
   may be any `i64`, negative included.
 
 Operands must be integers; `f64` and `bool` are rejected
@@ -666,7 +666,7 @@ record batches) starts from `0xFFFFFFFF` and inverts the end:
 
 ```elixir
 defk crc32c_of(b :: [u8]) :: i64 do
-  n = len(b)
+  n = length(b)
   words = n - rem(n, 8)
 
   crc =
@@ -773,7 +773,7 @@ The rule, the same in native code and Elixir mode:
   `band(...)`. `x = h * p` followed by `band(x, @mask64)` computes `h * p`
   checked, and raises there if it overflows (a limit: in Elixir `x` is a
   bignum); no mask is tracked through variables. Mixing an `i64` with a
-  `u64` outside a mask is [`u64-mix`](compile-errors.md#u64-mix), whose hint shows the
+  `u64` outside a mask is [`u64-with-i64`](compile-errors.md#u64-with-i64), whose hint shows the
   expression moved inside `band(..., 0xFFFFFFFFFFFFFFFF)`.
 - **The result type:** the 64-bit mask gives a `u64` in 0..2^64 - 1, and
   `band(x, 0xFFFFFFFFFFFFFFFF)` of an `i64` x is the `i64` to `u64`
@@ -820,11 +820,11 @@ iex> M.mix32(0, 1)
 with integer-literal segments (each `0..255`, optionally `::8` or
 `::size(8)`) are a `[u8]`, the same value a binary module attribute
 is: indexed (out of range raises `Enum.OutOfBoundsError`), measured with
-`len/1`, iterated with `for x <- "abc"`, bound to a variable, passed to a
+`length/1`, iterated with `for x <- "abc"`, bound to a variable, passed to a
 kernel, compared byte by byte in a loop. Natively it is a static const view in
 the NIF: no allocation and no copy, and its length is known, so
 `"0123456789abcdef"[band(x, 15)]` has no bounds check. In Elixir mode it is
-the binary itself. `""` and `<<>>` are a zero-length array (`len` is 0, any
+the binary itself. `""` and `<<>>` are a zero-length array (`length` is 0, any
 index raises); `<<>>` is also where a [bitstring
 accumulator](#the-bitstring-accumulator) starts.
 
@@ -834,10 +834,10 @@ defk hex_digit(x :: i64) :: i64 do
 end
 
 defk starts_with?(s :: [u8], p :: [u8]) :: bool do
-  if len(p) > len(s) do
+  if length(p) > length(s) do
     false
   else
-    for i <- 0..(len(p) - 1)//1, reduce: true do
+    for i <- 0..(length(p) - 1)//1, reduce: true do
       acc -> acc and s[i] == p[i]
     end
   end
@@ -981,7 +981,7 @@ iex> M.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
 **Unsupported, until a workload needs them** ([`bitstring-segment`](compile-errors.md#bitstring-segment),
 [`bitstring-use`](compile-errors.md#bitstring-use)): little- or native-endian, float,
 binary, bitstring and UTF segments; reading or indexing a bitstring
-(`acc[i]`, `len(acc)`, `for b <- acc`; a `<<...>> = acc` match is
+(`acc[i]`, `length(acc)`, `for b <- acc`; a `<<...>> = acc` match is
 [`bitstring-match`](compile-errors.md#bitstring-match)); starting from
 an input binary (`<<input::bitstring, ...>>` with `input :: [u8]`); a
 `bitstring` parameter of a kernel called from Elixir; and passing a
@@ -1032,7 +1032,7 @@ iex> M.ones(10)
 ```
 
 A binary attribute is an array like an input array: it can be indexed (a
-read out of range raises `Enum.OutOfBoundsError`), measured with `len/1`,
+read out of range raises `Enum.OutOfBoundsError`), measured with `length/1`,
 iterated with `for c <- @table`, bound to a variable and passed to a kernel.
 A write copies it first, like an input array's ([Copies](#copies));
 returned unwritten, it reaches the caller as a new binary of its bytes. It
@@ -1068,7 +1068,7 @@ Each of these is a compile error with a code; the code's entry on the
 | a range as a value (`r = 1..10`), `x in [1, 2, 3]`, `**`, a match used as a value | [`unsupported-expression`](compile-errors.md#unsupported-expression) |
 | `unless`, `with`, `try`, `receive`, `reraise`, `throw`, `send`, `spawn`, ... | [`unsupported-construct`](compile-errors.md#unsupported-construct) |
 | `raise` with an interpolated or computed message, of another module, or used as a value | [`raise-message`](compile-errors.md#raise-message), [`raise-module`](compile-errors.md#raise-module), [`raise-value`](compile-errors.md#raise-value) (see [`raise`](#raise)) |
-| a call to a function that is neither a builtin nor a kernel of this module (`while`, `length`) | [`unknown-function`](compile-errors.md#unknown-function) |
+| a call to a function that is neither a builtin nor a kernel of this module (`while`, `byte_size`) | [`undefined-function`](compile-errors.md#undefined-function) |
 
 ### Unsupported, write this instead
 
@@ -1080,15 +1080,15 @@ that compiles. The error for each says the same.
 | `a \|> f(b)` | `f(a, b)` | [`pipe`](compile-errors.md#pipe) |
 | `Enum.sum(a)`, `Enum.max(a)` over an array or range | `for x <- a, reduce: 0.0 do acc -> acc + x end` | [`unsupported-call`](compile-errors.md#unsupported-call) |
 | `Enum.min([a, b, c])` | `min(min(a, b), c)` | [`unsupported-call`](compile-errors.md#unsupported-call) |
-| `for {x, i} <- Enum.with_index(a)` | `for i <- 0..(len(a) - 1)//1` and `x = a[i]` in the body | [`generator-pattern`](compile-errors.md#generator-pattern) |
-| `for x <- a, do: x * 2` as a value, or `for ..., into:` | `out = alloc(f64, len(a))`, a `for` that writes `out[i]`, then `out` | [`for-collect`](compile-errors.md#for-collect) |
+| `for {x, i} <- Enum.with_index(a)` | `for i <- 0..(length(a) - 1)//1` and `x = a[i]` in the body | [`generator-pattern`](compile-errors.md#generator-pattern) |
+| `for x <- a, do: x * 2` as a value, or `for ..., into:` | `out = alloc(f64, length(a))`, a `for` that writes `out[i]`, then `out` | [`for-collect`](compile-errors.md#for-collect) |
 | `[x \| acc]` then `Enum.reverse(acc)` to build a result of unknown length | append to a [bitstring accumulator](#the-bitstring-accumulator) started at `<<>>`: `<<acc::bitstring, x::64>>`, read in Elixir with `for <<x::64 <- out>>, do: x`; or `alloc` the largest size and return `{out, count}` | [`unsupported-list`](compile-errors.md#unsupported-list) |
 | `<<a, b, _::16, rest::binary>> = arr` | indexed reads `a = arr[0]`, `b = arr[1]` | [`bitstring-match`](compile-errors.md#bitstring-match) |
 | `<<b::64>> = <<x::float-64>>` | convert in Elixir before the call | [`bitstring-match`](compile-errors.md#bitstring-match) |
 | `x ** 2` | `x * x`, or `pow(x, 2)` for a float | [`unsupported-expression`](compile-errors.md#unsupported-expression) |
 | `x in [1, 2, 3]` | `x == 1 or x == 2 or x == 3` | [`unsupported-expression`](compile-errors.md#unsupported-expression) |
 | `Enum.all?(a, &(&1 > 0))` | `Enum.all?(a, fn x -> x > 0 end)` | [`fn-argument`](compile-errors.md#fn-argument) |
-| `length(a)`, `byte_size(a)` | `len(a)` | [`unknown-function`](compile-errors.md#unknown-function) |
+| `byte_size(a)` | `length(a)` | [`undefined-function`](compile-errors.md#undefined-function) |
 | `unless c do ... end` | `if not c do ... end` | [`unsupported-construct`](compile-errors.md#unsupported-construct) |
 | a map of counters, `Map.update(m, k, 1, &(&1 + 1))` | an array indexed by the key: `counts = alloc(i64, 256)`, `counts[k] = counts[k] + 1` | [`unsupported-map`](compile-errors.md#unsupported-map) |
 | `xs :: list(float)` | `xs :: [f64]`, packed in Elixir with `for x <- xs, into: <<>>, do: <<x::float-64-native>>` | [`unknown-type`](compile-errors.md#unknown-type) |
@@ -1166,7 +1166,7 @@ caller it is a binary of native-endian values of that type.
 ([`type-mismatch`](compile-errors.md#type-mismatch) for an `f64` index,
 [`not-an-array`](compile-errors.md#not-an-array) when `a` is not an array).
 
-An index outside `0..len(a) - 1`, including a negative one, raises
+An index outside `0..length(a) - 1`, including a negative one, raises
 `Enum.OutOfBoundsError` with the index:
 
 ```elixir
@@ -1181,10 +1181,10 @@ iex> M.get(<<1.0::float-native>>, 1)
 ```
 
 The check is left out where the compiler proves the index in range, for
-example `i <- 0..(n - 1)//1` with `n = min(len(a), len(b))`, a
+example `i <- 0..(n - 1)//1` with `n = min(length(a), length(b))`, a
 `for x <- a` generator, a `[u8]` value indexing a 256-element `alloc`, or
-`out[2 * i + 1]` with `out = alloc(u8, 2 * len(a))` and
-`i <- 0..(len(a) - 1)//1` (a literal multiple or `div` by a literal of a
+`out[2 * i + 1]` with `out = alloc(u8, 2 * length(a))` and
+`i <- 0..(length(a) - 1)//1` (a literal multiple or `div` by a literal of a
 length). That changes speed, never results.
 
 ### Word loads
@@ -1208,11 +1208,11 @@ and the big-endian `u64_be`, `u32_be`, `u16_be` read the unsigned 8-, 4- or
   of the unsigned value (see [Limits](#12-limits)). Mix it into a hash with
   masked arithmetic or `wrap64`, where only the bits matter;
   `band(u64_le(b, i), 0xFFFFFFFFFFFFFFFF)` is the unsigned word as a `u64`.
-- `i < 0` or `i + width > len(bytes)` raises `Enum.OutOfBoundsError` with
+- `i < 0` or `i + width > length(bytes)` raises `Enum.OutOfBoundsError` with
   index `i`, like `a[i]`: "8-byte load at index 5 out of bounds for array of
   length 8".
 - The check is left out where the compiler proves `0 <= i` and
-  `i + width <= len(bytes)`, as in `for i <- 0..(len(b) - 8)//1` (or
+  `i + width <= length(bytes)`, as in `for i <- 0..(length(b) - 8)//1` (or
   `//8`) followed by `u64_le(b, i)`. A `u16_*` value indexes a
   65536-element `alloc` without a check.
 - The load is unaligned and compiles to one machine load (plus a byte swap
@@ -1220,7 +1220,7 @@ and the big-endian `u64_be`, `u32_be`, `u16_be` read the unsigned 8-, 4- or
 
 ```elixir
 defk sum_words(b :: [u8]) :: i64 do
-  for i <- 0..(len(b) - 8)//8, reduce: 0 do
+  for i <- 0..(length(b) - 8)//8, reduce: 0 do
     acc -> wrap64(acc + u64_le(b, i))
   end
 end
@@ -1292,7 +1292,7 @@ defk unpack(lits :: [u8], seqs :: [i64], size :: i64) :: [u8] do
   out = alloc(u8, size)
 
   {out, _, _} =
-    for s <- 0..(div(len(seqs), 3) - 1)//1, reduce: {out, 0, 0} do
+    for s <- 0..(div(length(seqs), 3) - 1)//1, reduce: {out, 0, 0} do
       {out, ip, op} ->
         ln = seqs[3 * s]
         out = copy(out, op, lits, ip, ln)
@@ -1403,7 +1403,7 @@ An input array is written the same way; here a HyperLogLog register update:
 
 ```elixir
 defk update(regs :: [u8], idx :: [i64], ranks :: [i64]) :: [u8] do
-  for k <- 0..(len(idx) - 1)//1 do
+  for k <- 0..(length(idx) - 1)//1 do
     j = idx[k]
     regs[j] = max(regs[j], ranks[k])
   end
@@ -1550,14 +1550,14 @@ running total of the bytes it holds, and an allocation that would take it
 past the module's budget raises `ArgumentError`:
 
 ```
-** (ArgumentError) out of memory (allocating 1024 bytes would take this call's buffers past max_owned, 8192 bytes)
+** (ArgumentError) out of memory (allocating 1024 bytes would take this call's buffers past max_owned_bytes, 8192 bytes)
 ```
 
 This keeps a runaway loop from exhausting the machine: an operating system
 that overcommits memory kills the whole node long before an allocation
 fails, which would break the [runtime contract](guides/runtime-contract.md).
 
-- The budget is `use Defk, max_owned: bytes`, a positive integer (an
+- The budget is `use Defk, max_owned_bytes: n`, a positive integer (an
   expression such as `4 * 1024 ** 3` or a module attribute is fine), for
   every kernel of the module. Any other value is an `ArgumentError` when the
   module compiles.
@@ -1566,14 +1566,14 @@ fails, which would break the [runtime contract](guides/runtime-contract.md).
   memory, and a loop that keeps a buffer per iteration raises before it
   takes the memory the node and the OS need. A fixed default would be too
   small on large servers or too large on small machines. In a container
-  whose memory limit is below the host's, set `max_owned` (the default sees
-  the host's memory). `Mod.__defk_stats__().max_owned` shows the budget.
+  whose memory limit is below the host's, set `max_owned_bytes` (the default sees
+  the host's memory). `Mod.__defk_stats__().max_owned_bytes` shows the budget.
 - The count is per call: concurrent calls each have their own, a call
   after a raise starts from zero, and a yield keeps it. An array a kernel
   returns counts until it returns.
 - Elixir mode enforces the same budget on `alloc/2`: it adds up the bytes
   every `alloc/2` of the call asks for (in called kernels too), against
-  the same `max_owned` (it reads `__defk_stats__().max_owned`), and raises
+  the same `max_owned_bytes` (it reads `__defk_stats__().max_owned_bytes`), and raises
   the same message before building the binary. So an `alloc` in a loop
   raises at the same iteration in both modes, and a size no host could
   hold raises instead of exhausting the node. Elixir mode does not see
@@ -1596,7 +1596,7 @@ binary literal or attribute returned unwritten is a new binary of its bytes.
 
 ```elixir
 defk first_nonempty(a :: [i64], b :: [i64]) :: [i64] do
-  if len(a) > 0, do: a, else: b
+  if length(a) > 0, do: a, else: b
 end
 ```
 
@@ -1920,7 +1920,7 @@ and carries the result to the next iteration and out of the loop:
 
 ```elixir
 defk insert(slots :: [i64], counts :: [i64], key :: i64) :: {[i64], [i64], i64} do
-  j = band(key, len(slots) - 1)
+  j = band(key, length(slots) - 1)
   new = if counts[j] == 0, do: 1, else: 0
   slots[j] = key
   counts[j] = counts[j] + 1
@@ -2089,7 +2089,7 @@ iex> M.count_primes(100)
 
 The builtins are listed in [section 4](#builtins). Functions of other modules,
 including ordinary `def`s of the kernel's own module, are not callable
-([`unsupported-call`](compile-errors.md#unsupported-call), [`unknown-function`](compile-errors.md#unknown-function)).
+([`unsupported-call`](compile-errors.md#unsupported-call), [`undefined-function`](compile-errors.md#undefined-function)).
 
 ## 9. Yielding and the runtime contract in practice
 
@@ -2207,7 +2207,7 @@ hint: pass the values as separate arguments, or pack them into an array before t
 means it is planned; other wordings ("is not a kernel builtin", "is not a
 kernel type") are mistakes with a fix in the hint. The link in the last line
 is a URL in a project that depends on defk, and the page's path inside the
-defk repository. Codes are never renamed. `Defk.Errors.codes/0` lists them,
+defk repository. From 0.1.0, codes are never renamed. `Defk.Errors.entries/0` lists them,
 and `mix run -e 'Defk.Errors.explain!("unsupported-map")'` prints one entry.
 The [compile errors](compile-errors.md) page has every code, its default why
 and hint, a failing example and the rewrite.
@@ -2229,7 +2229,7 @@ bug.
 | a `u64` above 2^63 - 1 where an `i64` is expected (index, length, range bound, `i64` parameter, result or accumulator), and `rotl/3`, `rotr/3` of an `i64` giving one | the integer | `ArithmeticError` "... does not fit in i64" |
 | a negative `i64` where a `u64` is expected | the integer | `ArithmeticError` "-1 does not fit in u64" |
 | a `[u64]` write of a negative value, an `[i64]` write of a `u64` above 2^63 - 1 | `<<-1::64>>` wraps | `ArgumentError` "value -1 does not fit in u64" |
-| a `u64` mixed with an `i64` that may be negative in `+ - * band bor bxor div rem min max`, outside a mask | runs | compile error [`u64-mix`](compile-errors.md#u64-mix) |
+| a `u64` mixed with an `i64` that may be negative in `+ - * band bor bxor div rem min max`, outside a mask | runs | compile error [`u64-with-i64`](compile-errors.md#u64-with-i64) |
 | `bnot` or unary `-` of a `u64` outside a mask | a negative integer | compile error [`operand-type`](compile-errors.md#operand-type) |
 | arithmetic bound to a variable and masked later, `x = h * p` then `band(x, m)` | a bignum, then masked | `x = h * p` is checked and raises on overflow (see [Masked arithmetic](#masked-arithmetic)) |
 | `bsl` inside a mask by a count that is not a literal and is negative | an exact right shift | `ArithmeticError` "bsl/2 by the negative count -1 inside a mask" |
@@ -2255,7 +2255,7 @@ bug.
 | an array variable bound again inside a loop body and read after the loop | the binding is gone after the loop | compile error [`array-rebind-in-loop`](compile-errors.md#array-rebind-in-loop) |
 | a called kernel writing an array parameter it does not return | the write is lost | compile error [`write-not-returned`](compile-errors.md#write-not-returned) |
 | memory of arrays written in a loop while another variable still reads them | the old binaries are garbage collected | each copy (see [Copies](#copies)) lives until the kernel returns |
-| a call holding more bytes in arrays it allocated or copied (an `alloc` or a copy in a loop body) than its [owned-buffer budget](#the-owned-buffer-budget) (`max_owned`, by default half of physical memory) | the old binaries are garbage collected | `ArgumentError` "out of memory (allocating N bytes would take this call's buffers past max_owned, M bytes)"; Elixir mode raises it for `alloc/2` (the same message), not for copies |
+| a call holding more bytes in arrays it allocated or copied (an `alloc` or a copy in a loop body) than its [owned-buffer budget](#the-owned-buffer-budget) (`max_owned_bytes`, by default half of physical memory) | the old binaries are garbage collected | `ArgumentError` "out of memory (allocating N bytes would take this call's buffers past max_owned_bytes, M bytes)"; Elixir mode raises it for `alloc/2` (the same message), not for copies |
 | the C compiler is needed at build time | | compile error [`no-c-compiler`](compile-errors.md#no-c-compiler) |
 
 ## 13. Known divergences

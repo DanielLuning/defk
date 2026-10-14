@@ -15,7 +15,7 @@ Defk.Report.print(Examples.Kernels)
 ```text
 dot/2  test/support/examples.ex:18
   18 |   defk dot(a :: [f64], b :: [f64]) :: f64 do
-  19 |     n = min(len(a), len(b))
+  19 |     n = min(length(a), length(b))
   20 |
   21 |     for i <- 0..(n - 1)//1, reduce: 0.0 do    # loop: strips of DEFK_STRIP trips, one safepoint per strip; flagged
      |                                               # non-finite: float checks set a flag tested once per strip; a set flag replays the strip with raising checks
@@ -30,8 +30,8 @@ A kept check names the fact the compiler could not prove:
 ```text
 next_sum/1  test/report_test.exs:16
   16 |   defk next_sum(a :: [i64]) :: i64 do
-  17 |     for i <- 0..(len(a) - 1)//1, reduce: 0 do  # loop: strips of DEFK_STRIP trips, one safepoint per strip
-  18 |       acc -> acc + a[i + 1]                    # a[i + 1]: bounds check kept; nothing proves i + 1 < len(a)
+  17 |     for i <- 0..(length(a) - 1)//1, reduce: 0 do  # loop: strips of DEFK_STRIP trips, one safepoint per strip
+  18 |       acc -> acc + a[i + 1]                       # a[i + 1]: bounds check kept; nothing proves i + 1 < length(a)
   19 |     end
   20 |   end
 ```

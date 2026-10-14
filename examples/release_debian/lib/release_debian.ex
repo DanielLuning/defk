@@ -3,7 +3,7 @@ defmodule ReleaseDebian do
   use Defk
 
   defk dot(a :: [f64], b :: [f64]) :: f64 do
-    for i <- 0..(len(a) - 1)//1, reduce: 0.0 do
+    for i <- 0..(length(a) - 1)//1, reduce: 0.0 do
       acc -> acc + a[i] * b[i]
     end
   end

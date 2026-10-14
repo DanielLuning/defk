@@ -455,7 +455,7 @@ Tests that changed with it:
 - `popcount`, `mulhi` and `rotl`/`rotr` in real code: only `argon2`, `blake` and `hash_chain` use them (minutes of compile, poor verdicts); `test/bit_builtins_test.exs` and `test/crc32c_test.exs` cover the builtins.
 - Narrow integer element types (`[i16]`, `[i32]`): `pcm_mix` (+1 s) is the one example.
 - Kernels with a 25-element tuple accumulator (`keccak`, 63 s) and very large C (`cdcl_sat`, 2.35 MB, 295 s): compile-time scaling is not tested.
-- `Enum.reduce_while` with a `case` on patterns in a body (`blake`, `argon2`), `max_owned` and `adaptive_slice` options: no example uses them; unit tests do.
+- `Enum.reduce_while` with a `case` on patterns in a body (`blake`, `argon2`), `max_owned_bytes` and `adaptive_slice` options: no example uses them; unit tests do.
 - Bit-exact libm beyond what `geo_nearest` and `rolling_stats` use (`sin`/`cos` in `fft`).
 - Dense 2-D float loops (`matmul`) and the blocked variant.
 - Anything that needs deps: `cosine_topk`, `hll_update_many`, `gorilla_encode`, `hashes` and `lz4_snappy_decode` compile without them, but their Elixir baselines and anchors (and so their benchmarks) are not run.

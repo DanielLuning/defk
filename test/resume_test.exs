@@ -28,7 +28,7 @@ defmodule Defk.ResumeTest.Shapes do
 
             t2 =
               if rem(r, 2) == 0 do
-                for i <- 0..(len(a) - 1)//1, reduce: t do
+                for i <- 0..(length(a) - 1)//1, reduce: t do
                   acc ->
                     inner =
                       for k <- 0..(rem(i, 5) + 1)//1, reduce: 0 do
@@ -79,7 +79,7 @@ defmodule Defk.ResumeTest.Shapes do
               end
 
             s2 =
-              for i <- 0..(len(a) - 1)//1, reduce: 0.0 do
+              for i <- 0..(length(a) - 1)//1, reduce: 0.0 do
                 z -> z + a[i]
               end
 
@@ -107,7 +107,7 @@ defmodule Defk.ResumeTest.Shapes do
               end
 
             rem(
-              acc + dot_mod(a, w) + kept + bonus + tail + chain(min(len(a), 2500), r),
+              acc + dot_mod(a, w) + kept + bonus + tail + chain(min(length(a), 2500), r),
               1_000_000_007
             )
         end
@@ -157,9 +157,9 @@ defmodule Defk.ResumeTest.K do
   # callees: inlined into both forms above, so they yield only in the first
 
   defk weights(a :: [i64], r :: i64) :: [i64] do
-    w = alloc(i64, len(a))
+    w = alloc(i64, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       w[i] = rem(a[i] * r, 97)
     end
 
@@ -167,7 +167,7 @@ defmodule Defk.ResumeTest.K do
   end
 
   defk dot_mod(a :: [i64], b :: [i64]) :: i64 do
-    for i <- 0..(min(len(a), len(b)) - 1)//1, reduce: 0 do
+    for i <- 0..(min(length(a), length(b)) - 1)//1, reduce: 0 do
       acc -> rem(acc + a[i] * b[i], 1_000_000_007)
     end
   end
