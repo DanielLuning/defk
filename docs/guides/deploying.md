@@ -36,6 +36,36 @@ Why defk compiles C at build time, rather than shipping precompiled code or
 compiling at run time, is recorded in
 [ADR 0002](https://github.com/DanielLuning/defk/blob/main/docs/adr/0002-c-compiler-at-build-time.md).
 
+## Where defk is tested
+
+The whole test suite runs on every change, with OTP 29 and Elixir 1.20, on
+these four targets:
+
+| OS and CPU | C library | Compiler |
+|---|---|---|
+| Linux x86-64 (Debian) | glibc | clang |
+| Linux x86-64 (Debian) | glibc | gcc |
+| Linux arm64 (Debian) | glibc | clang |
+| macOS arm64 | | Apple clang |
+
+Linux arm64 with gcc passed the suite too, but is not run on every change.
+The recipe, and how to run it on your own machine with or without GitHub,
+is in the repository's
+[`ci/README.md`](https://github.com/DanielLuning/defk/blob/main/ci/README.md).
+
+Not tested: Alpine and other musl systems (the table above lists their
+compiler packages, but no kernel has been run there), macOS on x86-64,
+Windows, the BSDs, 32-bit systems, and cross-compiling. Each may work; none
+has been checked.
+
+Two features depend on the compiler:
+
+- The fast-path report's vectorisation facts (`report: :full`) come from
+  clang. With gcc they say "unknown".
+- Which loops vectorise differs by CPU: a float sum kept in Elixir's order
+  vectorises on arm64 but not on x86-64. Results stay the same; only the
+  speed differs.
+
 ## The runtime needs no compiler
 
 The kernel libraries link only against the C library (`libc.so.6` on

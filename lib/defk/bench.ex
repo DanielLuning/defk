@@ -260,14 +260,16 @@ defmodule Defk.Bench do
 
     runs = Keyword.get(opts, :runs, 5)
     check = check_fun(opts)
-    elixir_us = best(Keyword.fetch!(opts, :elixir), runs)
+    [elixir_us | _] = elixir_runs = timed(Keyword.fetch!(opts, :elixir), runs)
 
     result =
       case Keyword.fetch(opts, :defk) do
         {:ok, defk} ->
           correct = if check == :skipped, do: :skipped, else: check.()
-          defk_us = best(defk, runs)
-          Map.put(compare(elixir_us, defk_us), :correct, correct)
+          [defk_us | _] = defk_runs = timed(defk, runs)
+
+          compare(elixir_us, defk_us)
+          |> Map.merge(%{correct: correct, defk_spread_ms: spread(defk_runs)})
 
         :error ->
           %{
@@ -284,7 +286,8 @@ defmodule Defk.Bench do
         example: name,
         expected: expected,
         baseline: baseline,
-        reason: Keyword.get(opts, :reason)
+        reason: Keyword.get(opts, :reason),
+        elixir_spread_ms: spread(elixir_runs)
       })
 
     result
@@ -387,13 +390,14 @@ defmodule Defk.Bench do
 
   defp add_native(result, native, runs) do
     {fun, label} = native_parts(native)
-    native_us = best(fun, runs)
+    [native_us | _] = native_runs = timed(fun, runs)
     native_ms = ms(native_us)
 
     native_speedup = if result.defk_ms, do: native_speedup(native_ms, result.defk_ms)
 
     Map.merge(result, %{
       native_ms: native_ms,
+      native_spread_ms: spread(native_runs),
       native_label: label,
       native_speedup: native_speedup
     })
@@ -477,14 +481,31 @@ defmodule Defk.Bench do
   # long-lived data a real caller holds; a list built a moment ago is young.
   # Large inputs shared across requests should still live where a real app
   # keeps them (:persistent_term, ETS), not on this process's heap.
-  defp best(fun, runs) do
+  defp best(fun, runs), do: fun |> timed(runs) |> hd()
+
+  # every run's time in microseconds, fastest first
+  defp timed(fun, runs) do
     fun.()
 
     Enum.map(1..runs, fn _ ->
       settle()
       elem(:timer.tc(fun), 0)
     end)
-    |> Enum.min()
+    |> Enum.sort()
+  end
+
+  # The spread of a side's runs (fastest first), beside the best run that the
+  # verdict uses: the median and the slowest run, in ms (the evidence bar's
+  # "best of N with spread", docs/verdict.md).
+  defp spread(sorted_us) do
+    n = length(sorted_us)
+
+    median =
+      if rem(n, 2) == 1,
+        do: Enum.at(sorted_us, div(n, 2)),
+        else: (Enum.at(sorted_us, div(n, 2) - 1) + Enum.at(sorted_us, div(n, 2))) / 2
+
+    %{runs: n, median: ms(median), max: ms(List.last(sorted_us))}
   end
 
   defp ms(us), do: Float.round(us / 1000, 3)
@@ -494,6 +515,7 @@ defmodule Defk.Bench do
     IO.puts("  elixir     #{r.elixir_ms} ms")
     if r.defk_ms, do: IO.puts("  defk       #{r.defk_ms} ms   (#{r.speedup}x)")
     if r[:native_ms], do: IO.puts(native_line(r))
+    print_spread(r)
 
     case r.correct do
       :skipped -> IO.puts("  correct    skipped (#{r.reason})")
@@ -521,6 +543,19 @@ defmodule Defk.Bench do
   defp native_line(r) do
     vs = if r.native_speedup, do: "   (defk #{r.native_speedup}x vs native)", else: ""
     "  native     #{r.native_ms} ms   [#{r.native_label}]#{vs}"
+  end
+
+  # absent from a result reused from the cache before the spread existed
+  defp print_spread(r) do
+    sides =
+      for side <- [:elixir, :defk, :native], s = r[:"#{side}_spread_ms"] do
+        "#{side} #{s.median} / #{s.max}"
+      end
+
+    if sides != [] do
+      runs = r.elixir_spread_ms.runs
+      IO.puts("  spread     median / slowest of #{runs} ms: #{Enum.join(sides, ", ")}")
+    end
   end
 
   defp print_gaps(r) do

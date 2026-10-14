@@ -157,12 +157,28 @@ defmodule Defk.BenchTest do
 
     assert Enum.sort(Map.keys(json)) ==
              Enum.sort(
-               ~w(baseline correct defk_ms elixir_ms example expected reason speedup verdict)
+               ~w(baseline correct defk_ms defk_spread_ms elixir_ms elixir_spread_ms example) ++
+                 ~w(expected reason speedup verdict)
              )
 
     assert r.verdict in [:good, :marginal, :poor]
     assert json["verdict"] == Atom.to_string(r.verdict)
     assert is_number(json["speedup"]) and is_number(json["elixir_ms"])
+  end
+
+  # the evidence bar's "best of N with spread" (defk-a1p)
+  test "each side's spread: the median and the slowest of its runs, beside the best" do
+    {r, out, json} = report(runs: 3, native: {spin(2), "n"})
+
+    for side <- [:elixir, :defk, :native] do
+      best = r[:"#{side}_ms"]
+      assert %{runs: 3, median: median, max: max} = r[:"#{side}_spread_ms"]
+      assert best <= median and median <= max
+      assert %{"runs" => 3} = json["#{side}_spread_ms"]
+    end
+
+    assert out =~ ~r/spread     median \/ slowest of 3 ms: elixir [\d.]+ \/ [\d.]+, defk /
+    assert out =~ ~r/, native [\d.]+ \/ [\d.]+\n/
   end
 
   test ":check is required when :defk is given, before anything is timed" do
