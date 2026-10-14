@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-sgw.5"
   ],
@@ -12,8 +12,8 @@
   ],
   "parent": "defk-sgw",
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "Final verdict session: accept the conclusion and close the map",
   "type": "task",
-  "updated_at": "2026-10-06T09:13:59Z"
+  "updated_at": "2026-10-14T06:03:31Z"
 }
