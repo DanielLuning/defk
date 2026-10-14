@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-wfi.2"
   ],
@@ -25,8 +25,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Run the test suite on Linux (x86-64 and aarch64) and record one Linux measurement run",
   "type": "task",
-  "updated_at": "2026-10-14T13:18:03Z"
+  "updated_at": "2026-10-14T17:09:26Z"
 }
