@@ -22,11 +22,15 @@
     {
       "text": "Re-scoped by the map 'Wayfinder: defk ready for a first Hex release' (2026-10-14). Scope item 1's choice is made: dual CI (GitHub Actions and a local Docker recipe), built by defk-wfi.2, which this ticket now waits on. This ticket keeps: fix or ticket each Linux failure that the matrix shows; add the spread to Defk.Bench.report/1 (the known evidence gap) before the measurement run; one examples/run_all.exs run on Linux x86-64 (native hardware, never emulation), recorded in docs/performance.md as its own conditions block, with verdicts that differ from macOS called out; the supported/untested note in the guides.",
       "timestamp": "2026-10-14T13:18:03Z"
+    },
+    {
+      "text": "Resolution: done, merged to main.\n- Suite on Linux: CI run 38608015638 on 4d7f6ba passes on all four labels on native hardware (linux-x86_64-clang, linux-x86_64-gcc, linux-aarch64-clang, macos-arm64-clang). The first Linux runs found four bugs, fixed in defk-wfi.7, .8, .9, .10. Repeatable: ci/README.md (GitHub Actions, act, ci/local.sh).\n- Spread: Defk.Bench.report/1 records elixir/defk/native_spread_ms (runs, median, max) and prints them; the best run still sets the verdict.\n- Measurement run: .github/workflows/measure.yml (on demand) runs ci/measure.sh = mix defk.examples --bench --all --snapshot --fresh. Run 38608036908 on ubuntu-24.04: AMD EPYC 9V45, 2 vCPUs (a private repo's runner), load 1.5-1.8, provisional. 29/31 examples as claimed; hash_chain 0.98x marginal (macOS 0.55x poor) and batched_levenshtein 3.76x good (macOS 1.73x marginal, on a 73k-word list against 234k). Recorded in docs/performance.md 6.31 with every row against macOS. The workflow run shows failure because those two verdicts differ from their claims; the examples keep their macOS claims.\n- Also fixed: geo_nearest crashed in check-only mode (read defk_ms); a bench cache test failed when it ran first.\n- Guides: docs/guides/deploying.md 'Where defk is tested' (tested targets; untested: musl, macOS x86-64, Windows, BSDs, 32-bit, cross-compiling).\n- Verdict: docs/verdict.md Limitations rewritten: what was checked on Linux since, and what was not (a quiet Linux machine with more cores, musl, macOS x86-64, Windows, cross-compiling).\n- Check-only examples on Linux aarch64 (podman): 27/32 before the fixes; the rest were missing tools (cargo, cmake, a word list) and memory in the 8 GB VM; the measure workflow installs the tools.\n- Not done: Valgrind as a Linux job (stays manual at release time, ci/README.md).",
+      "timestamp": "2026-10-14T18:15:38Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Run the test suite on Linux (x86-64 and aarch64) and record one Linux measurement run",
   "type": "task",
-  "updated_at": "2026-10-14T17:09:26Z"
+  "updated_at": "2026-10-14T18:15:38Z"
 }
