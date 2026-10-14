@@ -461,15 +461,21 @@ end
 
 exact = elixir_nearest.()
 agree = single.() == exact and grid_elixir.() == exact and grid_defk.() == exact
-single_ms = best.(single)
-{ge, gd} = {best.(grid_elixir), best.(grid_defk)}
 
-IO.puts("""
+# check-only (mix defk.examples): the agreement, no timings
+if Defk.Bench.check_only?() do
+  IO.puts("\n  beside the verdict (agrees with the full scan: #{agree})")
+else
+  single_ms = best.(single)
+  {ge, gd} = {best.(grid_elixir), best.(grid_defk)}
 
-  beside the verdict (agrees with the full scan: #{agree})
-    Elixir in one process (no parallel chunks): #{single_ms} ms; defk #{result.defk_ms} ms is #{Float.round(single_ms / result.defk_ms, 1)}x
-    grid, Elixir: #{ge} ms
-    grid, defk:   #{gd} ms (#{Float.round(ge / gd, 2)}x)
-""")
+  IO.puts("""
+
+    beside the verdict (agrees with the full scan: #{agree})
+      Elixir in one process (no parallel chunks): #{single_ms} ms; defk #{result.defk_ms} ms is #{Float.round(single_ms / result.defk_ms, 1)}x
+      grid, Elixir: #{ge} ms
+      grid, defk:   #{gd} ms (#{Float.round(ge / gd, 2)}x)
+  """)
+end
 
 agree or System.halt(1)
