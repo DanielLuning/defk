@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-wfi.4"
+  ],
   "created": "2026-10-14T13:17:49Z",
   "description": "## Question\n\nWhich names change before 0.1.0? After 0.1.0 the stability promise (CONTEXT.md) freezes them, and a rename needs a deprecation.\n\nIn scope (decided on the map 'Wayfinder: defk ready for a first Hex release'): the public tier of ADR-0006 (modules, functions, macros), the defk options (for example yield:, max_owned), the builtins of the kernel subset (for example alloc/2, crc32c/3), and the error codes (docs/compile-errors.md; their 'never renamed' rule starts at the release). Out of scope: the package name defk.\n\nDone when: each name has a keep or rename decision, the renames are recorded as a list, and the work they cause is ticketed under the map.",
   "id": "defk-wfi.3",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Rename review: the public tier, the options, the builtins, the error codes",
   "type": "task",
-  "updated_at": "2026-10-14T13:17:59Z"
+  "updated_at": "2026-10-14T13:18:01Z"
 }
