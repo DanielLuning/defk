@@ -5,11 +5,13 @@
   "created": "2026-10-14T07:27:52Z",
   "description": "Why: a question after the verdict (defk-sgw.6, 2026-10-14): defk generates both C and Elixir for each kernel, so could a call switch to the generated Elixir below the crossover size? defk-dtw.6 ruled Elixir mode a test oracle, never production, and its timings never quoted; its estimate was a 30-100x slowdown. Array writes compile to a = put(a, i, v), a binary copy per write. Nobody has measured it. One cheap experiment closes or opens the question.\n\nScope:\n1. Time Elixir mode (Mod.__defk_elixir__/2) against the kernel and against the optimised Elixir baseline at the small sizes of two read-only kernels (no array writes, the best case for Elixir mode; e.g. a ws_masking-like or hash kernel at 16 B-1 KiB) and one kernel with writes.\n2. Record the result in docs/performance.md (provisional if the machine is loaded). This is an exploration measurement; it does not change the rule that Elixir mode timings are not quoted as baselines.\n3. If Elixir mode is within ~2x of the optimised Elixir at small sizes, file a decision ticket on a size-based switch to Elixir mode (needs: Elixir mode compiled outside :test, a faster array representation for writes, a reversal of defk-dtw.6's 'never in production', a threshold source). If it is ~10x or more slower, close with the numbers.\n\nDone when: the numbers are in docs/performance.md and either the decision ticket exists or this ticket closes the question.",
   "id": "defk-vcx.2",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-vcx",
   "priority": 3,
   "status": "open",
   "title": "Measure Elixir mode at small sizes: could it ever be the fast side below a crossover?",
   "type": "task",
-  "updated_at": "2026-10-14T07:27:52Z"
+  "updated_at": "2026-10-14T07:27:56Z"
 }
