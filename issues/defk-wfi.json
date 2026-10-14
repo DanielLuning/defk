@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-a1p"
+  ],
   "created": "2026-10-14T06:04:34Z",
   "description": "## Destination\n\ndefk ready for a first Hex release: Linux evidence (the suite on x86-64 and aarch64, one Linux measurement run), a stability promise for the kernel subset and the runtime contract, and the expansion candidates from docs/verdict.md ('Where defk could grow') triaged.\n\n## Notes\n\n- Opened by the accepted verdict (defk-sgw.6, 2026-10-14): the go/no-go rule's outcome is go; the decision taken on it is to keep developing and improving defk, and not to publish on Hex until the two gates above hold.\n- First ticket: defk-a1p (Linux suite and measurement run).\n- Stub: the map's design (decisions, ordering, what the stability promise covers) is its own session.\n- The deferred epics (defk-52v, defk-n4r, defk-sve, defk-ulk, defk-96f) and the open support epics stay as they are until this map triages them; they do not reopen automatically.\n- Known evidence gap carried over: the snapshot records no spread (best of five only); the next snapshot should add it to Defk.Bench.report/1.",
   "id": "defk-wfi",
