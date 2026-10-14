@@ -14,9 +14,15 @@
     "wayfinder:task"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Decided with the maintainer (2026-10-14), refines the local path:\n- The real work lives in one repo script (for example ci/run.sh) that runs mix ci. Each workflow job does only setup (OTP, Elixir, compiler) and then calls this script.\n- act (nektos/act) is the normal local path: it runs the same .github/workflows file, so the matrix is the same by construction. Use it also to build and test the workflow before a push.\n- act setup: keep the -P label mappings in a repo .actrc (ubuntu-24.04 and ubuntu-24.04-arm to images; x86-64 with --container-architecture linux/amd64 under emulation, arm64 native; macos-15=-self-hosted runs the macOS job on the Mac host). Emulation is for tests, never timing.\n- Check under act and on GitHub: erlef/setup-beam (also its arm64 Linux support, from defk-wfi.1) and actions/cache. act's default images (catthehacker/ubuntu) differ from GitHub's runner images.\n- Fallback that needs neither act nor GitHub: one documented docker run per matrix entry that calls the same script. A release never depends on act or on GitHub.\n- The result file for the release-readiness check comes from the script, so all three paths write it the same way.",
+      "timestamp": "2026-10-14T13:25:02Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Dual CI: a GitHub Actions workflow and a local Docker recipe with the same matrix",
   "type": "task",
-  "updated_at": "2026-10-14T13:18:01Z"
+  "updated_at": "2026-10-14T13:25:02Z"
 }
