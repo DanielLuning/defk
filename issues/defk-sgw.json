@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-14T06:05:55Z",
   "created": "2026-10-06T09:13:19Z",
   "description": "Implementation plan for the decisions in the map 'Wayfinder: roadmap to a defk verdict' (defk-dtw). The map holds the decisions; this epic sequences the build to docs/verdict.md. Its children are the verdict-specific tickets; the build tickets it orders live in the README Roadmap and the catalog epic (defk-9p6). Plan and phases are in the comment below.",
   "id": "defk-sgw",
@@ -13,8 +14,8 @@
     }
   ],
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Build to the defk verdict",
   "type": "epic",
-  "updated_at": "2026-10-12T10:12:06Z"
+  "updated_at": "2026-10-14T06:05:55Z"
 }
