@@ -5,6 +5,7 @@
     "defk-djy.19",
     "defk-wfi.10",
     "defk-wfi.11",
+    "defk-wfi.12",
     "defk-wfi.2",
     "defk-wfi.4",
     "defk-wfi.5",
@@ -24,5 +25,5 @@
   "status": "open",
   "title": "Release-readiness check for 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-14T20:03:49Z"
+  "updated_at": "2026-10-14T20:04:01Z"
 }
