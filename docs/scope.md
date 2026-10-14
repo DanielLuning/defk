@@ -9,8 +9,8 @@ errors on it are generated from the compiler's error registry
 
 defk asks one question: **can a typed subset of Elixir compile to native code
 that runs at C speed, with a cheap call boundary, while keeping the BEAM's
-promises?** It is a research project working towards that answer, not a
-released library (it is not on Hex).
+promises?** For loops over numbers and bytes the answer was yes, and defk is
+a library on Hex, from `0.1.0` with a [stability promise](guides/stability.md).
 
 You write a **kernel** with `defk` in an ordinary module. It reads like
 Elixir, takes typed numbers and packed binaries, and compiles to a checked

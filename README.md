@@ -4,7 +4,9 @@
 > to native code that runs at C speed, with a cheap boundary, while keeping the
 > BEAM's promises (preemption, isolation, cleanup)?**
 
-defk is a research project, not a released library (it is not on Hex). You
+The project's [verdict](https://github.com/DanielLuning/defk/blob/main/docs/verdict.md)
+answered yes for loops over numbers and bytes, and defk is now a library on
+Hex, from `0.1.0` with a [stability promise](docs/guides/stability.md). You
 write a **kernel** with `defk` in an ordinary module. It reads like Elixir,
 takes typed numbers and packed binaries, and compiles to a checked native
 function (a NIF) when the module compiles.
@@ -87,8 +89,8 @@ compiles to plain Elixir (Elixir mode), so tests can check the two agree.
 
 Needs Elixir ≥ 1.20 (OTP 29 tested) and a C compiler (`cc`, or set `CC`) on
 the machine that compiles your code. To use it, add it as a dependency
-(`{:defk, path: "../defk"}` in a Mix project's `deps`, or
-`Mix.install([{:defk, path: "../defk"}])` in a script; it is not on Hex) and
+(`{:defk, "~> 0.1"}` in a Mix project's `deps`, or
+`Mix.install([{:defk, "~> 0.1"}])` in a script) and
 write kernels in any module with `use Defk`.
 
 - [Getting started](docs/guides/getting-started.md): a first kernel, step by step.

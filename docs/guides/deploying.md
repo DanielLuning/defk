@@ -186,8 +186,8 @@ MyApp.Live.add(2, 3)
 
 ## Shipping kernels in a Hex package
 
-defk itself is not on Hex; a release waits for the project's verdict. A
-library with kernels would today make every app that depends on it compile
+A library of your own that uses kernels would today make every app that
+depends on it compile
 them, so every build machine would need a C compiler. Precompiled libraries,
 built per target in CI and downloaded by hash as `rustler_precompiled` and
 `cc_precompiler` do, are the way out the project has named, but nothing is
