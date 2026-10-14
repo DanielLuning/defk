@@ -187,7 +187,7 @@ iex> M.classify(-3, true)
   the subject, and a literal at another parameter is a test in front of that
   clause's guard. Nothing is copied: the C is what the same `case` or `cond`
   written by hand gives, an if-chain over the parameter (which clang turns
-  into a switch where that pays). (defk-u9c)
+  into a switch where that pays).
 
 A helper over the bitstring accumulator, as Gorilla's encoder writes its
 delta-of-delta buckets:
@@ -473,8 +473,6 @@ non-negative integer Elixir has.
 
 - A `case` on a `u64` is [`case-subject`](compile-errors.md#case-subject).
 
-(defk-wlu)
-
 ### Float arithmetic
 
 **Supported:** `+`, `-`, `*`, `/` and unary `-` on `f64`. When one operand is
@@ -494,9 +492,9 @@ does not raise. An `[f64]` or `[f32]` input element whose bits are inf or NaN ra
 `ArgumentError` when it is read; elements never read don't. An `if`/`cond` arm
 that isn't taken never raises. Messages differ from Elixir's (they name the
 operation, not the line); run the kernel in Elixir mode to find the line.
-(defk-i00; the checks cost 17-24% on float reductions and about 2x on a
-vectorised elementwise loop today, see [performance.md 6.5](performance.md#65-float-checks-flag-the-strip-replay-on-failure) and
-defk-6tt.)
+(The checks cost 17-24% on float reductions and about 2x on a vectorised
+elementwise loop today; see
+[performance notes 6.5](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#65-float-checks-flag-the-strip-replay-on-failure).)
 
 ### Comparisons
 
@@ -603,7 +601,7 @@ result does not fit in i64, where Elixir would return a bignum (a limit, see
 are rejected ([operand-type](compile-errors.md#operand-type)). `band` with a constant mask
 gives the compiler a range: `table[band(h, 255)]` skips its bounds check
 against a 256-element array. Elixir 1.20 deprecates `~~~` and `^^^`; prefer
-`bnot/1` and `bxor/2`. (defk-w38)
+`bnot/1` and `bxor/2`.
 
 ### Bit builtins
 
@@ -620,7 +618,6 @@ Elixir functions do. `rotl`/`rotr` rotate by `n` modulo `w` (any `i64` n)
 and give x's type, so a 32-bit hash rotates as 32 bits in an `i64`
 (`rotl(k, 15, 32)` is MurmurHash3's `ROTL32(k, 15)`) and a 64-bit one in a
 `u64`. `f64_bits(x)` is the bits of a float, `<<b::64>> = <<x::float-64>>`.
-(defk-wlu)
 
 `mulhi(a, b)`, `clz(x)`, `ctz(x)`, `popcount(x)`, `rotl(x, n)` and
 `rotr(x, n)` work on the u64 bit pattern of an `i64` (`clz`, `ctz` and
@@ -640,7 +637,6 @@ with the top bit set is negative):
 
 Operands must be integers; `f64` and `bool` are rejected
 ([builtin-arguments](compile-errors.md#builtin-arguments)). None of these six can raise.
-(defk-52v.6)
 
 ### Hardware builtins
 
@@ -651,7 +647,7 @@ one, and a portable C version elsewhere: **the value is the same on every
 CPU, only the speed differs.** The choice is made at run time, once per
 kernel library (at its first call of the builtin), so a portable build
 never needs an architecture flag and never runs an instruction the CPU
-lacks. There is one so far, `crc32c/3`. (defk-ulk.4)
+lacks. There is one so far, `crc32c/3`.
 
 `crc32c(crc, x, w)` is one CRC32C (Castagnoli) step: the CRC register
 `crc` after the `w` bits of `x`, as `w / 8` bytes, least significant byte
@@ -696,7 +692,8 @@ makes it the `u64` value, at no cost. One step waits for the previous one
 (3 cycles on an Apple M4), so this loop runs at about 10 GB/s; three
 independent streams joined at the end run at about 28 GB/s, level with the
 crc32cer NIF (`examples/hashes.exs` has that kernel, and
-[Performance notes](performance.md), 6.21 and 6.22, the numbers).
+[Performance notes](https://github.com/DanielLuning/defk/blob/main/docs/performance.md),
+6.21 and 6.22, the numbers).
 
 Which implementation runs, and what it costs, depends on the CPU:
 
@@ -812,8 +809,6 @@ iex> M.mix32(0, 1)
 651101558
 ```
 
-(defk-n4r.2, defk-wlu)
-
 ### Binary literals
 
 **Supported:** a string literal `"abc"` (its UTF-8 bytes) and `<<1, 2, 3>>`
@@ -864,7 +859,7 @@ new binary of its bytes. It is not a `case` pattern.
 `0..255`, or any type or size other than 8-bit integer
 ([`binary-literal`](compile-errors.md#binary-literal)); build it in Elixir and pass it as a
 `[u8]` parameter, or use a module attribute. `<>` and `~s` are
-[`unsupported-string`](compile-errors.md#unsupported-string). (defk-n4r.5)
+[`unsupported-string`](compile-errors.md#unsupported-string).
 
 ### The bitstring accumulator
 
@@ -985,7 +980,7 @@ binary, bitstring and UTF segments; reading or indexing a bitstring
 [`bitstring-match`](compile-errors.md#bitstring-match)); starting from
 an input binary (`<<input::bitstring, ...>>` with `input :: [u8]`); a
 `bitstring` parameter of a kernel called from Elixir; and passing a
-bitstring where a kernel takes another type. (defk-cmr, defk-ooq)
+bitstring where a kernel takes another type.
 
 ### Module attributes
 
@@ -1046,7 +1041,7 @@ list, tuple, map, atom, `nil`, or a bitstring that is not whole bytes
 ([`attribute-value`](compile-errors.md#attribute-value)). An accumulating attribute
 (`Module.register_attribute(__MODULE__, :a, accumulate: true)`) is a list. A
 list of bytes packs into a binary attribute (`@table <<1, 2, 4>>`); the error
-shows that rewrite. (defk-ivt)
+shows that rewrite.
 
 ### What is not an expression
 
@@ -1233,8 +1228,6 @@ iex> M.sum_words(<<-1::64-little, 1::64-little>>)
 0
 ```
 
-(defk-n4r.2)
-
 ### Range copies
 
 **Supported:** `out = copy(out, at, src, from, n)` and
@@ -1310,7 +1303,7 @@ iex> M.unpack("abc", seqs, 7)
 "abccccc"
 ```
 
-(defk-52v.16; `examples/lz4_snappy_decode.exs` decodes with them.)
+(`examples/lz4_snappy_decode.exs` decodes with them.)
 
 ### Allocating
 
@@ -1425,8 +1418,8 @@ A count-min sketch update over `[u64]` hashes combines both: an input
 bucket index from a hash. `band(..., 0xFFFFFFFF)` keeps the per-row hash
 `h1 + r * h2` inside a mask, where `u64` and `i64` mix freely, and gives an
 `i64` in 0..2^32 - 1, so `rem(..., w)` takes the `i64` width (see
-[Masked arithmetic](#masked-arithmetic)). Written by the cold test
-(defk-sgw.3) from this document alone:
+[Masked arithmetic](#masked-arithmetic)). Written by a cold test, from
+this document alone:
 
 ```elixir
 defk update_many(sk :: [u64], d :: i64, w :: i64, hashes :: [u64]) :: [u64] do
@@ -1777,8 +1770,6 @@ iex> M.split(7, 3.0)
   value; arms of plain arithmetic become one select per element, as a
   number branch does. Elixir mode runs the branch as written.
 
-(defk-uew)
-
 ### Arrays from branches
 
 **Supported:** an `if`, `cond` or `case` may give an array, alone or as an
@@ -1819,8 +1810,6 @@ iex> {x, s, a}
   the arm taken would not need it.
 - Returned unwritten, the array is the caller's binary when the arm taken
   gave an input (see [Returning](#returning)).
-
-(defk-gqk)
 
 ### `for`
 
@@ -1962,8 +1951,6 @@ iex> {:binary.part(counts, 8, 16), n}
 - Elixir mode runs the same `for ..., reduce:` or `Enum.reduce_while/3`,
   with the arrays as binaries.
 
-(defk-n4r.10)
-
 ### `raise`
 
 **Supported with restrictions:** `raise Module, "message"`, `raise Module`
@@ -2056,7 +2043,9 @@ iex> M.count_primes(100)
   Give each helper one call site: call it from one loop over its inputs, or
   copy the inputs into a buffer and call it once. The largest kernels in the
   examples are under 30,000 lines; the threshold and the measurements behind
-  it are [Performance notes](performance.md) 6.27.
+  it are
+  [Performance notes](https://github.com/DanielLuning/defk/blob/main/docs/performance.md)
+  6.27.
 - Arguments are converted like a result: an `i64` widens to an `f64`
   parameter, anything else must match ([`type-mismatch`](compile-errors.md#type-mismatch)).
 - An array argument is passed without a copy. A callee that writes an array

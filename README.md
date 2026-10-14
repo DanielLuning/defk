@@ -27,7 +27,8 @@ Elixir and in defk, checked for agreement and measured end to end. The
 measurement rules are in [`examples/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/README.md); the
 [scope page](docs/scope.md) says when to use defk, when to use something else,
 what is planned and what stays out by design; what we have learned about speed
-on the BEAM is in the [performance guide](docs/performance.md).
+on the BEAM is in the
+[performance guide](https://github.com/DanielLuning/defk/blob/main/docs/performance.md).
 
 Speedups over an optimised Elixir baseline, measured end to end on an
 otherwise idle M4 Pro on 2026-10-13 (the frozen snapshot in
@@ -98,7 +99,8 @@ write kernels in any module with `use Defk`.
 - [Stability](docs/guides/stability.md): what stays the same from release to release.
 - [Cheatsheet](docs/guides/cheatsheet.cheatmd) and the full [language reference](docs/language.md).
 - [Compile errors](docs/compile-errors.md): every code, why and what to write instead.
-- [Scope](docs/scope.md) and the [performance guide](docs/performance.md).
+- [Scope](docs/scope.md) and the
+  [performance guide](https://github.com/DanielLuning/defk/blob/main/docs/performance.md).
 
 Working on defk itself (demo and benchmarks, which file does what, design
 decisions, results snapshot, roadmap): [docs/project.md](https://github.com/DanielLuning/defk/blob/main/docs/project.md).
