@@ -115,6 +115,7 @@ defmodule Defk.MixProject do
     "docs/guides/measuring.md",
     "docs/guides/runtime-contract.md",
     "docs/guides/deploying.md",
+    "docs/guides/stability.md",
     "docs/scope.md",
     "docs/performance.md"
   ]
