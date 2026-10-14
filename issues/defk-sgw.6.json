@@ -4,6 +4,7 @@
     "defk-sgw.5"
   ],
   "blocks": [],
+  "closed_at": "2026-10-14T06:05:55Z",
   "created": "2026-10-06T09:13:19Z",
   "description": "HITL, decided in 'What must docs/verdict.md contain to count as done?' (defk-dtw.4): a session with the user that reviews docs/verdict.md, challenges the conclusion against the go/no-go rule, and ends with the user accepting it. Then close the map 'Wayfinder: roadmap to a defk verdict' (defk-dtw). A library effort, if the verdict is go, is a new map.",
   "id": "defk-sgw.6",
@@ -18,8 +19,8 @@
     }
   ],
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Final verdict session: accept the conclusion and close the map",
   "type": "task",
-  "updated_at": "2026-10-14T06:05:54Z"
+  "updated_at": "2026-10-14T06:05:55Z"
 }
