@@ -11,9 +11,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution (grilling, 2026-10-14). Rule: a ticket blocks 0.1.0 only if it is a bug, changes something 0.1.0 freezes (the stability promise), or would leave the first release wrong. No bug ticket was open.\n\nBlocks 0.1.0 (wired to defk-wfi.6):\n- defk-djy.19 HexDocs pages must not reference ADRs or tickets (the extras are the release's public face; performance.md and scope.md still carry ticket ids) (Q1).\n- defk-wfi.12 Note in the language reference: lint checks may flag length/1 in a kernel (new, from the renames; the maintainer chose to block on it) (Q4 a).\n\nDoes not block (Q2, Q3): every other open ticket. Speed only: defk-o08 and u1u, qdz, b38, pvt, pic, siy, 9za, n7k, fun; agp, 5qk, i5r, oed, w8l, 25s, cao, c1e, wnu. Additive constructs: oit, sbp, nii, pe3, 3rl, defk-vcx. Error/report quality (texts and facts not promised): ajj, xyz, 27w, 10d (later, keeping CompileError). Unstable API: 9qv. Additive docs: djy.17, djy.18, vcx.1, defk-djy after djy.19. Catalog/measurement: defk-9p6, 9p6.21, 9p6.29, 9p6.30, 9p6.31, l2g, 7tk, vcx.2, defk-w8r. Deferred epics stay deferred, for planning after 0.1.0: defk-n4r, defk-52v, defk-sve, defk-ulk, defk-96f, defk-ajw (already not a gate), defk-o1w.",
+      "timestamp": "2026-10-14T20:04:01Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Triage: which open tickets block 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-14T19:59:19Z"
+  "updated_at": "2026-10-14T20:04:01Z"
 }
