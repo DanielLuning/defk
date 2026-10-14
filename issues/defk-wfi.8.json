@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-wfi.6"
@@ -12,8 +12,8 @@
   ],
   "parent": "defk-wfi",
   "priority": 1,
-  "status": "open",
+  "status": "in_progress",
   "title": "[BUG] gcc on x86-64: a kernel raises a different first error than Elixir mode",
   "type": "bug",
-  "updated_at": "2026-10-14T13:53:57Z"
+  "updated_at": "2026-10-14T15:18:20Z"
 }
