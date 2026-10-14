@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-wfi.2"
+  ],
   "created": "2026-10-14T13:17:49Z",
   "description": "## Question\n\nWhat does the GitHub Actions free tier give a public repo, and where does it stop? The dual CI (GitHub Actions plus a local recipe, decided on the map 'Wayfinder: defk ready for a first Hex release') must fit inside these limits.\n\nFind, from GitHub's own docs: minutes and cost for public repos on standard runners; Linux arm64 hosted runners (labels, availability for public repos, limits); macOS arm64 runners for public repos; concurrent job limits; job and workflow time limits; storage and cache limits; anything that throttles or stops a run (for example abuse limits).\n\nDone when: the findings are in docs/research/ with sources, and the resolution comment states the limits that shape the CI matrix.",
   "id": "defk-wfi.1",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "GitHub Actions free-tier limits for a public repo",
   "type": "task",
-  "updated_at": "2026-10-14T13:17:58Z"
+  "updated_at": "2026-10-14T13:18:00Z"
 }
