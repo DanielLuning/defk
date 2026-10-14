@@ -4,8 +4,7 @@
 > to native code that runs at C speed, with a cheap boundary, while keeping the
 > BEAM's promises (preemption, isolation, cleanup)?**
 
-The project's [verdict](https://github.com/DanielLuning/defk/blob/main/docs/verdict.md)
-answered yes for loops over numbers and bytes, and defk is now a library on
+For loops over numbers and bytes the answer was yes, and defk is now a library on
 Hex, from `0.1.0` with a [stability promise](docs/guides/stability.md). You
 write a **kernel** with `defk` in an ordinary module. It reads like Elixir,
 takes typed numbers and packed binaries, and compiles to a checked native
@@ -28,14 +27,11 @@ Elixir wins as part of the record.
 Elixir and in defk, checked for agreement and measured end to end. The
 measurement rules are in [`examples/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/README.md); the
 [scope page](docs/scope.md) says when to use defk, when to use something else,
-what is planned and what stays out by design; what we have learned about speed
-on the BEAM is in the
-[performance guide](https://github.com/DanielLuning/defk/blob/main/docs/performance.md).
+what is planned and what stays out by design.
 
 Speedups over an optimised Elixir baseline, measured end to end on an
-otherwise idle M4 Pro on 2026-10-13 (the frozen snapshot in
-[the verdict](https://github.com/DanielLuning/defk/blob/main/docs/verdict.md);
-every number is one machine, so measure your own job). ✅ defk helps;
+otherwise idle M4 Pro on 2026-10-13 (a frozen snapshot; every number is one
+machine, so measure your own job). ✅ defk helps;
 🟡 and ❌ use Elixir.
 
 | | The job | defk vs best Elixir |
@@ -101,8 +97,4 @@ write kernels in any module with `use Defk`.
 - [Stability](docs/guides/stability.md): what stays the same from release to release.
 - [Cheatsheet](docs/guides/cheatsheet.cheatmd) and the full [language reference](docs/language.md).
 - [Compile errors](docs/compile-errors.md): every code, why and what to write instead.
-- [Scope](docs/scope.md) and the
-  [performance guide](https://github.com/DanielLuning/defk/blob/main/docs/performance.md).
-
-Working on defk itself (demo and benchmarks, which file does what, design
-decisions, results snapshot, roadmap): [docs/project.md](https://github.com/DanielLuning/defk/blob/main/docs/project.md).
+- [Scope](docs/scope.md): what defk is for, what is planned and what stays out.
