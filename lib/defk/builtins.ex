@@ -12,10 +12,10 @@ defmodule Defk.Builtins do
   @loads [:u64_le, :u64_be, :u32_le, :u32_be, :u16_le, :u16_be]
   # range copies into an array: copy/5 (memmove) and copy_back/4 (an LZ match)
   @copies [:copy, :copy_back]
-  # bit builtins with a plain Elixir meaning in Defk.Bits (clz and ctz also
-  # take a width: clz/2, ctz/2)
-  @bits [:mulhi, :clz, :ctz, :popcount, :rotl64, :rotr64, :rotl, :rotr, :f64_to_u64, :crc32c]
-  @all [:len, :bit_size, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
+  # bit builtins with a plain Elixir meaning in Defk.Bits (clz, ctz, rotl and
+  # rotr also take a width: clz/2, ctz/2, rotl/3, rotr/3)
+  @bits [:mulhi, :clz, :ctz, :popcount, :rotl, :rotr, :f64_bits, :crc32c]
+  @all [:length, :bit_size, :min, :max, :abs, :float, :trunc, :round, :div, :rem] ++
          @math1 ++ [:pow] ++ @bitwise ++ [:wrap64] ++ @loads ++ @copies ++ [:alloc] ++ @bits
 
   @doc "Every builtin name."
@@ -49,8 +49,8 @@ defmodule Defk.Builtins do
   def copies, do: @copies
 
   @doc """
-  The bit builtins (mulhi/2, clz/1,2, ctz/1,2, popcount/1, rotl64/2,
-  rotr64/2, rotl/3, rotr/3, f64_to_u64/1, crc32c/3).
+  The bit builtins (mulhi/2, clz/1,2, ctz/1,2, popcount/1, rotl/2,3,
+  rotr/2,3, f64_bits/1, crc32c/3).
   """
   def bits, do: @bits
 
@@ -71,7 +71,7 @@ defmodule Defk.Builtins do
   # A row's acceptance is structural; a fact-dependent rejection (mixing a
   # possibly-negative i64 into u64 min/max) stays with the emitters.
   @typing [
-            {:len, [arr: :e], :i64, []},
+            {:length, [arr: :e], :i64, []},
             {:bit_size, [:bitstring], :i64, []}
           ] ++
             for(f <- @loads, do: {f, [{:arr, :u8}, :i64], :i64, []}) ++
@@ -84,8 +84,8 @@ defmodule Defk.Builtins do
               {:ctz, [:int], :i64, []},
               {:popcount, [:int], :i64, []},
               {:mulhi, [:i64, :i64], :i64, []},
-              {:rotl64, [:i64, :i64], :i64, []},
-              {:rotr64, [:i64, :i64], :i64, []},
+              {:rotl, [:i64, :i64], :i64, []},
+              {:rotr, [:i64, :i64], :i64, []},
               {:clz, [:int, :int], :i64, [{1, :i64, "clz/2 width"}]},
               {:ctz, [:int, :int], :i64, [{1, :i64, "ctz/2 width"}]},
               {:rotl, [:int, :int, :int], {:arg, 0},
@@ -93,7 +93,7 @@ defmodule Defk.Builtins do
               {:rotr, [:int, :int, :int], {:arg, 0},
                [{1, :i64, "rotr/3 count"}, {2, :i64, "rotr/3 width"}]},
               {:crc32c, [:int, :int, :int], :i64, [{2, :i64, "crc32c/3 width"}]},
-              {:f64_to_u64, [:number], :u64, [{0, :f64, "f64_to_u64/1"}]},
+              {:f64_bits, [:number], :u64, [{0, :f64, "f64_bits/1"}]},
               {:div, [:i64, :i64], :i64, []},
               {:rem, [:i64, :i64], :i64, []},
               {:div, [:int, :int], :u64, []},
@@ -197,7 +197,9 @@ defmodule Defk.Builtins do
   def builtin?(name, arity), do: arity in arities(name)
 
   @doc "The arities builtin `name` takes (none for a name that is not a builtin)."
-  def arities(name) when name in [:len, :bit_size, :abs, :float, :trunc, :round, :wrap64], do: [1]
+  def arities(name) when name in [:length, :bit_size, :abs, :float, :trunc, :round, :wrap64],
+    do: [1]
+
   def arities(name) when name in [:min, :max, :div, :rem, :pow, :alloc], do: [2]
   def arities(name) when name in @math1, do: [1]
   def arities(name) when name in @bitwise, do: [bitwise_arity(name)]
@@ -205,9 +207,10 @@ defmodule Defk.Builtins do
   def arities(:copy), do: [5]
   def arities(:copy_back), do: [4]
   def arities(name) when name in [:clz, :ctz], do: [1, 2]
-  def arities(name) when name in [:mulhi, :rotl64, :rotr64], do: [2]
-  def arities(name) when name in [:rotl, :rotr, :crc32c], do: [3]
-  def arities(name) when name in [:popcount, :f64_to_u64], do: [1]
+  def arities(name) when name in [:rotl, :rotr], do: [2, 3]
+  def arities(:mulhi), do: [2]
+  def arities(:crc32c), do: [3]
+  def arities(name) when name in [:popcount, :f64_bits], do: [1]
   def arities(_name), do: []
 
   # Enum.all?/any? with a predicate are the same fold with a different bool

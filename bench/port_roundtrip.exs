@@ -21,7 +21,7 @@ defmodule PortRoundTrip.K do
   use Defk
 
   defk first(a :: [u8]) :: i64 do
-    if len(a) > 0, do: a[0], else: -1
+    if length(a) > 0, do: a[0], else: -1
   end
 end
 

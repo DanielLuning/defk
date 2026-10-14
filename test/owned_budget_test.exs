@@ -1,17 +1,17 @@
 # The owned-buffer budget (defk-4b2): every alloc/2, copy and bitstring
 # buffer a call makes lives until the kernel returns, so one in a loop body
 # keeps a buffer per iteration. A call raises ArgumentError "out of memory"
-# once its live owned bytes would pass `use Defk, max_owned:` (default: half
+# once its live owned bytes would pass `use Defk, max_owned_bytes:` (default: half
 # of physical memory), instead of growing until the OS kills the node.
 # Elixir mode enforces the same budget on alloc/2 (defk-bh3): it counts the
 # bytes every alloc/2 of the call asks for, against the native library's
-# max_owned, and raises the same message. It does not see value-semantics
+# max_owned_bytes, and raises the same message. It does not see value-semantics
 # copies or bitstring buffers, so for those it garbage-collects the old
 # binaries and succeeds where native raises.
 
 defmodule Defk.OwnedBudgetTest.K do
   # 8 KiB: eight 1 KiB buffers fit, the ninth does not
-  use Defk, max_owned: 8 * 1024
+  use Defk, max_owned_bytes: 8 * 1024
 
   # k i64 elements per iteration, each kept until the kernel returns
   defk alloc_loop(n :: i64, k :: i64) :: i64 do
@@ -62,7 +62,7 @@ defmodule Defk.OwnedBudgetTest.Default do
   use Defk
 
   defk one_alloc(n :: i64) :: i64 do
-    len(alloc(u8, n))
+    length(alloc(u8, n))
   end
 
   defk alloc_loop(n :: i64, k :: i64) :: i64 do
@@ -83,13 +83,13 @@ defmodule Defk.OwnedBudgetTest do
 
   alias Defk.OwnedBudgetTest.{Default, K}
 
-  @oom ~r/^out of memory \(allocating 1024 bytes would take this call's buffers past max_owned, 8192 bytes\)$/
+  @oom ~r/^out of memory \(allocating 1024 bytes would take this call's buffers past max_owned_bytes, 8192 bytes\)$/
 
   defp elixir(fun, args), do: K.__defk_elixir__(fun, args)
 
-  test "the budget is the module's max_owned, and half of physical memory by default" do
-    assert K.__defk_stats__().max_owned == 8192
-    default = Default.__defk_stats__().max_owned
+  test "the budget is the module's max_owned_bytes, and half of physical memory by default" do
+    assert K.__defk_stats__().max_owned_bytes == 8192
+    default = Default.__defk_stats__().max_owned_bytes
     assert is_integer(default) and default >= 64 * 1024 * 1024
     assert Default.alloc_loop(100, 1024) == Enum.sum(0..99)
   end
@@ -116,9 +116,9 @@ defmodule Defk.OwnedBudgetTest do
     assert same_raise(K, :alloc_loop, [1, 1025]) =~ ~r/^out of memory \(allocating 8200 bytes/
   end
 
-  test "Elixir mode's budget is the native library's max_owned" do
+  test "Elixir mode's budget is the native library's max_owned_bytes" do
     # rejected before anything is allocated, in both modes
-    max = Default.__defk_stats__().max_owned
+    max = Default.__defk_stats__().max_owned_bytes
 
     assert same_raise(Default, :one_alloc, [max + 1]) =~
              ~r/^out of memory \(allocating #{max + 1}/
@@ -223,15 +223,15 @@ defmodule Defk.OwnedBudgetTest do
     end
   end
 
-  describe "use Defk, max_owned:" do
+  describe "use Defk, max_owned_bytes:" do
     for bad <- ["0", "-1", ":big", "\"1024\"", "1.5e3", "18_446_744_073_709_551_616"] do
       test "rejects #{bad}" do
         assert_raise ArgumentError,
-                     ~r/max_owned: expects a positive integer number of bytes/,
+                     ~r/max_owned_bytes: expects a positive integer number of bytes/,
                      fn ->
                        Code.compile_string("""
                        defmodule Defk.OwnedBudgetTest.Bad do
-                         use Defk, max_owned: #{unquote(bad)}
+                         use Defk, max_owned_bytes: #{unquote(bad)}
 
                          defk one() :: i64, do: 1
                        end
@@ -240,8 +240,8 @@ defmodule Defk.OwnedBudgetTest do
       end
     end
 
-    test "lists max_owned among the options" do
-      assert_raise ArgumentError, ~r/`max_owned: bytes`/, fn ->
+    test "lists max_owned_bytes among the options" do
+      assert_raise ArgumentError, ~r/`max_owned_bytes: n`/, fn ->
         Code.compile_string("""
         defmodule Defk.OwnedBudgetTest.Unknown do
           use Defk, max_bytes: 10

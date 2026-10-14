@@ -7,10 +7,10 @@ defmodule Defk.Facts do
   #
   # An i64 value's facts:
   #   lo, hi - constants with lo <= v <= hi (nil = unknown)
-  #   lb, ub - %{array_cvar => k}: v >= len(array) + k, v <= len(array) + k;
+  #   lb, ub - %{array_cvar => k}: v >= length(array) + k, v <= length(array) + k;
   #            a multiple or quotient of a length (defk-upc) has the key
   #            {array_cvar, p, q}, p >= 0 and q >= 1 coprime and not both 1:
-  #            q * v >= p * len(array) + k, q * v <= p * len(array) + k
+  #            q * v >= p * length(array) + k, q * v <= p * length(array) + k
   # An array's facts: len_lo / len_lb, the same lower bounds for its length.
   # Facts are exact for checked arithmetic (an overflow raises, never wraps).
   # They name array C variables, which are assigned in one place, never change
@@ -89,7 +89,8 @@ defmodule Defk.Facts do
   def prove_i64(lo, hi),
     do: is_integer(lo) and is_integer(hi) and lo >= @i64_min and hi <= @i64_max
 
-  # 0 <= i < len(a); with a width w (a word load), 0 <= i and i + w <= len(a)
+  # 0 <= i < length(a); with a width w (a word load), 0 <= i and
+  # i + w <= length(a)
   def in_bounds?(a, i, w \\ 1), do: prove_in_bounds(a, i, w) != :unproven
 
   def prove_in_bounds(a, i, w \\ 1) do
@@ -109,7 +110,7 @@ defmodule Defk.Facts do
       else: :unproven
   end
 
-  # the fact that would drop the check `0 <= i` / `i + w <= len(a)` when
+  # the fact that would drop the check `0 <= i` / `i + w <= length(a)` when
   # nothing does: the report names it (the perturbations stay in here, where
   # the representation is)
   def missing(a, i, w \\ 1) do
@@ -121,8 +122,8 @@ defmodule Defk.Facts do
     end
   end
 
-  # q * i <= p * len(y) + o proves i < len(a): y is a with p <= q and o < 0,
-  # or len(a) has a lower bound q1 * len(a) >= p1 * len(y) + d with
+  # q * i <= p * length(y) + o proves i < length(a): y is a with p <= q and
+  # o < 0, or length(a) has a lower bound q1 * length(a) >= p1 * length(y) + d with
   # p / q <= p1 / q1 and o / q < d / q1. Gives the proof's support, or nil.
   defp below_via({key, o}, arr, len_lb) do
     {y, p, q} = scale(key)
@@ -309,7 +310,7 @@ defmodule Defk.Facts do
   defp scale({_arr, _p, _q} = key), do: key
   defp scale(arr), do: {arr, 1, 1}
 
-  # the fact q * v <= p * len(arr) + k (dir :ub) or >= (:lb), with p and q
+  # the fact q * v <= p * length(arr) + k (dir :ub) or >= (:lb), with p and q
   # made coprime: dividing by their gcd rounds k down for ub, up for lb
   defp norm_fact(arr, p, q, k, dir) do
     g = Integer.gcd(p, q)

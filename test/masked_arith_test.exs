@@ -26,7 +26,7 @@ defmodule Defk.MaskedArithTest.K do
 
   # FNV-style mixing a word at a time, tail bytes ignored
   defk word_hash(b :: [u8]) :: i64 do
-    for i <- 0..(len(b) - 8)//8, reduce: -3_750_763_034_362_895_579 do
+    for i <- 0..(length(b) - 8)//8, reduce: -3_750_763_034_362_895_579 do
       h -> wrap64(bxor(h, u64_le(b, i)) * 1_099_511_628_211 + bsl(h, 5))
     end
   end

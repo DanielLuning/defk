@@ -8,7 +8,7 @@ defmodule Defk.SincosTest.K do
   use Defk
 
   defk cs(a :: [f64]) :: {[f64], [f64]} do
-    n = len(a)
+    n = length(a)
     c = alloc(f64, n)
     s = alloc(f64, n)
 
@@ -21,7 +21,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_sqrt(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -32,7 +32,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_exp(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -43,7 +43,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_log(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -54,7 +54,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_log2(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -65,7 +65,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_log10(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -76,7 +76,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_pow_half(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -87,7 +87,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_pow_two(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -98,7 +98,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_expm1(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -109,7 +109,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_log1p(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -120,7 +120,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_abs(a :: [f64]) :: [f64] do
-    n = len(a)
+    n = length(a)
     o = alloc(f64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -131,7 +131,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_round(a :: [f64]) :: [i64] do
-    n = len(a)
+    n = length(a)
     o = alloc(i64, n)
 
     for i <- 0..(n - 1)//1 do
@@ -142,7 +142,7 @@ defmodule Defk.SincosTest.K do
   end
 
   defk p_trunc(a :: [f64]) :: [i64] do
-    n = len(a)
+    n = length(a)
     o = alloc(i64, n)
 
     for i <- 0..(n - 1)//1 do

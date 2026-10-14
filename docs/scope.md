@@ -207,7 +207,7 @@ Every compile error the compiler marks as outside the kernel subset for good:
 - [`tuple-binding`](compile-errors.md#tuple-binding): A tuple is taken apart where it is bound: `{a, b} = ...`.
 - [`unsupported-pattern`](compile-errors.md#unsupported-pattern): `=` binds a variable or a tuple of variables.
 - [`bitstring-match`](compile-errors.md#bitstring-match): Binary patterns `<<...>> = bin` are not in the kernel subset; read array elements by index.
-- [`u64-mix`](compile-errors.md#u64-mix): Outside a mask, + - * band bor bxor div rem min max mix a u64 only with a u64 or an i64 known to be >= 0.
+- [`u64-with-i64`](compile-errors.md#u64-with-i64): Outside a mask, + - * band bor bxor div rem min max mix a u64 only with a u64 or an i64 known to be >= 0.
 - [`nested-tuple`](compile-errors.md#nested-tuple): Tuples don't nest.
 - [`tuple-argument`](compile-errors.md#tuple-argument): Tuples are not passed as arguments.
 - [`recursion`](compile-errors.md#recursion): A kernel can't call itself, directly or through other kernels; write the recursion as a loop.

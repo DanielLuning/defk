@@ -116,7 +116,7 @@ defmodule Hll.Kernels do
   # zero, which min/2 caps at 64 - p. The input state is copied once, before
   # the loop (the caller's binary is never changed), and written in place.
   defk update_many(state :: [u8], hashes :: [u64], p :: i64) :: [u8] do
-    if p < 4 or p > 16 or len(state) != 4 + bsl(1, p) do
+    if p < 4 or p > 16 or length(state) != 4 + bsl(1, p) do
       raise ArgumentError, "invalid HLL state length or p"
     end
 

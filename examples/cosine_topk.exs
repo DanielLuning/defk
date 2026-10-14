@@ -135,7 +135,7 @@
 # rows), and that a 383-element query, a partial row and k = 0 raise.
 #
 # Kernel notes: @dim 384 is a literal, so m[r * 384 + 8 * j + c] needs no
-# bounds check (with dim = len(q) every access kept its check: 25 vs 20 ms
+# bounds check (with dim = length(q) every access kept its check: 25 vs 20 ms
 # in one call; defk-n7k); q is copied into a 384-element alloc for the same
 # reason. A strict f64 sum cannot be vectorised by clang, so the dot product
 # keeps eight partial sums; clang's SLP vectoriser then runs them as four
@@ -164,7 +164,7 @@ defmodule Cosine.Kernels do
   # Returns {row indices + base, scores}, best first; ties go to the lower
   # index. Slots never filled (fewer than k rows) hold index -1.
   defk topk(m :: [f32], q :: [f64], k :: i64, base :: i64) :: {[i64], [f64]} do
-    if len(q) != @dim or rem(len(m), @dim) != 0 or k < 1,
+    if length(q) != @dim or rem(length(m), @dim) != 0 or k < 1,
       do: raise(ArgumentError, "topk: q must have 384 elements, m whole 384-element rows, k >= 1")
 
     # a local copy of q: its length is a literal, so qq[j] needs no check
@@ -179,7 +179,7 @@ defmodule Cosine.Kernels do
       best_i[s] = -1
     end
 
-    n = div(len(m), @dim)
+    n = div(length(m), @dim)
 
     _ =
       for r <- 0..(n - 1)//1, reduce: 0 do

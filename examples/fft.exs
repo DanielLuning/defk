@@ -70,7 +70,7 @@ defmodule FFT.Kernels do
   # Iterative radix-2 decimation-in-time FFT. re and im are packed f64 of the
   # same power-of-two length; returns the transform as two new arrays.
   defk fft(re :: [f64], im :: [f64]) :: {[f64], [f64]} do
-    n = len(re)
+    n = length(re)
 
     # largest power of two <= n, and its log2 (no bitwise operators yet)
     {p, bits} =
@@ -78,7 +78,7 @@ defmodule FFT.Kernels do
         if p * 2 <= n, do: {:cont, {p * 2, b + 1}}, else: {:halt, {p, b}}
       end)
 
-    if p != n or len(im) != n,
+    if p != n or length(im) != n,
       do: raise(ArgumentError, "fft: re and im must have the same power-of-two length")
 
     ore = alloc(f64, n)
@@ -144,8 +144,8 @@ defmodule FFT.Kernels do
   # Direct (full) convolution, length n + m - 1: out[k] = sum_j a[k - j] * b[j],
   # summed with j ascending.
   defk convolve(a :: [f64], b :: [f64]) :: [f64] do
-    n = len(a)
-    m = len(b)
+    n = length(a)
+    m = length(b)
     out = alloc(f64, n + m - 1)
 
     for k <- 0..(n + m - 2)//1 do

@@ -108,8 +108,8 @@ defmodule Lev.Kernels do
   # Plain DP, one row, query along the row: candidate w is
   # blob[offs[w] .. offs[w + 1]). Any query length (0 included).
   defk lev_dp(q :: [u8], blob :: [u8], offs :: [i64]) :: [i64] do
-    m = len(q)
-    nw = len(offs) - 1
+    m = length(q)
+    nw = length(offs) - 1
     out = alloc(i64, nw)
     row = alloc(i64, m + 1)
 
@@ -144,8 +144,8 @@ defmodule Lev.Kernels do
   # lev_myers below with the score step as a cond, as in the textbook (a
   # variant: the branch-free step measured faster on both sides).
   defk lev_myers_cond(q :: [u8], blob :: [u8], offs :: [i64]) :: [u8] do
-    m = len(q)
-    nw = len(offs) - 1
+    m = length(q)
+    nw = length(offs) - 1
     out = alloc(u8, nw)
     peq = alloc(i64, 256)
 
@@ -192,7 +192,7 @@ defmodule Lev.Kernels do
   # as [u8], so the caller must keep every candidate under 256 bytes. Words
   # lo..hi - 1 only, so chunks of one index can run on several schedulers.
   defk lev_myers(q :: [u8], blob :: [u8], offs :: [i64], lo :: i64, hi :: i64) :: [u8] do
-    m = len(q)
+    m = length(q)
     out = alloc(u8, hi - lo)
     peq = alloc(i64, 256)
 

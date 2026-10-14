@@ -92,7 +92,7 @@ defmodule Matmul.Kernels do
   use Defk
 
   defk matmul(a :: [f64], b :: [f64], n :: i64, m :: i64, p :: i64) :: [f64] do
-    if not (n > 0 and m > 0 and p > 0 and len(a) == n * m and len(b) == m * p),
+    if not (n > 0 and m > 0 and p > 0 and length(a) == n * m and length(b) == m * p),
       do: raise(ArgumentError, "matmul: sizes must be positive and match the array lengths")
 
     out = alloc(f64, n * p)
@@ -109,7 +109,7 @@ defmodule Matmul.Kernels do
   end
 
   defk matmul_blocked(a :: [f64], b :: [f64], n :: i64, m :: i64, p :: i64) :: [f64] do
-    if not (n > 0 and m > 0 and p > 0 and len(a) == n * m and len(b) == m * p),
+    if not (n > 0 and m > 0 and p > 0 and length(a) == n * m and length(b) == m * p),
       do: raise(ArgumentError, "matmul: sizes must be positive and match the array lengths")
 
     out = alloc(f64, n * p)

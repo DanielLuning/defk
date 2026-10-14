@@ -48,7 +48,7 @@
 # message words as 16 locals loaded by u64_le/u32_le, so the schedule is
 # literal variable names, as in the reference C's ROUND macros. The same
 # generator writes the Elixir versions' rounds. BLAKE2b keeps words as u64
-# bit patterns in i64 (wrap64 adds, rotr64); BLAKE3 keeps 32-bit words below
+# bit patterns in i64 (wrap64 adds, rotr); BLAKE3 keeps 32-bit words below
 # 2^32 (adds under a 32-bit mask, rotr(x, n, 32)). The IVs are a binary
 # attribute (BLAKE2b, read with u64_le) or literals. BLAKE3's tree is
 # iterative over an alloc'd stack of 54 CVs: after full chunk c, ctz(c + 1)
@@ -226,17 +226,17 @@ defmodule Blake.Gen do
         do: stmt
   end
 
-  @doc "BLAKE2b's G in a kernel: u64 bit patterns in i64, wrapping adds, rotr64."
+  @doc "BLAKE2b's G in a kernel: u64 bit patterns in i64, wrapping adds, rotr."
   def g2b_kernel(a, b, c, d, x, y) do
     [
       quote(do: unquote(a) = wrap64(unquote(a) + unquote(b) + unquote(x))),
-      quote(do: unquote(d) = rotr64(bxor(unquote(d), unquote(a)), 32)),
+      quote(do: unquote(d) = rotr(bxor(unquote(d), unquote(a)), 32)),
       quote(do: unquote(c) = wrap64(unquote(c) + unquote(d))),
-      quote(do: unquote(b) = rotr64(bxor(unquote(b), unquote(c)), 24)),
+      quote(do: unquote(b) = rotr(bxor(unquote(b), unquote(c)), 24)),
       quote(do: unquote(a) = wrap64(unquote(a) + unquote(b) + unquote(y))),
-      quote(do: unquote(d) = rotr64(bxor(unquote(d), unquote(a)), 16)),
+      quote(do: unquote(d) = rotr(bxor(unquote(d), unquote(a)), 16)),
       quote(do: unquote(c) = wrap64(unquote(c) + unquote(d))),
-      quote(do: unquote(b) = rotr64(bxor(unquote(b), unquote(c)), 63))
+      quote(do: unquote(b) = rotr(bxor(unquote(b), unquote(c)), 63))
     ]
   end
 
@@ -296,7 +296,7 @@ defmodule Blake.Gen do
       ]
     end
 
-    # r = rotr64(r ^ p, n) for 0 < n < 32 on halves, through the temps t, u
+    # r = rotr(r ^ p, n) for 0 < n < 32 on halves, through the temps t, u
     rot = fn {rh, rl}, {ph, pl}, n ->
       [
         quote(do: unquote(t) = bxor(unquote(rh), unquote(ph))),
@@ -408,9 +408,9 @@ kernels =
     # a zero-padded copy.
     defk blake2b_keyed(msg :: [u8], key :: [u8], outlen :: i64) :: [u8] do
       if outlen < 1 or outlen > 64, do: raise(ArgumentError, "outlen must be in 1..64")
-      kk = len(key)
+      kk = length(key)
       if kk > 64, do: raise(ArgumentError, "key must be at most 64 bytes")
-      ll = len(msg)
+      ll = length(msg)
       kb = if kk > 0, do: 1, else: 0
       total = 128 * kb + ll
       nb = max(div(total + 127, 128), 1)
@@ -527,7 +527,7 @@ kernels =
 
     # keyed_hash mode: the key's 8 little-endian words replace the IV
     defk blake3_keyed(msg :: [u8], key :: [u8]) :: [u8] do
-      if len(key) != 32, do: raise(ArgumentError, "key must be 32 bytes")
+      if length(key) != 32, do: raise(ArgumentError, "key must be 32 bytes")
 
       blake3_core(
         msg,
@@ -544,7 +544,7 @@ kernels =
     # Flags: CHUNK_START 1, CHUNK_END 2, PARENT 4, ROOT 8, KEYED_HASH 16.
     defk blake3_core(msg :: [u8], unquote_splicing(typed.(Enum.take(k, 8))), flags :: i64) ::
            [u8] do
-      n = len(msg)
+      n = length(msg)
       nc = max(div(n + 1023, 1024), 1)
       # 54 levels are enough for 2^64 bytes
       stack0 = alloc(i64, 8 * 54)

@@ -42,9 +42,9 @@ defmodule Search.Kernels do
 
   # Maps every byte to a lowercase letter; used once to build the input.
   defk lower(a :: [u8]) :: [u8] do
-    out = alloc(u8, len(a))
+    out = alloc(u8, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i] = rem(a[i], 26) + 97
     end
 
@@ -54,8 +54,8 @@ defmodule Search.Kernels do
   # Horspool: shift by the skip of the byte under the window's last position.
   # -1 when absent. Every step advances by at least 1, so n steps suffice.
   defk find(hay :: [u8], needle :: [u8]) :: i64 do
-    n = len(hay)
-    m = len(needle)
+    n = length(hay)
+    m = length(needle)
     skip = alloc(i64, 256)
 
     for b <- 0..255//1 do

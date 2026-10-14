@@ -165,7 +165,7 @@ defmodule Ws.Defk do
     k1 = band(bsr(mask, 16), 255)
     k2 = band(bsr(mask, 8), 255)
     k3 = band(mask, 255)
-    n = len(payload)
+    n = length(payload)
     out = alloc(u8, n)
 
     for i <- 0..(div(n, 4) - 1)//1 do

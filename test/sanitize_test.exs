@@ -297,7 +297,7 @@ defmodule Defk.SanitizeTest do
       use Defk
 
       defk flip(a :: [u8]) :: [u8] do
-        n = len(a)
+        n = length(a)
         out = alloc(u8, n)
 
         for i <- 0..(n - 1)//1 do

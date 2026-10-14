@@ -27,7 +27,7 @@ defmodule Defk.BitstringHelperTest.K do
 
   # the first timestamp in 64 bits, then dod_bits for each one after it
   defk timestamps(ts :: [i64]) :: bitstring do
-    n = len(ts)
+    n = length(ts)
 
     if n == 0 do
       <<>>
@@ -334,7 +334,7 @@ defmodule Defk.BitstringHelperTest do
     test "passing the accumulator as another type" do
       msg =
         rejected(
-          "defk g(b :: [u8]) :: i64, do: len(b)\n\n" <>
+          "defk g(b :: [u8]) :: i64, do: length(b)\n\n" <>
             "defk f(x :: i64) :: i64 do\n  acc = <<>>\n  acc = <<acc::bitstring, x::8>>\n  g(acc)\nend"
         )
 
@@ -360,13 +360,13 @@ defmodule Defk.BitstringHelperTest do
         end
 
         defk g(acc :: bitstring, x :: i64) :: bitstring do
-          _ = len(acc)
+          _ = length(acc)
           <<acc::bitstring, x::8>>
         end
         """)
 
       assert codes(msg) == ["bitstring-use"], msg
-      assert msg =~ "len(acc) reads the bitstring acc", msg
+      assert msg =~ "length(acc) reads the bitstring acc", msg
     end
   end
 

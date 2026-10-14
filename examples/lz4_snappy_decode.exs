@@ -206,7 +206,7 @@ defmodule LzSnappy.Kernels do
   use Defk, elixir_mode: true
 
   defk snappy_decode(src :: [u8]) :: [u8] do
-    n = len(src)
+    n = length(src)
 
     {ulen, ip0, done} =
       Enum.reduce_while(0..4//1, {0, 0, false}, fn i, {v, _p, _d} ->
@@ -282,7 +282,7 @@ defmodule LzSnappy.Kernels do
   end
 
   defk lz4_block_decode(src :: [u8], max_out :: i64) :: {[u8], i64} do
-    n = len(src)
+    n = length(src)
     if max_out < 0, do: raise(ArgumentError, "lz4: negative max_out")
     if n == 0, do: raise(ArgumentError, "lz4: empty input")
     out = alloc(u8, max_out)
@@ -333,7 +333,7 @@ defmodule LzSnappy.Kernels do
   # an LZ4 length continued in bytes from src[ip] while they are 255:
   # {base + their sum, the index after the last one}
   defk ext_len(src :: [u8], ip :: i64, base :: i64) :: {i64, i64} do
-    n = len(src)
+    n = length(src)
 
     Enum.reduce_while(ip..n//1, {base, ip}, fn i, {acc, _p} ->
       if i >= n, do: raise(ArgumentError, "lz4: truncated length")

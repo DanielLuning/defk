@@ -48,7 +48,7 @@ defmodule Defk.ElixirModeTest.K do
     best[0] = -1
 
     _ =
-      for i <- 0..(len(a) - 1)//1, reduce: 0 do
+      for i <- 0..(length(a) - 1)//1, reduce: 0 do
         top ->
           if a[i] > top do
             best[0] = i
@@ -182,8 +182,8 @@ defmodule Defk.ElixirModeTest.K do
 
   defk mk(e :: i64, n :: i64) :: i64 do
     case e do
-      0 -> len(alloc(u8, n))
-      _ -> len(alloc(f64, n))
+      0 -> length(alloc(u8, n))
+      _ -> length(alloc(f64, n))
     end
   end
 
@@ -224,7 +224,7 @@ defmodule Defk.ElixirModeTest.K do
   end
 
   defk count(a :: [f64], b :: [u8], n :: i64, x :: f64, flag :: bool) :: f64 do
-    if flag, do: len(a) + len(b) + n + x, else: x
+    if flag, do: length(a) + length(b) + n + x, else: x
   end
 
   # snapshot: b keeps what it had when out is written (value semantics)

@@ -7,7 +7,7 @@ defmodule FuzzySearch.Kernels.Template do
   defmacro defsearch(name, opts) do
     quote do
       defk unquote(name)(q :: [u8], blob :: [u8], offs :: [i64], k :: i64) :: [i64], unquote(opts) do
-        m = len(q)
+        m = length(q)
         row = alloc(i64, m + 1)
         best_d = alloc(i64, k)
         best_i = alloc(i64, k)
@@ -19,7 +19,7 @@ defmodule FuzzySearch.Kernels.Template do
 
         # `worst` is the slot holding the largest (distance, index) key
         _worst =
-          for c <- 0..(len(offs) - 2)//1, reduce: 0 do
+          for c <- 0..(length(offs) - 2)//1, reduce: 0 do
             worst ->
               start = offs[c]
               n = offs[c + 1] - start

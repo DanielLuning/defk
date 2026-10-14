@@ -14,7 +14,7 @@ defmodule Defk.Crc32cTest.K do
 
   # the standard CRC-32C of a message: 64-bit words, then the tail bytes
   defk crc_msg(b :: [u8]) :: i64 do
-    n = len(b)
+    n = length(b)
     words = n - rem(n, 8)
 
     crc =
@@ -32,7 +32,7 @@ defmodule Defk.Crc32cTest.K do
 
   # the same with 32- and 16-bit words, so every width runs in a loop
   defk crc_msg32(b :: [u8]) :: i64 do
-    n = len(b)
+    n = length(b)
     words = n - rem(n, 4)
 
     crc =
@@ -62,7 +62,7 @@ defmodule Defk.Crc32cTest.Portable do
   defk(step(c :: i64, x :: i64, w :: i64) :: i64, do: crc32c(c, x, w))
 
   defk crc_msg(b :: [u8]) :: i64 do
-    n = len(b)
+    n = length(b)
     words = n - rem(n, 8)
 
     crc =

@@ -241,15 +241,15 @@ defmodule Defk.Errors.Rewrites do
   end
 
   # Elixir functions a developer reaches for that have a builtin form
-  defp local_hint(name, [a]) when name in [:length, :byte_size, :tuple_size] do
-    {"unknown-function", "#{name}/1 is not a kernel builtin",
-     why: "the length of a kernel array is len/1",
-     hint: "use len/1",
-     rewrite: Macro.to_string({:len, [], [a]})}
+  defp local_hint(name, [a]) when name in [:byte_size, :tuple_size] do
+    {"undefined-function", "#{name}/1 is not a kernel builtin",
+     why: "the length of a kernel array is length/1",
+     hint: "use length/1",
+     rewrite: Macro.to_string({:length, [], [a]})}
   end
 
   defp local_hint(:elem, [_t, i]) do
-    {"unknown-function", "elem/2 is not a kernel builtin",
+    {"undefined-function", "elem/2 is not a kernel builtin",
      why: "a kernel takes a tuple apart where it is bound",
      hint:
        "destructure the tuple where it is bound, e.g. {a, b} = ..., and use element #{Macro.to_string(i)} by name"}
@@ -320,7 +320,7 @@ defmodule Defk.Errors.Rewrites do
       if var?(src) do
         [i, acc] = fresh_names(~w(i acc), [src])
 
-        "for #{i} <- 1..(len(#{s(src)}) - 1)//1, reduce: #{s(src)}[0] do\n  #{acc} -> #{fun}(#{acc}, #{s(index(src, i))})\nend"
+        "for #{i} <- 1..(length(#{s(src)}) - 1)//1, reduce: #{s(src)}[0] do\n  #{acc} -> #{fun}(#{acc}, #{s(index(src, i))})\nend"
       end
 
     {"unsupported-call", "Enum.#{fun}/1 is not in the kernel subset",
@@ -344,7 +344,7 @@ defmodule Defk.Errors.Rewrites do
 
     {"unsupported-call", "Enum.with_index/#{length(args)} is not in the kernel subset",
      why: "Enum.with_index builds a list of tuples, and a kernel has no lists",
-     hint: "walk the index with i <- 0..(len(#{a}) - 1)//1 and read #{a}[i]"}
+     hint: "walk the index with i <- 0..(length(#{a}) - 1)//1 and read #{a}[i]"}
   end
 
   defp call_rejection("Enum", :reduce, [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}], _node) do
@@ -427,7 +427,7 @@ defmodule Defk.Errors.Rewrites do
       [i, lo, hi] = fresh_names(~w(i lo hi), [src])
       ai = s(index(src, i))
 
-      "for #{i} <- 1..(len(#{s(src)}) - 1)//1, reduce: {#{s(src)}[0], #{s(src)}[0]} do\n  {#{lo}, #{hi}} -> {min(#{lo}, #{ai}), max(#{hi}, #{ai})}\nend"
+      "for #{i} <- 1..(length(#{s(src)}) - 1)//1, reduce: {#{s(src)}[0], #{s(src)}[0]} do\n  {#{lo}, #{hi}} -> {min(#{lo}, #{ai}), max(#{hi}, #{ai})}\nend"
     end
   end
 
@@ -441,7 +441,7 @@ defmodule Defk.Errors.Rewrites do
       # (each element gets its own if: an if gives a number, not a tuple)
       """
       {#{best}, _} =
-        for #{i} <- 1..(len(#{s(src)}) - 1)//1, reduce: {#{s(src)}[0], #{key_at.(0)}} do
+        for #{i} <- 1..(length(#{s(src)}) - 1)//1, reduce: {#{s(src)}[0], #{key_at.(0)}} do
           {#{best}, #{k}} ->
             #{ki} = #{key_at.(i)}
             #{better} = #{ki} #{cmp} #{k}
@@ -461,7 +461,7 @@ defmodule Defk.Errors.Rewrites do
     if var?(src) do
       [i] = fresh_names(~w(i), [src, pred])
 
-      "Enum.reduce_while(0..(len(#{s(src)}) - 1)//1, -1, fn #{i}, _ ->\n  if #{s(subst(pred, x, index(src, i)))}, do: {:halt, #{i}}, else: {:cont, -1}\nend)"
+      "Enum.reduce_while(0..(length(#{s(src)}) - 1)//1, -1, fn #{i}, _ ->\n  if #{s(subst(pred, x, index(src, i)))}, do: {:halt, #{i}}, else: {:cont, -1}\nend)"
     end
   end
 
@@ -484,7 +484,7 @@ defmodule Defk.Errors.Rewrites do
   defp array_fill(src, x, body, elems, type_of) do
     [i, out] = fresh_names(~w(i out), [src, body])
     v = s(subst(body, x, index(src, i)))
-    n = "len(#{s(src)})"
+    n = "length(#{s(src)})"
 
     for e <- element_types(subst(body, x, index(src, 0)), elems, type_of),
         do:

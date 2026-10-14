@@ -242,9 +242,9 @@ defmodule SatEx.Kernels do
   # learned-clause arena ran out).
   defk solve(lits :: [i64], offs :: [i64], n :: i64, cap :: i64, budget :: i64) ::
          {i64, [i64], i64} do
-    m = len(offs) - 1
-    st = alloc(i64, state_size(n, m, len(lits), cap))
-    st = init(st, n, m, len(lits), cap)
+    m = length(offs) - 1
+    st = alloc(i64, state_size(n, m, length(lits), cap))
+    st = init(st, n, m, length(lits), cap)
     st = load(st, lits, offs, 0, m, lits, offs, 0, 0)
     st = search(st, budget)
     status = st[@h_status]
@@ -262,7 +262,7 @@ defmodule SatEx.Kernels do
 
   # Crux's satisfying_scenarios enumeration in one call. all/allo is one CSR
   # CNF: the formula's clauses [0, mf), then the minimisation query's
-  # clauses [mf, len(allo) - 1) (Crux's selector clause, gadget clauses and
+  # clauses [mf, length(allo) - 1) (Crux's selector clause, gadget clauses and
   # definitions). prim are the bound variables in Crux's order. Each round:
   # solve the formula plus the blocking clauses so far; take the cube of
   # prim from the model; drop each literal in turn if the rest still implies
@@ -284,9 +284,9 @@ defmodule SatEx.Kernels do
          out_cap :: i64,
          max_scen :: i64
        ) :: {i64, [i64], [i64], i64, i64} do
-    mall = len(allo) - 1
+    mall = length(allo) - 1
     mg = mall - mf
-    np = len(prim)
+    np = length(prim)
     lf = allo[mf] - allo[0]
     lg = allo[mall] - allo[mf]
 
@@ -427,7 +427,7 @@ defmodule SatEx.Kernels do
     st[@o_hist] = st[@o_mark] + l
     st[@o_arena] = st[@o_hist] + 64
     top = st[@o_arena] + nlits + cap
-    if top > len(st), do: raise(ArgumentError, "sat: state array too small")
+    if top > length(st), do: raise(ArgumentError, "sat: state array too small")
     st[@h_n] = n
     st[1] = l
     st[@h_ncls] = 0

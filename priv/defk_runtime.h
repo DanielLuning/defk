@@ -217,13 +217,13 @@ static void defk_frame_dtor(ErlNifEnv *env, void *obj) {
  * runtime contract. So a call raises ArgumentError "out of memory" once its
  * live owned bytes would pass defk_max_owned.
  *
- * `use Defk, max_owned: n` compiles DEFK_MAX_OWNED in. The default is half of
+ * `use Defk, max_owned_bytes: n` compiles DEFK_MAX_OWNED in. The default is half of
  * physical memory, read once when the library loads: a single call may then
  * build any result that fits comfortably in RAM, while a runaway loop raises
  * before it takes the machine's memory (the BEAM and the OS keep the other
  * half). A fixed default would be too small on large servers or too large on
  * small machines. sysconf cannot see a container's cgroup limit; such a
- * deployment sets max_owned. Without a physical memory size the default is
+ * deployment sets max_owned_bytes. Without a physical memory size the default is
  * DEFK_OWNED_FALLBACK (4 GiB).
  *
  * The check is one compare and one add per allocation, never per element.
@@ -252,7 +252,7 @@ __attribute__((noreturn, cold)) static void defk_over_budget(defk_ctx *ctx, size
   if ((uint64_t)bytes >= DEFK_NO_ALLOC_BYTES)
     defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", bytes);
   defk_fail(ctx, DEFK_E_ARG,
-            "out of memory (allocating %zu bytes would take this call's buffers past max_owned, %llu bytes)",
+            "out of memory (allocating %zu bytes would take this call's buffers past max_owned_bytes, %llu bytes)",
             bytes, (unsigned long long)defk_max_owned);
 }
 
@@ -333,7 +333,7 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
  * was a 0-byte buffer of length 2^61, and an in-bounds write crashed the VM
  * (defk-gtv). A size under the limit that the allocator cannot provide raises
  * "out of memory" (defk_own). It also bounds every array length below 2^61,
- * which the compiler relies on (range_limit: a range ending at len/1 cannot
+ * which the compiler relies on (range_limit: a range ending at length/1 cannot
  * step past the i64 limit).
  */
 #if UINTPTR_MAX > 0xFFFFFFFFu
@@ -2221,7 +2221,7 @@ static ERL_NIF_TERM defk_stats_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
   const char *crc_impl = crc == 1 ? "instruction" : crc == 2 ? "table" : "not_called";
   ERL_NIF_TERM keys[5] = {enif_make_atom(env, "frames_live"), enif_make_atom(env, "promotions"),
                           enif_make_atom(env, "yields"), enif_make_atom(env, "crc32c"),
-                          enif_make_atom(env, "max_owned")};
+                          enif_make_atom(env, "max_owned_bytes")};
   ERL_NIF_TERM vals[5] = {enif_make_long(env, atomic_load(&defk_stat_frames_live)),
                           enif_make_long(env, atomic_load(&defk_stat_promotions)),
                           enif_make_long(env, atomic_load(&defk_stat_yields)),

@@ -55,11 +55,11 @@
 # s16le and s32le kernels come from one quoted source through a macro.
 # Kernel notes (Defk.Report):
 #   - the sum loop keeps two bounds checks, so it runs scalar: a block
-#     offset bufs[j * m + i] with m = div(len(bufs), n) cannot be proven
+#     offset bufs[j * m + i] with m = div(length(bufs), n) cannot be proven
 #     (defk-siy). It is ~70% of the kernel at 1 s chunks (0.2-0.29 ms of
 #     0.3-0.37 ms for 4 x 48k stereo frames, timed phase by phase);
-#   - out = alloc(t, total) with total = len(held) + m: out[i] is proven
-#     only with the loop bound min(len(all), len(out)) (cf. defk-pic);
+#   - out = alloc(t, total) with total = length(held) + m: out[i] is proven
+#     only with the loop bound min(length(all), length(out)) (cf. defk-pic);
 #   - the rescale loop inside the scan makes the scan take a safepoint per
 #     iteration; it runs on 0.5% of half-waves at the realistic input;
 #   - Defk.Report puts every note of a macro-generated kernel on the macro
@@ -146,16 +146,16 @@ defmodule PCM.Gen do
       # One mix call: n equal-length chunks concatenated in bufs, the
       # held-back sums of the open half-wave in held, its sign in pos (true:
       # it takes values >= 0). Returns {out, all, emitted, pos}: out[0,
-      # emitted) are the finished samples, all[emitted, len(all)) the new
+      # emitted) are the finished samples, all[emitted, length(all)) the new
       # held-back sums.
       defk unquote(mix)(bufs :: [unquote(t)], n :: i64, held :: [i64], pos :: bool) ::
              {[unquote(t)], [i64], i64, bool} do
-        hl = len(held)
-        m = div(len(bufs), n)
+        hl = length(held)
+        m = div(length(bufs), n)
         total = hl + m
         all = alloc(i64, total)
 
-        for i <- 0..(min(len(held), len(all)) - 1)//1 do
+        for i <- 0..(min(length(held), length(all)) - 1)//1 do
           all[i] = held[i]
         end
 
@@ -170,7 +170,7 @@ defmodule PCM.Gen do
         # every sum as a sample, then rescale the half-waves that overflow
         out = alloc(unquote(t), total)
 
-        for i <- 0..(min(len(all), len(out)) - 1)//1 do
+        for i <- 0..(min(length(all), length(out)) - 1)//1 do
           out[i] = max(min(all[i], unquote(hi)), unquote(lo))
         end
 
@@ -214,14 +214,14 @@ defmodule PCM.Gen do
             true -> 1.0
           end
 
-        out = alloc(unquote(t), len(held))
+        out = alloc(unquote(t), length(held))
 
         if q == 1.0 do
-          for k <- 0..(len(held) - 1)//1 do
+          for k <- 0..(length(held) - 1)//1 do
             out[k] = max(min(held[k], unquote(hi)), unquote(lo))
           end
         else
-          for k <- 0..(len(held) - 1)//1 do
+          for k <- 0..(length(held) - 1)//1 do
             out[k] = max(min(trunc(held[k] * q), unquote(hi)), unquote(lo))
           end
         end

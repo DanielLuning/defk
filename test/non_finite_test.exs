@@ -77,7 +77,7 @@ defmodule Defk.NonFiniteTest.K do
   end
 
   defk sum_to(a :: [f64], n :: i64) :: f64 do
-    for i <- 0..(min(n, len(a)) - 1)//1, reduce: 0.0 do
+    for i <- 0..(min(n, length(a)) - 1)//1, reduce: 0.0 do
       acc -> acc + a[i]
     end
   end
@@ -90,9 +90,9 @@ defmodule Defk.NonFiniteTest.K do
 
   # an alloc/2 array is read without the input check
   defk copy_sum(a :: [f64]) :: f64 do
-    b = alloc(f64, len(a))
+    b = alloc(f64, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       b[i] = a[i]
     end
 
@@ -145,9 +145,9 @@ defmodule Defk.NonFiniteTest.K do
   # and replay a failed strip with the raising checks (defk-6tt): an
   # element-wise map writing its output, a reduce, and two accumulators
   defk scale(a :: [f64], k :: f64) :: [f64] do
-    out = alloc(f64, len(a))
+    out = alloc(f64, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[i] = a[i] * k
     end
 
@@ -155,7 +155,7 @@ defmodule Defk.NonFiniteTest.K do
   end
 
   defk dot(a :: [f64], b :: [f64]) :: f64 do
-    n = min(len(a), len(b))
+    n = min(length(a), length(b))
 
     for i <- 0..(n - 1)//1, reduce: 0.0 do
       acc -> acc + a[i] * b[i]
@@ -192,15 +192,15 @@ defmodule Defk.NonFiniteTest.K do
   # (defk-hki): a gather read and a scatter write, whose flagged forms never
   # touch memory outside the array
   defk gather(a :: [f64], ix :: [i64], k :: i64) :: f64 do
-    for i <- 0..(len(ix) - 1)//1, reduce: 0.0 do
+    for i <- 0..(length(ix) - 1)//1, reduce: 0.0 do
       acc -> acc + a[ix[i] * k] * 2.0
     end
   end
 
   defk scatter(a :: [f64], ix :: [i64], k :: i64) :: [f64] do
-    out = alloc(f64, len(a))
+    out = alloc(f64, length(a))
 
-    for i <- 0..(min(len(a), len(ix)) - 1)//1 do
+    for i <- 0..(min(length(a), length(ix)) - 1)//1 do
       out[ix[i] * k] = a[i] * 2.0
     end
 
@@ -211,7 +211,7 @@ defmodule Defk.NonFiniteTest.K do
   # a strip that also flags an overflow (ix[i] * 2) stays checked, since a
   # flagged run computes on after a failure (defk-hki)
   defk shifted_sum(x :: [f64], ix :: [i64]) :: f64 do
-    n = min(len(x), len(ix))
+    n = min(length(x), length(ix))
 
     for i <- 0..(n - 2)//1, reduce: 0.0 do
       acc ->
@@ -236,9 +236,9 @@ defmodule Defk.NonFiniteTest.K do
 
   # an integer-only loop has no float check to flag (defk-60q)
   defk spread(a :: [u8]) :: [u8] do
-    out = alloc(u8, 2 * len(a))
+    out = alloc(u8, 2 * length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       out[2 * i] = a[i]
     end
 
@@ -509,7 +509,7 @@ defmodule Defk.NonFiniteTest do
   defp mixed_strips(force?) do
     K.__defk_force_yields__(force?)
     a = mixed_a()
-    # scatter reads a[i] for i < len(a), so it runs over a longer a of 0.5s;
+    # scatter reads a[i] for i < length(a), so it runs over a longer a of 0.5s;
     # its own errors are the index ones and a NaN or inf at a[i]
     try do
       for n <- [100, 2 * @strip + 3],

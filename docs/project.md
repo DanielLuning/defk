@@ -69,7 +69,7 @@ How a kernel is compiled, Elixir mode and the fast-path report are described in 
    - `a..b` counts down when `a > b`
    - a `case` that no clause matches raises `CaseClauseError`, so a catch-all is optional
    - a `{:halt, acc}` ends only the `Enum.reduce_while` it belongs to, also inside nested loops and inlined calls
-   - bounds failures raise `Enum.OutOfBoundsError` in the caller. The check is dropped when the compiler can prove the index is in range, e.g. `i <- 0..(n - 1)//1` with `n = min(len(a), len(b))`, or a `[u8]` value indexing a 256-element `alloc`
+   - bounds failures raise `Enum.OutOfBoundsError` in the caller. The check is dropped when the compiler can prove the index is in range, e.g. `i <- 0..(n - 1)//1` with `n = min(length(a), length(b))`, or a `[u8]` value indexing a 256-element `alloc`
 3. **Automatic yielding.** Every loop back-edge is a safepoint. Locals live in registers and are spilled to a frame struct only when the kernel actually yields. Resume re-enters each loop through its header, so loops keep a single entry and clang optimises them like ordinary loops.
    A call to another kernel is inlined, so the callee's loops (however many calls deep) are loops of the kernel called from Elixir and yield like its own. `yield: false` applies to the kernel called from Elixir, including what it calls.
    A `{:halt, acc}` jumps to the end of its loop. Jumping out of loops keeps their single entry, so it needs no change to resume.

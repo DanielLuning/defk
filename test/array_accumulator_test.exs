@@ -43,7 +43,7 @@ defmodule Defk.ArrayAccumulatorTest.K do
   # 1BRC-shaped: an open-addressing table of keys and per-slot stats
   # {count, sum, min, max}, updated by an inlined helper that returns both
   defk insert(slots :: [i64], stats :: [i64], key :: i64, t :: i64) :: {[i64], [i64], i64} do
-    mask = len(slots) - 1
+    mask = length(slots) - 1
 
     j =
       Enum.reduce_while(0..mask//1, band(key, mask), fn _, j ->
@@ -64,7 +64,7 @@ defmodule Defk.ArrayAccumulatorTest.K do
 
   # two alloc'd tables threaded through a for ..., reduce: by the helper
   defk aggregate(keys :: [i64], temps :: [i64]) :: {[i64], [i64], i64} do
-    for k <- 0..(min(len(keys), len(temps)) - 1)//1,
+    for k <- 0..(min(length(keys), length(temps)) - 1)//1,
         reduce: {alloc(i64, 64), alloc(i64, 256), 0} do
       {slots, stats, n} ->
         {slots, stats, new} = insert(slots, stats, keys[k], temps[k])
@@ -75,14 +75,15 @@ defmodule Defk.ArrayAccumulatorTest.K do
   # one line "name;temp\n" from pos: {hash of name (never 0), temp, next pos}
   defk parse_line(bytes :: [u8], pos :: i64) :: {i64, i64, i64} do
     {h, semi} =
-      Enum.reduce_while(pos..(len(bytes) - 1)//1, {0, pos}, fn i, {h, _} ->
+      Enum.reduce_while(pos..(length(bytes) - 1)//1, {0, pos}, fn i, {h, _} ->
         b = bytes[i]
         if b == 59, do: {:halt, {h, i}}, else: {:cont, {band(h * 31 + b, 0xFFFFFFFF), i}}
       end)
 
     {t, neg, nl} =
-      Enum.reduce_while((semi + 1)..(len(bytes) - 1)//1, {0, false, len(bytes)}, fn i,
-                                                                                    {t, neg, _} ->
+      Enum.reduce_while((semi + 1)..(length(bytes) - 1)//1, {0, false, length(bytes)}, fn i,
+                                                                                          {t, neg,
+                                                                                           _} ->
         b = bytes[i]
 
         cond do
@@ -100,13 +101,13 @@ defmodule Defk.ArrayAccumulatorTest.K do
   defk brc(bytes :: [u8]) :: {[i64], [i64], i64} do
     {slots, stats, n, _} =
       Enum.reduce_while(
-        0..(len(bytes) - 1)//1,
+        0..(length(bytes) - 1)//1,
         {alloc(i64, 64), alloc(i64, 256), 0, 0},
         fn _, {slots, stats, n, pos} ->
           {h, t, next} = parse_line(bytes, pos)
           {slots, stats, new} = insert(slots, stats, h, t)
 
-          if next >= len(bytes),
+          if next >= length(bytes),
             do: {:halt, {slots, stats, n + new, next}},
             else: {:cont, {slots, stats, n + new, next}}
         end
@@ -168,7 +169,7 @@ defmodule Defk.ArrayAccumulatorTest.K do
 
   # an input array as the initial accumulator: copied, the caller's unchanged
   defk doubled(a :: [i64]) :: [i64] do
-    for i <- 0..(len(a) - 1)//1, reduce: a do
+    for i <- 0..(length(a) - 1)//1, reduce: a do
       acc ->
         acc[i] = band(acc[i], 0xFFFF) * 2
         acc
@@ -200,7 +201,7 @@ defmodule Defk.ArrayAccumulatorTest.K do
   # f64 accumulators: from alloc/2 (finite), and a copy of an input, whose
   # elements are still checked when read
   defk prefix(a :: [f64]) :: [f64] do
-    for i <- 1..(len(a) - 1)//1, reduce: a do
+    for i <- 1..(length(a) - 1)//1, reduce: a do
       acc ->
         acc[i] = acc[i] + acc[i - 1]
         acc
@@ -208,7 +209,7 @@ defmodule Defk.ArrayAccumulatorTest.K do
   end
 
   defk scaled(a :: [f64], k :: f64) :: {[f64], f64} do
-    for i <- 0..(len(a) - 1)//1, reduce: {alloc(f64, len(a)), 0.0} do
+    for i <- 0..(length(a) - 1)//1, reduce: {alloc(f64, length(a)), 0.0} do
       {out, s} ->
         out[i] = a[i] * k
         {out, s + out[i]}
@@ -224,10 +225,10 @@ defmodule Defk.ArrayAccumulatorTest.K do
   end
 
   # the same for [f32], whose input reads are checked like [f64]'s (defk-4ai);
-  # alloc(f32, len(a)) has no constant length, so finiteness is the only fact
+  # alloc(f32, length(a)) has no constant length, so finiteness is the only fact
   # the new value loses
   defk pick_input_f32(a :: [f32]) :: {[f32], f64} do
-    for _ <- 0..1//1, reduce: {alloc(f32, len(a)), 0.0} do
+    for _ <- 0..1//1, reduce: {alloc(f32, length(a)), 0.0} do
       {acc, s} -> {a, s + acc[0]}
     end
   end

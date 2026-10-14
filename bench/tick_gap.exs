@@ -7,7 +7,7 @@ defmodule TickGap.Alloc do
 
   # zeroing an 85 MB alloc (defk-ktw): in strips with a safepoint after each
   defk zeros(n :: i64) :: i64 do
-    len(alloc(u8, n))
+    length(alloc(u8, n))
   end
 end
 
