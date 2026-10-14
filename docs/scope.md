@@ -66,10 +66,7 @@ enough work to pay for the call: rolling statistics, nearest-neighbour
 search, image filters, FFT and convolution, non-cryptographic hashes, codecs
 such as base64, and similar numeric or byte-level jobs. Most of the numbers
 behind this list were measured on a loaded machine and are provisional until
-a quiet-machine run;
-[Performance on the BEAM](https://github.com/DanielLuning/defk/blob/main/docs/performance.md)
-gives each figure with its status.
-A provisional win is a reason to measure your own job
+a quiet-machine run. A provisional win is a reason to measure your own job
 ([Measuring](guides/measuring.md)), not a promise.
 
 **Elixir is the right choice** when:
@@ -100,9 +97,8 @@ the call must stay preemptible and stop with its process, or when it is the
 one numeric job in an app that doesn't otherwise need Nx and a compiled
 backend. Some overlap with Nx is fine: a kernel that saves you adding EXLA for
 one loop is a good use of defk. A kernel takes the same packed layout as
-`Nx.to_binary/1`, so the two work side by side. The
-[Nx boundary research](https://github.com/DanielLuning/defk/blob/main/docs/research/nx-boundary.md)
-gives the sources; the small-input and early-exit cases are not measured
+`Nx.to_binary/1`, so the two work side by side. The small-input and
+early-exit cases are not measured
 against EXLA yet.
 
 **A wrapper NIF (Rustler, Zigler or an existing binding) is the right

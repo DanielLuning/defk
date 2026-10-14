@@ -74,9 +74,8 @@ defmodule Defk.Report do
   flagged, and both array reads lost their bounds checks, because `i` stays
   below `length(a)` and `length(b)`. `Defk.Report.print(MyApp.Dot)` shows the
   same notes beside the source lines. When a kernel is slower than you
-  expect, [Measuring](measuring.md#5-explain-the-number) and
-  [Making a defk kernel fast](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#6-making-a-defk-kernel-fast)
-  say what to do with them.
+  expect, [Measuring](measuring.md#5-explain-the-number) says what to do with
+  them.
   """
 
   @typedoc "A kernel called from Elixir, as `{name, arity}`. Unstable."

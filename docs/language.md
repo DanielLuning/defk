@@ -493,8 +493,7 @@ does not raise. An `[f64]` or `[f32]` input element whose bits are inf or NaN ra
 that isn't taken never raises. Messages differ from Elixir's (they name the
 operation, not the line); run the kernel in Elixir mode to find the line.
 (The checks cost 17-24% on float reductions and about 2x on a vectorised
-elementwise loop today; see
-[performance notes 6.5](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#65-float-checks-flag-the-strip-replay-on-failure).)
+elementwise loop today.)
 
 ### Comparisons
 
@@ -700,9 +699,7 @@ top bit set is negative and does not fit in 64 bits; `band(..., 0xFFFFFFFFFFFFFF
 makes it the `u64` value, at no cost. One step waits for the previous one
 (3 cycles on an Apple M4), so this loop runs at about 10 GB/s; three
 independent streams joined at the end run at about 28 GB/s, level with the
-crc32cer NIF (`examples/hashes.exs` has that kernel, and
-[Performance notes](https://github.com/DanielLuning/defk/blob/main/docs/performance.md),
-6.21 and 6.22, the numbers).
+crc32cer NIF (`examples/hashes.exs` has that kernel).
 
 Which implementation runs, and what it costs, depends on the CPU:
 
@@ -2051,10 +2048,7 @@ iex> M.count_primes(100)
 
   Give each helper one call site: call it from one loop over its inputs, or
   copy the inputs into a buffer and call it once. The largest kernels in the
-  examples are under 30,000 lines; the threshold and the measurements behind
-  it are
-  [Performance notes](https://github.com/DanielLuning/defk/blob/main/docs/performance.md)
-  6.27.
+  examples are under 30,000 lines.
 - Arguments are converted like a result: an `i64` widens to an `f64`
   parameter, anything else must match ([`type-mismatch`](compile-errors.md#type-mismatch)).
 - An array argument is passed without a copy. A callee that writes an array
@@ -2126,9 +2120,6 @@ including ordinary `def`s of the kernel's own module, are not callable
   (`test/upgrade_test.exs`).
 - **Testing yields.** `Mod.__defk_force_yields__(true)` makes the module's
   kernels yield at every clock read, so a test can run every resume path.
-
-The BEAM side of all this (scheduling, `enif_schedule_nif`, resources,
-upgrade) is in [docs/beam-nifs.md](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md).
 
 ## 10. Elixir mode
 

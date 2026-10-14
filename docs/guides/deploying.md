@@ -50,9 +50,6 @@ these four targets:
 | macOS arm64 | | Apple clang |
 
 Linux arm64 with gcc passed the suite too, but is not run on every change.
-The recipe, and how to run it on your own machine with or without GitHub,
-is in the repository's
-[`ci/README.md`](https://github.com/DanielLuning/defk/blob/main/ci/README.md).
 
 Not tested: Alpine and other musl systems (the table above lists their
 compiler packages, but no kernel has been run there), macOS on x86-64,
