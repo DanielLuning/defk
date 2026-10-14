@@ -11,9 +11,15 @@
     "needs-triage"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution: fixed, merged to main.\n- Cause: the generated C put two operands that can raise into one call (defk_fadd(ctx, A, B), defk_put_f64(ctx, a, i, v), ...). C leaves the order of call arguments open; gcc on x86-64 evaluated them right to left. A second form showed on every compiler: an operand with statements (a loop, an inlined kernel call, a tuple item) ran before the checks of the operands left of it (a[5] + big(x) raised big's error).\n- Fix: lower_expr/2 now wraps every lower_node/2 clause; lower_ops/3 and in_order/3 lower the operands of one operation in Elixir's order. An operand that can raise is bound to a local when one right of it can raise too: by a statement when one right of it has statements, else by the comma operator in front of the expression's C. Case guards and speculated selects (env.ovf) are left alone: their errors are flags and the replay orders them. Inlined kernel calls, copy and copy_back bind their arguments by statements.\n- Tests: test/evaluation_order_test.exs (inline, two overflows, store index before value, statement operands, forced yields).\n- Results: macOS mix ci 1736/1736. podman linux-aarch64-clang pass. podman linux-x86_64-gcc (Rosetta) 1731/1732, the only failure is defk-wfi.7; non_finite_test 63/63 with gcc. Native x86-64 confirmation comes with the next GitHub run.\n- Speed: image_blur and hashes unchanged (docs/performance.md 6.30, provisional).",
+      "timestamp": "2026-10-14T15:37:23Z"
+    }
+  ],
   "priority": 1,
   "status": "in_progress",
   "title": "[BUG] gcc on x86-64: a kernel raises a different first error than Elixir mode",
   "type": "bug",
-  "updated_at": "2026-10-14T15:18:20Z"
+  "updated_at": "2026-10-14T15:37:23Z"
 }
