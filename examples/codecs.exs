@@ -123,7 +123,7 @@ defmodule Codecs.Source do
       # ---- base64 (RFC 4648 alphabet, padded: Base.encode64/decode64!) ----
 
       defk encode64(s :: [u8]) :: [u8] do
-        n = len(s)
+        n = length(s)
         full = div(n, 3)
         out = alloc(u8, 4 * div(n + 2, 3))
 
@@ -165,7 +165,7 @@ defmodule Codecs.Source do
       # alphabet (255 in the table, so the OR of all sextets exceeds 63)
       # after the loop. '=' is only padding in the last quad.
       defk decode64(s :: [u8]) :: {[u8], i64} do
-        n = len(s)
+        n = length(s)
         _ = alloc(u8, if(rem(n, 4) == 0, do: 0, else: -1))
         quads = div(n, 4)
         out = alloc(u8, 3 * quads)
@@ -214,7 +214,7 @@ defmodule Codecs.Source do
       # ---- hex (uppercase out: Base.encode16, :binary.encode_hex) ----
 
       defk encode16(s :: [u8]) :: [u8] do
-        n = len(s)
+        n = length(s)
         out = alloc(u8, 2 * n)
 
         for i <- 0..(n - 1)//1 do
@@ -229,7 +229,7 @@ defmodule Codecs.Source do
       # Mixed case in, as :binary.decode_hex. An odd length raises at once, a
       # byte outside the alphabet after the loop (both a negative alloc).
       defk decode16(s :: [u8]) :: [u8] do
-        n = len(s)
+        n = length(s)
         _ = alloc(u8, if(rem(n, 2) == 0, do: 0, else: -1))
         m = div(n, 2)
         out = alloc(u8, m)
@@ -255,7 +255,7 @@ defmodule Codecs.Source do
       # first: each two input bytes are one multiply-add per limb, and each
       # limb gives eight digits at the end. One call per key is count = 1.
       defk encode58(keys :: [u8], klen :: i64) :: {[u8], [i64]} do
-        count = if klen > 0, do: div(len(keys), klen), else: 0
+        count = if klen > 0, do: div(length(keys), klen), else: 0
         w = div(klen * 138 + 99, 100) + 1
         nlimbs = div(w + 7, 8) + 1
         out = alloc(u8, count * w)
@@ -336,7 +336,7 @@ defmodule Codecs.Source do
       # alphabet raises ArgumentError at the end of its string (a negative
       # alloc length).
       defk decode58(chars :: [u8], offs :: [i64]) :: {[u8], [i64]} do
-        count = len(offs) - 1
+        count = length(offs) - 1
 
         maxlen =
           for k <- 0..(count - 1)//1, reduce: 0 do

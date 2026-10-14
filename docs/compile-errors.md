@@ -5,7 +5,7 @@ compile error when the module compiles. Each error is printed with why it is
 rejected, a hint, and its stable code, which is the heading of its entry on
 this page: the last line of the error is a link to that entry. The
 [language reference](language.md#11-compile-errors) shows the format; this page
-is the catalogue. Codes are never renamed. `Defk.Errors.codes/0` lists them,
+is the catalogue. From 0.1.0, codes are never renamed. `Defk.Errors.entries/0` lists them,
 and `mix run -e 'Defk.Errors.explain!("unsupported-map")'` prints one entry.
 
 Each entry gives the code's summary, its kind, the default why and hint (an
@@ -674,7 +674,7 @@ defk f(x :: i64, b :: bool) :: i64 do
 end
 ```
 
-### u64-mix
+### u64-with-i64
 
 Outside a mask, + - * band bor bxor div rem min max mix a u64 only with a u64 or an i64 known to be >= 0.
 
@@ -746,12 +746,12 @@ defk f(x :: i64) :: {i64, i64, i64} do
 end
 ```
 
-### unknown-function
+### undefined-function
 
 A kernel calls builtins and the other kernels in its module.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: a kernel runs as native code: it can call its builtins (len, bit_size, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, log2, log10, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, copy, copy_back, mulhi, clz, ctz, popcount, rotl64, rotr64, rotl, rotr, f64_to_u64, crc32c) and the kernels in this module, which are inlined
+- why: a kernel runs as native code: it can call its builtins (length, bit_size, min, max, abs, float, trunc, round, div, rem, sqrt, exp, log, log2, log10, sin, cos, pow, band, bor, bxor, bnot, bsl, bsr, wrap64, u64_le, u64_be, u32_le, u32_be, u16_le, u16_be, copy, copy_back, mulhi, clz, ctz, popcount, rotl, rotr, f64_bits, crc32c) and the kernels in this module, which are inlined
 - hint: define it as a kernel in this module, or compute it in Elixir and pass the result in
 
 Rejected:
@@ -900,9 +900,9 @@ Write instead:
 
 ```elixir
 defk f(a :: [f64]) :: [f64] do
-  out = alloc(f64, len(a))
+  out = alloc(f64, length(a))
 
-  for i <- 0..(len(a) - 1)//1 do
+  for i <- 0..(length(a) - 1)//1 do
     out[i] = a[i] * 2.0
   end
 
@@ -956,7 +956,7 @@ Write instead:
 
 ```elixir
 defk f(a :: [f64], t :: f64) :: i64 do
-  Enum.reduce_while(0..(len(a) - 1)//1, -1, fn i, _ ->
+  Enum.reduce_while(0..(length(a) - 1)//1, -1, fn i, _ ->
     if a[i] > t, do: {:halt, i}, else: {:cont, -1}
   end)
 end
@@ -1054,9 +1054,9 @@ Write instead:
 
 ```elixir
 defk f(a :: [f64]) :: [f64] do
-  out = alloc(f64, len(a))
+  out = alloc(f64, length(a))
 
-  for i <- 0..(len(a) - 1)//1 do
+  for i <- 0..(length(a) - 1)//1 do
     out[i] = a[i] * 2.0
   end
 
@@ -1142,7 +1142,7 @@ Write instead:
 
 ```elixir
 defk f(a :: [f64]) :: f64 do
-  for i <- 0..(len(a) - 1)//1, reduce: 0.0 do
+  for i <- 0..(length(a) - 1)//1, reduce: 0.0 do
     acc -> acc + a[i] * i
   end
 end
@@ -1489,7 +1489,7 @@ Rejected:
 ```elixir
 defk f(x :: i64) :: i64 do
   s = "ab" <> "cd"
-  len(s) + x
+  length(s) + x
 end
 ```
 
@@ -1498,7 +1498,7 @@ Write instead:
 ```elixir
 defk f(x :: i64) :: i64 do
   s = "abcd"
-  len(s) + x
+  length(s) + x
 end
 ```
 
@@ -1784,7 +1784,7 @@ Rejected:
 defk f(n :: i64) :: i64 do
   acc = <<>>
   acc = <<acc::bitstring, n::8>>
-  len(acc)
+  length(acc)
 end
 ```
 

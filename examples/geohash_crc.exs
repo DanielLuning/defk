@@ -138,7 +138,7 @@ defmodule GeoCrc.Source do
         if precision < 1 or precision > 12,
           do: raise(ArgumentError, "geohash_encode: precision must be 1..12")
 
-        n = min(len(lat), len(lon))
+        n = min(length(lat), length(lon))
         out = alloc(u8, n * precision)
         alphabet = alloc(u8, 32)
 
@@ -196,7 +196,7 @@ defmodule GeoCrc.Source do
         if precision < 1 or precision > 12,
           do: raise(ArgumentError, "geohash_decode: precision must be 1..12")
 
-        n = div(len(hashes), precision)
+        n = div(length(hashes), precision)
         lat = alloc(f64, n)
         lon = alloc(f64, n)
         # alphabet value + 1 by byte; 0 marks a byte that is not in the alphabet

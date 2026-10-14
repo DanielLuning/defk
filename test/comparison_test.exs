@@ -32,7 +32,7 @@ defmodule Defk.ComparisonTest.K do
 
   # a comparison inside a loop, where the compiler may vectorise
   defk count_below(xs :: [i64], t :: f64) :: i64 do
-    for i <- 0..(len(xs) - 1)//1, reduce: 0 do
+    for i <- 0..(length(xs) - 1)//1, reduce: 0 do
       acc -> if xs[i] < t, do: acc + 1, else: acc
     end
   end

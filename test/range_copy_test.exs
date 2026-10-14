@@ -45,8 +45,8 @@ defmodule Defk.RangeCopyTest.K do
 
   # ... in a buffer the kernel owns, so the move is in place
   defk move_owned(a :: [u8], at :: i64, from :: i64, n :: i64) :: [u8] do
-    b = alloc(u8, len(a))
-    b = copy(b, 0, a, 0, len(a))
+    b = alloc(u8, length(a))
+    b = copy(b, 0, a, 0, length(a))
     b = copy(b, at, b, from, n)
     b
   end
@@ -102,7 +102,7 @@ defmodule Defk.RangeCopyTest.K do
     out = alloc(u8, size)
 
     {out, _ip, _op} =
-      for t <- 0..(div(len(ops), 3) - 1)//1, reduce: {out, 0, 0} do
+      for t <- 0..(div(length(ops), 3) - 1)//1, reduce: {out, 0, 0} do
         {out, ip, op} ->
           ln = ops[3 * t]
           off = ops[3 * t + 1]
@@ -348,18 +348,18 @@ defmodule Defk.RangeCopyTest do
   defp rejection(body, sig), do: reject(__MODULE__, kernel(sig, "i64", body))
 
   test "mismatched element types and float positions are rejected" do
-    msg = rejection("a = copy(a, 0, b, 0, 1)\nlen(a)", "a :: [u8], b :: [f64]")
+    msg = rejection("a = copy(a, 0, b, 0, 1)\nlength(a)", "a :: [u8], b :: [f64]")
     assert msg =~ "(defk builtin-arguments"
     assert msg =~ "copy/5 takes an array, an i64 index, a source array of the same element type"
 
     # a float position fails the signature table like any other wrong type
     # (defk-o49; it used to fail one step later, as a type-mismatch on the
     # coercion)
-    msg = rejection("a = copy_back(a, x, 1, 1)\nlen(a)", "a :: [u8], x :: f64")
+    msg = rejection("a = copy_back(a, x, 1, 1)\nlength(a)", "a :: [u8], x :: f64")
     assert msg =~ "(defk builtin-arguments"
     assert msg =~ "called here with ([u8], f64, i64, i64)"
 
-    msg = rejection("a = copy_back(1, 1, 1, 1)\nlen(a)", "a :: [u8]")
+    msg = rejection("a = copy_back(1, 1, 1, 1)\nlength(a)", "a :: [u8]")
     assert msg =~ "(defk builtin-arguments"
   end
 

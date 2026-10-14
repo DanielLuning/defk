@@ -1,8 +1,8 @@
 # Word loads from a [u8] (defk-n4r.2): u64_le(bytes, i) and friends read the
 # unsigned w-byte integer at byte offset i, as Elixir's
 # <<_::binary-size(i), x::little-unsigned-size(w * 8), _::binary>> = bytes,
-# raise Enum.OutOfBoundsError like a[i] when i < 0 or i + w > len(bytes),
-# and drop the check where the compiler proves i + w <= len(bytes). u64 is
+# raise Enum.OutOfBoundsError like a[i] when i < 0 or i + w > length(bytes),
+# and drop the check where the compiler proves i + w <= length(bytes). u64 is
 # returned as its i64 bit pattern (a limit).
 
 defmodule Defk.WordLoadsTest.K do
@@ -29,20 +29,20 @@ defmodule Defk.WordLoadsTest.Proven do
 
   # every 8-byte window, wrapped to 64 bits
   defk windows(b :: [u8]) :: i64 do
-    for i <- 0..(len(b) - 8)//1, reduce: 0 do
+    for i <- 0..(length(b) - 8)//1, reduce: 0 do
       acc -> wrap64(acc + u64_le(b, i))
     end
   end
 
   # whole words, a step of 8
   defk words(b :: [u8]) :: i64 do
-    for i <- 0..(len(b) - 8)//8, reduce: 0 do
+    for i <- 0..(length(b) - 8)//8, reduce: 0 do
       acc -> bxor(acc, u64_be(b, i))
     end
   end
 
   defk halves(b :: [u8]) :: i64 do
-    for i <- 0..(len(b) - 4)//1, reduce: 0 do
+    for i <- 0..(length(b) - 4)//1, reduce: 0 do
       acc -> acc + u32_le(b, i) - u16_be(b, i + 2)
     end
   end
@@ -51,7 +51,7 @@ defmodule Defk.WordLoadsTest.Proven do
   defk lookup(b :: [u8]) :: i64 do
     table = alloc(u8, 65_536)
 
-    for i <- 0..(len(b) - 2)//1, reduce: 0 do
+    for i <- 0..(length(b) - 2)//1, reduce: 0 do
       acc -> acc + table[u16_le(b, i)]
     end
   end
@@ -62,7 +62,7 @@ defmodule Defk.WordLoadsTest.Short do
   use Defk
 
   defk windows(b :: [u8]) :: i64 do
-    for i <- 0..(len(b) - 7)//1, reduce: 0 do
+    for i <- 0..(length(b) - 7)//1, reduce: 0 do
       acc -> wrap64(acc + u64_le(b, i))
     end
   end

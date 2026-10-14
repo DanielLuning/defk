@@ -7,8 +7,8 @@ defmodule Defk.Bits do
   `Defk.Bits.clz(x, 32)`; the compiler maps them to machine instructions,
   and Elixir mode calls these functions, whose bodies are what the kernel
   computes. `clz/2`, `ctz/2`, `rotl/3` and `rotr/3` take a width, so a
-  32-bit hash rotates as 32 bits; `clz/1`, `ctz/1`, `popcount/1`, `rotl64/2`
-  and `rotr64/2` work on the 64-bit pattern of any integer. The names are
+  32-bit hash rotates as 32 bits; `clz/1`, `ctz/1`, `popcount/1`, `rotl/2`
+  and `rotr/2` work on the 64-bit pattern of any integer. The names are
   the kernel builtins' names too, so renaming one would change the kernel
   subset. `crc32c/3` is a hardware builtin: a kernel runs it as the CPU's
   CRC32C instruction where there is one and as a table step elsewhere, with
@@ -121,17 +121,17 @@ defmodule Defk.Bits do
   Rotate the 64-bit pattern of `x` left by `band(n, 63)` bits, as a signed
   i64 (`n` may be any i64).
 
-      iex> Defk.Bits.rotl64(1, 63)
+      iex> Defk.Bits.rotl(1, 63)
       -0x8000000000000000
-      iex> Defk.Bits.rotl64(-0x8000000000000000, 1)
+      iex> Defk.Bits.rotl(-0x8000000000000000, 1)
       1
-      iex> Defk.Bits.rotl64(0x0123456789ABCDEF, 64)
+      iex> Defk.Bits.rotl(0x0123456789ABCDEF, 64)
       0x0123456789ABCDEF
-      iex> Defk.Bits.rotl64(1, -1)
+      iex> Defk.Bits.rotl(1, -1)
       -0x8000000000000000
   """
-  @spec rotl64(integer(), integer()) :: integer()
-  def rotl64(x, n) when is_integer(x) and is_integer(n) do
+  @spec rotl(integer(), integer()) :: integer()
+  def rotl(x, n) when is_integer(x) and is_integer(n) do
     k = Bitwise.band(n, 63)
     u = u64(x)
     wrap64(Bitwise.bor(Bitwise.bsl(u, k), Bitwise.bsr(u, 64 - k)))
@@ -141,15 +141,15 @@ defmodule Defk.Bits do
   Rotate the 64-bit pattern of `x` right by `band(n, 63)` bits, as a signed
   i64 (`n` may be any i64).
 
-      iex> Defk.Bits.rotr64(1, 1)
+      iex> Defk.Bits.rotr(1, 1)
       -0x8000000000000000
-      iex> Defk.Bits.rotr64(-0x8000000000000000, 63)
+      iex> Defk.Bits.rotr(-0x8000000000000000, 63)
       1
-      iex> Defk.Bits.rotr64(5, 64)
+      iex> Defk.Bits.rotr(5, 64)
       5
   """
-  @spec rotr64(integer(), integer()) :: integer()
-  def rotr64(x, n) when is_integer(x) and is_integer(n), do: rotl64(x, 64 - Bitwise.band(n, 63))
+  @spec rotr(integer(), integer()) :: integer()
+  def rotr(x, n) when is_integer(x) and is_integer(n), do: rotl(x, 64 - Bitwise.band(n, 63))
 
   @doc """
   The number of leading zero bits of `x` as a `width`-bit value: 0 to
@@ -223,17 +223,17 @@ defmodule Defk.Bits do
   @doc """
   The IEEE 754 bits of the float `x` as an unsigned 64-bit integer, as
   `<<b::64>> = <<x::float-64>>` gives them. An integer is converted to a
-  float first, as in that match. A kernel's `f64_to_u64(x)` returns a `u64`.
+  float first, as in that match. A kernel's `f64_bits(x)` returns a `u64`.
 
-      iex> Defk.Bits.f64_to_u64(1.0)
+      iex> Defk.Bits.f64_bits(1.0)
       0x3FF0000000000000
-      iex> Defk.Bits.f64_to_u64(-0.0)
+      iex> Defk.Bits.f64_bits(-0.0)
       0x8000000000000000
-      iex> Defk.Bits.f64_to_u64(2)
+      iex> Defk.Bits.f64_bits(2)
       0x4000000000000000
   """
-  @spec f64_to_u64(number()) :: non_neg_integer()
-  def f64_to_u64(x) when is_number(x) do
+  @spec f64_bits(number()) :: non_neg_integer()
+  def f64_bits(x) when is_number(x) do
     <<b::64>> = <<x::float-64>>
     b
   end

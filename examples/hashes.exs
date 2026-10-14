@@ -233,10 +233,10 @@ defmodule Hashes.CRC32CKernels do
         bxor(crc, 0xFFFFFFFF)
       end
 
-      defk(crc32c(bytes :: [u8]) :: i64, do: crc32c_at(bytes, 0, len(bytes)))
+      defk(crc32c(bytes :: [u8]) :: i64, do: crc32c_at(bytes, 0, length(bytes)))
 
       defk crc32c_batch(blob :: [u8], offsets :: [i64]) :: [i64] do
-        n = len(offsets) - 1
+        n = length(offsets) - 1
         out = alloc(i64, n)
 
         for k <- 0..(n - 1)//1 do
@@ -334,10 +334,10 @@ defmodule Hashes.Kernels do
     bxor(h, shr32(h))
   end
 
-  defk(xxh64(bytes :: [u8], seed :: i64) :: i64, do: xxh64_at(bytes, 0, len(bytes), seed))
+  defk(xxh64(bytes :: [u8], seed :: i64) :: i64, do: xxh64_at(bytes, 0, length(bytes), seed))
 
   defk xxh64_batch(blob :: [u8], offsets :: [i64], seed :: i64) :: [i64] do
-    n = len(offsets) - 1
+    n = length(offsets) - 1
     out = alloc(i64, n)
 
     for k <- 0..(n - 1)//1 do
@@ -370,7 +370,7 @@ defmodule Hashes.Kernels do
   # Murmur3 x64_128 of each key [offsets[k], offsets[k + 1]) of blob: h1 at
   # out[2k], h2 at out[2k + 1]
   defk murmur3_batch(blob :: [u8], offsets :: [i64], seed :: i64) :: [i64] do
-    n = len(offsets) - 1
+    n = length(offsets) - 1
     out = alloc(i64, 2 * n)
 
     for k <- 0..(n - 1)//1 do
@@ -408,7 +408,7 @@ defmodule Hashes.Kernels do
 
   defk murmur3_128(bytes :: [u8], seed :: i64) :: {i64, i64} do
     offsets = alloc(i64, 2)
-    offsets[1] = len(bytes)
+    offsets[1] = length(bytes)
     out = murmur3_batch(bytes, offsets, seed)
     {out[0], out[1]}
   end
@@ -472,11 +472,11 @@ defmodule Hashes.Kernels do
   end
 
   defk(siphash24(bytes :: [u8], k0 :: i64, k1 :: i64) :: i64,
-    do: siphash24_at(bytes, 0, len(bytes), k0, k1)
+    do: siphash24_at(bytes, 0, length(bytes), k0, k1)
   )
 
   defk siphash24_batch(blob :: [u8], offsets :: [i64], k0 :: i64, k1 :: i64) :: [i64] do
-    n = len(offsets) - 1
+    n = length(offsets) - 1
     out = alloc(i64, n)
 
     for k <- 0..(n - 1)//1 do
@@ -500,7 +500,7 @@ defmodule Hashes.Kernels do
   defk(crc_t(k :: i64, x :: i64) :: i64, do: u32_le(@crc_tables, bsl(256 * k + band(x, 255), 2)))
 
   defk crc32c_s8(b :: [u8]) :: i64 do
-    n = len(b)
+    n = length(b)
     words = n - rem(n, 8)
 
     crc =

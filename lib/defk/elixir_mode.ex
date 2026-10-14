@@ -17,10 +17,10 @@ defmodule Defk.ElixirMode do
     * wrong-typed arguments raise `ArgumentError`, as the kernel does
     * `alloc/2` over 2^48 bytes raises `ArgumentError` ("length too large"),
       and from 2^47 bytes ("out of memory"), as the kernel does
-    * `alloc/2` raises the kernel's "out of memory (... past max_owned, M
-      bytes)" `ArgumentError` once the bytes the call's `alloc/2` calls
-      (called kernels' included) ask for would pass the native library's
-      `max_owned`, before building the binary. Native code also counts
+    * `alloc/2` raises the kernel's "out of memory (... past
+      max_owned_bytes, M bytes)" `ArgumentError` once the bytes the call's
+      `alloc/2` calls (called kernels' included) ask for would pass the
+      native library's `max_owned_bytes`, before building the binary. Native code also counts
       value-semantics copies, bitstring accumulator buffers and aligned
       copies of misaligned inputs, which Elixir mode does not see, so there
       native code can raise where Elixir mode succeeds, never the reverse
@@ -159,7 +159,7 @@ defmodule Defk.ElixirMode do
               Defk.ElixirMode.Ops.args!(args, unquote(Macro.escape(sig.params)))
 
             # the call's owned-buffer budget is the native library's
-            Defk.ElixirMode.Ops.owned_call(__defk_stats__().max_owned, fn ->
+            Defk.ElixirMode.Ops.owned_call(__defk_stats__().max_owned_bytes, fn ->
               unquote(fun_name(sig.name))(unquote_splicing(vs))
             end)
           end
@@ -655,7 +655,7 @@ defmodule Defk.ElixirMode do
     end
   end
 
-  defp em_builtin(:len, [a], [{:arr, e}], m), do: call(:"len_#{e}", [a], m)
+  defp em_builtin(:length, [a], [{:arr, e}], m), do: call(:"len_#{e}", [a], m)
   defp em_builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: call(f, [a, i], m)
 
   # copy/5 and copy_back/4 (defk-52v.16): a new binary with the range
@@ -666,10 +666,10 @@ defmodule Defk.ElixirMode do
   defp em_builtin(:copy_back, [a, at, off, n], [{:arr, e} | _], m),
     do: call(:copy_back, [a, at, off, n, esize(e)], m)
 
-  defp em_builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl64, :rotr64],
+  defp em_builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl, :rotr],
     do: remote(Defk.Bits, f, [a, b], m)
 
-  # clz/2, ctz/2, rotl/3, rotr/3, f64_to_u64/1 (defk-wlu): Defk.Bits as it
+  # clz/2, ctz/2, rotl/3, rotr/3, f64_bits/1 (defk-wlu): Defk.Bits as it
   # is; rotl/rotr of an i64 give an i64, checked
   defp em_builtin(f, [x, w], [_, _], m) when f in [:clz, :ctz],
     do: remote(Defk.Bits, f, [x, w], m)
@@ -682,7 +682,7 @@ defmodule Defk.ElixirMode do
   defp em_builtin(:crc32c, [c, x, w], [_, _, _], m),
     do: remote(Defk.Bits, :crc32c, [c, x, w], m)
 
-  defp em_builtin(:f64_to_u64, [x], [_], m), do: remote(Defk.Bits, :f64_to_u64, [x], m)
+  defp em_builtin(:f64_bits, [x], [_], m), do: remote(Defk.Bits, :f64_bits, [x], m)
 
   defp em_builtin(f, [a], [t], m) when f in @bits and t in @ints,
     do: remote(Defk.Bits, f, [a], m)

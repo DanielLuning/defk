@@ -58,7 +58,7 @@
 #     words) and 8 columns (word pairs 16 apart), then r is XORed into
 #     block cur. perm(r, base, s) is one P: 16 loads, BLAKE2b's round with
 #     GB's multiplications, wrap64(a + b + 2 * band(a, 0xFFFFFFFF) *
-#     band(b, 0xFFFFFFFF)) and rotr64, 16 stores.
+#     band(b, 0xFFFFFFFF)) and rotr, 16 stores.
 #   - segment(...) computes one lane's segment of one slice: for Argon2i and
 #     Argon2id's first half, the segment's addresses first (Z with counter
 #     k, G(0, G(0, Z)), 128 per block) into an alloc'd [i64]; then each
@@ -216,17 +216,17 @@ defmodule Argon2Ex.Gen do
         do: stmt
   end
 
-  # BLAKE2b's G: u64 bit patterns in i64, wrapping adds, rotr64
+  # BLAKE2b's G: u64 bit patterns in i64, wrapping adds, rotr
   defp g(a, b, c, d, x, y) do
     [
       quote(do: unquote(a) = wrap64(unquote(a) + unquote(b) + unquote(x))),
-      quote(do: unquote(d) = rotr64(bxor(unquote(d), unquote(a)), 32)),
+      quote(do: unquote(d) = rotr(bxor(unquote(d), unquote(a)), 32)),
       quote(do: unquote(c) = wrap64(unquote(c) + unquote(d))),
-      quote(do: unquote(b) = rotr64(bxor(unquote(b), unquote(c)), 24)),
+      quote(do: unquote(b) = rotr(bxor(unquote(b), unquote(c)), 24)),
       quote(do: unquote(a) = wrap64(unquote(a) + unquote(b) + unquote(y))),
-      quote(do: unquote(d) = rotr64(bxor(unquote(d), unquote(a)), 16)),
+      quote(do: unquote(d) = rotr(bxor(unquote(d), unquote(a)), 16)),
       quote(do: unquote(c) = wrap64(unquote(c) + unquote(d))),
-      quote(do: unquote(b) = rotr64(bxor(unquote(b), unquote(c)), 63))
+      quote(do: unquote(b) = rotr(bxor(unquote(b), unquote(c)), 63))
     ]
   end
 
@@ -246,13 +246,13 @@ defmodule Argon2Ex.Gen do
 
     [
       add.(a, b),
-      quote(do: unquote(d) = rotr64(bxor(unquote(d), unquote(a)), 32)),
+      quote(do: unquote(d) = rotr(bxor(unquote(d), unquote(a)), 32)),
       add.(c, d),
-      quote(do: unquote(b) = rotr64(bxor(unquote(b), unquote(c)), 24)),
+      quote(do: unquote(b) = rotr(bxor(unquote(b), unquote(c)), 24)),
       add.(a, b),
-      quote(do: unquote(d) = rotr64(bxor(unquote(d), unquote(a)), 16)),
+      quote(do: unquote(d) = rotr(bxor(unquote(d), unquote(a)), 16)),
       add.(c, d),
-      quote(do: unquote(b) = rotr64(bxor(unquote(b), unquote(c)), 63))
+      quote(do: unquote(b) = rotr(bxor(unquote(b), unquote(c)), 63))
     ]
   end
 end
@@ -312,12 +312,12 @@ kernels =
       if t < 1 or t > 4_294_967_295, do: raise(ArgumentError, "t_cost must be in 1..2^32-1")
       if y < 0 or y > 2, do: raise(ArgumentError, "type must be 0, 1 or 2")
 
-      if len(pwd) > 4_294_967_295 or len(salt) > 4_294_967_295 or len(secret) > 4_294_967_295 or
-           len(ad) > 4_294_967_295,
+      if length(pwd) > 4_294_967_295 or length(salt) > 4_294_967_295 or length(secret) > 4_294_967_295 or
+           length(ad) > 4_294_967_295,
          do: raise(ArgumentError, "inputs must be at most 2^32-1 bytes")
 
       # H_0 (RFC 9106 3.2, step 1)
-      n0 = 40 + len(pwd) + len(salt) + len(secret) + len(ad)
+      n0 = 40 + length(pwd) + length(salt) + length(secret) + length(ad)
       b0 = alloc(u8, n0)
       b0 = put32(b0, 0, p)
       b0 = put32(b0, 4, tlen)
@@ -690,15 +690,15 @@ kernels =
       b
     end
 
-    # LE32(len(f)) || f at b[off..]; gives the offset after it
+    # LE32(length(f)) || f at b[off..]; gives the offset after it
     defk put_field(b :: [u8], off :: i64, f :: [u8]) :: {[u8], i64} do
-      b = put32(b, off, len(f))
+      b = put32(b, off, length(f))
 
-      for i <- 0..(len(f) - 1)//1 do
+      for i <- 0..(length(f) - 1)//1 do
         b[off + 4 + i] = f[i]
       end
 
-      {b, off + 4 + len(f)}
+      {b, off + 4 + length(f)}
     end
   end
 

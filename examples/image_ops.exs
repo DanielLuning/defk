@@ -71,7 +71,7 @@ defmodule ImageOps.Kernels do
 
   defk resize_bilinear(px :: [u8], w :: i64, h :: i64, ch :: i64, out_w :: i64, out_h :: i64) ::
          [u8] do
-    if not (w > 1 and h > 1 and out_w > 1 and out_h > 1 and ch > 0 and len(px) == w * h * ch),
+    if not (w > 1 and h > 1 and out_w > 1 and out_h > 1 and ch > 0 and length(px) == w * h * ch),
       do: raise(ArgumentError, "resize_bilinear: sizes must be > 1 and px w * h * ch bytes")
 
     out = alloc(u8, out_w * out_h * ch)
@@ -110,7 +110,7 @@ defmodule ImageOps.Kernels do
   # BT.601: Y = ((66R + 129G + 25B + 128) >> 8) + 16, U and V likewise (+128),
   # with the negative terms offset so div/2 floors like >>.
   defk rgb_to_yuv420(px :: [u8], w :: i64, h :: i64) :: [u8] do
-    if not (w > 0 and h > 0 and rem(w, 2) == 0 and rem(h, 2) == 0 and len(px) == w * h * 3),
+    if not (w > 0 and h > 0 and rem(w, 2) == 0 and rem(h, 2) == 0 and length(px) == w * h * 3),
       do: raise(ArgumentError, "rgb_to_yuv420: w and h must be even and px w * h * 3 bytes")
 
     cw = div(w, 2)
@@ -140,7 +140,7 @@ defmodule ImageOps.Kernels do
   # Floyd-Steinberg, left to right on every row. err holds two rows of w + 2
   # entries (one pad each side): row y % 2 is the current row, the other the next.
   defk dither_fs(gray :: [u8], w :: i64, h :: i64) :: [u8] do
-    if not (w > 0 and h > 0 and len(gray) == w * h),
+    if not (w > 0 and h > 0 and length(gray) == w * h),
       do: raise(ArgumentError, "dither_fs: w and h must be positive and gray w * h bytes")
 
     out = alloc(u8, w * h)

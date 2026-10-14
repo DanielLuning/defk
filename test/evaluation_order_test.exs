@@ -70,7 +70,7 @@ defmodule Defk.EvaluationOrderTest.K do
   end
 
   defk range_bounds(ix :: [i64], b :: [f64]) :: f64 do
-    for i <- ix[5]..(len(b) - 1 + trunc(big(b[0])))//1, reduce: 0.0 do
+    for i <- ix[5]..(length(b) - 1 + trunc(big(b[0])))//1, reduce: 0.0 do
       acc -> acc + float(i)
     end
   end

@@ -136,7 +136,7 @@ defmodule Utf8.Kernels do
     trans[129] = 3
 
     final =
-      Enum.reduce_while(0..(len(bytes) - 1)//1, 0, fn i, s ->
+      Enum.reduce_while(0..(length(bytes) - 1)//1, 0, fn i, s ->
         next = trans[bsl(s, 4) + cls[bytes[i]]]
         if next == 1, do: {:halt, 1}, else: {:cont, next}
       end)

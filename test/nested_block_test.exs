@@ -107,7 +107,7 @@ defmodule Defk.NestedBlockTest.K do
       a
     )
 
-    a[n - 1] + len(a)
+    a[n - 1] + length(a)
   end
 
   # the block binds an input array's alias that is then written

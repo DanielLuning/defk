@@ -4,15 +4,16 @@ defmodule Defk.Errors do
 
   Every rejection the compiler makes has a stable code, a readable slug that
   is also its heading on the [compile errors](compile-errors.md) page
-  (`docs/compile-errors.md#<code>`). Codes are never renamed. `explain!/1` prints a
-  code's entry. `codes/0` lists them, each with a one-line summary, whether
+  (`docs/compile-errors.md#<code>`). From 0.1.0, codes are never renamed.
+  `explain!/1` prints a code's entry. `entries/0` lists them, each with a
+  one-line summary, whether
   the construct is outside the kernel subset for good (`:subset`), planned
   (`:planned`), or a mistake in a construct that is in it (`:error`), the
   default `why`/`hint`, and a failing `example` with its `rewrite` (both
   module bodies; the test suite checks the example is rejected with that code
   and the rewrite compiles).
 
-  The codes are the stable part: `codes/0` and `explain!/1` are public. The
+  The codes are the stable part: `entries/0` and `explain!/1` are public. The
   keys of an entry map may change in any version, and so may `fetch!/1`,
   which is unstable. The rest of this module is the compiler's.
 
@@ -345,7 +346,7 @@ defmodule Defk.Errors do
       rewrite: "defk f(x :: i64, b :: bool) :: i64 do\n  if b, do: x + 1, else: x\nend"
     },
     %{
-      code: "u64-mix",
+      code: "u64-with-i64",
       kind: :subset,
       summary:
         "Outside a mask, + - * band bor bxor div rem min max mix a u64 only with a u64 or an i64 known to be >= 0.",
@@ -378,7 +379,7 @@ defmodule Defk.Errors do
 
     # -- calls
     %{
-      code: "unknown-function",
+      code: "undefined-function",
       kind: :error,
       summary: "A kernel calls builtins and the other kernels in its module.",
       why:
@@ -440,7 +441,7 @@ defmodule Defk.Errors do
       hint: "compute it in Elixir before or after the call and pass the result in",
       example: "defk f(a :: [f64]) :: [f64] do\n  Enum.map(a, fn x -> x * 2.0 end)\nend",
       rewrite:
-        "defk f(a :: [f64]) :: [f64] do\n  out = alloc(f64, len(a))\n\n  for i <- 0..(len(a) - 1)//1 do\n    out[i] = a[i] * 2.0\n  end\n\n  out\nend"
+        "defk f(a :: [f64]) :: [f64] do\n  out = alloc(f64, length(a))\n\n  for i <- 0..(length(a) - 1)//1 do\n    out[i] = a[i] * 2.0\n  end\n\n  out\nend"
     },
     %{
       code: "enum-reduce",
@@ -464,7 +465,7 @@ defmodule Defk.Errors do
       example:
         "defk f(a :: [f64], t :: f64) :: i64 do\n  Enum.find_index(a, fn x -> x > t end)\nend",
       rewrite:
-        "defk f(a :: [f64], t :: f64) :: i64 do\n  Enum.reduce_while(0..(len(a) - 1)//1, -1, fn i, _ ->\n    if a[i] > t, do: {:halt, i}, else: {:cont, -1}\n  end)\nend"
+        "defk f(a :: [f64], t :: f64) :: i64 do\n  Enum.reduce_while(0..(length(a) - 1)//1, -1, fn i, _ ->\n    if a[i] > t, do: {:halt, i}, else: {:cont, -1}\n  end)\nend"
     },
     %{
       code: "fn-argument",
@@ -511,7 +512,7 @@ defmodule Defk.Errors do
       hint: "allocate the output array and write it in the loop",
       example: "defk f(a :: [f64]) :: [f64] do\n  for x <- a, do: x * 2.0\nend",
       rewrite:
-        "defk f(a :: [f64]) :: [f64] do\n  out = alloc(f64, len(a))\n\n  for i <- 0..(len(a) - 1)//1 do\n    out[i] = a[i] * 2.0\n  end\n\n  out\nend"
+        "defk f(a :: [f64]) :: [f64] do\n  out = alloc(f64, length(a))\n\n  for i <- 0..(length(a) - 1)//1 do\n    out[i] = a[i] * 2.0\n  end\n\n  out\nend"
     },
     %{
       code: "for-option",
@@ -544,7 +545,7 @@ defmodule Defk.Errors do
       example:
         "defk f(a :: [f64]) :: f64 do\n  for {x, i} <- Enum.with_index(a), reduce: 0.0 do\n    acc -> acc + x * i\n  end\nend",
       rewrite:
-        "defk f(a :: [f64]) :: f64 do\n  for i <- 0..(len(a) - 1)//1, reduce: 0.0 do\n    acc -> acc + a[i] * i\n  end\nend"
+        "defk f(a :: [f64]) :: f64 do\n  for i <- 0..(length(a) - 1)//1, reduce: 0.0 do\n    acc -> acc + a[i] * i\n  end\nend"
     },
     %{
       code: "generator-source",
@@ -683,8 +684,8 @@ defmodule Defk.Errors do
         "kernels see bytes, not text: there are no UTF-8 or grapheme operations, and a kernel cannot build a string at run time",
       hint:
         "write one string literal, or pass the bytes as a [u8] argument and do text work in Elixir before or after the call",
-      example: "defk f(x :: i64) :: i64 do\n  s = \"ab\" <> \"cd\"\n  len(s) + x\nend",
-      rewrite: "defk f(x :: i64) :: i64 do\n  s = \"abcd\"\n  len(s) + x\nend"
+      example: "defk f(x :: i64) :: i64 do\n  s = \"ab\" <> \"cd\"\n  length(s) + x\nend",
+      rewrite: "defk f(x :: i64) :: i64 do\n  s = \"abcd\"\n  length(s) + x\nend"
     },
     %{
       code: "unsupported-atom",
@@ -819,7 +820,7 @@ defmodule Defk.Errors do
       hint:
         "measure it with bit_size/1, and keep what the kernel needs to read in variables or an array",
       example:
-        "defk f(n :: i64) :: i64 do\n  acc = <<>>\n  acc = <<acc::bitstring, n::8>>\n  len(acc)\nend",
+        "defk f(n :: i64) :: i64 do\n  acc = <<>>\n  acc = <<acc::bitstring, n::8>>\n  length(acc)\nend",
       rewrite:
         "defk f(n :: i64) :: i64 do\n  acc = <<>>\n  acc = <<acc::bitstring, n::8>>\n  bit_size(acc)\nend"
     },
@@ -912,11 +913,11 @@ defmodule Defk.Errors do
 
   The codes are stable; the keys of the entries are not.
 
-      iex> "unsupported-map" in Enum.map(Defk.Errors.codes(), & &1.code)
+      iex> "unsupported-map" in Enum.map(Defk.Errors.entries(), & &1.code)
       true
   """
-  @spec codes() :: [entry()]
-  def codes, do: @codes
+  @spec entries() :: [entry()]
+  def entries, do: @codes
 
   @doc """
   The registry entry for `code`. Raises `KeyError` for an unknown code.
@@ -1045,7 +1046,7 @@ defmodule Defk.Errors do
   def validate_code!(code) do
     if is_binary(code) and not Map.has_key?(@by_code, code) do
       raise ArgumentError,
-            "unknown defk error code #{inspect(code)}: not in Defk.Errors.codes/0"
+            "unknown defk error code #{inspect(code)}: not in Defk.Errors.entries/0"
     end
 
     :ok

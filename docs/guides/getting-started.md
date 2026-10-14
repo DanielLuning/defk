@@ -89,7 +89,7 @@ The kernel:
   are listed in [the reference](../language.md#3-types) and on the
   [cheatsheet](cheatsheet.cheatmd).
 - The body is Elixir: `for` with `reduce:`, `if`, `cond`, `case`,
-  arithmetic, comparisons and a fixed set of builtins such as `len/1`,
+  arithmetic, comparisons and a fixed set of builtins such as `length/1`,
   `min/2` and `sqrt/1`. Anything outside that set is a compile error.
 - A module can mix kernels and ordinary `def`s.
 
@@ -129,7 +129,7 @@ defmodule Filter do
   use Defk
 
   defk positives(xs :: [i64]) :: {[i64], i64} do
-    out = alloc(i64, len(xs))
+    out = alloc(i64, length(xs))
 
     n =
       for x <- xs, reduce: 0 do
@@ -237,7 +237,7 @@ From people writing their first kernels:
   (`band(expr, 0xFFFFFFFFFFFFFFFF)`), which gives Elixir's exact result, and
   values up to 2^64 - 1 are [`u64`](../language.md#u64).
 - **An `alloc` inside a loop allocates on every pass, and nothing is freed
-  until the kernel returns.** Past the module's `max_owned` budget (by
+  until the kernel returns.** Past the module's `max_owned_bytes` budget (by
   default half of physical memory) the call raises "out of memory", and the
   fast-path report notes each such `alloc`. A scratch array per window or
   row (a histogram, say) belongs before the loop, cleared at the start of
@@ -249,7 +249,7 @@ From people writing their first kernels:
 
     # the largest byte count in each 4-byte window
     defk max_count(data :: [u8]) :: [i64] do
-      n = div(len(data), 4)
+      n = div(length(data), 4)
       out = alloc(i64, n)
       counts = alloc(i64, 256)
 

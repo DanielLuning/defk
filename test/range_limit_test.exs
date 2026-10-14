@@ -10,13 +10,13 @@
 defmodule Defk.RangeLimitTest.K do
   use Defk
 
-  # the index min(i, 9) has its bounds check removed (0 <= i, 9 < len(out))
+  # the index min(i, 9) has its bounds check removed (0 <= i, 9 < length(out))
   defk wrap(n :: i64) :: i64 do
     out = alloc(i64, 10)
 
     for i <- 0..9_223_372_036_854_775_807//4_611_686_018_427_387_904, reduce: 0 do
       acc ->
-        j = min(i, len(out) - 1)
+        j = min(i, length(out) - 1)
         out[j] = n
         acc + 1
     end
@@ -54,7 +54,7 @@ defmodule Defk.RangeLimitTest.K do
 
   # ends tied to an array length: no test is emitted, and none is needed
   defk sum_len(a :: [i64]) :: i64 do
-    for i <- 0..(len(a) - 1)//1, reduce: 0 do
+    for i <- 0..(length(a) - 1)//1, reduce: 0 do
       acc -> acc + a[i]
     end
   end

@@ -22,7 +22,7 @@ defmodule Defk.AllocZeroTest.K do
       a[i] = 255
     end
 
-    len(a)
+    length(a)
   end
 
   defk zeros(n :: i64) :: [u8] do
@@ -38,7 +38,7 @@ defmodule Defk.AllocZeroTest.K do
   end
 
   defk zeros_len(n :: i64) :: i64 do
-    len(alloc(u8, n))
+    length(alloc(u8, n))
   end
 
   # a constant length of at most 4 KiB: zeroed at once, no safepoint
@@ -70,7 +70,7 @@ defmodule Defk.AllocZeroTest.K do
             z -> z + x
           end
 
-        acc + s + len(b)
+        acc + s + length(b)
     end
   end
 
@@ -87,12 +87,12 @@ defmodule Defk.AllocZeroTest.K do
               if b == 1 do
                 t = alloc(u8, n + a)
                 t[n] = a
-                t[0] + t[n + a - 1] + len(t)
+                t[0] + t[n + a - 1] + length(t)
               else
                 0
               end
 
-            acc2 + buf[0] + buf[div(n, 2)] + buf[n - 1] + len(buf) + more
+            acc2 + buf[0] + buf[div(n, 2)] + buf[n - 1] + length(buf) + more
         end
     end
   end

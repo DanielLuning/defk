@@ -51,7 +51,7 @@ defmodule Defk.BuiltinsTypingTest do
   test "names typed outside the table say so; unknown shapes are errors" do
     assert :bespoke = Builtins.typing(:alloc, [:i64, :i64])
     assert :bespoke = Builtins.typing(:band, [:i64, :i64])
-    assert :error = Builtins.typing(:len, [:i64])
+    assert :error = Builtins.typing(:length, [:i64])
     assert :error = Builtins.typing(:crc32c, [:i64, :i64])
   end
 

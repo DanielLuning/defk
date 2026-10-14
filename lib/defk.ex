@@ -19,7 +19,7 @@ defmodule Defk do
       ...>   use Defk
       ...>
       ...>   defk dot(a :: [f64], b :: [f64]) :: f64 do
-      ...>     n = min(len(a), len(b))
+      ...>     n = min(length(a), length(b))
       ...>
       ...>     for i <- 0..(n - 1)//1, reduce: 0.0 do
       ...>       acc -> acc + a[i] * b[i]
@@ -59,7 +59,7 @@ defmodule Defk do
       time, where the 9 ns shows. The option is unstable: the heuristic is
       new and may be retuned or replaced. See the
       [runtime contract](runtime-contract.md#1-preemption-a-long-kernel-yields).
-    * `max_owned: bytes` is the most one kernel call may hold in arrays it
+    * `max_owned_bytes: n` is the most one kernel call may hold in arrays it
       allocates or copies (every one lives until the kernel returns, so an
       `alloc` or a copy in a loop body keeps one per iteration). An
       allocation past it raises `ArgumentError` "out of memory" instead of
@@ -146,7 +146,7 @@ defmodule Defk do
   | `__defk_report__/0` | unstable | the fast-path report as data, `[{kernel, line, fact}]`; read it with `Defk.Report.print/1` |
   | `__defk_lib__/0` | unstable | the path of the compiled NIF library (`.so`) |
   | `__defk_kernels__/0` | unstable | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
-  | `__defk_stats__/0` | unstable | the library's runtime counters: `%{frames_live:, promotions:, yields:, crc32c:, max_owned:}` |
+  | `__defk_stats__/0` | unstable | the library's runtime counters: `%{frames_live:, promotions:, yields:, crc32c:, max_owned_bytes:}` |
 
   **Public** functions keep their meaning; a change would come with a
   deprecation. **Unstable** ones are for debugging and tools, and their
@@ -202,19 +202,19 @@ defmodule Defk do
     adaptive = Keyword.get(opts, :adaptive_slice, true)
 
     # an expression (`4 * 1024 ** 3`, `@limit`): evaluated in the module,
-    # checked in __before_compile__/1 (max_owned!/1)
-    max_owned = Keyword.get(opts, :max_owned)
+    # checked in __before_compile__/1 (max_owned_bytes!/1)
+    max_owned_bytes = Keyword.get(opts, :max_owned_bytes)
 
-    if Keyword.keys(opts) -- [:elixir_mode, :report, :adaptive_slice, :max_owned] != [] or
+    if Keyword.keys(opts) -- [:elixir_mode, :report, :adaptive_slice, :max_owned_bytes] != [] or
          not is_boolean(elixir_mode) or not is_boolean(adaptive) or report not in [nil, :full] do
       raise ArgumentError,
-            "use Defk accepts only `elixir_mode: true | false`, `report: :full`, `adaptive_slice: true | false` and `max_owned: bytes`, got: #{Macro.to_string(opts)}"
+            "use Defk accepts only `elixir_mode: true | false`, `report: :full`, `adaptive_slice: true | false` and `max_owned_bytes: n`, got: #{Macro.to_string(opts)}"
     end
 
     quote do
       @defk_elixir_mode unquote(elixir_mode)
       @defk_adaptive_slice unquote(adaptive)
-      @defk_max_owned unquote(max_owned)
+      @defk_max_owned_bytes unquote(max_owned_bytes)
       @defk_report unquote(report)
       import Defk, only: [defk: 1, defk: 2, defk: 3]
       Module.register_attribute(__MODULE__, :defk_kernels, accumulate: true)
@@ -425,7 +425,7 @@ defmodule Defk do
         nif_name: nif_name,
         fault_hooks: fault_hooks?,
         adaptive_slice: adaptive?,
-        max_owned: max_owned!(env.module)
+        max_owned_bytes: max_owned_bytes!(env.module)
       )
 
     # a yielding kernel's NIF takes the run-queue hint (defk-04y): it is
@@ -594,16 +594,16 @@ defmodule Defk do
     File.write!(Path.join(dir, "#{inspect(module)}.c"), c_src)
   end
 
-  # `use Defk, max_owned: n`: a positive integer of bytes that fits in a
-  # uint64 (DEFK_MAX_OWNED), or nil (the runtime's default)
-  defp max_owned!(module) do
-    case Module.get_attribute(module, :defk_max_owned) do
+  # `use Defk, max_owned_bytes: n`: a positive integer of bytes that fits in
+  # a uint64 (DEFK_MAX_OWNED), or nil (the runtime's default)
+  defp max_owned_bytes!(module) do
+    case Module.get_attribute(module, :defk_max_owned_bytes) do
       n when is_nil(n) or (is_integer(n) and n > 0 and n <= 0xFFFFFFFFFFFFFFFF) ->
         n
 
       other ->
         raise ArgumentError,
-              "use Defk, max_owned: expects a positive integer number of bytes (at most 2^64 - 1), the most a kernel call may hold in arrays it allocates or copies, got: #{inspect(other)}"
+              "use Defk, max_owned_bytes: expects a positive integer number of bytes (at most 2^64 - 1), the most a kernel call may hold in arrays it allocates or copies, got: #{inspect(other)}"
     end
   end
 

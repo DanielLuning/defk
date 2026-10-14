@@ -115,7 +115,7 @@ defmodule Defk.ArrayBranchTest.K do
   defk write_loop_after(c :: bool, a :: [i64], n :: i64) :: [i64] do
     x = if c, do: a, else: alloc(i64, n)
 
-    for i <- 0..(len(x) - 1)//1 do
+    for i <- 0..(length(x) - 1)//1 do
       x[i] = band(x[i], 0xFFFF) + i
     end
 

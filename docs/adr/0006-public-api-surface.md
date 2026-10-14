@@ -136,6 +136,10 @@ above.
 
 ## Naming inconsistencies and rename candidates
 
+Decided later by the rename review before 0.1.0 (`defk-wfi.3`, applied in
+`defk-wfi.11`; the list is in `CHANGELOG.md`). The candidates below are the
+record as of this ADR.
+
 Before people depend on these names (no tickets yet; the maintainer decides):
 
 1. **`__defk_source__/0` is the C source**, next to `__defk_elixir_source__/0`.
