@@ -1,7 +1,7 @@
 # ADR-0010: A stability promise stricter than SemVer 0.x
 
 - Date: 2026-10-14
-- Status: proposed (accepted when the maintainer approves the guide's text)
+- Status: accepted (2026-10-14: the maintainer approved the guide's text)
 - Source: the map 'Wayfinder: defk ready for a first Hex release'
   (`defk-wfi`), its rename review (`defk-wfi.3`) and `defk-wfi.4`; the
   text is `docs/guides/stability.md`
