@@ -15,6 +15,9 @@ defmodule Defk.MixProject do
       dialyzer: [plt_add_apps: [:ex_unit, :mix]],
       name: "defk",
       source_url: @source_url,
+      description:
+        "A typed subset of Elixir that compiles to checked native kernels, with the BEAM's promises kept",
+      package: package(),
       docs: docs(),
       aliases: aliases(),
       usage_rules: usage_rules()
@@ -22,6 +25,23 @@ defmodule Defk.MixProject do
   end
 
   def application, do: [extra_applications: [:logger]]
+
+  # The Hex package (defk-djy.8). Publishing is gated on the verdict
+  # (docs/verdict.md); until then `mix hex.build` in `mix ci` only proves the
+  # package builds. The package holds what a dependent's build needs: the
+  # compiler (lib/), the runtime header (priv/defk_runtime.h) and the docs
+  # ex_doc builds from. examples/, bench/, dev/, test/ and the research
+  # notes stay out. At the first release, Defk.Errors' footer base
+  # (@url_base) moves from the GitHub blob to hexdocs.pm (defk-djy.6).
+  defp package do
+    [
+      licenses: ["MIT"],
+      links: %{"GitHub" => @source_url, "Changelog" => @source_url <> "/blob/main/CHANGELOG.md"},
+      files:
+        ~w(lib priv/defk_runtime.h mix.exs README.md LICENSE CHANGELOG.md CONTEXT.md
+                docs/guides docs/language.md docs/compile-errors.md docs/scope.md docs/performance.md)
+    ]
+  end
 
   defp elixirc_paths(:test), do: ["lib", "dev", "test/support"]
   # bench/ (incl. demo.exs) uses the example kernels; deps compile as :prod and skip them.
@@ -208,7 +228,11 @@ defmodule Defk.MixProject do
         # review concern: a lower --min-mass reports noise.
         "ex_dna lib dev test --exclude-macro defk --max-clones 0",
         "reach.check --arch --smells",
-        "usage_rules.sync --check"
+        "usage_rules.sync --check",
+        # the package builds (its tarball is git-ignored); publishing is a
+        # decision, not a step. A fresh `mix`, because Hex's tasks are loaded
+        # only when a mix process starts with them in hand, not inside an alias.
+        "cmd mix hex.build"
       ]
     ]
   end
