@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-wfi.6"
@@ -15,5 +15,5 @@
   "status": "open",
   "title": "Triage: which open tickets block 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-14T13:18:02Z"
+  "updated_at": "2026-10-14T19:59:18Z"
 }
