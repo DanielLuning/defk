@@ -11,9 +11,15 @@
     "needs-triage"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution: fixed, merged to main.\n- Fix: priv/defk_runtime.h includes \u003csanitizer/allocator_interface.h\u003e when __has_include finds it, else declares __sanitizer_get_ownership and __sanitizer_get_allocated_size (compiler-rt's signatures). gcc 14's libasan exports both (nm -D checked on aarch64).\n- The planted-overrun address test was macOS-only; it now runs on Linux with the C compiler's own ASan runtime (LD_PRELOAD of gcc's libasan.so or clang's libclang_rt.asan-\u003carch\u003e.so, ASAN_OPTIONS=detect_leaks=0, paths in the report accepted).\n- Results: macOS mix ci 1736/1736, sanitize_test --include sanitize 14/14. Linux aarch64 gcc --include sanitize 14/14 (overrun reported as use-after-poison, control run clean). Linux x86-64 gcc (Rosetta) default sanitize_test 12/12. Linux aarch64 clang --include sanitize 13/14: the undefined mode does not load, a separate bug, ticketed as defk-wfi.10.",
+      "timestamp": "2026-10-14T16:00:15Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "[BUG] Sanitizer build mode does not compile with gcc: no \u003csanitizer/allocator_interface.h\u003e",
   "type": "bug",
-  "updated_at": "2026-10-14T15:53:06Z"
+  "updated_at": "2026-10-14T16:00:15Z"
 }
