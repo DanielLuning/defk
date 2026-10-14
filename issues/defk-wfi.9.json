@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-wfi.6"
@@ -12,8 +12,8 @@
   ],
   "parent": "defk-wfi",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Fast-path report tests expect arm64 vectorisation facts; x86-64 clang does not vectorise dot",
   "type": "bug",
-  "updated_at": "2026-10-14T14:07:48Z"
+  "updated_at": "2026-10-14T16:18:58Z"
 }
