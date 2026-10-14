@@ -95,6 +95,7 @@ write kernels in any module with `use Defk`.
 - [Measuring](docs/guides/measuring.md): compare with an optimised Elixir version honestly.
 - [Runtime contract](docs/guides/runtime-contract.md): preemption, errors and cleanup.
 - [Deploying](docs/guides/deploying.md): releases and the C compiler.
+- [Stability](docs/guides/stability.md): what stays the same from release to release.
 - [Cheatsheet](docs/guides/cheatsheet.cheatmd) and the full [language reference](docs/language.md).
 - [Compile errors](docs/compile-errors.md): every code, why and what to write instead.
 - [Scope](docs/scope.md) and the [performance guide](docs/performance.md).

@@ -13,6 +13,8 @@ it stops today. What each means inside a kernel is in
 [Yielding and the runtime contract in practice](../language.md#9-yielding-and-the-runtime-contract-in-practice);
 the BEAM side (scheduling, `enif_schedule_nif`, resources, upgrade) is in the
 [BEAM/NIF reference](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md).
+The four promises are part of [the stability promise](stability.md): later
+releases keep them, while the numbers that tune them may change.
 
 ## 1. Preemption: a long kernel yields
 
