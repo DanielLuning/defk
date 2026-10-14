@@ -1,0 +1,77 @@
+# CI (defk-wfi.2): `mix ci` on every push, through ci/run.sh. The same
+# script runs locally under act and in the podman fallback (ci/README.md),
+# so a release never waits for GitHub. The Linux jobs run in one pinned
+# multi-arch image; ci/local.sh reads the image tag and the labels below.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    container: docker.io/hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: linux-x86_64-clang, runner: ubuntu-24.04, cc: clang }
+          - { label: linux-x86_64-gcc, runner: ubuntu-24.04, cc: gcc }
+          - { label: linux-aarch64-clang, runner: ubuntu-24.04-arm, cc: clang }
+    env:
+      CC: ${{ matrix.cc }}
+      CI_PATH: github-actions
+      LANG: C.UTF-8
+    steps:
+      # without git in the container, checkout downloads a tarball with no
+      # .git, and the tests that read `git ls-files` fail
+      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v7
+      - run: ci/setup-debian.sh
+      # act runs JavaScript actions inside the job container, which has no node
+      - uses: actions/cache@v6
+        if: ${{ !env.ACT }}
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ matrix.label }}-${{ hashFiles('mix.lock') }}
+      - run: ci/run.sh ${{ matrix.label }}
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && !env.ACT }}
+        with:
+          name: ci-result-${{ matrix.label }}
+          path: tmp/ci-result/
+          retention-days: 30
+
+  macos:
+    name: macos-arm64-clang
+    runs-on: macos-15
+    env:
+      CI_PATH: github-actions
+    steps:
+      - uses: actions/checkout@v7
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.0.3"
+          elixir-version: "1.20.2"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            deps
+            _build
+          key: macos-arm64-clang-${{ hashFiles('mix.lock') }}
+      - run: ci/run.sh macos-arm64-clang
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ci-result-macos-arm64-clang
+          path: tmp/ci-result/
+          retention-days: 30
