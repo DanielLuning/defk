@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-wfi.6"
+  ],
   "created": "2026-10-14T13:17:50Z",
   "description": "## Question\n\nFor each open ticket, one question: does it block the 0.1.0 release? (Decided on the map 'Wayfinder: defk ready for a first Hex release': no full re-priority.)\n\nScope: the deferred epics (defk-52v, defk-n4r, defk-sve, defk-ulk, defk-96f) and the expansion candidates in docs/verdict.md ('Where defk could grow'), and the children of the support epics (defk-9p6, defk-djy, defk-o08, defk-vcx, defk-w8r). The agent prepares a table of every open ticket with a proposed yes or no and a reason; the maintainer decides each row.\n\nInput from the map: new constructs are allowed under the stability promise, so no expansion candidate must land before 0.1.0 only to protect the promise. Precompiled artefacts (defk-ajw) are not a gate.\n\nDone when: every row has a decision; 'yes' rows become tickets under the map (or are linked as blockers of the release-readiness check); 'no' rows stay where they are, unchanged.",
   "id": "defk-wfi.5",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Triage: which open tickets block 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-14T13:17:59Z"
+  "updated_at": "2026-10-14T13:18:02Z"
 }
