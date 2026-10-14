@@ -174,7 +174,47 @@ defmodule Defk.Build do
   def sanitize_flags([]), do: []
 
   def sanitize_flags(modes),
-    do: Enum.flat_map(modes, &Map.fetch!(@sanitizers, &1)) ++ @sanitize_common
+    do: Enum.flat_map(modes, &Map.fetch!(@sanitizers, &1)) ++ @sanitize_common ++ libsan(modes)
+
+  # A shared object built by clang off macOS has its sanitizer runtime
+  # undefined (only an executable links it in), so the kernel library fails
+  # to load: -shared-libsan links the shared runtime instead, as macOS clang
+  # and gcc do by default, with an rpath to clang's runtime directory, which
+  # the loader does not search (defk-wfi.10). `trap` has no runtime.
+  defp libsan(modes) do
+    runtime? = Enum.any?(modes, &(&1 in ["address", "undefined"]))
+
+    with true <- runtime? and not match?({:unix, :darwin}, :os.type()) and clang?(),
+         dir when is_binary(dir) <- clang_runtime_dir(System.get_env("CC", "cc")) do
+      ["-shared-libsan", "-Wl,-rpath,#{dir}"]
+    else
+      _ -> []
+    end
+  end
+
+  # the directory of clang's runtime libraries (its builtins library is one)
+  defp clang_runtime_dir(cc) do
+    key = {__MODULE__, :clang_runtime_dir, cc}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        dir = probe_clang_runtime_dir(cc)
+        if dir, do: :persistent_term.put(key, dir)
+        dir
+
+      dir ->
+        dir
+    end
+  end
+
+  defp probe_clang_runtime_dir(cc) do
+    case System.cmd(cc, ["-print-libgcc-file-name", "--rtlib=compiler-rt"]) do
+      {out, 0} -> out |> String.trim() |> Path.dirname()
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
 
   # A sanitizer library's file name says so (`<Module>-<key>-san-address.so`):
   # the key already differs, the name is for people reading _build.
