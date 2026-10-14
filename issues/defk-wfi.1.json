@@ -11,9 +11,15 @@
     "wayfinder:research"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution (GitHub docs and changelog, read 2026-10-14):\n- Minutes are free and unlimited on standard GitHub-hosted runners in a public repo, including ubuntu-24.04 (x64, 4 vCPU/16 GB), ubuntu-24.04-arm (arm64, 4 vCPU/16 GB, GA for public repos 2025-08-07) and macos-15/macos-26/macos-latest (arm64 M1, 3 cores/7 GB). Larger runners are always billed: use standard labels only.\n- Concurrency is the binding limit: Free plan 20 concurrent jobs, at most 5 macOS. A 4-job run uses 4 slots and 1 macOS slot; use concurrency cancel-in-progress per branch.\n- Time: 6 h per job (fails), 35 days per workflow run; ubuntu-slim has a 15 min cap, do not use it. Matrix max 256 jobs, 50 re-runs.\n- Storage: cache 10 GB/repo, 7-day eviction of unused entries; artifacts 500 MB (shared with Packages), retention 1-90 days on public repos.\n- Other stops: GITHUB_TOKEN 1,000 API req/h/repo, cache uploads 200/min, secondary rate limits, Actions acceptable-use terms (CI for the repo's own code is fine).\n- The 4-job matrix on every push fits; macOS (5 slots, 7 GB RAM, slowest machine) is the tightest constraint.\nFindings: branch research/gha-free-tier, docs/research/gha-free-tier.md",
+      "timestamp": "2026-10-14T13:20:52Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "GitHub Actions free-tier limits for a public repo",
   "type": "task",
-  "updated_at": "2026-10-14T13:18:28Z"
+  "updated_at": "2026-10-14T13:20:52Z"
 }
