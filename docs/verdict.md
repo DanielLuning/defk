@@ -2,25 +2,33 @@
 
 ## Conclusion
 
-Draft for the final session (defk-sgw.6); the pre-registered rule is in
+Accepted on 2026-10-14 (defk-sgw.6); the pre-registered rule is in
 [Method](#method).
 
-A typed subset of Elixir does compile to native code that runs at C speed
-with a cheap boundary while keeping the BEAM's promises: on the frozen
-snapshot, 11 of the 14 target workloads are good on optimised Elixir
-baselines (the pre-registered six: four good, two marginal), across byte
-transforms, hashing and sketches, numeric arrays, codecs and decoders and a
-search algorithm, and the kernels stay within half a millisecond of the
-scheduler's idle tick gap where the anchor NIFs block for 19-44 ms. No
-safety gap in the runtime contract is open: a fault inside kernel code is an
-exception, the threat list has a test per entry, and the deep, sanitizer,
-Valgrind and fuzz runs are clean. The devex bar is met and three cold tests
-wrote working kernels from the docs alone; the C-compiler stance is settled
-and a release ships its kernels. By the rule, defk warrants growing into a
-library. The honest frame around that: most NIFs wrap a library, where defk
-cannot help, and where a BIF or `:crypto` already does the job natively defk
-loses or ties; its niche is the hand-written loop over packed data, and
-there it replaces the scheduling workarounds those NIFs carry.
+A typed subset of Elixir does compile to native code that runs at the speed
+of a hand-written C loop, with checks and yielding, a cheap boundary and the
+BEAM's promises kept: on the frozen snapshot, four of the six pre-registered
+target workloads are good on optimised Elixir baselines (PCM mixing, HLL
+updates, cosine top-k, Gorilla encoding; four NIF-survey categories) and two
+are marginal; with the eight target workloads added later, 11 of 14 are good.
+The kernels stay within half a millisecond of the scheduler's idle tick gap
+where the anchor NIFs block for 9-44 ms (picosat 1.3 s on hard 3-SAT). On
+macOS arm64, the only platform measured, no safety gap in the runtime
+contract is open: a fault inside kernel code is an exception, the threat
+list has a test per entry, and the deep, sanitizer, Valgrind and fuzz runs
+are clean. The devex
+bar is met and three cold tests wrote working kernels from the docs alone;
+the C-compiler stance is settled and a release ships its kernels. By the
+rule, the outcome is go. The decision taken on it, stated against the
+rule's wording: defk keeps being developed and improved, and is not published
+on Hex yet; a first release waits for Linux evidence (the suite on x86-64
+and aarch64 and one Linux measurement run, `defk-a1p`) and a stability
+promise for the subset and the runtime contract. The honest frame around
+that: most NIFs wrap a library, where defk cannot help; where a BIF or
+`:crypto` already does the job natively defk loses or ties; a tuned C library
+beats a kernel on the same algorithm by 1.5-5×. Its niche is the hand-written
+loop over packed data, and there it replaces the scheduling workarounds those
+NIFs carry.
 
 ## "Should I use defk for X?" guide
 
@@ -35,7 +43,7 @@ answer. Every row names the example that measured it.
 | Wrapping an existing library: parsers that produce terms, databases, big codecs, crypto with secrets, memory-hard hashing | **a binding** (Rustler, Zigler, elixir_make) | the value is the library; Argon2's C runs its lanes on threads (0.25×); constant time is not a kernel property (`examples/README.md`, "Where a wrapper is the right choice") |
 | A loop over packed bytes or numbers with no native equivalent, called with at least a few microseconds of work and a kilobyte or so of input | **defk** | hashes 209×, FFT 73×, BLAKE 32×, image ops 7-14×, HLL 10×, PCM 8.6×, codecs 6.9×, decoders 5×; checked, yielding, bit-exact with Elixir mode |
 | The same, but one call per element or per tiny item | **Elixir, or batch it** | a call costs 13 ns against 2 ns for an Elixir call (`poor_tiny_calls` 0.28×); per-pair string distance pays only from ~8-byte strings; batch SAT solves are 2-4× per-call |
-| A job a hand-written NIF does today, on a normal scheduler, that must not block it | **defk** | the WebSocket, PCM, Keccak, BLAKE and SAT NIFs block their scheduler 9-1,300 ms per call; the kernels stay within 0.5 ms of the idle tick gap |
+| A job a hand-written NIF does today, on a normal scheduler, that must not block it | **defk** | the WebSocket, PCM, Keccak, BLAKE and SAT NIFs block their scheduler 9-44 ms per call (picosat 1.3 s on hard 3-SAT); the kernels stay within 0.5 ms of the idle tick gap |
 | Decoding untrusted input of a simple format (Snappy, LZ4) | **defk if safety and yielding matter, the C NIF if throughput does** | every access checked, 6,000 fuzz inputs raise or agree; the libraries built -O2 are 1.5-5× faster than the kernel |
 | Something that needs state kept in native memory between calls, SIMD intrinsics, strings as values, or a Windows build | **not defk today** | see [Limitations](#limitations) |
 
@@ -99,7 +107,7 @@ which illustrate but do not count towards the verdict.
 | ✅ | T | keccak | 10k × 32 B per call | **7.0×** | 0.64× ex_keccak |
 | ✅ | T | codecs | base64 of 1 MB | **6.9×** | 4.3× fast64 |
 | ✅ | | sort_u64_keys | 1M packed keys | **6.2×** | – |
-| ✅ | T | lz4_snappy_decode | Snappy block of 64 KB | **5.0×** | 2.5× snappyer as installed |
+| ✅ | T | lz4_snappy_decode | Snappy block of 64 KB | **5.0×** | 2.5× snappyer as installed (-O0) |
 | ✅ | | per_pair_distance | 50k pairs, one call each | **4.0×** | – |
 | ✅ | | geo_nearest | 10 nearest of 500k | **3.3×** | – |
 | ✅ | | monte_carlo_rtp | 100M spins | **3.0×** | – |
@@ -180,7 +188,9 @@ recommendation is the same on both sides of each line, so the scripts keep
 their pre-registered expectation and their own check now accepts the
 neighbouring verdict for those lines; the first line of each script, the
 one the runner reads, is held to its claim. The two examples were then
-rerun alone; their rows above come from those runs.
+rerun alone; their rows above come from those runs. So `run_all.exs` is
+green at commit `9e40685` (the snapshot commit with those checks), not at
+`f064e33`, where the two scripts failed.
 
 **Tally for the go/no-go rule.** Of the six pre-registered target workloads,
 four are good on an optimised baseline (PCM mixing, HLL, cosine top-k,
@@ -188,14 +198,16 @@ Gorilla) and two are marginal (WebSocket masking at small frames, the
 dictionary-wide Levenshtein batch). Of the eight target workloads added
 later, seven are good (hashes, codecs, Keccak, BLAKE, Snappy and LZ4
 decode, the SAT solver at Ash size, and matrix multiply against Nx's binary
-backend) and one is poor (Argon2). The good results span byte transforms,
-hashing and checksums, sketch updates, f32 vectors, time-series encoding,
+backend) and one is poor (Argon2); the SAT solver has two scripts
+(`cdcl_sat`, `cdcl_sat_per_call`), both good, counted as one workload. The
+good results span byte transforms, hashing and checksums, sketch updates, f32 vectors, time-series encoding,
 codecs, decoders on untrusted input and a search algorithm: more than two of
 the NIF survey's categories. Against the anchor NIFs, defk is faster in
 nine rows, level in two (BLAKE2b, SipHash) and slower in three (Keccak
 0.64x, WebSocket masking 0.87x, CRC32C 0.84-0.91x). No kernel's tick gap
-left the 2 ms floor by more than 0.5 ms; three anchor NIFs block their
-scheduler for 19-44 ms per call.
+left the 2 ms floor by more than 0.5 ms; four anchor NIFs block their
+scheduler for 9-44 ms per call (bandit_native, NativeAdder, ex_keccak,
+blake2_elixir), and picosat for 1.3 s on hard random 3-SAT.
 
 ## Runtime contract
 
@@ -339,6 +351,10 @@ the release build; x86-64 kernels have been compiled and checked, not timed
 untested branch on Linux (`defk-a1p`). A Linux run with different speedups
 or a failing test would move rows and could move the conclusion.
 
+**No spread.** The snapshot keeps the best of five runs per side and records
+no spread (`Defk.Bench.report/1` keeps the minimum only), so it falls short
+of the evidence bar's "best of N with spread"; see [Method](#method).
+
 **A C compiler at build time.** Settled for applications (`defk-dtw.11`):
 as for elixir_make packages, the build machine needs `cc` (`gcc libc6-dev`
 at minimum on Debian) and the runtime image does not. A Hex library that
@@ -412,6 +428,11 @@ Go/no-go rule:
 Amendment:
 
 > Amended by 'Plan the catalog build for the six target workloads' (defk-dtw.15): each workload verdict is measured at a realistic size declared in the script before any numbers (recorded in Method beside the go/no-go rule); the other size and the crossover are reported beside it.
+
+Deviation from the evidence bar, accepted in the final session
+(defk-sgw.6): the snapshot is best of five with no spread recorded. It was
+not rerun for the spread because no pre-registered good result is near the
+line: the closest, Gorilla encoding at 2.41×, is 27% above the 1.9× bar.
 
 ### Correctness runs before the snapshot (defk-sgw.4)
 
