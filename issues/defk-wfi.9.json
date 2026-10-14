@@ -4,6 +4,7 @@
   "blocks": [
     "defk-wfi.6"
   ],
+  "closed_at": "2026-10-14T16:22:58Z",
   "created": "2026-10-14T14:07:48Z",
   "description": "Found by the dual CI (defk-wfi.2), 2026-10-14, on native x86-64 (GitHub Actions linux-x86_64-clang) and under Rosetta; both agree.\n\nProblem: test/report_test.exs 'report: :full dot's hot loop vectorises' and 'report: :full, a cache built in another directory gives the same facts as the directory that built it' assert a {:vectorize, :vectorized, _} fact for dot/2. On x86-64, clang 19 reports {:vectorize, :missed, \"not vectorised: cannot prove it is safe to reorder floating-point operations ...\"} for the same loop. The kernel is correct; the facts differ by target. The fast-path report is not part of the kernel subset (CONTEXT.md), so this is a test expectation, not a meaning change. It may still matter for performance claims: docs/performance.md numbers are arm64 only, and an x86-64 float reduction that does not vectorise could change rows of the Linux measurement run (defk-a1p).\n\nDecide: make the assertions per target (vectorised on arm64, missed with the reorder reason on x86-64), or pick a kernel that vectorises on both for the cache test (it only needs some fact that survives the move). Note why arm64 clang vectorises an ordered f64 reduction and x86-64 does not, in docs/performance.md if it explains a measured difference.\n\nDone when: both tests pass on linux-x86_64-clang and on arm64.",
   "id": "defk-wfi.9",
@@ -18,8 +19,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Fast-path report tests expect arm64 vectorisation facts; x86-64 clang does not vectorise dot",
   "type": "bug",
-  "updated_at": "2026-10-14T16:22:57Z"
+  "updated_at": "2026-10-14T16:22:58Z"
 }
