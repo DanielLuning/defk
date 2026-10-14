@@ -1,14 +1,8 @@
 # Changelog
 
-defk is a research project that may grow into a library (the decision is
-the verdict in `docs/verdict.md`). It is not on Hex yet.
-
 ## Version policy
 
-- `0.0.x` while the project is a research result: anything may change
-  between versions, including the kernel subset, the generated functions and
-  the build paths. The published docs say what is stable (`docs/scope.md`)
-  and what is not (ADR-0006 in the repository).
+- `0.0.x` was the research project: anything could change between versions.
 - From `0.1.0`, the first version published to Hex, the
   [stability promise](docs/guides/stability.md) holds: within a major
   version (`0` counts as one) a valid kernel keeps compiling and keeps its
@@ -18,12 +12,25 @@ the verdict in `docs/verdict.md`). It is not on Hex yet.
   its bug fixes that change a result or reject a kernel, its deprecations,
   and any rise in the minimum Elixir or OTP version.
 
-## Unreleased
+## 0.1.0
 
-Everything so far: the kernel subset (`docs/language.md`), Elixir mode,
-the runtime contract (preemption, isolation with fault containment, cleanup
-on process death, hot code upgrade), the compile error catalogue, the
-example catalog and its scoreboard, and the verdict.
+The first release on Hex, after the project's verdict (go) and the release
+readiness work.
+
+- The kernel subset, described in `docs/language.md`, with Elixir mode: every
+  kernel also compiles to plain Elixir, so tests can check the two agree.
+- The runtime contract: preemption, isolation with fault containment,
+  cleanup on process death, hot code upgrade.
+- The compile error catalogue: every rejection has a stable code, why, a
+  hint and a rewrite where one exists.
+- The [stability promise](docs/guides/stability.md) for the kernel subset,
+  the runtime contract, the public API and the error codes.
+- Tested on every change on Linux x86-64 (clang and gcc), Linux arm64
+  (clang) and macOS arm64 (Apple clang), with OTP 29 and Elixir 1.20.
+- Fixed before the release: the operands of an operation are evaluated in
+  Elixir's order, so the first error is Elixir's on every C compiler (gcc on
+  x86-64 evaluated call arguments right to left); the `address` sanitizer
+  mode builds with gcc; the sanitizer modes load with clang on Linux.
 
 ### Renamed before 0.1.0
 
