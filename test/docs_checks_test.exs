@@ -78,6 +78,19 @@ defmodule Defk.DocsChecksTest do
       assert found == [], Enum.join(["ticket or ADR references in the extras:" | found], "\n  ")
     end
 
+    # HexDocs is for users and GitHub for developing defk: a published page
+    # links examples a user can copy, never the development docs, benches or
+    # CI (docs/, bench/, ci/ in the repository)
+    test "no extra links the repository's development docs" do
+      found =
+        for page <- LanguageDoc.extras(),
+            {line, n} <- page |> File.read!() |> String.split("\n") |> Enum.with_index(1),
+            line =~ ~r{github\.com/DanielLuning/defk/blob/[^/]+/(docs|bench|ci)/},
+            do: "#{page}:#{n}: #{String.trim(line)}"
+
+      assert found == [], Enum.join(["development links in the extras:" | found], "\n  ")
+    end
+
     test "the reference check catches a ticket id and an ADR, not the example markers" do
       assert maintainer_ref?("as decided (defk-wfi.3)")
       assert maintainer_ref?("see `defk-04y`")

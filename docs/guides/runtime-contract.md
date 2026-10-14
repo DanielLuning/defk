@@ -10,9 +10,7 @@ worse than a port, however fast it is.
 
 This page says what each promise means for you, how defk keeps it, and where
 it stops today. What each means inside a kernel is in
-[Yielding and the runtime contract in practice](../language.md#9-yielding-and-the-runtime-contract-in-practice);
-the BEAM side (scheduling, `enif_schedule_nif`, resources, upgrade) is in the
-[BEAM/NIF reference](https://github.com/DanielLuning/defk/blob/main/docs/beam-nifs.md).
+[Yielding and the runtime contract in practice](../language.md#9-yielding-and-the-runtime-contract-in-practice).
 The four promises are part of [the stability promise](stability.md): later
 releases keep them, while the numbers that tune them may change.
 
@@ -31,8 +29,7 @@ You don't have to do anything for a kernel to share its scheduler:
 
 Measured on one scheduler with a 1 ms ticker, the worst gap beside a
 yielding kernel was 2.3 to 2.5 ms, against 2.0 to 2.2 ms beside a busy Elixir
-process (the
-[results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot), [`bench/tick_gap.exs`](https://github.com/DanielLuning/defk/blob/main/bench/tick_gap.exs)).
+process.
 
 `yield: false` after the return type compiles a kernel without safepoints.
 Use it only for kernels that always finish in well under a millisecond: the
@@ -46,9 +43,7 @@ yielding kernel's function checks whether any processes are waiting
 (`:erlang.statistics(:total_run_queue_lengths)`, about 9 ns a call) and, if
 so, yields every 50 µs instead of 250 µs for the call's first millisecond.
 A lone call is unchanged. 48 calls of 0.65 ms under `Task.async_stream/3`
-went from 3 schedulers and 13.6 ms to 10-11 schedulers and 5.6-5.7 ms
-(see
-[Parallelism and schedulers](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#4-parallelism-and-schedulers)).
+went from 3 schedulers and 13.6 ms to 10-11 schedulers and 5.6-5.7 ms.
 `use Defk, adaptive_slice: false` turns this off. `+swt very_low` spreads
 such calls further.
 
@@ -143,6 +138,5 @@ still running old Erlang code.
   [Testing kernels](testing.md)).
 - `test/resume_test.exs`, `test/upgrade_test.exs`,
   `test/fault_containment_test.exs` (faults injected into a kernel, in the
-  VM and in a child VM) and the `bench/tick_gap.exs` and
-  `bench/yield_cost.exs` measurements, described in the
-  [design decisions](https://github.com/DanielLuning/defk/blob/main/docs/project.md#design-decisions-the-benchmarks-validated).
+  VM and in a child VM), and measurements of the scheduler gap beside a
+  yielding kernel and of the cost of yielding.
