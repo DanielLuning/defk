@@ -2174,7 +2174,9 @@ static void defk_fault_pin_old(void *old_priv) {
 __attribute__((noinline)) static void defk_inject_fault_now(int kind) {
   atomic_store(&defk_inject_fault, 0);
   volatile int *bad = (volatile int *)(uintptr_t)8;
-  volatile int64_t zero = 0;
+  /* both volatile: with a constant dividend, 1 / zero compiles to a compare
+   * and select (only 1 and -1 give a nonzero quotient), not an idiv */
+  volatile int64_t one = 1, zero = 0;
   switch (kind) {
   case 1: *bad = 1; break;
 #if defined(__aarch64__)
@@ -2184,7 +2186,7 @@ __attribute__((noinline)) static void defk_inject_fault_now(int kind) {
 #else
   case 2: __builtin_trap(); break;
 #endif
-  case 3: zero = 1 / zero; break;
+  case 3: zero = one / zero; break;
   case 4: memset((void *)(uintptr_t)8, 0, 64); break;
   default: break;
   }
