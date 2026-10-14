@@ -3,7 +3,9 @@
   "blocked_by": [
     "defk-wfi.1"
   ],
-  "blocks": [],
+  "blocks": [
+    "defk-a1p"
+  ],
   "created": "2026-10-14T13:17:49Z",
   "description": "## Question\n\nBuild the two CI paths that the map 'Wayfinder: defk ready for a first Hex release' decided on, so a release never waits for the GitHub free tier.\n\nDecided on the map (2026-10-14):\n- GitHub Actions runs mix ci on every push: Linux x86-64 (clang and gcc), Linux aarch64 (clang), macOS arm64. Valgrind and the measurement run stay manual, at release time.\n- The local recipe runs the same Linux matrix in Docker on the Mac: aarch64 natively, x86-64 under emulation (correct but slow; for tests, never for timing).\n- A release commit needs one green run of the full matrix from either path.\n- The recipe writes a short result file that the release-readiness check can cite.\n- Add CC=clang on glibc to the matrix: defk-o52 crashes on the first raise without its fix (comment on defk-a1p). The Valgrind container (defk-96f.3) can become a release-time job.\n\nDone when: the workflow is in .github/workflows/, the recipe is in the repo with a short doc, both paths ran the matrix once, and each failure is fixed or ticketed.",
   "id": "defk-wfi.2",
@@ -15,5 +17,5 @@
   "status": "open",
   "title": "Dual CI: a GitHub Actions workflow and a local Docker recipe with the same matrix",
   "type": "task",
-  "updated_at": "2026-10-14T13:18:00Z"
+  "updated_at": "2026-10-14T13:18:01Z"
 }
