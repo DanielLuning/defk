@@ -20,7 +20,8 @@ if [ -n "${ACT:-}" ]; then path=act; else path=${CI_PATH:-local}; fi
 # ci/local.sh runs in a git snapshot of the checkout and passes the real
 # commit and its state in CI_COMMIT and CI_DIRTY
 commit=${CI_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo "${GITHUB_SHA:-unknown}")}
-if [ -z "$(git status --porcelain 2>/dev/null)" ]; then dirty=no; else dirty=yes; fi
+if ! status=$(git status --porcelain 2>/dev/null); then dirty=unknown
+elif [ -z "$status" ]; then dirty=no; else dirty=yes; fi
 dirty=${CI_DIRTY:-$dirty}
 if [ $rc -eq 0 ]; then result=pass; else result="fail (exit $rc)"; fi
 
