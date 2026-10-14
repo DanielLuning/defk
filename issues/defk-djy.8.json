@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-djy.1",
     "defk-sgw.5"
@@ -27,8 +27,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Hex package metadata and publishing readiness",
   "type": "task",
-  "updated_at": "2026-10-13T22:12:34Z"
+  "updated_at": "2026-10-14T05:30:30Z"
 }
