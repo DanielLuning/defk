@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-14T13:52:10Z",
+  "description": "Found by the dual CI (defk-wfi.2), 2026-10-14.\n\nProblem: priv/defk_runtime.h includes \u003csanitizer/allocator_interface.h\u003e under DEFK_SANITIZE_ADDRESS (for defk_poison_slack: __sanitizer_get_ownership, __sanitizer_get_allocated_size). gcc 14 (Debian trixie, gcc 14.2.0) ships \u003csanitizer/asan_interface.h\u003e but not allocator_interface.h, so DEFK_SANITIZE=address cannot build with CC=gcc. clang (with libclang-rt-dev) has both.\n\nSeen as: test/sanitize_test.exs 'a normal build compiles none of the sanitizer code in the runtime header' fails with CC=gcc (cc -E -DDEFK_SANITIZE_ADDRESS=1 exits 1), natively on Linux aarch64 and on x86-64. The :sanitize-tagged tests are excluded by default, so only this test shows it.\n\nOptions: declare the two functions in the header when the include is missing (__has_include; libasan exports them on gcc too), or document the sanitizer mode as clang-only and make the test and DEFK_SANITIZE say so with a clear error.\n\nDone when: CC=gcc either builds the address-sanitizer mode or rejects it with a clear message, and the test passes with gcc (linux-x86_64-gcc in CI).",
+  "id": "defk-wfi.7",
+  "labels": [],
+  "parent": "defk-wfi",
+  "priority": 2,
+  "status": "open",
+  "title": "[BUG] Sanitizer build mode does not compile with gcc: no \u003csanitizer/allocator_interface.h\u003e",
+  "type": "bug",
+  "updated_at": "2026-10-14T13:52:10Z"
+}
