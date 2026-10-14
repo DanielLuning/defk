@@ -37,7 +37,13 @@ act -j linux --matrix label:linux-aarch64-clang --container-architecture linux/a
 act -j linux --matrix label:linux-x86_64-gcc --container-architecture linux/amd64
 ```
 
-`.actrc` maps the runner labels to act's images. Under act the cache and
+Run act from a normal clone, not from a git worktree: act copies the
+directory into the job container, and a worktree's `.git` is a file that
+points to a path outside it, so the tests that read `git ls-files` fail.
+
+`.actrc` maps the runner labels to act's images and stops act from mounting
+the Docker socket into the job (podman's socket on macOS cannot be mounted;
+no job needs it). Under act the cache and
 artifact steps are skipped (they need node in the job container), so each
 act run fetches deps and builds the PLT again. act does not run the macOS
 job; on the Mac, `ci/run.sh macos-arm64-clang` is that job.
