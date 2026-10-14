@@ -109,17 +109,20 @@ state, `bw ready` the next unblocked steps, `bw show <epic>` an epic's goal,
 children and order. This page does not repeat it, because a copy goes stale
 within days (the checklist that used to be here did).
 
-The destination is the verdict in [`verdict.md`](verdict.md). The map that
-holds the decisions behind it is the epic `defk-dtw`; the epic `defk-sgw`
-sequences the build to the verdict and is the critical path. While it is
-open, the other epics are either in support of it or deferred:
+The verdict in [`verdict.md`](verdict.md) was accepted on 2026-10-14
+(`defk-sgw.6`): the go/no-go rule's outcome is go, and the decision taken on
+it is to keep developing and improving defk without publishing on Hex yet.
+The map that held the decisions behind it (`defk-dtw`) and the build to it
+(`defk-sgw`) are closed. The next destination is the map `defk-wfi`: defk
+ready for a first Hex release, gated on Linux evidence (`defk-a1p`, its
+first ticket) and a stability promise for the subset and the runtime
+contract. Until that map is designed, the other epics stay as they were:
 
-| Epic | What it holds | State while the verdict is open |
+| Epic | What it holds | State |
 |---|---|---|
-| `defk-sgw` | the verdict: freeze the snapshot, fault containment, write and accept the verdict | the critical path |
-| `defk-dtw` | the map: decisions behind the verdict; closes with `defk-sgw.6` | open, no work of its own |
-| `defk-9p6` | the example catalog: new entries and baseline work | open, in support |
-| `defk-djy` | documentation: API docs, guides, HexDocs | open, in support |
+| `defk-wfi` | the map to a first Hex release; a stub until its own design session | open |
+| `defk-9p6` | the example catalog: new entries and baseline work | open |
+| `defk-djy` | documentation: API docs, guides, HexDocs | open |
 | `defk-o08` | symbolic bounds: prove more indices in range (ADR-0007) | open |
 | `defk-w8r` | measurement and per-call cost | open |
 | `defk-vcx` | kernel subset and devex gaps | open |
@@ -129,7 +132,8 @@ open, the other epics are either in support of it or deferred:
 | `defk-ulk` | SIMD and target-specific builds | deferred |
 | `defk-96f` | verification of the generated C: sanitizers, Valgrind, fuzzing, bounded proofs | deferred |
 
-A deferred epic is hidden from `bw ready` until the verdict closes; `bw list
---all` shows it. The rule comes from the map: expansion candidates are
-listed in the verdict, not built before it ([`scope.md`](scope.md) says what
-is planned, under exploration and out by design).
+A deferred epic is hidden from `bw ready`; `bw list --all` shows it. The
+expansion candidates are listed in the verdict under "Where defk could
+grow"; `defk-wfi` triages them, and none reopens automatically
+([`scope.md`](scope.md) says what is planned, under exploration and out by
+design).
