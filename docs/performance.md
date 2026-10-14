@@ -2070,6 +2070,25 @@ storing through it twice brought it within noise.
   [`test/fault_containment_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/fault_containment_test.exs).
 - **Status:** provisional.
 
+### 6.30 Evaluating operands in Elixir's order costs nothing measurable
+
+When two operands of one operation can both raise, the compiler binds the
+left one to a local first, so the leftmost error is raised as in Elixir (C
+leaves the order of call arguments open, and gcc on x86-64 evaluated them
+right to left). The catalog's kernels gained up to 25 such locals each
+(`hashes`: 25, `image_blur`: 16), most between two i64 overflow checks; the
+C compiler keeps them in registers, and some are saved at safepoints.
+
+- **Numbers** (ms, two interleaved runs each, `main` / branch):
+  `image_blur` 1.537, 1.452 / 1.383, 1.498; `hashes` (four kernels)
+  0.176-0.184, 0.529-0.531, 0.059, 0.148-0.149 / 0.176-0.178,
+  0.529-0.531, 0.059, 0.148.
+- **Conditions:** M-series Mac, Apple clang, OTP 29, Elixir 1.20.2, load
+  ~8 (another BEAM at one full core).
+- **Source:** `defk-wfi.8`,
+  [`test/evaluation_order_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/evaluation_order_test.exs).
+- **Status:** provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
