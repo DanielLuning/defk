@@ -11,9 +11,15 @@
     "ready-for-human"
   ],
   "parent": "defk-djy",
+  "comments": [
+    {
+      "text": "Resolution: done, merged to main.\n- docs/performance.md left the HexDocs extras (maintainer's choice, 2026-10-14): it is a maintainers' record with a source line per entry. The README, the Measuring guide, the runtime contract, scope.md, language.md and Defk.Report's moduledoc link it by its GitHub URL; docs/project.md already lists it. Its examples still run (language_doc_examples_test) and its links are still checked.\n- language.md: 18 ticket ids dropped (they credited the work), with the float-check cost kept as a sentence. scope.md: the 'Not yet' list says what is planned without ids, and notes that planned constructs can arrive in a minor release under the stability promise; test/scope_doc_test.exs checks the planned codes only.\n- The guides: ADR 0001 and 0002 links replaced by the decision's substance (state travels as values; C at build time as elixir_make does); ticket ids dropped.\n- New check: test/docs_checks_test.exs fails on a ticket id (defk-xyz, defk-xyz.3) or an ADR reference in any extra, with a self-test that the example markers (defk-example) are not caught.\n- mix ci 1739/1739; mix docs --warnings-as-errors clean.",
+      "timestamp": "2026-10-14T20:26:41Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "HexDocs pages must not reference ADRs or tickets: they are for users, not maintainers",
   "type": "task",
-  "updated_at": "2026-10-14T20:09:44Z"
+  "updated_at": "2026-10-14T20:26:41Z"
 }
