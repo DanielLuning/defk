@@ -9,12 +9,14 @@ the verdict in `docs/verdict.md`). It is not on Hex yet.
   between versions, including the kernel subset, the generated functions and
   the build paths. The published docs say what is stable (`docs/scope.md`)
   and what is not (ADR-0006 in the repository).
-- `0.1.0` is the first version published to Hex, cut when the verdict is
-  accepted. From then on a minor version may add constructs and builtins and
-  may change what `docs/scope.md` lists as unstable; it never changes a
-  kernel's result, removes a construct, or renames a compile error code.
-- From `0.1.0`, compile error codes are never renamed or reused; a retired
-  code stays in the catalogue as retired.
+- From `0.1.0`, the first version published to Hex, the
+  [stability promise](docs/guides/stability.md) holds: within a major
+  version (`0` counts as one) a valid kernel keeps compiling and keeps its
+  meaning, and a change to the kernel subset, the runtime contract, the
+  public API or the compile error codes needs a deprecation first. A minor
+  version may add constructs, builtins and options. Each release lists here
+  its bug fixes that change a result or reject a kernel, its deprecations,
+  and any rise in the minimum Elixir or OTP version.
 
 ## Unreleased
 
