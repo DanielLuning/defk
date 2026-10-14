@@ -11,9 +11,15 @@
     "wayfinder:grilling"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution (grilling, 2026-10-14). Rules: a name changes when it misleads, breaks a pattern of similar names, or is unclear or far from Elixir's own names (Q1 b). In scope: the public tier, the options, the builtins, the error codes, and the kernel subset's type names; unstable and hidden tiers out (Q2). Renames happen in place before 0.1.0, no deprecated aliases; CHANGELOG.md names old and new (Q3).\n\nRenames (the list):\n1. builtins rotl64/2, rotr64/2 -\u003e rotl/2, rotr/2 (same pattern as clz/1, clz/2); Defk.Bits too.\n2. builtin f64_to_u64/1 -\u003e f64_bits/1 (it is a bit cast, not a conversion); Defk.Bits too.\n3. builtin len/1 -\u003e length/1 (Elixir's name; docs say it is constant time).\n4. use Defk option max_owned: -\u003e max_owned_bytes: (the unit in the name).\n5. Defk.Errors.codes/0 -\u003e Defk.Errors.entries/0 (it returns entries, not codes).\n6. error code unknown-function -\u003e undefined-function (Elixir's term; pairs with undefined-variable, undefined-attribute).\n7. error code u64-mix -\u003e u64-with-i64.\n\nKept: every other name in scope: modules Defk, Defk.Test, Defk.ElixirMode, Defk.Bits, Defk.Report, Defk.Errors; use Defk, defk, assert_agrees/4, agreement_reason/1, with_mode/2, Report.print/1, Report.format/1, explain!/1; __defk_elixir__/2, __defk_force_yields__/1; elixir_mode:, report: :full, yield: false, config :defk, mode: (Q9), CC, ERTS_INCLUDE_DIR; copy/5 and copy_back/4 (Q7); the other 71 error codes (the unsupported-* prefix stays partial, Q11); the other builtins incl. mulhi, clz, ctz, popcount, wrap64, crc32c, the loads; the types i64 u64 f64 f32 i32 i16 u8 bool [T] bitstring.\n\nWork: ticketed under the map as one task.",
+      "timestamp": "2026-10-14T18:39:21Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Rename review: the public tier, the options, the builtins, the error codes",
   "type": "task",
-  "updated_at": "2026-10-14T18:19:51Z"
+  "updated_at": "2026-10-14T18:39:21Z"
 }
