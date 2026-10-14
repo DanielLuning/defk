@@ -11,9 +11,15 @@
     "ready-for-human"
   ],
   "parent": "defk-sgw",
+  "comments": [
+    {
+      "text": "Accepted 2026-10-14. Decisions: lead with the pre-registered six (4/6 good); safety claim scoped to macOS arm64 (Linux = defk-a1p, a platform limit, not a safety gap); 'speed of a hand-written C loop' with the 1.5-5x tuned-library gap; run_all green at 29957df, not 3bf0bec; no spread recorded, accepted deviation, no rerun; outcome go = keep developing, no Hex release until Linux evidence and a stability promise. New map: defk-wfi (stub).",
+      "timestamp": "2026-10-14T06:05:54Z"
+    }
+  ],
   "priority": 1,
   "status": "in_progress",
   "title": "Final verdict session: accept the conclusion and close the map",
   "type": "task",
-  "updated_at": "2026-10-14T06:03:31Z"
+  "updated_at": "2026-10-14T06:05:54Z"
 }
