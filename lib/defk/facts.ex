@@ -1,5 +1,5 @@
 defmodule Defk.Facts do
-  # The range-facts lattice (defk-k4x): what the compiler knows a kernel
+  # The range-facts lattice: what the compiler knows a kernel
   # value satisfies, used to drop bounds and overflow checks. A value map
   # carries one opaque %Defk.Facts{} under :facts; only this module reads
   # or writes its insides, so the ADR-0007 representation migration happens
@@ -8,7 +8,7 @@ defmodule Defk.Facts do
   # An i64 value's facts:
   #   lo, hi - constants with lo <= v <= hi (nil = unknown)
   #   lb, ub - %{array_cvar => k}: v >= length(array) + k, v <= length(array) + k;
-  #            a multiple or quotient of a length (defk-upc) has the key
+  #            a multiple or quotient of a length has the key
   #            {array_cvar, p, q}, p >= 0 and q >= 1 coprime and not both 1:
   #            q * v >= p * length(array) + k, q * v <= p * length(array) + k
   # An array's facts: len_lo / len_lb, the same lower bounds for its length.
@@ -83,7 +83,7 @@ defmodule Defk.Facts do
   # ------------------------------------------------------------- proving --
   # The only functions whose answers may drop a check. A proof carries its
   # support: the C variables of the arrays whose length facts it used, which
-  # the flagged-strip classifier must see (ADR-0007, defk-ch4).
+  # the flagged-strip classifier must see (ADR-0007).
 
   # a value within lo..hi needs no i64 overflow check
   def prove_i64(lo, hi),

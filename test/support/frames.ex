@@ -5,7 +5,7 @@ defmodule Defk.Test.Frames do
   # (the kernel's owned buffers are freed earlier and synchronously, by
   # defk_finish on a raise or a normal end). The destructor can run on another
   # scheduler a moment after control is back in the test, so a strict read
-  # right after a raise, a kill or a finish is racy under load (defk-cwl).
+  # right after a raise, a kill or a finish is racy under load.
   # Poll with a bounded timeout instead.
 
   import ExUnit.Assertions

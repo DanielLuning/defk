@@ -1,8 +1,8 @@
-# Masked arithmetic (defk-n4r.2, CONTEXT.md): the + - * neg bsl tree directly
+# Masked arithmetic (CONTEXT.md): the + - * neg bsl tree directly
 # under band(expr, 2^k - 1) is computed with wrapping machine arithmetic and
 # masked once, which gives Elixir's exact result (band of the bignum) and
 # never raises (band bor bxor bnot join the tree, k = 64 and u64 are in
-# test/u64_test.exs, defk-wlu); wrap64(expr) wraps the same tree to the 64-bit pattern
+# test/u64_test.exs); wrap64(expr) wraps the same tree to the 64-bit pattern
 # (Defk.Bits.wrap64/1), while band(expr, -1) is Elixir's identity, checked
 # like any band whose operand is not a 2^k - 1 mask. Anything else in
 # the tree is a leaf and is checked as usual; a mask that is not 2^k - 1 gets
@@ -55,7 +55,7 @@ defmodule Defk.MaskedArithTest.K do
   defk(leaf_rem(x :: i64, y :: i64) :: i64, do: band(x * y + rem(x * y, 7), 255))
   # bsr is a leaf, exact
   defk(leaf_bsr(x :: i64, y :: i64) :: i64, do: band(bsr(x, 3) * y, 0xFFFF))
-  # a bsl by a non-literal count is in the tree (defk-wlu): it wraps, and a
+  # a bsl by a non-literal count is in the tree: it wraps, and a
   # negative count raises
   defk(var_bsl(x :: i64, n :: i64) :: i64, do: band(bsl(x, n) + 1, 255))
 
@@ -68,7 +68,7 @@ defmodule Defk.MaskedArithTest.K do
     if c, do: band(x * y, 255), else: x + y
   end
 
-  # a module attribute is its literal (defk-ivt)
+  # a module attribute is its literal
   @mask32 0xFFFFFFFF
   @all_ones -1
   defk(attr_mask(x :: i64, y :: i64) :: i64, do: band(x * y, @mask32))

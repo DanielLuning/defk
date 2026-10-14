@@ -2,10 +2,10 @@
 # Each kernel shape is compiled twice (yielding and `yield: false`) and run
 # with natural yields and with a yield forced at every clock read, which
 # exercises the resume path of every safepoint, including those in loops of
-# inlined kernel calls (defk-jaj).
+# inlined kernel calls.
 #
 # The kernel bodies in `shapes` are fixture data: credo counts their nested
-# `for`s and reports them as one complex function (defk-x15.3), so the
+# `for`s and reports them as one complex function, so the
 # complexity/nesting checks are off here.
 
 # credo:disable-for-this-file
@@ -113,7 +113,7 @@ defmodule Defk.ResumeTest.Shapes do
         end
       end
 
-      # body temporaries (defk-zep): `held` is bound before the nested loops
+      # body temporaries: `held` is bound before the nested loops
       # and read in and after them, so their safepoints spill it; `hot` is the
       # inner loop's own, left out of every spill list
       defk unquote(n.(:temps))(a :: [i64], reps :: i64) :: i64, unquote(opts) do
@@ -224,7 +224,7 @@ defmodule Defk.ResumeTest.Lost do
 end
 
 # a safepoint in an inner loop: resuming it goes through the outer loop's
-# dispatch first (defk-yqo)
+# dispatch first
 defmodule Defk.ResumeTest.LostNested do
   use Defk
 
@@ -245,7 +245,7 @@ defmodule Defk.ResumeTest do
   # A resume that misses its safepoint raises (defk_lost_resume in the
   # runtime). This backstop fails any other endless resume loop before it
   # exhausts memory: each restart re-runs alloc/2 and keeps the binary until
-  # the kernel ends, which got the VM OOM-killed in about 25 s (defk-juw).
+  # the kernel ends, which got the VM OOM-killed in about 25 s.
   # The tests take about a second. DEFK_TIMEOUT_SCALE stretches the backstop
   # for a slow emulator (verify/valgrind runs about 50x slower).
   @moduletag timeout: 10_000 * String.to_integer(System.get_env("DEFK_TIMEOUT_SCALE", "1"))
@@ -338,7 +338,7 @@ defmodule Defk.ResumeTest do
     end
   end
 
-  # A safepoint spills the locals live where it resumes (defk-zep): the
+  # A safepoint spills the locals live where it resumes: the
   # strip safepoint of temps/2's inner loop spills `held`, and no safepoint
   # spills `hot`, so the C compiler need not keep it alive out of its loop.
   test "safepoints spill only the locals live where they resume" do
@@ -454,7 +454,7 @@ defmodule Defk.ResumeTest do
     load = quote do: def(__load__(lib), do: :erlang.load_nif(lib, 0))
     Module.create(mod, [load | stubs], Macro.Env.location(__ENV__))
     :ok = mod.__load__(String.to_charlist(lib))
-    # the kernel yields, so its NIF takes the run-queue hint last (defk-04y)
+    # the kernel yields, so its NIF takes the run-queue hint last
     [kernel] = for [f, "2", "nif_" <> _] <- nifs, do: String.to_atom(f)
     {mod, &apply(mod, kernel, [&1, 0])}
   end
@@ -502,7 +502,7 @@ defmodule Defk.ResumeTest do
   end
 
   # ---------------------------------------------------- agreement properties --
-  # Every kernel here against its Elixir mode (defk-ne6). Trip counts are
+  # Every kernel here against its Elixir mode. Trip counts are
   # bounded, with the i64 maximum as the one cheap edge (its range raises
   # before the loop starts); array elements are mostly small, so the
   # arithmetic gets past the first overflow.

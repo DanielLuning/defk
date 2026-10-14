@@ -1,5 +1,5 @@
 defmodule Defk.DocsChecksTest do
-  # Checks that keep the docs true (defk-djy.7), beside the example runner
+  # Checks that keep the docs true, beside the example runner
   # (test/language_doc_examples_test.exs) and `mix docs --warnings-as-errors`:
   #
   #   - every link between extras, and to repo files, resolves, anchors included,
@@ -7,12 +7,18 @@ defmodule Defk.DocsChecksTest do
   #   - every module with `iex>` in its docs has a `doctest` call in the suite
   #   - every error code has an example and a rewrite
   #   - every public function of a documented module has a @doc
-  #   - no extra names a ticket or an ADR: they are for users (defk-djy.19)
+  #   - no extra names a ticket or an ADR, or links a development doc: they
+  #     are for users
+  #   - no code names a ticket: a comment says the reason, the tracker keeps
+  #     the history
   use ExUnit.Case, async: true
 
   alias Defk.LanguageDoc
 
   @repo_url "https://github.com/DanielLuning/defk/blob/main/"
+
+  # a beadwork id: the project prefix, three characters, maybe a child number
+  @ticket_id ~r/\bdefk-[a-z0-9]{3}(\.\d+)?\b/
 
   # the library's modules (not the examples of test/support)
   defp lib_modules do
@@ -66,8 +72,8 @@ defmodule Defk.DocsChecksTest do
       assert Defk.MixProject.hexdocs_link("../../examples/_template.exs") == :error
     end
 
-    # a ticket id (defk-xyz, defk-xyz.3) or an ADR is for someone developing
-    # defk; the user's pages say what it stands for instead
+    # a ticket id or an ADR is for someone developing defk; the user's pages
+    # say what it stands for instead
     test "no extra names a ticket or an ADR" do
       found =
         for page <- LanguageDoc.extras(),
@@ -91,9 +97,29 @@ defmodule Defk.DocsChecksTest do
       assert found == [], Enum.join(["development links in the extras:" | found], "\n  ")
     end
 
+    # the code, tests and scripts of the repository; the development docs
+    # (docs/) may keep ticket ids as sources
+    test "no code names a ticket" do
+      {files, 0} =
+        System.cmd("git", ~w(ls-files lib priv test dev examples bench ci verify .github
+                             mix.exs .credo.exs))
+
+      found =
+        for file <- String.split(files, "\n", trim: true),
+            text = File.read!(file),
+            String.valid?(text),
+            {line, n} <- text |> String.split("\n") |> Enum.with_index(1),
+            line =~ @ticket_id,
+            do: "#{file}:#{n}: #{String.trim(line)}"
+
+      assert found == [], Enum.join(["ticket ids in code:" | found], "\n  ")
+    end
+
+    # the ids are built here, so this file passes its own check
     test "the reference check catches a ticket id and an ADR, not the example markers" do
-      assert maintainer_ref?("as decided (defk-wfi.3)")
-      assert maintainer_ref?("see `defk-04y`")
+      assert maintainer_ref?("as decided (" <> "defk-" <> "wfi.3)")
+      assert maintainer_ref?("see `" <> "defk-" <> "04y`")
+      refute maintainer_ref?("_build/test/defk-moved-cache-12/x.so")
       assert maintainer_ref?("[ADR 0002](https://github.com/x/docs/adr/0002-c.md)")
       assert maintainer_ref?("ADR-0006 lists the tiers")
       refute maintainer_ref?("<!-- defk-example error: unsupported-call -->")
@@ -112,8 +138,7 @@ defmodule Defk.DocsChecksTest do
   end
 
   # a beadwork id, or an ADR by number or by its path in docs/adr/
-  defp maintainer_ref?(line),
-    do: line =~ ~r/\bdefk-[a-z0-9]{3}(\.\d+)?\b|\bADR[- ]?\d|docs\/adr\//
+  defp maintainer_ref?(line), do: line =~ @ticket_id or line =~ ~r/\bADR[- ]?\d|docs\/adr\//
 
   # nil, or why `target`, linked from `page`, is broken
   defp broken_link(_, @repo_url <> path), do: check_file(path, nil)

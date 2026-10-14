@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# defk-ulk.1: run the agreement and float tests (native === Elixir mode,
+# SIMD study: run the agreement and float tests (native === Elixir mode,
 # bit-exact floats) with every kernel built at each target level of this
 # machine's architecture. Each level gets its own build path, so _build is
 # untouched. `bench/simd/agree_levels.sh [level ...]`

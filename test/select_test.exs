@@ -1,9 +1,8 @@
 # An `if` or `cond` value whose arms are pure arithmetic is compiled as a
 # select: every arm is computed, overflow is flagged instead of raised, and
-# only an overflow in the taken arm (or a reached condition) raises
-# (defk-jp3, defk-7q5).
+# only an overflow in the taken arm (or a reached condition) raises.
 
-# A division is not speculated (defk-id9): an arm with div, rem or a float
+# A division is not speculated: an arm with div, rem or a float
 # division compiles to a branch, so the untaken one is skipped.
 defmodule Defk.SelectTest.Cost do
   use Defk
@@ -174,7 +173,7 @@ defmodule Defk.SelectTest do
     assert c =~ "defk_add_i64_s(&"
   end
 
-  describe "cost heuristic (defk-id9)" do
+  describe "cost heuristic" do
     defp cost_c,
       do: File.read!(String.replace_suffix(Defk.SelectTest.Cost.__defk_lib__(), ".so", ".c"))
 
@@ -209,7 +208,7 @@ defmodule Defk.SelectTest do
   end
 
   # ---------------------------------------------------- agreement properties --
-  # Every kernel here against its Elixir mode (defk-ne6): arms that overflow
+  # Every kernel here against its Elixir mode: arms that overflow
   # only when taken, on any i64; loop counts bounded (the i64 maximum raises
   # before the loop starts).
 

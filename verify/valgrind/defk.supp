@@ -5,8 +5,8 @@
 # frame_tag_test.exs, "a frame with a foreign tag fails cleanly": the test
 # stamps promoted frames with a wrong layout tag (__defk_corrupt_tags__), and
 # defk_frame_dtor deliberately frees nothing for a foreign frame ("The leak
-# (the binaries it owned) is accepted; a crash is not", priv/defk_runtime.h,
-# defk-ls8). The abandoned owned table and its buffers are by design.
+# (the binaries it owned) is accepted; a crash is not", priv/defk_runtime.h).
+# The abandoned owned table and its buffers are by design.
 #
 # Scoped to the one kernel library that test builds
 # (Elixir.Defk.FrameTagTest.K-<key>.so), so the same leak anywhere else

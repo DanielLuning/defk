@@ -1,4 +1,4 @@
-# Valgrind memcheck for defk kernels inside the BEAM (defk-96f.3).
+# Valgrind memcheck for defk kernels inside the BEAM.
 #
 # Debian + the distro's valgrind + OTP built from source with the `valgrind`
 # emulator flavor (`make -C erts/emulator valgrind`) + Elixir copied from the

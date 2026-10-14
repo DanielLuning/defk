@@ -2,7 +2,7 @@ defmodule Defk.YieldFalseStripTest do
   use ExUnit.Case, async: true
   import Defk.TestKit, only: [i64s: 1]
 
-  # defk-5dd: a strip loop in a yield: false kernel computes v_rem_N, which
+  # A strip loop in a yield: false kernel computes v_rem_N, which
   # DEFK_SHORT(R) ignores under no-yield; it must still count as used, or
   # clang warns "variable set but not used".
 

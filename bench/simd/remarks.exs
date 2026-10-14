@@ -6,7 +6,7 @@
 # Uses Defk.Report.full/3 (the `report: :full` pass) with `CC` set to a
 # wrapper per level, on the C each module was built from. Writes the results
 # as an Erlang term file (default: $TMPDIR/defk-simd-remarks.etf) and prints
-# one line per loop. Research tooling for defk-ulk.1, not part of defk.
+# one line per loop. Research tooling for the SIMD study, not part of defk.
 Code.require_file("load.exs", __DIR__)
 Code.require_file("levels.exs", __DIR__)
 

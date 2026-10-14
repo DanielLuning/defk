@@ -1,6 +1,6 @@
 # The operands of an operation are evaluated left to right, as in Elixir, so
-# when two of them can raise, the leftmost error is the one raised
-# (defk-wfi.8). C orders neither the arguments of a call nor the operands of
+# when two of them can raise, the leftmost error is the one raised.
+# C orders neither the arguments of a call nor the operands of
 # most operators: gcc on x86-64 evaluated them right to left, and an
 # operand's statements (a loop, an inlined kernel) ran before the checks of
 # the operands left of it on every compiler.

@@ -1,5 +1,5 @@
 # The flagged-strip classifier decides from the strip record: rows the
-# lowering declared while emitting a flat loop's body (defk-ch4). These
+# lowering declared while emitting a flat loop's body. These
 # tests state each eligibility rule and rewrite decision on constructed
 # rows and a minimal body text — what used to be observable only by
 # compiling a kernel and grepping its C. The strip/yield end-to-end tests
@@ -8,7 +8,7 @@ defmodule Defk.StripRecordTest do
   use ExUnit.Case, async: false
 
   # the classifier reads the kernel's C declarations for variable types,
-  # from the compiler's one ctx key (defk-euu)
+  # from the compiler's one ctx key
   defp with_types(types) do
     lowering = %Defk.Compiler.Ctx.Lowering{decls: types}
     Process.put(:defk_ctx, %Defk.Compiler.Ctx{lowering: lowering})
@@ -67,7 +67,7 @@ defmodule Defk.StripRecordTest do
     refute IO.iodata_to_binary(fl.body) =~ "DEFK_FCHECK"
   end
 
-  describe "an accumulator that is a leaf of its own tree (defk-zj8)" do
+  describe "an accumulator that is a leaf of its own tree" do
     # the base strip's tree and its assignment under a branch arm (a
     # filter's), plus whatever `extra` rows and text follow them
     defp arm_rows(extra) do

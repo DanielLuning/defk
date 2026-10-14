@@ -1,10 +1,10 @@
-# An error inside a case guard (defk-7a6). Elixir treats a guard that raises
+# An error inside a case guard. Elixir treats a guard that raises
 # as a guard that failed and tries the next clause: a division by zero (div,
 # rem, /) or a float operation giving inf fails the clause, in both modes.
 # An i64 overflow is not an Elixir error (Elixir has no i64 limit), so it
 # stays a limit: the kernel raises, with the message of the unguarded
 # operation, rather than answering differently from Elixir. A guard error
-# wins over an overflow beside it (defk-34l): Elixir fails that guard
+# wins over an overflow beside it: Elixir fails that guard
 # whatever the exact value, so both modes fail it too, in either order. Only
 # a guard whose answer the overflowed value decides raises: its left side of
 # an and/or (other than an `and` whose false fails the guard anyway) or a
@@ -177,7 +177,7 @@ defmodule Defk.CaseGuardErrorsTest.K do
     end
   end
 
-  # defk-34l: a zero divisor beside an overflow fails the guard, either order
+  # a zero divisor beside an overflow fails the guard, either order
   defk rem_then_ovf(x :: i64, y :: i64) :: i64 do
     case x do
       n when rem(n, y) < n * n -> 1
@@ -265,7 +265,7 @@ defmodule Defk.CaseGuardErrorsTest.K do
     end
   end
 
-  # in (defk-gid) beside a guard error: the zero divisor fails only its clause
+  # `in` beside a guard error: the zero divisor fails only its clause
   defk in_rem_guard(x :: i64, y :: i64) :: i64 do
     case x do
       n when n in 1..10 and rem(n, y) == 0 -> 1
@@ -588,7 +588,7 @@ defmodule Defk.CaseGuardErrorsTest do
     end
   end
 
-  describe "a guard error beside an overflow fails the guard (defk-34l)" do
+  describe "a guard error beside an overflow fails the guard" do
     @big 4_000_000_000
     @ovf "i64 overflow in #{@big} * #{@big}"
 

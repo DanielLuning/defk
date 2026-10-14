@@ -1,4 +1,4 @@
-# Target levels for the defk-ulk.1 study, and a CC wrapper per level that
+# Target levels for the SIMD study (docs/research/simd.md), and a CC wrapper per level that
 # adds the level's flags to defk's own (Defk.Build passes `CC` through and
 # keys its cache on the compiler path, so each wrapper gets its own .so and
 # its own remark cache). Research tooling, not part of defk.

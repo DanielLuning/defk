@@ -1,5 +1,5 @@
 defmodule Defk.CompileErrorsDocTest do
-  # docs/compile-errors.md, the error catalogue (defk-djy.6): every error code
+  # docs/compile-errors.md, the error catalogue: every error code
   # has its anchor (the compile error footer links <page>#<code>), the "Codes"
   # section is the registry's text. Its links are checked in
   # test/docs_checks_test.exs.

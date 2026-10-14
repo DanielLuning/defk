@@ -34,7 +34,7 @@ defmodule Defk.BuildTest do
     assert Defk.Build.cache_key(@src) == Defk.Build.cache_key(@src)
   end
 
-  describe "the compiler on macOS with CC unset (defk-h30)" do
+  describe "the compiler on macOS with CC unset" do
     # xcrun's answers, by argument list
     defp xcrun(clang, sdk) do
       fn

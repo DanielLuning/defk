@@ -1,5 +1,5 @@
 # Defk.Errors.Rewrites suggests kernel-subset rewrites for constructs and
-# calls outside the subset (defk-vlf). The property this file pins: every
+# calls outside the subset. The property this file pins: every
 # rejection names a registered code, and every suggested rewrite is valid
 # Elixir — a suggestion the developer cannot paste is worse than none.
 # compile_rewrites_test.exs stays the end-to-end net (the compiler shows

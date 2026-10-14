@@ -1,4 +1,4 @@
-# Bitwise operators on i64 (defk-w38): band/bor/bxor/bnot in two's
+# Bitwise operators on i64: band/bor/bxor/bnot in two's
 # complement, bsl/bsr exact as Elixir computes them over bignums, raising
 # ArithmeticError where bsl's result leaves i64. Both spellings (band(a, b)
 # and a &&& b), against Elixir mode and against Bitwise itself.

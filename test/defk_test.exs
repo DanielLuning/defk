@@ -29,7 +29,7 @@ defmodule DefkTest do
        :non_finite_input},
       {%ArgumentError{message: "alloc/2: length too large"}, :length_too_large},
       {%ArgumentError{message: "out of memory (allocating 8 bytes)"}, :out_of_memory},
-      # the owned-buffer budget, the same message in both modes (defk-bh3)
+      # the owned-buffer budget, the same message in both modes
       {%ArgumentError{
          message:
            "out of memory (allocating 1024 bytes would take this call's buffers past max_owned_bytes,8192 bytes)"

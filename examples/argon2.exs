@@ -24,7 +24,7 @@
 # version 13 in H_0 ("v=13" in the encoded string), match no other
 # implementation and fail here; reported here, not upstream.
 #
-# Pre-registered verdict (defk-52v.9): marginal on speed, with the tick gap
+# Pre-registered verdict: marginal on speed, with the tick gap
 # and the process kill beside it. Measured: level with the reference C lane
 # for lane (0.88-1.05x), but argon2_elixir's default of 4 lanes runs on 4
 # threads and the kernel computes lanes one after another, so at the
@@ -69,7 +69,7 @@
 #     (RFC 7693) on the first n bytes, the round code generated as in
 #     examples/blake.exs.
 #
-# Code size: a kernel call is inlined at each call site (defk-6ag). The
+# Code size: a kernel call is inlined at each call site. The
 # first draft called BLAKE2b's compression at 2 sites per BLAKE2b and
 # BLAKE2b at 3 sites per H', and the generated C was 26.6 MB (clang -O3 had
 # not finished after 10 minutes). One call site per helper (every BLAKE2b
@@ -79,7 +79,7 @@
 #
 # Language notes: when this was written, write-not-returned rejected a helper
 # that writes its array parameter and then rebinds and returns it (fill
-# wrote r[k], then `r = for ..., reduce: r`); defk-3z5 lifted that. The
+# wrote r[k], then `r = for ..., reduce: r`); that restriction has since been lifted. The
 # kernels keep the workaround, at no run-time cost (no copy in the C): the
 # first writes go through a reduce loop over the arrays or a helper that
 # returns them (address_input). The arrays are never copied on
@@ -113,8 +113,8 @@
 # ref.c (about 2.5 GB/s of blocks computed, 3 x 64 MiB in 76 ms); the
 # 4-lane gap is argon2_elixir's 4 threads. Splitting lanes across kernel calls in parallel needs memory
 # several calls write in disjoint parts between sync points, which value
-# semantics does not give (each slice would copy the whole array;
-# defk-52v.17). A burst of 24 hashes at the defaults started at
+# semantics does not give (each slice would copy the whole array).
+# A burst of 24 hashes at the defaults started at
 # once (argon2_elixir on 12 dirty schedulers x 4 threads, kernels on 12
 # normal schedulers): argon2_elixir 235-285 ms, defk 275-589 ms (1.2-2.1x
 # slower, against 3.6-4x for one hash): when every core is busy the lane

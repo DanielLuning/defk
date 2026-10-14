@@ -1,6 +1,6 @@
 # release_debian: a mix release in a stock Debian Elixir image
 
-Evidence for the C-compiler stance (defk-dtw.11, ticket defk-ds0). This is a
+Evidence for the C-compiler stance. This is a
 one-module app (`ReleaseDebian.dot/2`, a defk kernel) that depends on defk as
 a path dep. It is built with `mix release` in a stock hexpm/elixir Debian
 image, and the kernel is called from the release.
@@ -23,7 +23,7 @@ Builder: `hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713-slim`
 
 | `BUILD_PKGS` | Result |
 |---|---|
-| none | Fails. `System.cmd("cc", ...)` raises `ErlangError :enoent` while compiling defk's own `lib/examples.ex`. The error doesn't mention a C compiler (defk-lb8 covers that). Neither the slim nor the full hexpm Debian image ships `cc`, `gcc` or `make`. |
+| none | Fails. `System.cmd("cc", ...)` raises `ErlangError :enoent` while compiling defk's own `lib/examples.ex`. The error doesn't mention a C compiler. Neither the slim nor the full hexpm Debian image ships `cc`, `gcc` or `make`. |
 | `gcc` | Fails. `erl_drv_nif.h:161: fatal error: sys/types.h: No such file or directory`. With `--no-install-recommends`, gcc comes without libc headers. |
 | `gcc libc6-dev` | Works. This is the minimum. |
 | `build-essential` | Works. This is the conventional choice (Phoenix's generated Dockerfile uses it) and the Dockerfile's default. It adds g++, make and dpkg-dev, which defk doesn't need. |
@@ -59,7 +59,7 @@ first build).
 
 ## Findings for the verdict
 
-1. **The kernel `.so` was not part of the release (fixed by defk-n8f).**
+1. **The kernel `.so` was not part of the release (since fixed).**
    `Defk.Build` wrote it to `_build/<env>/defk/` and the generated
    `__defk_load__` loaded that absolute build path, which `mix release` does
    not copy. In a multi-stage image without it, `bin/release_debian start`

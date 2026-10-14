@@ -1,4 +1,4 @@
-# u64 and masked arithmetic up to 64 bits (defk-wlu, decided in defk-dtw.10):
+# u64 and masked arithmetic up to 64 bits:
 # a u64 scalar and [u64] element type; band(expr, 2^k - 1) for k <= 64 with
 # + - * band bor bxor bnot bsl nesting freely inside (wrapping machine
 # arithmetic, Elixir's exact result); the 64-bit mask gives a u64; a u64
@@ -94,7 +94,7 @@ defmodule Defk.U64Test.K do
     end)
   end
 
-  # -- with array accumulators (defk-n4r.10): a u64 accumulator from a
+  # -- with array accumulators: a u64 accumulator from a
   # literal and an array accumulator in one tuple. Both re-lower the loop
   # from saved compiler state: the u64 one when h meets a u64, the array one
   # when the new value (the input `a`) lacks alloc/2's facts

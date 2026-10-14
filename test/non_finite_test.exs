@@ -1,6 +1,6 @@
 # A float operation whose result would be inf or NaN raises ArithmeticError
 # at that operation, as Elixir does; an inf or NaN read from an input array
-# raises ArgumentError at the read (defk-i00, decided in defk-q1c). Every
+# raises ArgumentError at the read. Every
 # case runs in both modes through Defk.Test.assert_agrees.
 
 defmodule Defk.NonFiniteTest.K do
@@ -47,7 +47,7 @@ defmodule Defk.NonFiniteTest.K do
   end
 
   # the non-finite value never reaches the return: an integer compared with
-  # it (defk-t11.2's probe), or an output array element
+  # it, or an output array element
   defk compare(i :: i64, x :: f64, y :: f64) :: bool do
     i > x * y
   end
@@ -142,7 +142,7 @@ defmodule Defk.NonFiniteTest.K do
   end
 
   # flat loops whose only checks are float checks run each strip with a flag
-  # and replay a failed strip with the raising checks (defk-6tt): an
+  # and replay a failed strip with the raising checks: an
   # element-wise map writing its output, a reduce, and two accumulators
   defk scale(a :: [f64], k :: f64) :: [f64] do
     out = alloc(f64, length(a))
@@ -170,7 +170,7 @@ defmodule Defk.NonFiniteTest.K do
 
   # a filter puts the accumulator's update under a branch, where no
   # end-of-strip test covers it: the update keeps its own check in a flagged
-  # strip (defk-zj8). The comparison keeps an inf from the result's check.
+  # strip. The comparison keeps an inf from the result's check.
   defk filtered_sumsq(a :: [f64]) :: bool do
     s =
       for x <- a, x > 0.0, reduce: 0.0 do
@@ -188,8 +188,8 @@ defmodule Defk.NonFiniteTest.K do
   end
 
   # strips that can also fail by i64 overflow (ix[i] * k) and an index out
-  # of bounds (a[j], out[j]) run flagged too, every check setting the flag
-  # (defk-hki): a gather read and a scatter write, whose flagged forms never
+  # of bounds (a[j], out[j]) run flagged too, every check setting the flag:
+  # a gather read and a scatter write, whose flagged forms never
   # touch memory outside the array
   defk gather(a :: [f64], ix :: [i64], k :: i64) :: f64 do
     for i <- 0..(length(ix) - 1)//1, reduce: 0.0 do
@@ -209,7 +209,7 @@ defmodule Defk.NonFiniteTest.K do
 
   # x[j] is proved in bounds from j's facts, but j is assigned in the strip:
   # a strip that also flags an overflow (ix[i] * 2) stays checked, since a
-  # flagged run computes on after a failure (defk-hki)
+  # flagged run computes on after a failure
   defk shifted_sum(x :: [f64], ix :: [i64]) :: f64 do
     n = min(length(x), length(ix))
 
@@ -220,7 +220,7 @@ defmodule Defk.NonFiniteTest.K do
     end
   end
 
-  # sqrt of a value never below 0.0 needs no check (defk-hki); of one that
+  # sqrt of a value never below 0.0 needs no check; of one that
   # may be below it, the check stays
   defk root_clamped(x :: f64) :: f64 do
     sqrt(max(x, 0.0))
@@ -234,7 +234,7 @@ defmodule Defk.NonFiniteTest.K do
     sqrt(max(x, -1.0))
   end
 
-  # an integer-only loop has no float check to flag (defk-60q)
+  # an integer-only loop has no float check to flag
   defk spread(a :: [u8]) :: [u8] do
     out = alloc(u8, 2 * length(a))
 
@@ -387,7 +387,7 @@ defmodule Defk.NonFiniteTest do
   test "float arms compile to a select, a division arm to a branch" do
     c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
     assert c =~ "defk_fmul_s(&"
-    # a division is not speculated (defk-id9)
+    # a division is not speculated
     refute c =~ "defk_fdiv_s(&"
   end
 
@@ -458,7 +458,7 @@ defmodule Defk.NonFiniteTest do
   end
 
   # the update sits under the filter's branch, and the sum's inf never
-  # reaches a return check: only the update's own check can raise (defk-zj8)
+  # reaches a return check: only the update's own check can raise
   test "a filtered accumulator overflowing in a flagged strip raises at the operation" do
     for n <- [100, 2 * @strip + 3], p <- G.strip_positions(n) do
       non_finite(:filtered_sumsq, [with_bad(n, p, 1.0e308, -1.0)])
@@ -469,7 +469,7 @@ defmodule Defk.NonFiniteTest do
     assert {:ok, true} = agrees(:filtered_sumsq, [with_bad(2 * @strip + 3, 5, 1.0e154, -1.0)])
   end
 
-  # Mixed-error strips (defk-hki). Each kind of error is made at one
+  # Mixed-error strips. Each kind of error is made at one
   # iteration by the index ix[i] it reads: an i64 overflow of ix[i] * 2, an
   # index out of bounds (past the end, negative, far away), a NaN input
   # element, and a product overflowing to inf. a holds 0.5 except a NaN at 2

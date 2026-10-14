@@ -29,7 +29,7 @@
 # (`<<k0::little-signed-64, k1::little-signed-64>> = key`). Masked
 # arithmetic: every multiply and add is under wrap64/1, word loads are
 # u64_le/u32_le, and the constants are module attributes. CRC32C uses the
-# crc32c/3 hardware builtin (defk-ulk.4): the CPU's CRC32C instruction where
+# crc32c/3 hardware builtin: the CPU's CRC32C instruction where
 # it has one, a slicing-by-8 table otherwise, picked at run time; three
 # streams run side by side and are joined with a 4 KB shift table computed
 # at compile time. Hashes.CRC32CPortable is the same kernels in a library
@@ -38,8 +38,8 @@
 # the builtin (an 8 KB table attribute).
 # Rotates are not builtins yet: 14 helper kernels rotl1..rotl33 write
 # bor(wrap64(bsl(x, n)), band(bsr(x, 64 - n), 2^n - 1)), one per count,
-# because a bsl by a variable count is checked (defk-52v.6 would make them a
-# builtin). murmur3_128 is a batch of one (a kernel that returns a tuple
+# because a bsl by a variable count is checked (a rotate
+# builtin would replace them). murmur3_128 is a batch of one (a kernel that returns a tuple
 # cannot be called from another kernel), which costs an alloc per call.
 #
 # Agreement, checked on every run: the reference vectors (xxhsum's sanity
@@ -81,7 +81,7 @@
 #             too (the same slicing-by-8 step on three 2 KB sub-binaries,
 #             joined with the shift table): 5.6-6.4 ms against 2.57-2.59
 #             for one chain, so the JIT gains nothing from independent
-#             chains and the baseline stays one chain (defk-ulk.4).
+#             chains and the baseline stays one chain.
 # Not tried: 64-bit arithmetic in 16-bit limbs to stay in small integers
 # (four times the operations; unlikely to close a 90x gap); parallel
 # hashing of the batch across processes (the kernel is single-threaded).
@@ -97,7 +97,7 @@
 #     as expected; at 4 MB the kernel is 1.36x faster (1.33 vs 1.82 ms).
 #     One kernel call per key is 0.085 ms: a kernel call costs ~35 ns more
 #     than siphash's NIF call.
-#   CRC32C 4 MB, with the crc32c/3 builtin (defk-ulk.4; three runs, load
+#   CRC32C 4 MB, with the crc32c/3 builtin (three runs, load
 #     25-40, provisional): Elixir slicing-by-8 2.59-2.65 ms, kernel on the
 #     CRC32C instruction in three streams 0.147-0.165 ms (25-28 GB/s):
 #     17-18x, good. crc32cer 0.134-0.140 ms: the kernel is 0.84-0.91x of
@@ -491,7 +491,7 @@ defmodule Hashes.Kernels do
   # crc32c/1, crc32c_at/3 and crc32c_batch/2 on the crc32c/3 builtin
   use Hashes.CRC32CKernels
 
-  # Without the builtin, as before defk-ulk.4: slicing-by-8 tables for the
+  # Without the builtin, as before it existed: slicing-by-8 tables for the
   # reflected Castagnoli polynomial 0x82F63B78, 8 x 256 u32 little endian,
   # table k at byte 1024 * k, computed when the module compiles
   # (Hashes.Elixir.CRC32C uses the same tables as a tuple)

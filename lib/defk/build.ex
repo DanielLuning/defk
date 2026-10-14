@@ -10,16 +10,16 @@ defmodule Defk.Build do
   # source, the contents of priv/defk_runtime.h, the ERTS version (whose
   # erl_nif.h the library is built against), the resolved compiler (`CC` or
   # "cc") and the first line of its `--version` output, and the sanitizer
-  # mode's flags (`DEFK_SANITIZE`, sanitize/0; defk-96f.1).
+  # mode's flags (`DEFK_SANITIZE`, sanitize/0).
   # -ffp-contract=off: never fuse a*b+c into an FMA, whose single rounding
   # differs from Elixir's in the last bit. Float results must be bit-exact
-  # with Elixir mode, so no -ffast-math or reassociation either (defk-jlk).
-  # Hardening flags (defk-j5n): -fstack-protector-strong, -D_FORTIFY_SOURCE=2,
+  # with Elixir mode, so no -ffast-math or reassociation either.
+  # Hardening flags: -fstack-protector-strong, -D_FORTIFY_SOURCE=2,
   # -fno-strict-overflow. Measured 2026-10-08: 7 interleaved rounds against the
   # unflagged baseline, best-of per round, sum/dot/count_primes/count_primes_early.
   # Worst metric: +1.64% (all three combined, count_primes_early); worst per-flag
   # +1.62% (fno-strict-overflow) — all under the 2% bar. Adopted.
-  # -fno-builtin (defk-6g6): libm calls are never fused or substituted. With
+  # -fno-builtin: libm calls are never fused or substituted. With
   # cos(a) and sin(a) in one loop clang emits one sincos call (Darwin's
   # __sincos_stret, glibc's sincos) whose sin differs from :math.sin in the
   # last bit; -fno-builtin-sin -fno-builtin-cos -fno-builtin-sincos did NOT stop
@@ -35,7 +35,7 @@ defmodule Defk.Build do
   # +2.3% at the very worst, about +1% on the mean of rounds. Adopted.
   @cflags ~w(-O3 -ffp-contract=off -std=gnu11 -fPIC -shared -Wall -Wno-unused-label -Wno-unused-variable -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-strict-overflow -fno-builtin)
 
-  # The sanitizer build mode (defk-96f.1), `DEFK_SANITIZE`: a comma-separated
+  # The sanitizer build mode, `DEFK_SANITIZE`: a comma-separated
   # list of the keys below, appended after @cflags (so they win), plus
   # @sanitize_common. `undefined` stops at the first report
   # (-fno-sanitize-recover), so a test run cannot pass with one; `trap` is
@@ -74,7 +74,7 @@ defmodule Defk.Build do
   end
 
   @doc false
-  # The compiler to run and the arguments it needs first (defk-h30). An
+  # The compiler to run and the arguments it needs first. An
   # explicit CC runs as given. With CC unset, macOS's `cc` is an xcrun shim
   # that looks up the toolchain and the SDK on every call: about 95 ms of a
   # 120 ms kernel compile. So the clang it runs and the SDK it passes are
@@ -180,7 +180,7 @@ defmodule Defk.Build do
   # undefined (only an executable links it in), so the kernel library fails
   # to load: -shared-libsan links the shared runtime instead, as macOS clang
   # and gcc do by default, with an rpath to clang's runtime directory, which
-  # the loader does not search (defk-wfi.10). `trap` has no runtime.
+  # the loader does not search. `trap` has no runtime.
   defp libsan(modes) do
     runtime? = Enum.any?(modes, &(&1 in ["address", "undefined"]))
 
@@ -222,7 +222,7 @@ defmodule Defk.Build do
   defp sanitize_suffix(modes), do: "-san-" <> Enum.join(modes, "+")
 
   @doc """
-  Where the module's library is loaded from at run time (defk-n8f), after
+  Where the module's library is loaded from at run time, after
   `build!/3` built it at `base`.
 
   A module compiled by Mix from its project's `elixirc_paths` (a `.ex` file)
@@ -241,7 +241,7 @@ defmodule Defk.Build do
   file) gets `{:path, base}`: the absolute build path, as before.
 
   In the sanitizer mode (`sanitize/0`) a Mix app's module compiles only when
-  `MIX_BUILD_PATH` is set (defk-96f.1): its `.beam` and its library land in
+  `MIX_BUILD_PATH` is set: its `.beam` and its library land in
   that build path's `ebin/`, never in the normal one, where a sanitized
   library would replace the normal one and a later normal run would load it
   (an ASan library aborts a VM without the ASan runtime, before Mix can
@@ -425,7 +425,7 @@ defmodule Defk.Build do
 
   # The file is kept as its basename: the cached text names the .c of the
   # checkout that built it, which is not this one after a moved project, a
-  # copied _build or a restored CI cache (defk-fr7). The basename carries the
+  # copied _build or a restored CI cache. The basename carries the
   # module and the cache key, so it still names exactly this kernel's C.
   defp parse_remarks(out) do
     for line <- String.split(out, "\n"), [_, file, l, msg, kind] <- [Regex.run(@remark, line)] do
@@ -456,7 +456,7 @@ defmodule Defk.Build do
   @doc """
   Pure cache key: md5 over the cflags, the C source, the runtime header
   contents, the `:erts`, `:cc` and `:cc_version` strings in `env`, and the
-  sanitizer flags in `env[:sanitize]` (defk-96f.1; `[]` or absent for a
+  sanitizer flags in `env[:sanitize]` (`[]` or absent for a
   normal build, which leaves the key as it was before the mode existed).
   Returns the first 10 lowercase hex chars.
   """
@@ -477,7 +477,7 @@ defmodule Defk.Build do
 
   @doc """
   A 64-bit hash of the runtime header, the base of the frame layout tag
-  (`DEFK_LAYOUT_TAG`, defk-ls8): a frame stamped by a different header never
+  (`DEFK_LAYOUT_TAG`): a frame stamped by a different header never
   passes the check.
   """
   @spec header_hash() :: non_neg_integer()

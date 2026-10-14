@@ -1,4 +1,4 @@
-# Arrays are values, as in Elixir (defk-auo): a write `a[i] = v` gives `a`
+# Arrays are values, as in Elixir: a write `a[i] = v` gives `a`
 # a new array, and every other variable keeps what it had. Natively a write
 # is in place unless another binding of the same buffer is read later, or the
 # array is the caller's binary; then the buffer is copied once, before the
@@ -245,8 +245,8 @@ defmodule Defk.ValueSemanticsTest.K do
     {t, @table[i]}
   end
 
-  # A helper call in one branch whose other branch reads the array
-  # (defk-33b): the caller rebinds the array to the result, so the old buffer
+  # A helper call in one branch whose other branch reads the array:
+  # the caller rebinds the array to the result, so the old buffer
   # is not read again and the helper writes in place. Reading it in the other
   # branch, which runs instead, is not a read after the call.
   defk put1(out :: [u8], i :: i64) :: [u8] do
@@ -417,7 +417,7 @@ defmodule Defk.ValueSemanticsTest.K do
   end
 
   # A helper call in one branch whose condition reads the array, and whose
-  # other branch's tail hands it on (defk-tif): the condition ran before the
+  # other branch's tail hands it on: the condition ran before the
   # call, the other branch runs instead of it, and the next iteration reads
   # the helper's result, so the helper writes in place. (`step/1` is below.)
   defk halt_on(n :: i64, m :: i64) :: [i64] do
@@ -546,7 +546,7 @@ defmodule Defk.ValueSemanticsTest.K do
   end
 
   # A loop whose range or initial value reads the array its body writes and
-  # returns (defk-8tw): the first generator's range and the initial value are
+  # returns: the first generator's range and the initial value are
   # evaluated once, before the first iteration, and later iterations read the
   # accumulator, so the array is not copied.
   defk range_bound(n :: i64, r :: i64) :: [i64] do
@@ -704,7 +704,7 @@ defmodule Defk.ValueSemanticsTest.K do
   end
 
   # A helper that writes its array parameter, then binds the name again from
-  # a call or a reduce loop and returns the new binding (defk-3z5): the array
+  # a call or a reduce loop and returns the new binding: the array
   # returned carries the write, so nothing is lost and nothing is copied.
   defk step(a :: [i64]) :: [i64] do
     a[0] = a[0] + 1
@@ -927,7 +927,7 @@ defmodule Defk.ValueSemanticsTest do
     end
   end
 
-  describe "a helper call in one branch (defk-33b)" do
+  describe "a helper call in one branch" do
     @in_branch [:halt_reads, :halt_reads_hoisted, :case_cont, :if_cont, :cond_cont, :for_reduce]
     @still_copied [:outer_in_branch, :read_after_if, :read_after_in_stmt, :alias_in_branch]
 
@@ -972,7 +972,7 @@ defmodule Defk.ValueSemanticsTest do
     end
   end
 
-  describe "a helper call in a branch chosen by reading the array (defk-tif)" do
+  describe "a helper call in a branch chosen by reading the array" do
     @chosen [:halt_on, :halt_on_tuple, :halt_on_cond, :halt_on_case, :halt_on_nested]
     @chosen_copied [:halt_on_alias, :halt_on_outer, :cond_after_arm]
 
@@ -1006,7 +1006,7 @@ defmodule Defk.ValueSemanticsTest do
     end
   end
 
-  describe "a loop whose range or init reads the array it writes (defk-8tw)" do
+  describe "a loop whose range or init reads the array it writes" do
     @once [:range_bound, :range_top, :range_len, :range_step, :range_init, :init_reads]
     @once_copied [:range_old_after, :range_second_gen, :range_walks, :range_filter]
 
@@ -1050,7 +1050,7 @@ defmodule Defk.ValueSemanticsTest do
     end
   end
 
-  describe "a written parameter bound again and returned (defk-3z5)" do
+  describe "a written parameter bound again and returned" do
     @rebound [:rebind_call, :rebind_reduce, :rebind_tuple]
 
     test "is returned, and nothing is copied" do
@@ -1117,7 +1117,7 @@ defmodule Defk.ValueSemanticsTest do
       assert msg =~ "(defk write-not-returned"
     end
 
-    test "a written parameter bound again to a new array (defk-3z5)" do
+    test "a written parameter bound again to a new array" do
       msg =
         compile(__MODULE__, """
           defk g(a :: [i64]) :: [i64] do

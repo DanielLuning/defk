@@ -8,7 +8,7 @@
 # `Simd.Load.variant/3` evaluates one kernel module again under another
 # name, with `CC` set to a wrapper that adds target flags, and with
 # `elixir_mode: true`, so each target build can be checked against Elixir mode.
-# Research tooling for defk-ulk.1 (docs/research/simd.md), not part of defk.
+# Research tooling for the SIMD study (docs/research/simd.md), not part of defk.
 defmodule Simd.Load do
   @root Path.expand("../..", __DIR__)
 

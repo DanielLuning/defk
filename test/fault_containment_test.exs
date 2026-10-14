@@ -1,4 +1,4 @@
-# Fault containment (defk-7dm). A kernel never faults by construction, so a
+# Fault containment. A kernel never faults by construction, so a
 # SIGSEGV, SIGBUS, SIGILL or SIGFPE inside kernel native code is a defk bug.
 # The runtime's per-library signal handler turns such a fault into a
 # RuntimeError for the calling process when the fault is synchronous, a

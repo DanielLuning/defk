@@ -1,5 +1,5 @@
 defmodule Defk.Errors.Diagnostics do
-  # Rejections as the developer sees them (defk-vlf): the CompileError for a
+  # Rejections as the developer sees them: the CompileError for a
   # module, each diagnostic rendered with a source frame, and the location
   # machinery that turns an AST node into line, column and span against the
   # source text. Pure given its arguments; the code registry stays in

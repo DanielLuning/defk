@@ -1,5 +1,5 @@
 defmodule Defk.ReleaseLayoutTest do
-  # Where a kernel's library ships and loads from (defk-n8f): a Mix app's
+  # Where a kernel's library ships and loads from: a Mix app's
   # module loads it from its app's ebin/, wherever the app is at load time, so
   # it travels with `mix release` and a moved _build; anything else loads it
   # from the absolute build path. The subprocess builds in a directory of its
@@ -33,7 +33,7 @@ defmodule Defk.ReleaseLayoutTest do
   # A real Mix app depending on defk, compiled in a subprocess, then moved.
   @tag timeout: 600_000
   test "a compiled app runs from another directory without _build/<env>/defk" do
-    tmp = Path.join(System.tmp_dir!(), "defk-n8f-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "defk-moved-app-#{System.unique_integer([:positive])}")
     app = Path.join(tmp, "app")
     on_exit(fn -> File.rm_rf!(tmp) end)
 

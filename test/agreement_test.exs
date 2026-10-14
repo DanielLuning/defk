@@ -1,4 +1,4 @@
-# Agreement properties for the catalog's kernels (defk-ne6): each kernel
+# Agreement properties for the catalog's kernels: each kernel
 # against its Elixir mode on generated arguments (Defk.Properties). The test
 # files' own kernels have theirs next to them.
 
@@ -53,7 +53,7 @@ defmodule Defk.AgreementTest.Catalog do
   @max 0x7FFFFFFFFFFFFFFF
 
   # Any floats (a sum, square or product that overflows to inf raises at that
-  # operation in both modes, defk-i00), or floats small enough that none
+  # operation in both modes), or floats small enough that none
   # does, so the computed values are compared too.
   defp f64s, do: one_of([G.f64(), G.f64(1.0e100)])
 
@@ -123,7 +123,7 @@ defmodule Defk.AgreementTest.Catalog do
   # overflows, or is rejected before anything is allocated (out of memory
   # from 2^47 bytes, length too large past 2^48), never one a real allocator
   # might grant. A side of 2^31 asked for 8 GiB with a 4-row band and aborted
-  # the VM on an 8 GiB host (defk-bh3), so the products below put the large
+  # the VM on an 8 GiB host, so the products below put the large
   # factor in h.
   @hostile_sides [
     {@max, 2},
@@ -236,8 +236,8 @@ defmodule Defk.AgreementTest.Catalog do
     search_blocking: [args: fuzzy(16), deep: [args: fuzzy(200), max_runs: 1_000]]
   )
 
-  # --- gorilla_encode, lz4_snappy_decode, hashes, hll_update_many, cosine_topk
-  # (defk-30c.2). Their arguments come from Defk.CatalogGenerators: the stock
+  # --- gorilla_encode, lz4_snappy_decode, hashes, hll_update_many, cosine_topk.
+  # Their arguments come from Defk.CatalogGenerators: the stock
   # generators draw noise that the kernels reject at the first check, or sizes
   # that make a run last minutes.
 

@@ -1,4 +1,4 @@
-# The Linux CI machine for local runs (defk-wfi.2): the workflow's job
+# The Linux CI machine for local runs: the workflow's job
 # container with ci/setup-debian.sh already applied, so a local run skips
 # the apt step. ci/local.sh builds it per architecture with the image tag
 # it reads from .github/workflows/ci.yml.

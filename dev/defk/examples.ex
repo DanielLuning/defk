@@ -1,6 +1,6 @@
 defmodule Defk.Examples do
   @moduledoc false
-  # What `mix defk.examples` does (defk-30c.3): choose the examples, run each
+  # What `mix defk.examples` does: choose the examples, run each
   # in its own OS process, and judge the outcome. Dev tooling, compiled only
   # in :dev and :test (see `elixirc_paths/1` in mix.exs and the layout note in
   # `Mix.Tasks.Defk.Examples`), never part of the package.
@@ -63,7 +63,7 @@ defmodule Defk.Examples do
   end
 
   @doc """
-  Where `--bench` keeps its result cache (`Defk.Bench.Cache`, defk-30c.5):
+  Where `--bench` keeps its result cache (`Defk.Bench.Cache`):
   outside git, one file per example script.
   """
   def bench_cache_dir, do: Path.join(Mix.Project.build_path(), "defk_bench")

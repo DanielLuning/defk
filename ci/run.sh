@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The CI work for one matrix entry (defk-wfi.2): `mix ci`, then a result
+# The CI work for one matrix entry: `mix ci`, then a result
 # file. Every CI path calls this script: the GitHub Actions workflow, act
 # and the podman fallback (ci/local.sh). It installs nothing: the caller
 # provides Erlang/OTP, Elixir with Hex, git and a C compiler (CC, default cc).
