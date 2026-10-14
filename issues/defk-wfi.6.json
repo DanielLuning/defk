@@ -3,6 +3,7 @@
   "blocked_by": [
     "defk-a1p",
     "defk-wfi.10",
+    "defk-wfi.11",
     "defk-wfi.2",
     "defk-wfi.4",
     "defk-wfi.5",
@@ -22,5 +23,5 @@
   "status": "open",
   "title": "Release-readiness check for 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-14T16:00:14Z"
+  "updated_at": "2026-10-14T18:39:28Z"
 }
