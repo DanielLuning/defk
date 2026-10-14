@@ -371,12 +371,16 @@ defmodule Defk.SanitizeTest do
         arch =
           :erlang.system_info(:system_architecture) |> to_string() |> String.split("-") |> hd()
 
+        # the compiler's own runtime, which its library needs (clang finds
+        # gcc's libasan.so too, and two ASan runtimes cannot share a process;
+        # defk-wfi.10)
+        name =
+          if Defk.Build.clang?(), do: "libclang_rt.asan-#{arch}.so", else: "libasan.so"
+
         # a name the compiler does not know comes back as it is, not as a path
-        lib =
-          ["libasan.so", "libclang_rt.asan-#{arch}.so"]
-          |> Enum.map(fn name -> System.cmd(cc, ["-print-file-name=#{name}"]) end)
-          |> Enum.map(fn {path, 0} -> String.trim(path) end)
-          |> Enum.find(&(Path.type(&1) == :absolute))
+        {path, 0} = System.cmd(cc, ["-print-file-name=#{name}"])
+        lib = String.trim(path)
+        assert Path.type(lib) == :absolute, "#{cc} has no #{name}"
 
         {"LD_PRELOAD", lib}
     end
