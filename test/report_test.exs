@@ -235,14 +235,25 @@ defmodule Defk.ReportTest do
   describe "report: :full" do
     @describetag :clang
 
-    test "dot's hot loop vectorises" do
-      assert [{:vectorize, :vectorized, why}] =
+    # an in-order float reduction: arm64 vectorises it as an ordered
+    # reduction, x86-64 keeps it scalar (docs/performance.md 6.17; defk-wfi.9)
+    test "dot's hot loop: vectorised on arm64, missed with the reason on x86-64" do
+      assert [{:vectorize, result, why}] =
                for(
                  {:vectorize, _, _} = f <- facts(Full, {:dot, 2}, "for i <- 0..(n - 1)//1"),
                  do: f
                )
 
-      assert why =~ "width"
+      case :erlang.system_info(:system_architecture) |> to_string() do
+        "x86_64" <> _ ->
+          assert result == :missed
+          assert why =~ "reorder floating-point"
+
+        _arm64 ->
+          assert result == :vectorized
+          assert why =~ "width"
+      end
+
       refute Enum.any?(kernel_facts(Full, {:dot, 2}), &match?({:bounds, :kept, _}, &1))
     end
 
@@ -299,7 +310,8 @@ defmodule Defk.ReportTest do
       moved_report = Defk.Report.full(bare, src, moved)
 
       assert moved_report == Full.__defk_report__()
-      assert Enum.any?(moved_report, &match?({_, _, {:vectorize, :vectorized, _}}, &1))
+      # a fact from the remarks, whichever the target's result (defk-wfi.9)
+      assert Enum.any?(moved_report, &match?({_, _, {:vectorize, _, _}}, &1))
     end
   end
 
