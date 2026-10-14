@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-wfi.6"
+  ],
   "created": "2026-10-14T16:00:08Z",
   "description": "Found by defk-wfi.7, 2026-10-14, running the :sanitize tests on Linux for the first time.\n\nProblem: with CC=clang (Debian clang 19.1.7, linux aarch64) and DEFK_SANITIZE=undefined, the kernel library fails to load: 'undefined symbol: __ubsan_handle_function_type_mismatch_abort'. On Linux, clang does not link the UBSan runtime into a shared object (macOS clang links its dylib runtime; gcc on Linux adds libubsan as a needed library, and its undefined mode passes).\n\nSeen as: mix test test/sanitize_test.exs --include sanitize, test 'undefined: builds, loads its runtime itself, and the kernel runs' fails with CC=clang in the defk-ci:aarch64 image; 13/14 pass. The :sanitize tests are excluded by default, so CI does not show it.\n\nSuspects/fix: add -shared-libsan for clang on Linux in Defk.Build's sanitizer flags (links libclang_rt.ubsan_standalone dynamically), or preload the runtime. Check the address mode too keeps passing (it does today, with LD_PRELOAD of libclang_rt.asan).\n\nDone when: the undefined test passes with clang and gcc on Linux and on macOS.",
   "id": "defk-wfi.10",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "[BUG] Sanitizer undefined mode with clang on Linux: the kernel library does not load",
   "type": "bug",
-  "updated_at": "2026-10-14T16:00:08Z"
+  "updated_at": "2026-10-14T16:00:14Z"
 }
