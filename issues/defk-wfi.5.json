@@ -12,8 +12,8 @@
   ],
   "parent": "defk-wfi",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Triage: which open tickets block 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-14T19:59:18Z"
+  "updated_at": "2026-10-14T19:59:19Z"
 }
