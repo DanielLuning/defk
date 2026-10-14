@@ -5,11 +5,13 @@
   "created": "2026-10-14T13:17:50Z",
   "description": "## Question\n\nWrite the stability promise as the HexDocs guide docs/guides/stability.md, with links from the README and from docs/guides/runtime-contract.md. HITL: the maintainer reviews the text.\n\nDecided on the map 'Wayfinder: defk ready for a first Hex release' (2026-10-14):\n- The first release is 0.1.0. The promise is stricter than SemVer 0.x for its four surfaces.\n- Surfaces: the kernel subset, the runtime contract, the public tier of ADR-0006, the error codes.\n- Excluded: performance figures, fast-path report facts, the generated C, the unstable and hidden tiers.\n- A minor release can add constructs (a compile error may become a valid kernel). It cannot change the result of a valid kernel, and it cannot make a valid kernel fail to compile.\n- The names are those after the rename review.\n\nConsider an ADR for the promise (hard to reverse, surprising, a real trade-off).\n\nDone when: the guide is merged, linked, and in the HexDocs extras.",
   "id": "defk-wfi.4",
-  "labels": [],
+  "labels": [
+    "wayfinder:task"
+  ],
   "parent": "defk-wfi",
   "priority": 2,
   "status": "open",
   "title": "Write the stability promise",
   "type": "task",
-  "updated_at": "2026-10-14T13:17:50Z"
+  "updated_at": "2026-10-14T13:17:59Z"
 }
