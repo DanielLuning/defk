@@ -1,7 +1,8 @@
 defmodule Defk.ScopeDocTest do
   # docs/scope.md, the scope page: its two lists of compile errors are the
   # registry's text (Defk.Errors.scope/1), the hand-written "Not yet" list
-  # names every planned code with a ticket, the hand-written "Won't be" list
+  # names every planned code (its tickets live in the tracker, not on this
+  # user page), the hand-written "Won't be" list
   # names only codes outside the subset for good. Its links are checked in
   # test/docs_checks_test.exs, and its example kernel runs in
   # test/language_doc_examples_test.exs.
@@ -36,14 +37,6 @@ defmodule Defk.ScopeDocTest do
 
   defp codes(kind), do: for(%{kind: ^kind, code: code} <- Defk.Errors.entries(), do: code)
 
-  # top-level bullets, each with its continuation lines
-  defp bullets(text) do
-    text
-    |> String.split(~r/^- /m)
-    |> Enum.drop(1)
-    |> Enum.map(fn b -> b |> String.split(~r/\n\n/, parts: 2) |> hd() end)
-  end
-
   # the generated list of a section: from the blank line after "Every compile
   # error the compiler marks ..." to the next blank line
   defp generated(doc, title) do
@@ -64,15 +57,9 @@ defmodule Defk.ScopeDocTest do
     end
   end
 
-  test "\"Not yet\" names every planned code, and each planned item its ticket", %{doc: doc} do
+  test "\"Not yet\" names every planned code", %{doc: doc} do
     text = hand_written(doc, "Not yet: planned")
     assert Enum.sort(Enum.uniq(codes_linked(text))) == Enum.sort(codes(:planned))
-
-    [planned | _] = String.split(text, "\nUnder exploration", parts: 2)
-
-    for b <- bullets(planned) do
-      assert b =~ ~r/\(defk-[a-z0-9]+(\.\d+)?[,)]/, "no ticket in: - #{b}"
-    end
   end
 
   test "\"Won't be\" names only codes outside the subset for good", %{doc: doc} do

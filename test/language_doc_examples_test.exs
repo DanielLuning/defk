@@ -1,15 +1,17 @@
 defmodule Defk.LanguageDocExamplesTest do
   # Every example in every extra of the docs config (Defk.LanguageDoc.extras/0:
-  # README.md, the guides, docs/language.md, ...) runs (Defk.LanguageDoc has the
-  # conventions; a page opts a fragment out with a skip: annotation). Kernels
-  # with iex> lines run in native code and Elixir mode, agree, and give the
-  # documented results; rejected examples fail with their error code; an
-  # unannotated kernel block fails.
+  # README.md, the guides, docs/language.md, ...) runs, and so does every
+  # example in docs/performance.md, which is not an extra but a page people
+  # copy kernels from (Defk.LanguageDoc has the conventions; a page opts a
+  # fragment out with a skip: annotation). Kernels with iex> lines run in
+  # native code and Elixir mode, agree, and give the documented results;
+  # rejected examples fail with their error code; an unannotated kernel block
+  # fails.
   use ExUnit.Case, async: true
 
   alias Defk.LanguageDoc
 
-  @doc_paths Defk.LanguageDoc.extras()
+  @doc_paths Defk.LanguageDoc.extras() ++ ["docs/performance.md"]
   for path <- @doc_paths, do: @external_resource(path)
 
   # {doc path, example}; examples of different pages are told apart by path,

@@ -108,6 +108,11 @@ defmodule Defk.MixProject do
   # table, design decisions, results snapshot, roadmap with ticket ids,
   # tracker notes) moved to docs/project.md, which is not an extra; README
   # links it by its GitHub URL.
+  #
+  # Choice (defk-djy.19): the extras are for users, so they carry no ticket
+  # ids and no ADR references (test/docs_checks_test.exs checks it).
+  # docs/performance.md is a maintainers' record with a source line per
+  # entry: it left the extras, and the pages link it by its GitHub URL.
   @guides [
     "README.md",
     "docs/guides/getting-started.md",
@@ -116,8 +121,7 @@ defmodule Defk.MixProject do
     "docs/guides/runtime-contract.md",
     "docs/guides/deploying.md",
     "docs/guides/stability.md",
-    "docs/scope.md",
-    "docs/performance.md"
+    "docs/scope.md"
   ]
   @reference ["docs/language.md", "docs/compile-errors.md", "docs/guides/cheatsheet.cheatmd"]
 

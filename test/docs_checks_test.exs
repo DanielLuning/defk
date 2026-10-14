@@ -7,6 +7,7 @@ defmodule Defk.DocsChecksTest do
   #   - every module with `iex>` in its docs has a `doctest` call in the suite
   #   - every error code has an example and a rewrite
   #   - every public function of a documented module has a @doc
+  #   - no extra names a ticket or an ADR: they are for users (defk-djy.19)
   use ExUnit.Case, async: true
 
   alias Defk.LanguageDoc
@@ -25,9 +26,10 @@ defmodule Defk.DocsChecksTest do
   # ----------------------------------------------------------------- links --
 
   describe "links" do
+    # docs/performance.md is not an extra, but the extras link it
     test "every relative link in an extra resolves to a file and, where it names one, a heading" do
       broken =
-        for page <- LanguageDoc.extras(),
+        for page <- LanguageDoc.extras() ++ ["docs/performance.md"],
             target <- page |> File.read!() |> LanguageDoc.links(),
             reason = broken_link(page, target),
             do: "#{page}: (#{target}) #{reason}"
@@ -64,6 +66,27 @@ defmodule Defk.DocsChecksTest do
       assert Defk.MixProject.hexdocs_link("../../examples/_template.exs") == :error
     end
 
+    # a ticket id (defk-xyz, defk-xyz.3) or an ADR is for someone developing
+    # defk; the user's pages say what it stands for instead
+    test "no extra names a ticket or an ADR" do
+      found =
+        for page <- LanguageDoc.extras(),
+            {line, n} <- page |> File.read!() |> String.split("\n") |> Enum.with_index(1),
+            maintainer_ref?(line),
+            do: "#{page}:#{n}: #{String.trim(line)}"
+
+      assert found == [], Enum.join(["ticket or ADR references in the extras:" | found], "\n  ")
+    end
+
+    test "the reference check catches a ticket id and an ADR, not the example markers" do
+      assert maintainer_ref?("as decided (defk-wfi.3)")
+      assert maintainer_ref?("see `defk-04y`")
+      assert maintainer_ref?("[ADR 0002](https://github.com/x/docs/adr/0002-c.md)")
+      assert maintainer_ref?("ADR-0006 lists the tiers")
+      refute maintainer_ref?("<!-- defk-example error: unsupported-call -->")
+      refute maintainer_ref?("_build/test/defk/Elixir.M-1a2b3c4d5e.so")
+    end
+
     test "the link checker catches a missing file, a missing anchor and a stale repo link" do
       page = "README.md"
       assert broken_link(page, "docs/no-such-page.md") =~ "no such file"
@@ -74,6 +97,10 @@ defmodule Defk.DocsChecksTest do
       assert broken_link(page, "https://hexdocs.pm/elixir") == nil
     end
   end
+
+  # a beadwork id, or an ADR by number or by its path in docs/adr/
+  defp maintainer_ref?(line),
+    do: line =~ ~r/\bdefk-[a-z0-9]{3}(\.\d+)?\b|\bADR[- ]?\d|docs\/adr\//
 
   # nil, or why `target`, linked from `page`, is broken
   defp broken_link(_, @repo_url <> path), do: check_file(path, nil)
