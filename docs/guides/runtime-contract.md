@@ -47,8 +47,8 @@ yielding kernel's function checks whether any processes are waiting
 so, yields every 50 µs instead of 250 µs for the call's first millisecond.
 A lone call is unchanged. 48 calls of 0.65 ms under `Task.async_stream/3`
 went from 3 schedulers and 13.6 ms to 10-11 schedulers and 5.6-5.7 ms
-(`defk-04y`; see
-[Parallelism and schedulers](../performance.md#4-parallelism-and-schedulers)).
+(see
+[Parallelism and schedulers](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#4-parallelism-and-schedulers)).
 `use Defk, adaptive_slice: false` turns this off. `+swt very_low` spreads
 such calls further.
 
@@ -88,8 +88,9 @@ What a kernel cannot do to the VM, because the kernel subset has no way to
 say it: build or read BEAM terms other than its arguments and result, send
 or receive messages, call Elixir or Erlang functions, do I/O, or keep native
 state between calls. State travels as values, binaries in and new binaries
-out ([ADR 0001](https://github.com/DanielLuning/defk/blob/main/docs/adr/0001-state-travels-as-binaries.md));
-kernel-owned state is being explored in ticket `defk-sve`.
+out: a kernel that keeps a sketch or a decoder's state takes it as a binary
+and returns the new one. State that a kernel owns across calls may come
+later; it is being explored.
 
 **A fault in kernel code is an exception too.** A crash in a kernel's
 native code, such as a segmentation fault, would be a bug in defk's compiler

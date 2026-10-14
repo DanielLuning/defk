@@ -32,9 +32,10 @@ the runtime header, the compiler flags, the ERTS version and the compiler, so
 a CI cache of `_build` skips unchanged kernels. A module of your app also
 gets a copy of its library in the app's `ebin/` (next section).
 
-Why defk compiles C at build time, rather than shipping precompiled code or
-compiling at run time, is recorded in
-[ADR 0002](https://github.com/DanielLuning/defk/blob/main/docs/adr/0002-c-compiler-at-build-time.md).
+defk compiles C at build time, rather than shipping precompiled code or
+compiling at run time, for the same reason `elixir_make` packages do: the
+kernel is specialised to your code and optimised by your C compiler, and the
+running system needs nothing extra.
 
 ## Where defk is tested
 
@@ -189,7 +190,6 @@ defk itself is not on Hex; a release waits for the project's verdict. A
 library with kernels would today make every app that depends on it compile
 them, so every build machine would need a C compiler. Precompiled libraries,
 built per target in CI and downloaded by hash as `rustler_precompiled` and
-`cc_precompiler` do, are the way out the project has named
-([ADR 0002](https://github.com/DanielLuning/defk/blob/main/docs/adr/0002-c-compiler-at-build-time.md)),
-but nothing is built for it yet. The [scope page](../scope.md) tracks what
+`cc_precompiler` do, are the way out the project has named, but nothing is
+built for it yet. The [scope page](../scope.md) tracks what
 is planned.
