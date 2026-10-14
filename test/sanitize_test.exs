@@ -257,12 +257,11 @@ defmodule Defk.SanitizeTest do
     # wrapper, on the stock emulator with the ASan runtime inserted and
     # +Mea min (docs/research/c-verification-macos.md §1). ERTS's
     # CHICKEN_PAD slack hides it unless the runtime header poisons it: the
-    # control run builds the same planted kernel without the poisoning.
+    # control run builds the same planted kernel without the poisoning. On
+    # Linux the ASan runtime is the C compiler's own: gcc's libasan or
+    # clang's libclang_rt.asan (defk-wfi.7: gcc has no allocator_interface.h).
     @tag timeout: 300_000
     test "address: a planted 1-byte overrun of an alloc/2 result is reported", %{tmp: tmp} do
-      if :os.type() != {:unix, :darwin},
-        do: flunk("this test inserts Apple clang's ASan runtime: macOS only")
-
       flip = run_flip(tmp, plant: false)
       assert flip.status == 0, flip.out
       assert flip.out =~ "n=101: 101 bytes, first 254, last 254"
@@ -273,9 +272,10 @@ defmodule Defk.SanitizeTest do
       assert planted.out =~ "WRITE of size 1"
 
       assert planted.out =~
-               ~r/in run_k0_flip Elixir\.SanFlip-[0-9a-f]{10}-san-address\.planted\.c/
+               ~r/in run_k0_flip \S*Elixir\.SanFlip-[0-9a-f]{10}-san-address\.planted\.c/
 
-      assert planted.out =~ "in defk_own_raw defk_runtime.h"
+      # macOS prints the file's name, Linux its path
+      assert planted.out =~ ~r/in defk_own_raw \S*defk_runtime\.h/
 
       control = run_flip(tmp, plant: true, poison: false)
       assert control.status == 0, control.out
@@ -319,21 +319,22 @@ defmodule Defk.SanitizeTest do
 
     extra = if opts[:poison] == false, do: "-UDEFK_SANITIZE_ADDRESS", else: ""
 
+    cc = System.get_env("CC", "cc")
+
     File.write!(wrapper, """
     #!/bin/bash
-    if [ "$1" = "--version" ]; then exec cc --version; fi
+    if [ "$1" = "--version" ]; then exec #{cc} --version; fi
     out=()
     for a in "$@"; do
       if [[ -n '#{plant}' && "$a" == */Elixir.SanFlip-*.c ]]; then
         p="${a%.c}.planted.c"; sed -e '#{plant}' "$a" > "$p"; out+=("$p")
       else out+=("$a"); fi
     done
-    exec cc "${out[@]}" #{extra}
+    exec #{cc} "${out[@]}" #{extra}
     """)
 
     File.chmod!(wrapper, 0o755)
-    {resource, 0} = System.cmd("cc", ["-print-resource-dir"])
-    asan = Path.join(String.trim(resource), "lib/darwin/libclang_rt.asan_osx_dynamic.dylib")
+    {var, asan} = asan_runtime(cc)
     assert File.exists?(asan)
 
     {out, status} =
@@ -345,11 +346,39 @@ defmodule Defk.SanitizeTest do
           {"DEFK_SANITIZE", "address"},
           {"TMPDIR", dir},
           {"MIX_BUILD_PATH", nil},
-          {"ERL_AFLAGS", "-env DYLD_INSERT_LIBRARIES #{asan} +Mea min"}
+          # LeakSanitizer (on by default on Linux) reports the VM's own
+          # allocations at exit
+          {"ASAN_OPTIONS", "detect_leaks=0"},
+          {"ERL_AFLAGS", "-env #{var} #{asan} +Mea min"}
         ],
         stderr_to_stdout: true
       )
 
     %{out: out, status: status}
+  end
+
+  # The ASan runtime of the C compiler `cc`, and how to insert it into a VM
+  # that was not built with it
+  defp asan_runtime(cc) do
+    case :os.type() do
+      {:unix, :darwin} ->
+        {resource, 0} = System.cmd(cc, ["-print-resource-dir"])
+
+        {"DYLD_INSERT_LIBRARIES",
+         Path.join(String.trim(resource), "lib/darwin/libclang_rt.asan_osx_dynamic.dylib")}
+
+      _linux ->
+        arch =
+          :erlang.system_info(:system_architecture) |> to_string() |> String.split("-") |> hd()
+
+        # a name the compiler does not know comes back as it is, not as a path
+        lib =
+          ["libasan.so", "libclang_rt.asan-#{arch}.so"]
+          |> Enum.map(fn name -> System.cmd(cc, ["-print-file-name=#{name}"]) end)
+          |> Enum.map(fn {path, 0} -> String.trim(path) end)
+          |> Enum.find(&(Path.type(&1) == :absolute))
+
+        {"LD_PRELOAD", lib}
+    end
   end
 end
