@@ -133,6 +133,8 @@ defmodule Defk.BenchCacheTest do
   end
 
   test "the key covers the loaded kernel modules" do
+    # loaded by an earlier test in most orders only
+    Code.ensure_loaded!(Examples.Kernels)
     parts = Cache.key_parts("t", "t", __ENV__.file)
     assert Map.has_key?(parts.kernels, Examples.Kernels)
     assert parts.build == Defk.Build.cache_key("")
