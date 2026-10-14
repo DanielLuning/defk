@@ -2089,6 +2089,65 @@ C compiler keeps them in registers, and some are saved at safepoints.
   [`test/evaluation_order_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/evaluation_order_test.exs).
 - **Status:** provisional.
 
+### 6.31 Linux x86-64: the catalog keeps its verdicts but two, on a 2-vCPU runner
+
+The whole catalog, timed once on Linux x86-64 (`mix defk.examples --bench
+--all --snapshot --fresh`, through `ci/measure.sh`). 29 of 31 examples gave
+the verdict they claim. Two gave a better one than on macOS:
+
+- `hash_chain` (10M SHA-256 steps): 0.98x, **marginal** (macOS 0.55x,
+  poor). Per step, `:crypto` takes 118 ns here and 95 ns on the Mac; the
+  kernel's portable SHA-256 takes 121 ns here and 174 ns on the Mac.
+- `batched_levenshtein`: 3.76x, **good** (macOS 1.73x, marginal). The
+  runner's word list (Debian `wamerican`) has 73,445 words, the Mac's
+  234,454, and the runner has 2 cores where the Mac's chunked Elixir side
+  uses 12. Not the same job: no verdict change follows from it.
+
+- **Numbers** (speedup over Elixir, Linux / macOS from `docs/verdict.md`):
+
+  | Example | Linux | macOS | Example | Linux | macOS |
+  |---|---|---|---|---|---|
+  | hashes (xxHash64) | 200.0x | 208.8x | per_pair_distance | 4.85x | 4.03x |
+  | fft | 64.8x | 73.4x | geo_nearest | 4.36x | 3.32x |
+  | cdcl_sat | 33.2x | 12.9x | monte_carlo_rtp | 4.50x | 2.96x |
+  | matmul | 31.9x | 18.6x | cdcl_sat_per_call | 2.63x | 2.79x |
+  | blake (BLAKE2b) | 23.6x | 32.1x | gorilla_encode | 2.12x | 2.4x |
+  | cosine_topk | 17.4x | 12.7x | utf8_valid | 1.34x | 1.05x |
+  | image_resize | 17.1x | 13.6x | ws_masking | 1.27x | 1.01x |
+  | byte_histogram | 13.2x | 7.78x | poor_substring_search | 1.18x | 1.1x |
+  | hll_update_many | 12.4x | 10.1x | argon2 | 0.76x | 0.25x |
+  | rolling_stats | 11.2x | 10.7x | poor_tiny_calls | 0.37x | 0.28x |
+  | image_blur | 10.8x | 7.29x | poor_list_data | 0.12x | 0.08x |
+  | geohash (encode) | 8.62x | 10.7x | hash_chain | 0.98x | 0.55x |
+  | sort_u64_keys (packed) | 6.47x | 6.15x | batched_levenshtein | 3.76x | 1.73x |
+  | codecs (base64) | 6.29x | 6.87x | | | |
+  | keccak | 5.96x | 6.97x | | | |
+  | pcm_mix | 5.65x | 8.56x | | | |
+  | lz4_snappy_decode (Snappy) | 5.40x | 5.03x | | | |
+
+- **Against the native packages:** `cosine_topk` is 0.62x of vettore here
+  and 3.13x on the Mac: the kernel's in-order float sum does not vectorise
+  on x86-64 (6.17), and the package's own build does. `blake` is 0.95x of
+  blake2_elixir (1.02x), `keccak` 0.59x of ex_keccak (0.64x), `hll` 7.04x
+  of ex_data_sketch (7.33x).
+- **Speedups are not the Mac's.** The runner has 2 cores and the Mac 12, so
+  every example that splits its work into chunks runs both sides on fewer
+  schedulers. In the rows that grew most, the Elixir side lost more than the
+  kernel: `cdcl_sat` Elixir 3.5x slower than on the Mac, the kernel 1.3x;
+  `byte_histogram` 7.3x and 4.3x; `matmul` Elixir 1.55x slower, the kernel
+  1.1x faster. `argon2` rose from 0.25x to 0.76x because its comparison
+  side, argon2_elixir's C, runs its four lanes on threads, and 2 cores run
+  fewer of them at once (18 ms on the Mac, 74 ms here).
+- **Conditions:** GitHub Actions `ubuntu-24.04` runner (a shared VM), AMD
+  EPYC 9V45, 2 vCPUs, Debian trixie container
+  (`hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713`), Debian
+  clang 19.1.7, OTP 29.0.3, Elixir 1.20.2, commit `4d7f6ba`,
+  2026-10-14. Load 1.77 before, 1.46 after (on 2 cores): not a quiet
+  machine. Best of 5 per side, with the spread in the run's log; one run.
+- **Source:** `defk-a1p`, the workflow `.github/workflows/measure.yml`
+  (run 38608036908; its log is an artifact for 90 days), `ci/measure.sh`.
+- **Status:** provisional (a shared VM with 2 cores, one run).
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -2356,8 +2415,9 @@ output array would).
   (`sort_u64_keys`); 64-bit hashes in 16-bit limbs in Elixir (`hashes`);
   EXLA for matmul
   (`defk-7tk`); libvips for the image jobs; x86-64 timings at the target
-  levels (`defk-ulk.1`, remarks only so far); Linux (every number here is macOS
-  on arm64).
+  levels (`defk-ulk.1`, remarks only so far); Linux on a quiet machine with
+  more than 2 cores (every number here is macOS on arm64, except 6.31: one
+  run on a 2-vCPU Linux x86-64 runner).
 - **Quiet-machine snapshot.** Most provisional entries wait for `defk-sgw.4`.
 - **Tie band.** Verdicts at 1.0x and 2x flip with noise until `defk-9p6.24` lands.
 
