@@ -75,7 +75,7 @@ defmodule Defk.Report do
   below `length(a)` and `length(b)`. `Defk.Report.print(MyApp.Dot)` shows the
   same notes beside the source lines. When a kernel is slower than you
   expect, [Measuring](measuring.md#5-explain-the-number) and
-  [Making a defk kernel fast](performance.md#6-making-a-defk-kernel-fast)
+  [Making a defk kernel fast](https://github.com/DanielLuning/defk/blob/main/docs/performance.md#6-making-a-defk-kernel-fast)
   say what to do with them.
   """
 

@@ -66,8 +66,9 @@ enough work to pay for the call: rolling statistics, nearest-neighbour
 search, image filters, FFT and convolution, non-cryptographic hashes, codecs
 such as base64, and similar numeric or byte-level jobs. Most of the numbers
 behind this list were measured on a loaded machine and are provisional until
-a quiet-machine run (defk-sgw.4);
-[Performance on the BEAM](performance.md) gives each figure with its status.
+a quiet-machine run;
+[Performance on the BEAM](https://github.com/DanielLuning/defk/blob/main/docs/performance.md)
+gives each figure with its status.
 A provisional win is a reason to measure your own job
 ([Measuring](guides/measuring.md)), not a promise.
 
@@ -115,26 +116,23 @@ says, for each, what would change that.
 
 ## Not yet: planned
 
-Each planned item has a ticket in the project's issue tracker (beadwork,
-`bw show <id>`). Constructs the compiler rejects as planned say "not supported
-yet" in the compile error.
+Constructs the compiler rejects as planned say "not supported yet" in the
+compile error. Under the [stability promise](guides/stability.md), each can
+arrive in a minor release.
 
 - `Enum.reduce/3`, and `Enum.find/2` and `Enum.find_index/2` in a form that
-  keeps their meaning without `nil` (defk-nii):
+  keeps their meaning without `nil`:
   [`enum-reduce`](compile-errors.md#enum-reduce),
   [`enum-find`](compile-errors.md#enum-find).
 - More bitstring accumulator segments (little-endian, float, binary) and
-  reading a bitstring, when a workload needs them (defk-pe3):
+  reading a bitstring, when a workload needs them:
   [`bitstring-segment`](compile-errors.md#bitstring-segment),
   [`bitstring-use`](compile-errors.md#bitstring-use).
-- Sub-array views: `slice(a, start, len)` as an array without a copy
-  (defk-n4r.3).
-- `u64` values in 64-bit bitstring segments (defk-oit).
+- Sub-array views: `slice(a, start, len)` as an array without a copy.
+- `u64` values in 64-bit bitstring segments.
 - SIMD and builds for a specific CPU: research and prototypes first, then
   how to choose between a portable build and a faster one for one
-  architecture (defk-ulk).
-- A Hex release, which waits for the project's verdict (defk-sgw.5,
-  defk-djy.8).
+  architecture.
 
 Every compile error the compiler marks as planned:
 
@@ -147,8 +145,8 @@ Every compile error the compiler marks as planned:
 
 These are being looked at, with no commitment to build them:
 
-- Kernel-owned state that lives between calls and is changed in place
-  (defk-sve). Today state travels as values: pass it in as a binary and
+- Kernel-owned state that lives between calls and is changed in place.
+  Today state travels as values: pass it in as a binary and
   return the updated one (see
   [Array accumulators](language.md#array-accumulators)).
 
@@ -194,7 +192,7 @@ good say "not in the kernel subset" in the compile error.
   compiler proving an index in range, never from trusting the author. Raw
   CPU intrinsics in kernel source are out too: they are not portable, Elixir
   mode cannot run them, and their loads are not checked (a constraint the
-  SIMD work, defk-ulk, keeps).
+  SIMD work keeps).
 - **Wrapping integers by default.** `i64` and `u64` arithmetic raises on
   overflow where Elixir would give a bignum. Wrapping is written explicitly,
   as [masked arithmetic](language.md#masked-arithmetic), which still gives
