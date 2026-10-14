@@ -1,4 +1,4 @@
-# Early loop exit (Enum.reduce_while, Enum.all?/any?) and `case` (defk-9vl).
+# Early loop exit (Enum.reduce_while, Enum.all?/any?) and `case`.
 # Most kernels are written once by `twin`, which defines the kernel, its
 # `yield: false` form (`_nb`) and the same body as a plain Elixir function
 # (`ex_`), so every result and exit point is compared with Elixir itself.
@@ -452,7 +452,7 @@ defmodule Defk.EarlyExitTest do
   end
 
   # ---------------------------------------------------- agreement properties --
-  # Every kernel here against its Elixir mode (defk-ne6). Trip counts are
+  # Every kernel here against its Elixir mode. Trip counts are
   # bounded, except where the loop stops early for every i64 (first_div,
   # prime?, classify_until stop within a few thousand steps on every edge
   # value); the i64 maximum stays in as an edge, since its range raises

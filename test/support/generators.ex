@@ -1,6 +1,6 @@
 defmodule Defk.Generators do
   @moduledoc false
-  # Edge-biased generators for kernel arguments (defk-63k, defk-ne6). Each
+  # Edge-biased generators for kernel arguments. Each
   # mixes uniform draws with a fixed set of values where native code and
   # Elixir most plausibly part ways: the i64 limits and their neighbours,
   # the points where a double stops holding every integer (2^53) or any i64
@@ -115,7 +115,7 @@ defmodule Defk.Generators do
     over = div(@max_alloc_bytes, esz)
     # 2^47 bytes: out of memory without trying; one element less: past any
     # host's max_owned_bytes (half of physical memory by default), so both modes
-    # raise the budget's out of memory before allocating (defk-bh3)
+    # raise the budget's out of memory before allocating
     no_alloc = div(@no_alloc_bytes, esz)
 
     safe =
@@ -146,7 +146,7 @@ defmodule Defk.Generators do
   @doc """
   An f64 with magnitude at most `max_abs` (uniform, any magnitude up to it,
   or an edge value within it): for kernels whose arithmetic would mostly
-  overflow to inf on any f64 (both modes raise, defk-i00), so that their
+  overflow to inf on any f64 (both modes raise), so that their
   computed values are compared too.
   """
   def f64(max_abs) when is_float(max_abs) do
@@ -209,7 +209,7 @@ defmodule Defk.Generators do
 
   @doc """
   An `[f64]` (or `[f32]`) array with at least one element whose bits are inf
-  or NaN (only an input array can hold one, defk-q1c): Elixir mode raises
+  or NaN (only an input array can hold one): Elixir mode raises
   ArgumentError (:non_finite_input) when it reads one.
   """
   def array_non_finite(type \\ :f64, opts \\ []) do

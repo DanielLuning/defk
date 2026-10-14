@@ -1,4 +1,4 @@
-# Cost per call of the candidate "is my run queue crowded?" checks (defk-04y),
+# Cost per call of the candidate "is my run queue crowded?" checks,
 # idle and with every other scheduler busy: `mix run bench/run_queue_check_cost.exs [rounds]`
 # The NIF API (erl_nif.h) exposes no run-queue length, so every check is a BIF
 # called from Elixir before the kernel.

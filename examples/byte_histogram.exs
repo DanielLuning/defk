@@ -27,7 +27,7 @@
 #
 # Both sides return the same bytes: the histogram as 256 native-endian i64
 # counts (exact), the entropies as one f64 per whole window, bit for bit.
-# Both sides compute -p * log2(p) (the kernel's log2/1 builtin, defk-ngj,
+# Both sides compute -p * log2(p) (the kernel's log2/1 builtin
 # calls the same libm function as :math.log2/1), in the same order (bins 0 to
 # 255, empty bins skipped), and kernels never fuse or reassociate floats, so
 # the floats agree exactly (no tolerance). The cold test, before log2 landed,

@@ -10,7 +10,7 @@ inside the VM. Background and the spike this grew from:
 `docs/research/c-verification-macos.md` section 5 ("libFuzzer outside the VM").
 
 Not part of `mix ci`. It runs on demand and in the release set (the
-`mix defk.verify` task and release alias are defk-96f.2). Sibling tools:
+`mix defk.verify` task and release alias). Sibling tools:
 `verify/valgrind/` (memcheck inside the VM, Linux container) and the
 sanitizer build mode (`DEFK_SANITIZE`, `lib/defk/build.ex`).
 
@@ -205,9 +205,8 @@ Self-tests, from the seeds alone:
 
 ## Missing decoders
 
-The ticket (defk-96f.4) names the defk-52v decoders. Only LZ4 and Snappy
-exist so far; inflate/PNG (defk-52v.7), zstd (defk-52v.8) and baseline JPEG
-(defk-52v.12) are not built yet. Each gets a target when it lands.
+The plan names every from-scratch decoder. Only LZ4 and Snappy exist so
+far; inflate/PNG, zstd and baseline JPEG are not built yet. Each gets a target when it lands.
 
 ## Known limits
 

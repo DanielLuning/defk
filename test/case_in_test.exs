@@ -1,4 +1,4 @@
-# `in` in case guards (defk-gid): `x when x in [1, 2, 3]`, `x when x in 1..10`,
+# `in` in case guards: `x when x in [1, 2, 3]`, `x when x in 1..10`,
 # `x when x in a..b//s`, and `not in`. Every kernel is written once by `twin`,
 # which defines the kernel and the same body as a plain Elixir function
 # (`ex_`), so results (and CaseClauseError) are compared with Elixir itself,

@@ -1,5 +1,5 @@
 # A value bound to `_` or `_name` is still evaluated for its effects, as in
-# Elixir (defk-776): the raise lives in the expression, so dropping it made
+# Elixir: the raise lives in the expression, so dropping it made
 # the native kernel continue where Elixir mode raised.
 
 defmodule Defk.UnderscoreBindingTest.K do

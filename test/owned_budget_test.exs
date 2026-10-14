@@ -1,9 +1,9 @@
-# The owned-buffer budget (defk-4b2): every alloc/2, copy and bitstring
+# The owned-buffer budget: every alloc/2, copy and bitstring
 # buffer a call makes lives until the kernel returns, so one in a loop body
 # keeps a buffer per iteration. A call raises ArgumentError "out of memory"
 # once its live owned bytes would pass `use Defk, max_owned_bytes:` (default: half
 # of physical memory), instead of growing until the OS kills the node.
-# Elixir mode enforces the same budget on alloc/2 (defk-bh3): it counts the
+# Elixir mode enforces the same budget on alloc/2: it counts the
 # bytes every alloc/2 of the call asks for, against the native library's
 # max_owned_bytes, and raises the same message. It does not see value-semantics
 # copies or bitstring buffers, so for those it garbage-collects the old

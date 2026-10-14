@@ -4,7 +4,7 @@ defmodule Defk.ImplTest do
   # not async: capture_io(:stderr) sees every test's warnings
   import ExUnit.CaptureIO
 
-  # defk-ltt: @impl before a defk is for the kernel's function, not for the
+  # @impl before a defk is for the kernel's function, not for the
   # generated __defk_load__/0
 
   @behaviour_src """

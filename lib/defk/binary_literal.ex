@@ -1,6 +1,6 @@
 defmodule Defk.BinaryLiteral do
   @moduledoc false
-  # Binary literals in kernel bodies (defk-n4r.5): `"abc"` and `<<1, 2, 3>>`
+  # Binary literals in kernel bodies: `"abc"` and `<<1, 2, 3>>`
   # with integer segments are a read-only [u8], the same value a binary module
   # attribute is. The compiler lowers it to a static const view and Elixir mode
   # is the binary itself; both take the bytes from here, so they cannot

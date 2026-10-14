@@ -1,4 +1,4 @@
-# Cost of raising on inf/NaN like Elixir (defk-i00): each kernel built with
+# Cost of raising on inf/NaN like Elixir: each kernel built with
 # the float checks (every float op that can make inf or NaN, every [f64]
 # input read) and with them compiled out (-DDEFK_NO_FLOAT_CHECKS, a macro for
 # this measurement only, passed through a CC wrapper). Interleaved rounds,

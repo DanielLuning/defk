@@ -1,4 +1,4 @@
-# The compiler's state lives in one process-dictionary key (defk-euu): a
+# The compiler's state lives in one process-dictionary key: a
 # %Defk.Compiler.Ctx{} under :defk_ctx, snapshotted and restored as one
 # value by probing and backtracking. This test pins the invariant that no
 # other defk-prefixed key survives a compile, so no state can leak past the

@@ -1,5 +1,5 @@
-# defk-04y: the three examples whose parallel kernel chunks stay on few
-# schedulers (defk-8qs), under each slice treatment of bench/adaptive_slice.exs
+# Adaptive yield slice: the three examples whose parallel kernel chunks stay
+# on few schedulers, under each slice treatment of bench/adaptive_slice.exs
 # (today / adaptive / total, the last being the default), interleaved, medians
 # (fixed50 and gap: the experimental API of commit c552fb1):
 #   batched_levenshtein  234k words, 12 chunks of lev_myers (Task.async_stream)

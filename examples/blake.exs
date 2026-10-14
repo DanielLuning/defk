@@ -22,7 +22,7 @@
 # and blake2_elixir both define Blake2.Mixfile and Blake2, so blake2 is fetched
 # with `compile: false` and compiled here as HexBlake2.
 #
-# Expected verdicts (pre-registered in defk-52v.2): good against pure Elixir
+# Expected verdicts (pre-registered): good against pure Elixir
 # for both; marginal against :crypto's blake2b; poor against blake3's SIMD
 # build, parity with BLAKE3's portable C. All four held (numbers below).
 #
@@ -94,7 +94,7 @@
 # b3 is close to what Elixir can do; this file's loop only drops b3's
 # per-chunk struct updates (5-10%). Not tried: hashing BLAKE3's subtrees in
 # parallel tasks (the tree allows it on both sides, so the ratio would stay
-# about the same, and short kernel tasks stay on few schedulers, defk-8qs);
+# about the same, and short kernel tasks stay on few schedulers);
 # lazy masking in the halves (letting a half grow past 32 bits between
 # masks).
 #

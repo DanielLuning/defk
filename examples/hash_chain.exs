@@ -4,8 +4,7 @@
 # server seed hashed N times, revealed from the end) or from
 # HMAC-SHA256(server_seed, client_seed <> ":" <> nonce), then bytes -> float
 # -> outcome. Verifying a player's history recomputes millions of rounds, and
-# people ask whether native code would make it faster. Ticket defk-9p6.18;
-# pre-registered as marginal or poor: the entry exists to say "use :crypto"
+# people ask whether native code would make it faster. Pre-registered as marginal or poor: the entry exists to say "use :crypto"
 # with numbers.
 #
 #   elixir examples/hash_chain.exs

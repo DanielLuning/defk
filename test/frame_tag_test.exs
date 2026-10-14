@@ -1,7 +1,7 @@
-# Frame layout tag (defk-ls8), defence in depth. A promoted frame carries a tag
+# Frame layout tag, defence in depth. A promoted frame carries a tag
 # (hash of priv/defk_runtime.h + sizeof defk_ctx) and its struct size; the step
 # function checks both once at entry, and the destructor skips its cleanup on a
-# mismatch. Frames of different libraries never meet (defk-nbl), so a foreign
+# mismatch. Frames of different libraries never meet, so a foreign
 # frame cannot be built from Elixir: __defk_corrupt_tags__/1 makes
 # defk_promote stamp a wrong tag, which is exactly what a frame of another
 # layout looks like to the step function and the destructor.

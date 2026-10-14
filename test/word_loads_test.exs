@@ -1,4 +1,4 @@
-# Word loads from a [u8] (defk-n4r.2): u64_le(bytes, i) and friends read the
+# Word loads from a [u8]: u64_le(bytes, i) and friends read the
 # unsigned w-byte integer at byte offset i, as Elixir's
 # <<_::binary-size(i), x::little-unsigned-size(w * 8), _::binary>> = bytes,
 # raise Enum.OutOfBoundsError like a[i] when i < 0 or i + w > length(bytes),
@@ -15,7 +15,7 @@ defmodule Defk.WordLoadsTest.K do
   defk(u16_le_f(b :: [u8], i :: i64) :: i64, do: u16_le(b, i))
   defk(u16_be_f(b :: [u8], i :: i64) :: i64, do: u16_be(b, i))
 
-  # a binary module attribute is a [u8] in static storage (defk-ivt)
+  # a binary module attribute is a [u8] in static storage
   @magic <<0x7F, "ELF", 2, 1, 1, 0>>
   defk(magic(i :: i64) :: i64, do: u32_be(@magic, i))
 

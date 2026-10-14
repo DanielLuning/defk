@@ -1,6 +1,6 @@
 defmodule Defk.Clauses do
   @moduledoc false
-  # Multi-clause kernels (defk-u9c): one bodiless typed head, then clauses as
+  # Multi-clause kernels: one bodiless typed head, then clauses as
   # Elixir writes a multi-clause function,
   #
   #     defk dod_bits(acc :: bitstring, dod :: i64) :: bitstring

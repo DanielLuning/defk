@@ -1,7 +1,7 @@
 defmodule Defk.CatalogGenerators do
   @moduledoc false
   # Bounded argument generators for the catalog kernels that the stock
-  # Defk.Generators would draw badly (defk-30c.2): Gorilla series, Snappy and
+  # Defk.Generators would draw badly: Gorilla series, Snappy and
   # LZ4 streams (encoded here in Elixir, so the examples' Mix.install codecs
   # are not needed), and byte windows for the hashes. Each draw is small: a
   # whole property costs a few milliseconds.

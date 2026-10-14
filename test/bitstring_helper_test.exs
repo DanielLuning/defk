@@ -1,4 +1,4 @@
-# The bitstring accumulator through helper kernels (defk-ooq): a kernel may
+# The bitstring accumulator through helper kernels: a kernel may
 # take a `bitstring` parameter, append to it and return it, alone or in a
 # tuple. Kernel calls are inlined, so the accumulator stays one append-only
 # local of the caller. Such a helper has no NIF and no Elixir function: a

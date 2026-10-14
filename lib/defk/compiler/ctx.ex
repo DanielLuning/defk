@@ -1,5 +1,5 @@
 defmodule Defk.Compiler.Ctx do
-  # The compiler's one process-dictionary key (defk-euu): everything one
+  # The compiler's one process-dictionary key: everything one
   # module's compile accumulates lives in this struct under :defk_ctx, so a
   # snapshot or a restore is one get or put of one value. The compile-wide
   # fields travel into every rejection (err!/4); `lowering` is replaced

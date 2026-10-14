@@ -1,4 +1,4 @@
-# Owned arrays as reduce accumulators (defk-n4r.10): `for ..., reduce:` and
+# Owned arrays as reduce accumulators: `for ..., reduce:` and
 # Enum.reduce_while/3 thread an array accumulator through the loop in place.
 # The accumulator's buffer is the loop's own (an alloc/2 array, or a copy of
 # an input or of an array another live binding still sees), so the body's
@@ -224,7 +224,7 @@ defmodule Defk.ArrayAccumulatorTest.K do
     end
   end
 
-  # the same for [f32], whose input reads are checked like [f64]'s (defk-4ai);
+  # the same for [f32], whose input reads are checked like [f64]'s;
   # alloc(f32, length(a)) has no constant length, so finiteness is the only fact
   # the new value loses
   defk pick_input_f32(a :: [f32]) :: {[f32], f64} do
@@ -385,7 +385,7 @@ defmodule Defk.ArrayAccumulatorTest do
       for k <- [:alias_outside, :doubled, :same_init, :prefix] do
         c = kernel_c(K, k)
         assert copies(c) == 1, "#{k}"
-        # the kernel's loop, not the loop that zeroes the alloc (defk-ktw)
+        # the kernel's loop, not the loop that zeroes the alloc
         [before_loop, _] = String.split(c, "/* defk:loop ", parts: 2)
         assert before_loop =~ "defk_copy_", "#{k}"
       end

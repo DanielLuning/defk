@@ -1,6 +1,6 @@
 defmodule Defk.GuardIn do
   @moduledoc false
-  # `in` in a case guard (defk-gid), shared by the kernel compiler and Elixir
+  # `in` in a case guard, shared by the kernel compiler and Elixir
   # mode so both lower it to the same comparisons: `x in [1, 2]` to
   # `x === 1 or x === 2`, and `x in first..last//step` to bounds plus a
   # remainder test, exactly the integers Enum.member?/2 finds in the range.

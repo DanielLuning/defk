@@ -1,5 +1,5 @@
 # alloc/2 skips zeroing its buffer when the compiler proves every element is
-# written before anything reads it (defk-ktw): the alloc is bound to a
+# written before anything reads it: the alloc is bound to a
 # variable, and the next statement is a plain `for` over 0..(n - 1)//1 whose
 # body writes x[k * i + c] for every c in 0..k-1 at its top level and does
 # not otherwise mention x, where k * n is the alloc's length. The memset is a

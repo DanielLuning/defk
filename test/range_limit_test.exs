@@ -1,5 +1,5 @@
-# A range loop whose last element is within one step of the i64 limit
-# (defk-gtv audit). Stepping past that element overflowed the loop counter:
+# A range loop whose last element is within one step of the i64 limit.
+# Stepping past that element overflowed the loop counter:
 # it wrapped, the exit test never passed, the loop spun without a safepoint
 # (hanging its scheduler), and an index proven in range from the counter was
 # written out of bounds with no check. Such a range now raises
@@ -129,7 +129,7 @@ defmodule Defk.RangeLimitTest do
   end
 
   # ---------------------------------------------------- agreement properties --
-  # Every kernel here against its Elixir mode (defk-ne6). A range runs at
+  # Every kernel here against its Elixir mode. A range runs at
   # most a few thousand steps, anywhere in the i64 range: the far end is the
   # near one plus a bounded number of steps, clamped to the i64 limits, so
   # ranges ending at or next to them come up often.

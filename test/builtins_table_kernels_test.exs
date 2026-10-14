@@ -1,4 +1,4 @@
-# The enforcement half of the builtin signature table (ADR-0008, defk-o49):
+# The enforcement half of the builtin signature table (ADR-0008):
 # every table row is instantiated into tiny kernels — one per bounded
 # combination of its classes and variables — compiled through the full
 # pipeline and checked for agreement between native and Elixir mode. A

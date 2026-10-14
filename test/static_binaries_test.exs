@@ -1,4 +1,4 @@
-# A binary attribute or literal is emitted once per module (defk-qx3): one
+# A binary attribute or literal is emitted once per module: one
 # `static const uint8_t` array named by a hash of its contents, referenced
 # from every use site, however often a helper that reads it is inlined.
 

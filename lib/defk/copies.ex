@@ -1,9 +1,9 @@
 defmodule Defk.Copies do
-  # The copy analysis (defk-z8y): how the compiler decides whether a
-  # kernel's array write reuses the buffer or copies it first. This module
-  # is one home for the rules — what counts as a read after a write
-  # (defk-33b, defk-tif, defk-8tw landed in three different shards of this
-  # concept when it lived in two compiler sections 3,300 lines apart) — and,
+  # The copy analysis: how the compiler decides whether a kernel's array
+  # write reuses the buffer or copies it first. This module is one home for
+  # the rules — what counts as a read after a write (three fixes landed in
+  # three different shards of this concept when it lived in two compiler
+  # sections 3,300 lines apart) — and,
   # from phase B on, for the write/alias tracking state. Decisions out: the
   # C emission of the copies it calls for stays in the lowering.
   @moduledoc false
@@ -13,8 +13,8 @@ defmodule Defk.Copies do
   # unreturned_writes!), buffer carrying (:from, a copy or accumulator holds
   # what its source held) and alias classes (buffers an if/cond/case made
   # indistinguishable). The module is pure: state in, state out; the
-  # compiler keeps the current state as one field of its lowering ctx
-  # (defk-euu), so its backtracking snapshot covers it.
+  # compiler keeps the current state as one field of its lowering ctx, so
+  # its backtracking snapshot covers it.
 
   defstruct writes: [], from: %{}, alias: %{}
 
@@ -31,7 +31,7 @@ defmodule Defk.Copies do
   # callee under its own log and restores the caller's after
   def swap_writes(st, new), do: {st.writes, %{st | writes: new}}
 
-  # Buffers that may be one buffer (defk-gqk). The array an if, cond or case
+  # Buffers that may be one buffer. The array an if, cond or case
   # gives is one of its arms' arrays, which the compiler can't tell apart, so
   # their buffers are merged into one alias class, and bindings of any of
   # them may share a buffer from then on (flow-insensitively, for the rest of
@@ -222,7 +222,7 @@ defmodule Defk.Copies do
 
   # The outer names a loop's generators and filters read while it runs. The
   # first generator's range (start, end and step) is evaluated once, before
-  # the first iteration and so before the body writes anything (defk-8tw):
+  # the first iteration and so before the body writes anything:
   # `for k <- 0..(st[0] - 1)//1, reduce: st` reads st's buffer before the
   # accumulator takes it, and later iterations read the accumulator. An array
   # the first generator walks, later generators (evaluated again for each

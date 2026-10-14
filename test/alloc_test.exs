@@ -1,4 +1,4 @@
-# alloc/2 sizes at the extremes (defk-gtv). n * sizeof(T) used to wrap, so
+# alloc/2 sizes at the extremes. n * sizeof(T) used to wrap, so
 # alloc(f64, 2^61) made a 0-byte buffer of length 2^61 and a write inside its
 # bounds crashed the VM. A length whose byte size is over 2^48 (the user
 # address space of 64-bit platforms) raises "length too large"; one the
@@ -128,7 +128,7 @@ defmodule Defk.AllocTest do
 
   # sizes at their extremes are covered above (lengths just over the limit,
   # the macOS allocation limit, negative and wrapping lengths); indices are
-  # the other half of the threat entry (defk-5fc)
+  # the other half of the threat entry
   describe "indices at the extremes" do
     test "index -1 and index == len raise Enum.OutOfBoundsError in both modes" do
       a = i64s([10, 20, 30, 40])
@@ -184,7 +184,7 @@ defmodule Defk.AllocTest do
   end
 
   # ---------------------------------------------------- agreement properties --
-  # Every kernel here against its Elixir mode (defk-ne6), at lengths that are
+  # Every kernel here against its Elixir mode, at lengths that are
   # small, negative, or at or past the alloc limit (Defk.Generators.alloc_len:
   # never one a real allocator might grant), and indices around them.
 

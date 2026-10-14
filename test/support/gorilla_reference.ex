@@ -1,7 +1,7 @@
 defmodule Defk.GorillaReference do
   @moduledoc false
   # The value encoder of gorilla_stream 3.0.3, ported as the reference for the
-  # Gorilla kernel in test/bitstring_test.exs (defk-cmr): the logic of
+  # Gorilla kernel in test/bitstring_test.exs: the logic of
   # GorillaStream.Compression.Encoder.ValueCompression.compress/1 (Elixir
   # path), output bits only. Ported rather than added as a dependency because
   # gorilla_stream builds a C++ NIF through elixir_make, fine and

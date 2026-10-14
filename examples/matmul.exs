@@ -3,7 +3,7 @@
 # Why people reach for a NIF here: neural-net layers, least squares, graph
 # algorithms and simulation all bottom out in dense matrix products. In Elixir
 # the answer is Nx (with EXLA or Torchx for speed), so this example is not a
-# target workload: ticket defk-9p6.3 records where the boundary lies.
+# target workload: it records where the boundary lies.
 # Expected verdict: good (against pure Elixir; the easy part). The entry's real
 # message is in `native_speedup`, defk against Nx.
 #

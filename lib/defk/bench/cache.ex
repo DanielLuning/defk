@@ -1,6 +1,6 @@
 defmodule Defk.Bench.Cache do
   @moduledoc false
-  # The benchmark result cache of `mix defk.examples --bench` (defk-30c.5).
+  # The benchmark result cache of `mix defk.examples --bench`.
   # When nothing a measurement depends on changed, `Defk.Bench.report/1`
   # reuses the stored result instead of timing again. It still runs the
   # example's `:check`: correctness is never cached.

@@ -1,5 +1,5 @@
-# A plain parenthesised block binds into the enclosing scope, as in Elixir
-# (defk-pvp): `(x = a + 1; x); x * 2` sees x. Macro-generated bodies often
+# A plain parenthesised block binds into the enclosing scope, as in Elixir:
+# `(x = a + 1; x); x * 2` sees x. Macro-generated bodies often
 # arrive as a nested block. if/case/for keep their own scope. Each kernel is
 # checked against Elixir mode.
 

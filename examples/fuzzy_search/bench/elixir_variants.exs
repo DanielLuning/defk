@@ -1,5 +1,5 @@
 # Elixir variants of the top-k Levenshtein search, measured against each other
-# before the Elixir backend was chosen (defk-8i4):
+# before the Elixir backend was chosen:
 #
 #     NO_SERVER=1 mix run bench/elixir_variants.exs [rounds]
 #
@@ -257,7 +257,7 @@ defmodule Variants do
 
   # ---- 7. Myers/Hyyrö bit-parallel distance, no cut-off (not in comparison) --
   # A different algorithm: one word-sized bit-vector step per character instead
-  # of a row. defk kernels have no bitwise operators yet (defk-w38), so the
+  # of a row. defk kernels have no bitwise operators yet, so the
   # kernel cannot use it; this measures what it would be worth.
 
   def myers(query, k) do
@@ -297,7 +297,7 @@ defmodule Variants do
   end
 end
 
-# the first pass, kept verbatim as the reference (it was ElixirBackend before defk-8i4)
+# the first pass, kept verbatim as the reference (it was ElixirBackend before the early cut-off)
 defmodule FuzzySearch.ElixirBackend.FirstPass do
   alias FuzzySearch.Catalog
 
@@ -386,4 +386,4 @@ for {name, _} <- variants do
   IO.puts("  #{String.pad_trailing(name, 34)} median #{Float.round(med.(t) / 1000, 1)} ms/query  mean #{Float.round(Enum.sum(t) / length(t) / 1000, 1)}")
 end
 
-IO.puts("\n* not used as the baseline: 7 is a different algorithm the kernel cannot express yet (no bitwise ops, defk-w38); 10 adds a trick the kernel does not have")
+IO.puts("\n* not used as the baseline: 7 is a different algorithm the kernel cannot express yet (no bitwise ops when it was written); 10 adds a trick the kernel does not have")

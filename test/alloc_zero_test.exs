@@ -1,5 +1,5 @@
 # alloc/2 gives an array of zeros (Elixir mode: a binary of zeros), but the
-# zeroing is not one memset (defk-ktw): one memset held the scheduler for
+# zeroing is not one memset: one memset held the scheduler for
 # ~5 ms on an 85 MB alloc before the kernel's first loop ran. An alloc whose
 # length is not known to be small zeroes its buffer in strips of
 # DEFK_ZERO_STRIP bytes with a safepoint after each, a loop like any other: a

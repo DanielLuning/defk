@@ -38,12 +38,12 @@ defmodule Defk.Errors do
   The page is generated from this registry, so the two never differ.
   """
 
-  # Where an error footer points (defk-djy.6, defk-djy.9). Inside the defk
+  # Where an error footer points. Inside the defk
   # repository the page's relative path opens in an editor. In a project that
   # depends on defk the path would lead into deps/ or another checkout (a
   # path dependency's absolute path), which a reader of HexDocs cannot open,
   # so the footer is a URL there, whether or not the file is on disk: the
-  # HexDocs page of the version this defk is (from 0.1.0, defk-wfi.6), so the
+  # HexDocs page of the version this defk is (from 0.1.0), so the
   # anchor matches the code the installed compiler reported.
   @url_base "https://hexdocs.pm/defk/#{Mix.Project.config()[:version]}/compile-errors.html#"
   @catalogue Path.expand("../../docs/compile-errors.md", __DIR__)
@@ -54,12 +54,11 @@ defmodule Defk.Errors do
   @forms "=, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2"
 
   # ------------------------------------------------------------- registry --
-  # Retired codes, never reused: "bitwise" (the operators are supported since
-  # defk-w38), "module-attribute" (attributes are constants since defk-ivt),
-  # "read-only-array" (an input array is copied before a write since
-  # defk-auo), "tuple-return-call" (a kernel returning a tuple is called from
-  # kernels since defk-auo), "array-accumulator" (an owned array is threaded
-  # through a reduce accumulator since defk-n4r.10).
+  # Retired codes, never reused: "bitwise" (the operators are supported),
+  # "module-attribute" (attributes are constants), "read-only-array" (an
+  # input array is copied before a write), "tuple-return-call" (a kernel
+  # returning a tuple is called from kernels), "array-accumulator" (an owned
+  # array is threaded through a reduce accumulator).
 
   @codes [
     # -- kernel definitions
@@ -1037,7 +1036,7 @@ defmodule Defk.Errors do
 
   @doc false
   # A literal code in the compiler's err!/attempt_err! is checked here when
-  # the compiler itself compiles (defk-vlf): a typo fails mix compile.
+  # the compiler itself compiles: a typo fails mix compile.
   def validate_code!(code) do
     if is_binary(code) and not Map.has_key?(@by_code, code) do
       raise ArgumentError,

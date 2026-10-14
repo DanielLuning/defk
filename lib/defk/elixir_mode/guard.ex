@@ -1,8 +1,8 @@
 defmodule Defk.ElixirMode.Guard do
   @moduledoc false
-  # A case guard that can fail, as Elixir mode evaluates it (defk-7a6,
-  # defk-34l). The guard's operations call Ops, so it runs outside a real
-  # guard, with Elixir's guard rule applied by hand:
+  # A case guard that can fail, as Elixir mode evaluates it. The guard's
+  # operations call Ops, so it runs outside a real guard, with Elixir's
+  # guard rule applied by hand:
   #
   # - an error Elixir raises (a zero divisor, a float result of inf) fails
   #   the guard: false, and the next clause is tried;

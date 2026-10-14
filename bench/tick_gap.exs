@@ -5,7 +5,7 @@ alias Examples.Kernels, as: K
 defmodule TickGap.Alloc do
   use Defk
 
-  # zeroing an 85 MB alloc (defk-ktw): in strips with a safepoint after each
+  # zeroing an 85 MB alloc: in strips with a safepoint after each
   defk zeros(n :: i64) :: i64 do
     length(alloc(u8, n))
   end

@@ -1,5 +1,5 @@
 defmodule Defk.SanitizeTest do
-  # The sanitizer build mode, DEFK_SANITIZE (defk-96f.1): its flags, its place
+  # The sanitizer build mode, DEFK_SANITIZE: its flags, its place
   # in the cache key and the library's name, the build path a Mix app's module
   # needs, and the Mix recompile hook. These run in every `mix test` and need
   # no sanitizer runtime: the cache tests build with a fake compiler that
@@ -259,7 +259,7 @@ defmodule Defk.SanitizeTest do
     # CHICKEN_PAD slack hides it unless the runtime header poisons it: the
     # control run builds the same planted kernel without the poisoning. On
     # Linux the ASan runtime is the C compiler's own: gcc's libasan or
-    # clang's libclang_rt.asan (defk-wfi.7: gcc has no allocator_interface.h).
+    # clang's libclang_rt.asan (gcc has no allocator_interface.h).
     @tag timeout: 300_000
     test "address: a planted 1-byte overrun of an alloc/2 result is reported", %{tmp: tmp} do
       flip = run_flip(tmp, plant: false)
@@ -372,8 +372,7 @@ defmodule Defk.SanitizeTest do
           :erlang.system_info(:system_architecture) |> to_string() |> String.split("-") |> hd()
 
         # the compiler's own runtime, which its library needs (clang finds
-        # gcc's libasan.so too, and two ASan runtimes cannot share a process;
-        # defk-wfi.10)
+        # gcc's libasan.so too, and two ASan runtimes cannot share a process)
         name =
           if Defk.Build.clang?(), do: "libclang_rt.asan-#{arch}.so", else: "libasan.so"
 

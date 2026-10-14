@@ -33,7 +33,7 @@
 #     good (the package takes 1.2 s and the bisecting Elixir 53 ms); unpacking
 #     the result to lists adds 2.4 ms.
 #   crc16 / crc64 at 1 MB: 1.7x / 1.65-1.8x over the best Elixir, marginal,
-#     under load; the quiet-machine snapshot (2026-10-13, defk-sgw.4) read
+#     under load; the quiet-machine snapshot (2026-10-13) read
 #     crc64 at 2.16-2.17x (Elixir 4.32 ms vs defk 2.00 ms, 1.12x the crc NIF),
 #     just over the bar, and 1.91x at 16 MB. The line sits on the bar, so its
 #     `expected:` stays the pre-registered marginal and the script's own check

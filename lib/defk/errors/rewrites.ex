@@ -1,5 +1,5 @@
 defmodule Defk.Errors.Rewrites do
-  # The rewrite-suggestion engine (defk-vlf): the rejection and suggested
+  # The rewrite-suggestion engine: the rejection and suggested
   # kernel-subset rewrite for a construct outside the subset (unsupported/2),
   # a call the subset has an idiom for (unsupported_local/2, the
   # call_rejection table), and the for/alloc fill and collect rewrites. Pure

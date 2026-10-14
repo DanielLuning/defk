@@ -83,7 +83,7 @@ defmodule Defk.Bench do
   alias Defk.Bench.Cache
 
   # Thresholds, and the tie band: a speedup within 5% below a threshold counts
-  # as reaching it (`defk-9p6.24`).
+  # as reaching it.
   @good 2.0
   @marginal 1.0
   @band_factor 0.95
@@ -140,7 +140,7 @@ defmodule Defk.Bench do
     if check_only?(), do: check_only(opts), else: measure_or_reuse(opts)
   end
 
-  # The result cache (Defk.Bench.Cache, defk-30c.5): `:off` unless the
+  # The result cache (Defk.Bench.Cache): `:off` unless the
   # examples runner turned it on. A reused result gets a fresh `:check`.
   defp measure_or_reuse(opts) do
     refuse_sanitized!()
@@ -208,7 +208,7 @@ defmodule Defk.Bench do
   end
 
   @doc false
-  # Check-only mode (mix defk.examples, defk-30c.3): `DEFK_CHECK_ONLY=1` in
+  # Check-only mode (mix defk.examples): `DEFK_CHECK_ONLY=1` in
   # the environment makes every `report/1` run the example's `:check` and
   # nothing else: no timed run, no Elixir baseline run, no `:native`,
   # `:sweep` or `:responsiveness`, no verdict. The result still carries the
@@ -297,7 +297,7 @@ defmodule Defk.Bench do
     |> add_responsiveness(Keyword.get(opts, :responsiveness), opts)
   end
 
-  # The sanitizer build mode (defk-96f.1) is for checking the C, never for
+  # The sanitizer build mode is for checking the C, never for
   # timing it: refuse before anything runs.
   defp refuse_sanitized! do
     case Defk.Build.sanitize() do
@@ -313,7 +313,7 @@ defmodule Defk.Bench do
     end
   end
 
-  # `:check` is required whenever `:defk` is given (defk-k95): an unchecked
+  # `:check` is required whenever `:defk` is given: an unchecked
   # example must opt out visibly (`check: :none` plus a `:reason`), never
   # report `correct: true` by omission. Validated before anything is timed,
   # so a bad call fails before the measurement, not after it.

@@ -1,12 +1,12 @@
 defmodule Defk.RuntimeHeaderPortabilityTest do
   use ExUnit.Case, async: true
 
-  # defk-o52: the runtime header must compile cleanly on every compiler we
-  # support. Passing an int64_t * where enif_get_int64 takes a long * (macOS)
-  # was only a warning under Apple clang but an error under Homebrew LLVM, so
-  # no kernel built there. The glibc half of the ticket (__sigsetjmp redeclared
+  # The runtime header must compile cleanly on every compiler we support.
+  # Passing an int64_t * where enif_get_int64 takes a long * (macOS) was only
+  # a warning under Apple clang but an error under Homebrew LLVM, so no kernel
+  # built there. The glibc half of the problem (__sigsetjmp redeclared
   # returns_twice, or a clang-built kernel's first raise is a Bus error) needs
-  # Linux with CC=clang: raise_test.exs covers it there (defk-a1p).
+  # Linux with CC=clang: raise_test.exs covers it there.
 
   defmodule K do
     use Defk

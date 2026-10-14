@@ -1,5 +1,5 @@
 # The runtime contract, entry: a yield with small heap-binary inputs
-# (<= 64 bytes) and a forced GC between steps (defk-5fc). Binaries of at most
+# (<= 64 bytes) and a forced GC between steps. Binaries of at most
 # 64 bytes live on the caller's heap, so a GC between two steps can move them.
 # The runtime re-binds every array argument from the rescheduled argv on every
 # entry (defk_bind in priv/defk_runtime.h), so a resume must read the moved

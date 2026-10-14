@@ -1,4 +1,4 @@
-# CI (defk-wfi.2): `mix ci` on every push, through ci/run.sh. The same
+# CI: `mix ci` on every push, through ci/run.sh. The same
 # script runs locally under act and in the podman fallback (ci/README.md),
 # so a release never waits for GitHub. The Linux jobs run in one pinned
 # multi-arch image; ci/local.sh reads the image tag and the labels below.
