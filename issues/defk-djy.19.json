@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-wfi.6"
+  ],
   "created": "2026-10-13T19:53:06Z",
   "description": "Rule (maintainer, 2026-10-13): the HexDocs extras (mix.exs @guides and @reference: README, the guides, scope.md, performance.md, language.md, compile-errors.md, the cheatsheet) are for a user of the library. ADR links and beadwork ticket ids are for someone developing defk and do not belong there. Counted on 2026-10-13: performance.md 282 ticket ids and 8 ADR mentions, language.md 27 ids, scope.md 10, measuring.md 5, testing.md 3, cheatsheet 3, getting-started.md 2 ids and 2 ADR mentions, runtime-contract.md 2 ids and 3 ADR mentions, deploying.md 1 id and 4 ADR mentions.\n\nDecide and do:\n- performance.md: it is written for future maintainers ('what is fast on the BEAM, for future us', every entry has a Source line of ticket ids). Either take it out of the extras (link it from docs/project.md by its GitHub URL, as beam-nifs.md is) or keep it as a user page and move every Source attribution into a maintainer appendix outside HexDocs. The first is cheaper and honest about its audience.\n- scope.md 'Not yet': test/scope_doc_test.exs requires a ticket id per bullet. Replace the ids with plain statements of what is planned, and change the test to check the planned codes only; the ids live in beadwork.\n- language.md, the guides and the cheatsheet: replace each ticket id with the statement it stands for (or drop it where it only credits the work), and each ADR link with the decision's one-line substance or a GitHub URL to docs/project.md where a maintainer can continue.\n- Add a check to test/docs_checks_test.exs so an extra with a defk-xxx id or an adr/ link fails the suite, so this stays true.\n\nDone when: no extra contains a ticket id or an ADR reference, the new check is in the suite, and mix ci is green.",
   "id": "defk-djy.19",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "HexDocs pages must not reference ADRs or tickets: they are for users, not maintainers",
   "type": "task",
-  "updated_at": "2026-10-13T19:53:18Z"
+  "updated_at": "2026-10-14T20:03:49Z"
 }
