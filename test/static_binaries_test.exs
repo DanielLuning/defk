@@ -22,7 +22,7 @@ defmodule Defk.StaticBinariesTest.K do
   end
 
   defk lits(i :: i64) :: i64 do
-    "shared literal"[i] + "shared literal"[i + 1] + len("shared literal")
+    "shared literal"[i] + "shared literal"[i + 1] + length("shared literal")
   end
 
   defk lits2(i :: i64) :: i64 do
@@ -30,7 +30,7 @@ defmodule Defk.StaticBinariesTest.K do
   end
 
   defk empty(k :: i64) :: i64 do
-    len("") + k
+    length("") + k
   end
 
   # writes go to a copy, never to the static data

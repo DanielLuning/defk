@@ -51,7 +51,7 @@ lowering declares as it emits; defk-ch4), not from the C text.
 
 ## The other modules
 
-- `lib/defk.ex`: the `defk` macro, options (`max_owned`, `yield`,
+- `lib/defk.ex`: the `defk` macro, options (`max_owned_bytes`, `yield`,
   `adaptive_slice`), `@impl` handling, `lib_defs/1`.
 - `lib/defk/build.ex`: C compiler invocation, cache key, where the `.so`
   lives (`placement!/3`: app ebin vs absolute path), `mix_project?/0`, the

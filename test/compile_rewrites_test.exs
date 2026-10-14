@@ -10,7 +10,7 @@ defmodule Defk.CompileRewritesTest do
 
   # {construct, params, return type, body template, :rewrite | :none}
   @cases [
-    # |>, in, **, unless, length/1
+    # |>, in, **, unless, byte_size/1
     {"a[0] |> abs() |> sqrt()", "a :: [f64]", "f64", "@@", :rewrite},
     {"a |> Enum.sum()", "a :: [f64]", "f64", "@@", :none},
     {"x in [1, 2, 3]", "x :: i64", "bool", "@@", :rewrite},
@@ -21,7 +21,7 @@ defmodule Defk.CompileRewritesTest do
     {"x ** y", "x :: i64, y :: f64", "f64", "@@", :rewrite},
     {"x ** n", "x :: i64, n :: i64", "i64", "@@", :none},
     {"unless x > 0, do: 0, else: x", "x :: i64", "i64", "@@", :rewrite},
-    {"length(a)", "a :: [f64]", "i64", "@@", :rewrite},
+    {"byte_size(a)", "a :: [f64]", "i64", "@@", :rewrite},
     {"byte_size(b)", "b :: [u8]", "i64", "@@", :rewrite},
     # Enum.map/2 and collecting for
     {"Enum.map(a, fn x -> x * 2.0 end)", "a :: [f64]", "[f64]", "@@", :rewrite},

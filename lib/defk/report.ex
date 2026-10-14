@@ -12,7 +12,7 @@ defmodule Defk.Report do
     * `{:kernel, :yield | :no_yield, "dot/2"}` at the `defk` line
     * `{:bounds, :dropped | :kept, text}` for each array access and word
       load; a kept check names the fact that would drop it
-      (`"a[i + 1]: bounds check kept; nothing proves i + 1 < len(a)"`).
+      (`"a[i + 1]: bounds check kept; nothing proves i + 1 < length(a)"`).
       A range copy (`copy/5`, `copy_back/4`) keeps one check for its whole
       range
     * `{:branch, :select | :branch, text}` for each `if`, `cond` and `case`,
@@ -26,7 +26,7 @@ defmodule Defk.Report do
     * `{:copy, :copied, text}` for each copy that value semantics inserts
     * `{:owned, :per_iteration, text}` for each alloc/2 or copy inside a
       loop: every iteration keeps a buffer until the kernel returns, counted
-      against the module's `max_owned` budget
+      against the module's `max_owned_bytes` budget
     * `{:alloc, :unzeroed | :zeroed | :strips, text}` for each alloc/2: not
       zeroed (the next loop writes every element first), zeroed at once
       (a small constant length, or `yield: false`), or zeroed in strips with
@@ -59,7 +59,7 @@ defmodule Defk.Report do
       ...>   use Defk
       ...>
       ...>   defk dot(a :: [f64], b :: [f64]) :: f64 do
-      ...>     n = min(len(a), len(b))
+      ...>     n = min(length(a), length(b))
       ...>
       ...>     for i <- 0..(n - 1)//1, reduce: 0.0 do
       ...>       acc -> acc + a[i] * b[i]
@@ -72,7 +72,7 @@ defmodule Defk.Report do
 
   The loop runs in strips with one safepoint each, its float checks are
   flagged, and both array reads lost their bounds checks, because `i` stays
-  below `len(a)` and `len(b)`. `Defk.Report.print(MyApp.Dot)` shows the
+  below `length(a)` and `length(b)`. `Defk.Report.print(MyApp.Dot)` shows the
   same notes beside the source lines. When a kernel is slower than you
   expect, [Measuring](measuring.md#5-explain-the-number) and
   [Making a defk kernel fast](performance.md#6-making-a-defk-kernel-fast)
@@ -108,9 +108,9 @@ defmodule Defk.Report do
       ...>   use Defk
       ...>
       ...>   defk scale(a :: [f64], k :: f64) :: [f64] do
-      ...>     out = alloc(f64, len(a))
+      ...>     out = alloc(f64, length(a))
       ...>
-      ...>     for i <- 0..(len(a) - 1)//1 do
+      ...>     for i <- 0..(length(a) - 1)//1 do
       ...>       out[i] = a[i] * k
       ...>     end
       ...>

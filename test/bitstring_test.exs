@@ -114,7 +114,7 @@ defmodule Defk.BitstringTest.K do
   # an array accumulator beside a bitstring accumulator in one tuple
   defk evens_and_bits(xs :: [i64]) :: {[i64], bitstring} do
     {out, bits, _} =
-      for x <- xs, reduce: {alloc(i64, len(xs)), <<>>, 0} do
+      for x <- xs, reduce: {alloc(i64, length(xs)), <<>>, 0} do
         {out, bits, i} ->
           out[i] = band(x, 0xFFFF) * 2
           {out, <<bits::bitstring, band(x, 1)::1>>, i + 1}
@@ -128,7 +128,7 @@ defmodule Defk.BitstringTest.K do
   defk regrown(xs :: [i64]) :: {[i64], bitstring} do
     for x <- xs, reduce: {alloc(i64, 4), <<>>} do
       {a, bits} ->
-        b = alloc(i64, len(a) + 1)
+        b = alloc(i64, length(a) + 1)
         b[0] = band(x, 0xFFFF)
         {b, <<bits::bitstring, band(x, 3)::2>>}
     end
@@ -151,7 +151,7 @@ defmodule Defk.BitstringTest.K do
   # the top bit set is a negative i64 here, so the meaningful bits (up to 64)
   # are appended as two segments of at most 32 bits.
   defk gorilla(vs :: [i64]) :: bitstring do
-    n = len(vs)
+    n = length(vs)
 
     if n == 0 do
       <<>>
@@ -605,10 +605,10 @@ defmodule Defk.BitstringTest do
       assert msg =~ "starting from an input bitstring is not supported yet"
     end
 
-    test "reading the accumulator: indexing, len/1, a generator" do
+    test "reading the accumulator: indexing, length/1, a generator" do
       for {read, what} <- [
             {"acc[0]", "acc[0] reads the bitstring acc"},
-            {"len(acc)", "len(acc) reads the bitstring acc"},
+            {"length(acc)", "length(acc) reads the bitstring acc"},
             {"for b <- acc, reduce: 0 do\n    n -> n + b\n  end", "reads the bitstring acc"}
           ] do
         msg = rejected(appends("acc = <<acc::bitstring, x::8>>\n  #{read}", "i64"))
@@ -616,7 +616,7 @@ defmodule Defk.BitstringTest do
         assert msg =~ what
       end
 
-      assert rejected(appends("acc = <<acc::bitstring, x::8>>\n  len(acc)", "i64")) =~
+      assert rejected(appends("acc = <<acc::bitstring, x::8>>\n  length(acc)", "i64")) =~
                "bit_size(acc)"
     end
   end

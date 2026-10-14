@@ -11,8 +11,8 @@ defmodule Defk.UnderscoreBindingTest.K do
   end
 
   defk under_oob(a :: [f64]) :: i64 do
-    _ = a[len(a)]
-    len(a)
+    _ = a[length(a)]
+    length(a)
   end
 
   defk under_mul(x :: i64) :: i64 do
@@ -21,14 +21,14 @@ defmodule Defk.UnderscoreBindingTest.K do
   end
 
   defk bad_loop(a :: [f64]) :: i64 do
-    for i <- 0..len(a)//1, reduce: 0 do
+    for i <- 0..length(a)//1, reduce: 0 do
       s -> s + trunc(a[i])
     end
   end
 
   defk under_call(a :: [f64]) :: i64 do
     _r = bad_loop(a)
-    len(a)
+    length(a)
   end
 
   defk bare_alloc(n :: i64) :: i64 do
@@ -55,7 +55,7 @@ defmodule Defk.UnderscoreBindingTest do
     assert {:raise, %ArgumentError{}} = Defk.Test.assert_agrees(K, :under_alloc, [1])
   end
 
-  test "_ = a[len(a)] raises Enum.OutOfBoundsError" do
+  test "_ = a[length(a)] raises Enum.OutOfBoundsError" do
     assert {:raise, %Enum.OutOfBoundsError{}} =
              Defk.Test.assert_agrees(K, :under_oob, [
                <<1.0::float-native-64, 2.0::float-native-64>>

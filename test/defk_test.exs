@@ -32,7 +32,7 @@ defmodule DefkTest do
       # the owned-buffer budget, the same message in both modes (defk-bh3)
       {%ArgumentError{
          message:
-           "out of memory (allocating 1024 bytes would take this call's buffers past max_owned, 8192 bytes)"
+           "out of memory (allocating 1024 bytes would take this call's buffers past max_owned_bytes,8192 bytes)"
        }, :out_of_memory},
       {%Enum.OutOfBoundsError{message: "index 3 out of bounds"}, :index},
       {%CaseClauseError{term: 3}, :clause},

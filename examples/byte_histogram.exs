@@ -88,7 +88,7 @@
 # same per window, then the same term table as N5. Both read the input with
 # no bounds check (the fast-path report proves the ranges: the window loop
 # runs over lo..hi - 4//4 with lo = max(k * w, 0), hi = min(lo + w,
-# len(data))). The parallel side splits exactly as the Elixir side and
+# length(data))). The parallel side splits exactly as the Elixir side and
 # starts one Task.async per chunk (examples/README.md, measuring rule 7).
 # Kernel variants (HIST_VARIANTS=1), ms at 16 MB:
 #
@@ -133,7 +133,7 @@ defmodule Hist.Kernels do
   # Four interleaved tables; the 4-byte loop reads bytes[i..i+3] with i
   # stepping by 4 below len - 3, the tail one byte at a time.
   defk histogram(bytes :: [u8]) :: [i64] do
-    n = len(bytes)
+    n = length(bytes)
     h = alloc(i64, 1024)
 
     for i <- 0..(n - 4)//4 do
@@ -176,7 +176,7 @@ defmodule Hist.Kernels do
   # partial window is ignored). t[c] is the term for a bin with count c,
   # 0.0 - p * log2(p) with p = c / w, built once per call.
   defk entropy(data :: [u8], w :: i64) :: [f64] do
-    n = div(len(data), w)
+    n = div(length(data), w)
     out = alloc(f64, n)
     h = alloc(i64, 1024)
     t = alloc(f64, w + 1)
@@ -192,7 +192,7 @@ defmodule Hist.Kernels do
       end
 
       lo = max(k * w, 0)
-      hi = min(lo + w, len(data))
+      hi = min(lo + w, length(data))
 
       for i <- lo..(hi - 4)//4 do
         a = data[i]
@@ -223,7 +223,7 @@ defmodule Hist.Kernels do
 
   # One table, a log per bin (variant D3).
   defk entropy1(data :: [u8], w :: i64) :: [f64] do
-    n = div(len(data), w)
+    n = div(length(data), w)
     out = alloc(f64, n)
     h = alloc(i64, 256)
 
@@ -233,7 +233,7 @@ defmodule Hist.Kernels do
       end
 
       lo = max(k * w, 0)
-      hi = min(lo + w, len(data))
+      hi = min(lo + w, length(data))
 
       for i <- lo..(hi - 1)//1 do
         b = data[i]
@@ -253,7 +253,7 @@ defmodule Hist.Kernels do
 
   # Four tables, a log per bin (variant D4).
   defk entropy4(data :: [u8], w :: i64) :: [f64] do
-    n = div(len(data), w)
+    n = div(length(data), w)
     out = alloc(f64, n)
     h = alloc(i64, 1024)
 
@@ -263,7 +263,7 @@ defmodule Hist.Kernels do
       end
 
       lo = max(k * w, 0)
-      hi = min(lo + w, len(data))
+      hi = min(lo + w, length(data))
 
       for i <- lo..(hi - 4)//4 do
         a = data[i]

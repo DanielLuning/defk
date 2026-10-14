@@ -146,7 +146,7 @@ defmodule Defk.DocsChecksTest do
     @no_example ["no-c-compiler"]
 
     test "every error code has a failing example and a rewrite (compile_errors_test runs them)" do
-      for %{code: code, example: example, rewrite: rewrite} <- Defk.Errors.codes() do
+      for %{code: code, example: example, rewrite: rewrite} <- Defk.Errors.entries() do
         if code in @no_example do
           assert example == nil and rewrite == nil,
                  "#{code} has an example: remove it from @no_example"

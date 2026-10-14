@@ -180,7 +180,7 @@ row.("frame promotions / yields so far", inspect(Map.take(K.__defk_stats__(), [:
 h.("5. failure isolation: errors are exceptions in the caller, VM survives")
 
 for {label, fun} <- [
-      {"a[len(a)]", fn -> K.oob(bx) end},
+      {"a[length(a)]", fn -> K.oob(bx) end},
       {"i64 overflow", fn -> K.overflow(4_000_000_000) end},
       {"wrong binary size", fn -> K.sum("abc") end},
       {"float where i64 expected", fn -> K.add(1, 2.0) end},

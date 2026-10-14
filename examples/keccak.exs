@@ -121,13 +121,13 @@ kernels =
 
     defk keccak256(msg :: [u8]) :: [u8] do
       offsets = alloc(i64, 2)
-      offsets[1] = len(msg)
+      offsets[1] = length(msg)
       sponge(msg, offsets, 1)
     end
 
     defk sha3_256(msg :: [u8]) :: [u8] do
       offsets = alloc(i64, 2)
-      offsets[1] = len(msg)
+      offsets[1] = length(msg)
       sponge(msg, offsets, 6)
     end
 
@@ -168,7 +168,7 @@ kernels =
     # The 25 lanes are u64 bit patterns in i64 and live in the accumulator
     # tuples (registers), not in an array.
     defk sponge(blob :: [u8], offsets :: [i64], pad :: i64) :: [u8] do
-      k = len(offsets) - 1
+      k = length(offsets) - 1
       out = alloc(u8, 32 * k)
 
       for m <- 0..(k - 1)//1 do

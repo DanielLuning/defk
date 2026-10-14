@@ -13,7 +13,7 @@ body =
     use Defk
 
     defk dot(a :: [f64], b :: [f64]) :: f64 do
-      n = min(len(a), len(b))
+      n = min(length(a), length(b))
 
       for i <- 0..(n - 1)//1, reduce: 0.0 do
         acc -> acc + a[i] * b[i]
@@ -21,7 +21,7 @@ body =
     end
 
     defk cosine(a :: [f64], b :: [f64]) :: f64 do
-      n = min(len(a), len(b))
+      n = min(length(a), length(b))
 
       {d, na, nb} =
         for i <- 0..(n - 1)//1, reduce: {0.0, 0.0, 0.0} do
@@ -33,7 +33,7 @@ body =
 
     # examples/rolling_stats.exs
     defk mean_std(x :: [f64], w :: i64) :: [f64] do
-      n = len(x)
+      n = length(x)
       m = n - w + 1
       out = alloc(f64, 2 * m)
 
@@ -59,9 +59,9 @@ body =
 
     # an element-wise map: the one shape whose loop clang vectorises
     defk scale(a :: [f64], k :: f64) :: [f64] do
-      out = alloc(f64, len(a))
+      out = alloc(f64, length(a))
 
-      for i <- 0..(len(a) - 1)//1 do
+      for i <- 0..(length(a) - 1)//1 do
         out[i] = a[i] * k
       end
 

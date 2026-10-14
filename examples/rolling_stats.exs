@@ -54,7 +54,7 @@ defmodule Rolling.Kernels do
   # Sliding sums: O(n) regardless of window size. Returns means then stddevs,
   # n - w + 1 values each, packed into one array.
   defk mean_std(x :: [f64], w :: i64) :: [f64] do
-    n = len(x)
+    n = length(x)
     m = n - w + 1
     out = alloc(f64, 2 * m)
 

@@ -5,7 +5,7 @@
 # missing emission clause in either emitter, a wrong coercion, or a
 # semantic drift all fail here, by construction, for every row.
 #
-# u64 operands are built with f64_to_u64/1 of an f64 parameter (u64 is not
+# u64 operands are built with f64_bits/1 of an f64 parameter (u64 is not
 # a parameter type). The :bitstring row (bit_size/1) is not generated: a
 # bitstring parameter makes the kernel a helper (inlined only), and
 # bitstring_test.exs covers it end to end.
@@ -59,10 +59,10 @@ defmodule Defk.BuiltinsTableKernelsTest do
   defp param_decl({:arr, e}, i), do: "p#{i} :: [#{e}]"
   defp param_decl(t, i), do: "p#{i} :: #{t}"
 
-  defp arg_expr(:u64, i, _mixed?), do: "f64_to_u64(p#{i})"
+  defp arg_expr(:u64, i, _mixed?), do: "f64_bits(p#{i})"
 
   # mixing an i64 that may be negative into a u64 operation is rejected by
-  # the emitters (u64-mix, a fact-dependent refinement the table leaves to
+  # the emitters (u64-with-i64, a fact-dependent refinement the table leaves to
   # them): a mixed row's i64 operands are made provably non-negative with
   # the documented band idiom
   defp arg_expr(:i64, i, true), do: "band(p#{i}, 0x7FFFFFFFFFFFFFFF)"
@@ -73,7 +73,7 @@ defmodule Defk.BuiltinsTableKernelsTest do
 
   defp input(:i64), do: [7, -3]
   defp input(:f64), do: [2.5, -1.25]
-  # becomes a u64 via f64_to_u64 inside the kernel
+  # becomes a u64 via f64_bits inside the kernel
   defp input(:u64), do: [4.0, -2.0]
 
   defp input({:arr, :f64}),

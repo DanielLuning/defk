@@ -22,7 +22,7 @@ defmodule Defk.CompileErrorsDocTest do
 
   test "every error code has a ### heading in the Codes section, and every heading there is a code",
        %{doc: doc} do
-    codes = Enum.map(Defk.Errors.codes(), & &1.code)
+    codes = Enum.map(Defk.Errors.entries(), & &1.code)
 
     in_section =
       for {3, text} <- headings(codes_section(doc)), do: text
@@ -33,7 +33,7 @@ defmodule Defk.CompileErrorsDocTest do
   test "each code's anchor belongs to its heading and to no other", %{doc: doc} do
     anchors = anchors(doc)
 
-    for %{code: code} <- Defk.Errors.codes() do
+    for %{code: code} <- Defk.Errors.entries() do
       assert Enum.count(anchors, &(&1 == code)) == 1, "anchor ##{code}"
     end
   end
@@ -42,7 +42,7 @@ defmodule Defk.CompileErrorsDocTest do
     # Both slug a heading by lowercasing it and turning spaces into hyphens,
     # but differ on dots, apostrophes and the like: a code of only [a-z0-9-]
     # is the same anchor in both.
-    for %{code: code} <- Defk.Errors.codes() do
+    for %{code: code} <- Defk.Errors.entries() do
       assert code =~ ~r/^[a-z0-9]+(-[a-z0-9]+)*$/, "code #{inspect(code)} is not a plain slug"
     end
   end

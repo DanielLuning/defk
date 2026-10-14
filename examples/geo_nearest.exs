@@ -67,7 +67,7 @@ defmodule Geo.Kernels do
     end
 
     _ =
-      for i <- 0..(len(lat) - 1)//1, reduce: 0 do
+      for i <- 0..(length(lat) - 1)//1, reduce: 0 do
         worst ->
           sdlat = sin((lat[i] - qlat) / 2)
           s2 = sdlat * sdlat
@@ -118,7 +118,7 @@ defmodule Geo.Kernels do
   end
 
   # the same over gathered grid candidates: ties break by ids[], not position;
-  # returns positions in rank order (callers guarantee len(lat) >= k)
+  # returns positions in rank order (callers guarantee length(lat) >= k)
   defk nearest_ids(
          ids :: [i64],
          lat :: [f64],
@@ -138,7 +138,7 @@ defmodule Geo.Kernels do
     end
 
     _ =
-      for i <- 0..(len(lat) - 1)//1, reduce: 0 do
+      for i <- 0..(length(lat) - 1)//1, reduce: 0 do
         worst ->
           sdlat = sin((lat[i] - qlat) / 2)
           s2 = sdlat * sdlat

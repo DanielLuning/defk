@@ -1,4 +1,4 @@
-# Bit builtins (defk-52v.6): mulhi, clz, ctz, popcount, rotl64 and rotr64 act
+# Bit builtins (defk-52v.6): mulhi, clz, ctz, popcount, rotl and rotr act
 # on the u64 bit patterns of i64 operands and agree with their plain Elixir
 # meaning in Defk.Bits.
 
@@ -9,15 +9,15 @@ defmodule Defk.BitBuiltinsTest.K do
   defk(clz_f(a :: i64) :: i64, do: clz(a))
   defk(ctz_f(a :: i64) :: i64, do: ctz(a))
   defk(popcount_f(a :: i64) :: i64, do: popcount(a))
-  defk(rotl_f(a :: i64, n :: i64) :: i64, do: rotl64(a, n))
-  defk(rotr_f(a :: i64, n :: i64) :: i64, do: rotr64(a, n))
+  defk(rotl_f(a :: i64, n :: i64) :: i64, do: rotl(a, n))
+  defk(rotr_f(a :: i64, n :: i64) :: i64, do: rotr(a, n))
 
   # a count has a range: it indexes a 65-element table without a bounds check
   defk(count_at(t :: [i64], a :: i64) :: i64, do: t[popcount(a)] + t[clz(a)] + t[ctz(a)])
 
   # a typical use: xxh3-style 128-bit fold and a rotate-xor mix
   defk(fold(a :: i64, b :: i64) :: i64, do: bxor(mulhi(a, b), a))
-  defk(mix(h :: i64, n :: i64) :: i64, do: bxor(rotl64(h, 13), rotr64(h, n)))
+  defk(mix(h :: i64, n :: i64) :: i64, do: bxor(rotl(h, 13), rotr(h, n)))
 end
 
 # Module aliases are lexical (defk-kwl): `Bits.clz(x)` under `alias Defk.Bits`
@@ -96,7 +96,7 @@ defmodule Defk.BitBuiltinsTest do
     assert K.rotr_f(1, 65) == @min
   end
 
-  test "rotl64 with the top bit set equals the Bitwise rotate on the unsigned value" do
+  test "rotl with the top bit set equals the Bitwise rotate on the unsigned value" do
     for x <- [@min, -1, @min + 12_345, -0x123456789ABCDEF], n <- 0..63 do
       u = Bitwise.band(x, 0xFFFFFFFFFFFFFFFF)
 
@@ -108,7 +108,7 @@ defmodule Defk.BitBuiltinsTest do
 
       expected = if rot >= 2 ** 63, do: rot - 2 ** 64, else: rot
       assert K.rotl_f(x, n) == expected
-      assert Defk.Bits.rotl64(x, n) == expected
+      assert Defk.Bits.rotl(x, n) == expected
       assert K.rotr_f(K.rotl_f(x, n), n) == x
     end
   end
@@ -139,8 +139,8 @@ defmodule Defk.BitBuiltinsTest do
           {"clz(a)", "a :: f64", "clz/1 takes an integer, and is called here with (f64)"},
           {"popcount(a)", "a :: bool",
            "popcount/1 takes an integer, and is called here with (bool)"},
-          {"rotl64(a, b)", "a :: i64, b :: f64",
-           "rotl64/2 takes two i64 values, and is called here with (i64, f64)"},
+          {"rotl(a, b)", "a :: i64, b :: f64",
+           "rotl/2 takes two i64 values, and is called here with (i64, f64)"},
           {"mulhi(a)", "a :: i64", "mulhi/2 takes two i64 values, and is called here with (i64)"}
         ] do
       msg = rejection(body, sig)

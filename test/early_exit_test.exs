@@ -98,7 +98,7 @@ defmodule Defk.EarlyExitTest.K do
   # flat loops: the early-exit loop has no nested loop, so it runs on the
   # strip path (one plain loop under DEFK_STRIP trips, else strips)
   defk find_at_least(a :: [i64], t :: i64) :: i64 do
-    Enum.reduce_while(0..(len(a) - 1)//1, -1, fn i, _ ->
+    Enum.reduce_while(0..(length(a) - 1)//1, -1, fn i, _ ->
       if a[i] >= t, do: {:halt, i}, else: {:cont, -1}
     end)
   end
@@ -110,7 +110,7 @@ defmodule Defk.EarlyExitTest.K do
   # many short and long early-exit flat loops inside a loop with a safepoint
   defk find_many(a :: [i64], reps :: i64) :: i64 do
     for r <- 1..reps//1, reduce: 0 do
-      acc -> rem(acc * 7 + find_at_least(a, rem(r * 7919, len(a) + 50)), 1_000_000_007)
+      acc -> rem(acc * 7 + find_at_least(a, rem(r * 7919, length(a) + 50)), 1_000_000_007)
     end
   end
 
@@ -125,7 +125,7 @@ defmodule Defk.EarlyExitTest.K do
     end)
   end
 
-  # a[i] is checked (n may exceed len(a)): out of bounds raises only if
+  # a[i] is checked (n may exceed length(a)): out of bounds raises only if
   # reached before the halt; the inner fold gives the loop a safepoint
   defk sum_until(a :: [i64], stop :: i64, n :: i64) :: i64 do
     Enum.reduce_while(0..n//1, 0, fn i, acc ->
@@ -213,9 +213,9 @@ defmodule Defk.EarlyExitTest.K do
 
   # statement form: array writes in the arms, the last arm without a catch-all
   defk case_stmt(a :: [i64], strict :: bool) :: [i64] do
-    out = alloc(i64, len(a))
+    out = alloc(i64, length(a))
 
-    for i <- 0..(len(a) - 1)//1 do
+    for i <- 0..(length(a) - 1)//1 do
       case rem(a[i], 3) do
         0 -> out[i] = 100
         1 -> out[i] = a[i] * 2
