@@ -26,8 +26,9 @@ defmodule Defk.MixProject do
 
   def application, do: [extra_applications: [:logger]]
 
-  # The Hex package (defk-djy.8). Publishing is gated on the verdict
-  # (docs/verdict.md); until then `mix hex.build` in `mix ci` only proves the
+  # The Hex package (defk-djy.8). The accepted verdict (docs/verdict.md)
+  # holds publishing until Linux evidence and a stability promise exist
+  # (defk-wfi); until then `mix hex.build` in `mix ci` only proves the
   # package builds. The package holds what a dependent's build needs: the
   # compiler (lib/), the runtime header (priv/defk_runtime.h) and the docs
   # ex_doc builds from. examples/, bench/, dev/, test/ and the research
