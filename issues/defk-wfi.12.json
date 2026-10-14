@@ -11,9 +11,15 @@
     "wayfinder:task"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution: done, merged to main. Probe (a scratch kernel module under mix credo --strict with this repo's config): Credo's own default Credo.Check.Warning.ExpensiveEmptyEnumCheck warns on length(a) == 0 and length(a) \u003e 0 in a kernel ('Using length/1 is expensive, prefer comparing against an empty list'); ex_slop's LengthComparison flags length(a) == 0, \u003e 0 and \u003e 3; length(a) == length(b) is not flagged; n = length(a) then n == 0 is flagged by neither. Maintainer's decision (2026-10-14), given that Credo's default check is affected: keep length/1 and document it (not back to len/1, not array_size/1). docs/language.md has a 'Linters and length/1' paragraph after the builtins table; the cheatsheet's builtin line says it in one sentence. mix ci 1739/1739.",
+      "timestamp": "2026-10-14T20:33:50Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Note in the language reference: lint checks may flag length/1 in a kernel",
   "type": "task",
-  "updated_at": "2026-10-14T20:30:57Z"
+  "updated_at": "2026-10-14T20:33:50Z"
 }
