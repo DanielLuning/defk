@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-wfi.2"
+  ],
   "blocks": [],
   "created": "2026-10-14T13:17:50Z",
   "description": "## Question\n\nIs defk ready to publish 0.1.0? This is the last ticket of the map 'Wayfinder: defk ready for a first Hex release'. The map ends here: the publish itself (mix hex.publish) is not part of it.\n\nCheck and do:\n- version 0.1.0 in mix.exs; the first-release notes in mix.exs (for example the Defk.Errors footer base)\n- CHANGELOG.md with the 0.1.0 entry\n- zero open [BUG] tickets\n- one green run of the full CI matrix on the release commit, from either CI path, cited\n- the stability promise guide merged; the Linux run recorded; the triage's blockers closed\n- mix hex.build passes and the package holds what a dependent needs\n- the verdict's Limitations line names what was and was not checked\n\nDone when: every item holds, and the resolution comment cites the evidence.",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Release-readiness check for 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-14T13:18:00Z"
+  "updated_at": "2026-10-14T13:18:01Z"
 }
