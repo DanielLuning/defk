@@ -18,11 +18,15 @@
     {
       "text": "The Valgrind container (defk-96f.3) is ready to become a Linux job here (release-time, not per-CI). Also add CC=clang on glibc to the matrix: defk-o52 crashes on the first raise without its fix.",
       "timestamp": "2026-10-13T10:53:48Z"
+    },
+    {
+      "text": "Re-scoped by the map 'Wayfinder: defk ready for a first Hex release' (2026-10-14). Scope item 1's choice is made: dual CI (GitHub Actions and a local Docker recipe), built by defk-wfi.2, which this ticket now waits on. This ticket keeps: fix or ticket each Linux failure that the matrix shows; add the spread to Defk.Bench.report/1 (the known evidence gap) before the measurement run; one examples/run_all.exs run on Linux x86-64 (native hardware, never emulation), recorded in docs/performance.md as its own conditions block, with verdicts that differ from macOS called out; the supported/untested note in the guides.",
+      "timestamp": "2026-10-14T13:18:03Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Run the test suite on Linux (x86-64 and aarch64) and record one Linux measurement run",
   "type": "task",
-  "updated_at": "2026-10-14T13:18:02Z"
+  "updated_at": "2026-10-14T13:18:03Z"
 }
