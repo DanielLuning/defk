@@ -28,14 +28,12 @@ defmodule Defk.Errors do
 
       why: a kernel works on numbers, booleans, tuples and packed arrays; ...
       hint: pass the values as separate arguments, ...
-      (defk unsupported-map: https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#unsupported-map)
+      (defk unsupported-map: https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-map)
 
   The footer is a link that opens wherever you read the error. In a project
-  that depends on defk (from a path, git or Hex) it is a URL; the same entry
-  is on the [compile errors](compile-errors.md) page of these docs, under the
-  code's heading. The URL points at the `main` branch on GitHub until defk is
-  released on Hex; the release switches it to HexDocs for the installed
-  version (see `@url_base`). Only when you compile inside the defk repository
+  that depends on defk (from Hex, a path or git) it is a URL to the
+  [compile errors](compile-errors.md) page of the installed version's docs,
+  under the code's heading. Only when you compile inside the defk repository
   itself is the footer the page's path (`docs/compile-errors.md#unsupported-map`).
   The page is generated from this registry, so the two never differ.
   """
@@ -44,13 +42,10 @@ defmodule Defk.Errors do
   # repository the page's relative path opens in an editor. In a project that
   # depends on defk the path would lead into deps/ or another checkout (a
   # path dependency's absolute path), which a reader of HexDocs cannot open,
-  # so the footer is a URL there, whether or not the file is on disk. defk is
-  # not on Hex yet, so the URL is the GitHub blob on main, which resolves
-  # today and keeps every code's anchor (codes are never renamed). At the Hex
-  # release (defk-djy.8) change the one line below to
-  #   "https://hexdocs.pm/defk/#{Mix.Project.config()[:version]}/compile-errors.html#"
-  # (the version of the install, for an anchor that matches that version).
-  @url_base "https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#"
+  # so the footer is a URL there, whether or not the file is on disk: the
+  # HexDocs page of the version this defk is (from 0.1.0, defk-wfi.6), so the
+  # anchor matches the code the installed compiler reported.
+  @url_base "https://hexdocs.pm/defk/#{Mix.Project.config()[:version]}/compile-errors.html#"
   @catalogue Path.expand("../../docs/compile-errors.md", __DIR__)
 
   # Rejections reported per module; later ones are counted, not shown.

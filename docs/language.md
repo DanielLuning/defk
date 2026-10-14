@@ -275,7 +275,7 @@ error: cannot compile MyApp.Kernels: C compiler `cc` not found
 
 why: a kernel is compiled to native code at build time, so a C toolchain is needed on the build machine, as for elixir_make packages
 hint: install one (macOS: `xcode-select --install`; Debian/Ubuntu: `apt install build-essential`; Alpine: `apk add build-base`), or set `CC` to a compiler path
-(defk no-c-compiler: https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#no-c-compiler)
+(defk no-c-compiler: https://hexdocs.pm/defk/0.1.0/compile-errors.html#no-c-compiler)
 ```
 
 If the C compiler runs but fails, the `CompileError` says
@@ -2198,7 +2198,7 @@ error: maps are not in the kernel subset
 
 why: a kernel works on numbers, booleans, tuples and packed arrays; a map is a BEAM term it can neither build nor read
 hint: pass the values as separate arguments, or pack them into an array before the call; for a count per key, index an array by the key (counts = alloc(i64, 256), then counts[b] = counts[b] + 1)
-(defk unsupported-map: https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#unsupported-map)
+(defk unsupported-map: https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-map)
 ```
 
 "not in the kernel subset" means the construct stays out; "not supported yet"

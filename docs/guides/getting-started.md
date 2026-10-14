@@ -26,18 +26,19 @@ wrapper NIF is the better choice, is on the [scope page](../scope.md).
 
 ## Add defk to a project
 
-defk is a research project and is not on Hex. Add it to `deps` in `mix.exs`
-from a local checkout or from git:
+Add defk to `deps` in `mix.exs`:
 
 ```elixir
 defp deps do
   [
-    {:defk, path: "../defk"},
-    # or: {:defk, git: "https://github.com/DanielLuning/defk.git", branch: "main"}
+    {:defk, "~> 0.1"},
     {:stream_data, "~> 1.1", only: :test}
   ]
 end
 ```
+
+`~> 0.1` takes every `0.y` release: the
+[stability promise](stability.md) keeps them compatible.
 
 `stream_data` is optional; [Testing kernels](testing.md) uses it for
 agreement properties. Then run `mix deps.get`.
@@ -47,7 +48,7 @@ compiler too, on the machine the notebook runs on.
 
 <!-- defk-example skip: Mix.install cannot run inside the project's own tests; the measuring guide's script runs with it removed -->
 ```elixir
-Mix.install([{:defk, path: "../defk"}])
+Mix.install([{:defk, "~> 0.1"}])
 ```
 
 ## Your first kernel
@@ -193,7 +194,7 @@ hint: write the for ..., reduce: loop (start from 0.0 if the values are floats):
     for x <- xs, reduce: 0.0 do
       acc -> acc + x
     end
-(defk unsupported-call: https://github.com/DanielLuning/defk/blob/main/docs/compile-errors.md#unsupported-call)
+(defk unsupported-call: https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-call)
 ```
 
 Each error has the same parts:

@@ -2,7 +2,7 @@
 defmodule Defk.MixProject do
   use Mix.Project
 
-  @version "0.0.1"
+  @version "0.1.0"
   @source_url "https://github.com/DanielLuning/defk"
 
   def project do
@@ -26,21 +26,19 @@ defmodule Defk.MixProject do
 
   def application, do: [extra_applications: [:logger]]
 
-  # The Hex package (defk-djy.8). The accepted verdict (docs/verdict.md)
-  # holds publishing until Linux evidence and a stability promise exist
-  # (defk-wfi); until then `mix hex.build` in `mix ci` only proves the
-  # package builds. The package holds what a dependent's build needs: the
-  # compiler (lib/), the runtime header (priv/defk_runtime.h) and the docs
-  # ex_doc builds from. examples/, bench/, dev/, test/ and the research
-  # notes stay out. At the first release, Defk.Errors' footer base
-  # (@url_base) moves from the GitHub blob to hexdocs.pm (defk-djy.6).
+  # The Hex package (defk-djy.8; 0.1.0 made ready by the map defk-wfi). The
+  # package holds what a dependent's build needs: the compiler (lib/), the
+  # runtime header (priv/defk_runtime.h) and the user docs ex_doc builds
+  # from (the extras below). examples/, bench/, dev/, test/, the research
+  # notes and docs/performance.md (a maintainers' record) stay out.
+  # Defk.Errors' footer links the installed version's HexDocs page
+  # (@url_base, defk-djy.6).
   defp package do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url, "Changelog" => @source_url <> "/blob/main/CHANGELOG.md"},
-      files:
-        ~w(lib priv/defk_runtime.h mix.exs README.md LICENSE CHANGELOG.md CONTEXT.md
-                docs/guides docs/language.md docs/compile-errors.md docs/scope.md docs/performance.md)
+      files: ~w(lib priv/defk_runtime.h mix.exs README.md LICENSE CHANGELOG.md CONTEXT.md
+                docs/guides docs/language.md docs/compile-errors.md docs/scope.md)
     ]
   end
 
