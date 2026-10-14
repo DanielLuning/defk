@@ -1,4 +1,4 @@
-# Bit builtins (defk-52v.6): mulhi, clz, ctz, popcount, rotl and rotr act
+# Bit builtins: mulhi, clz, ctz, popcount, rotl and rotr act
 # on the u64 bit patterns of i64 operands and agree with their plain Elixir
 # meaning in Defk.Bits.
 
@@ -20,7 +20,7 @@ defmodule Defk.BitBuiltinsTest.K do
   defk(mix(h :: i64, n :: i64) :: i64, do: bxor(rotl(h, 13), rotr(h, n)))
 end
 
-# Module aliases are lexical (defk-kwl): `Bits.clz(x)` under `alias Defk.Bits`
+# Module aliases are lexical: `Bits.clz(x)` under `alias Defk.Bits`
 # (or `as: B`) is the same call as `Defk.Bits.clz(x)`, in native and Elixir mode.
 defmodule Defk.BitBuiltinsTest.AliasK do
   use Defk, elixir_mode: true

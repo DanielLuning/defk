@@ -1,5 +1,5 @@
-# Arrays through if/cond/case branches, and returning input arrays
-# (defk-gqk). The value of a branch may be any of its arms' arrays, input or
+# Arrays through if/cond/case branches, and returning input arrays.
+# The value of a branch may be any of its arms' arrays, input or
 # owned: natively the branch's temporary holds that array's view, no elements
 # copied. A view of an input array is re-bound after every resume, like the
 # parameter it came from (the binary may have moved in a GC between two

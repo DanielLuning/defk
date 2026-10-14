@@ -55,7 +55,7 @@ defmodule Defk.Builtins do
   def bits, do: @bits
 
   # -------------------------------------------------------------- typing ---
-  # The builtin signature table (ADR-0008, defk-o49): name and operand type
+  # The builtin signature table (ADR-0008): name and operand type
   # patterns in, result type and coercions out, consumed by both the C
   # lowering and Elixir mode so the two cannot drift. SEMANTICS stay written
   # twice on purpose: Elixir mode is the oracle (see the ADR before

@@ -1,6 +1,6 @@
 defmodule Defk.Properties do
   @moduledoc false
-  # Agreement properties (defk-ne6): for each kernel of a module, a property
+  # Agreement properties: for each kernel of a module, a property
   # that draws its arguments and runs Defk.Test.assert_agrees, so the kernel
   # and its Elixir mode are checked on generated inputs, not only on the
   # hand-picked ones in the tests. In a test module:
@@ -10,7 +10,7 @@ defmodule Defk.Properties do
   #     agreement K, [
   #       :add,
   #       count_primes: [args: fixed_list([G.i64(-10..3_000, [@max])])],
-  #       scale: [args: ..., divergence: {"defk-xxx: ...", args}]
+  #       scale: [args: ..., divergence: {"why: ...", args}]
   #     ]
   #
   # A kernel with no options draws each argument from Defk.Generators by its
@@ -23,7 +23,7 @@ defmodule Defk.Properties do
   #     (default: the same generator, 10_000 runs)
   #   * `:divergence` - `{why, args}`: one more property, over `args`, that
   #     finds a known divergence; tagged `:divergence` (excluded by default)
-  #     with `why` naming its ticket
+  #     with `why` saying what diverges
   #
   # `agreement/2` also defines a test that the list names every kernel of the
   # module (a new kernel without a property fails it), and a property that a

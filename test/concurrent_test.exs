@@ -1,5 +1,5 @@
 # The runtime contract, entry: concurrent calls of the same kernel from many
-# processes (defk-5fc). Every call has its own frame and its own owned buffers
+# processes. Every call has its own frame and its own owned buffers
 # (ctx->owned is per call, and frames_live counts the frames of this library),
 # so calls that yield and interleave must not share state: each caller gets
 # the result it would get alone (the one rule), and once every caller is done

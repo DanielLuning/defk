@@ -20,8 +20,8 @@
 # 1k to 100k.
 #
 # NUMBERS ARE PROVISIONAL: measured on a loaded machine (two other benchmark
-# agents running, load average ~6-7 on 12 cores). The quiet-machine run is
-# defk-sgw.4. M-series Mac, OTP 29, Elixir 1.20.2.
+# agents running, load average ~6-7 on 12 cores). A quiet-machine run was
+# recorded separately. M-series Mac, OTP 29, Elixir 1.20.2.
 #
 # The job, the same on every side: the query arrives as a list of 384 floats
 # (f32 values, not unit length, as the model returns it); normalise it, score
@@ -98,7 +98,7 @@
 #   Elixir, one process                        366-368   (3.7)
 #
 #   defk's 12 chunks are only 2.8x its one call: kernel tasks under
-#   Task.async_stream stay on 2-3 of 12 schedulers (defk-8qs).
+#   Task.async_stream stay on 2-3 of 12 schedulers.
 #   vettore runs one thread per call: defk with chunks is 1.6-1.7x faster
 #   than it, defk in one call 1.7x slower. Its flat_new_cosine computes
 #   three f64 dot products per row (the query's norm again on every row) and
@@ -108,7 +108,7 @@
 #   matrix-vector top-k, use Nx with EXLA. Nx on the BinaryBackend is Elixir
 #   and ~300x slower than the Elixir baseline. EXLA 0.13.1 compiled here in
 #   ~25 s with a precompiled XLA 0.10.0 (the EXLA 0.10.0 that matmul.exs
-#   tried did not compile; defk-7tk re-measures matmul with it). defk earns its place only where the loop is more
+#   tried did not compile; matmul is to be re-measured with it). defk earns its place only where the loop is more
 #   than a dot product (a custom score, a filter, a different top-k rule) or
 #   where EXLA is not wanted as a dependency.
 #
@@ -136,14 +136,13 @@
 #
 # Kernel notes: @dim 384 is a literal, so m[r * 384 + 8 * j + c] needs no
 # bounds check (with dim = length(q) every access kept its check: 25 vs 20 ms
-# in one call; defk-n7k); q is copied into a 384-element alloc for the same
+# in one call); q is copied into a 384-element alloc for the same
 # reason. A strict f64 sum cannot be vectorised by clang, so the dot product
 # keeps eight partial sums; clang's SLP vectoriser then runs them as four
 # 2 x f64 NEON lanes (fcvtl f32->f64, fmul.2d, fadd.2d) with the non-finite
 # checks flagged once per strip. A dimension-major layout (an axpy into the
 # score array) was tried: it does not vectorise, because the in-place
-# out[r] = out[r] + x * q keeps per-operation float checks (~26 ms;
-# defk-agp).
+# out[r] = out[r] + x * q keeps per-operation float checks (~26 ms).
 
 Mix.install([
   {:defk, path: Path.expand("..", __DIR__)},

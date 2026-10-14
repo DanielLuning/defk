@@ -1,4 +1,4 @@
-# Module attributes as constants in kernel bodies (defk-ivt): an integer,
+# Module attributes as constants in kernel bodies: an integer,
 # float or boolean attribute is inlined as its literal, a binary attribute is
 # a [u8] (a write copies it first), and any other value is a compile error.
 
@@ -105,7 +105,7 @@ defmodule Defk.AttributesTest.K do
     x + @lim
   end
 
-  # returned unwritten: a new binary of its bytes (defk-gqk)
+  # returned unwritten: a new binary of its bytes
   defk alphabet_or(c :: bool, b :: [u8]) :: [u8] do
     if c, do: @alphabet, else: b
   end

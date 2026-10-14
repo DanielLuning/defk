@@ -1,6 +1,6 @@
 defmodule Defk.Bitstring do
   @moduledoc false
-  # The bitstring accumulator (defk-cmr): a kernel local that starts as `<<>>`
+  # The bitstring accumulator: a kernel local that starts as `<<>>`
   # and is only appended to, `acc = <<acc::bitstring, v::size(n), ...>>`, with
   # unsigned big-endian integer segments, and is returned as a bitstring. The
   # compiler, Elixir mode and the generated wrappers share the forms here, so
@@ -121,7 +121,7 @@ defmodule Defk.Bitstring do
   @doc false
   # The names `body` appends to: `<<name::bitstring, ...>>` anywhere in it,
   # or `name` passed where a helper takes a bitstring (`bits_params`: the
-  # bitstring parameter positions of each {name, arity}, defk-ooq).
+  # bitstring parameter positions of each {name, arity}).
   def accumulator_names(body, bits_params \\ %{}) do
     {_, names} =
       Macro.prewalk(body, MapSet.new(), fn
@@ -163,7 +163,7 @@ defmodule Defk.Bitstring do
 
   @doc false
   # Whether a kernel (or its signature) is a helper: one that takes a
-  # bitstring (defk-ooq). A helper is only inlined into the kernels that call
+  # bitstring. A helper is only inlined into the kernels that call
   # it, so it has no NIF and no Elixir function.
   def helper?(%{params: params}), do: Enum.any?(params, &match?({_, :bitstring}, &1))
 

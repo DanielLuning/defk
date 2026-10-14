@@ -231,7 +231,7 @@ defmodule Defk.LanguageDocExamplesTest do
             fence("defk g(x :: i64) :: i64, do: %{a: x}"),
             fence(@kernel),
             fence("iex> M.f(1)\n3"),
-            "<!-- defk-example known-failure: defk-xyz -->",
+            "<!-- defk-example known-failure: f/1 gives 2 -->",
             fence(@kernel <> "\n"),
             fence("iex> M.f(1)\n3")
           ],
@@ -251,7 +251,7 @@ defmodule Defk.LanguageDocExamplesTest do
         LanguageDoc.verify!(wrong, LanguageDoc.compile(wrong, dir))
       end
 
-      assert known.known_failure == "defk-xyz"
+      assert known.known_failure == "f/1 gives 2"
       LanguageDoc.verify!(known, LanguageDoc.compile(known, dir))
       fixed = %{known | steps: [%{hd(known.steps) | expected: {:value, "2"}}]}
 

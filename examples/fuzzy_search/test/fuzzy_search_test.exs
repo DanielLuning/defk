@@ -1,5 +1,5 @@
 defmodule FuzzySearchTest do
-  # The early cut-off (defk-8i4) must not change any result: every backend is
+  # The early cut-off must not change any result: every backend is
   # compared with a plain full scan (every distance computed, all sorted).
   use ExUnit.Case, async: true
 

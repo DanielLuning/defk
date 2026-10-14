@@ -1,4 +1,4 @@
-# The fast-path report (defk-6cn): __defk_report__/0 lists what the compiler
+# The fast-path report: __defk_report__/0 lists what the compiler
 # did to each kernel's hot path as {kernel, line, fact}, and
 # Defk.Report.print/1 shows it as margin notes on the kernel source.
 #
@@ -66,7 +66,7 @@ defmodule Defk.ReportTest.K do
     a
   end
 
-  # no float operation: nothing to flag (defk-60q)
+  # no float operation: nothing to flag
   defk spread(a :: [u8]) :: [u8] do
     out = alloc(u8, 2 * length(a))
 
@@ -236,7 +236,7 @@ defmodule Defk.ReportTest do
     @describetag :clang
 
     # an in-order float reduction: arm64 vectorises it as an ordered
-    # reduction, x86-64 keeps it scalar (docs/performance.md 6.17; defk-wfi.9)
+    # reduction, x86-64 keeps it scalar (docs/performance.md 6.17)
     test "dot's hot loop: vectorised on arm64, missed with the reason on x86-64" do
       assert [{:vectorize, result, why}] =
                for(
@@ -290,11 +290,14 @@ defmodule Defk.ReportTest do
 
     # The cached .remarks name the .c of the checkout that built them; a
     # worktree with a copied _build, a moved project or a restored CI cache
-    # has the same cache key at another path (defk-fr7).
+    # has the same cache key at another path.
     test "gives the same facts as the directory that built it" do
       src = Full.__defk_c_source__()
       base = String.trim_trailing(Full.__defk_lib__(), ".so")
-      other = Path.join(System.tmp_dir!(), "defk-fr7-#{System.unique_integer([:positive])}")
+
+      other =
+        Path.join(System.tmp_dir!(), "defk-moved-cache-#{System.unique_integer([:positive])}")
+
       File.mkdir_p!(other)
       on_exit(fn -> File.rm_rf!(other) end)
 
@@ -310,7 +313,7 @@ defmodule Defk.ReportTest do
       moved_report = Defk.Report.full(bare, src, moved)
 
       assert moved_report == Full.__defk_report__()
-      # a fact from the remarks, whichever the target's result (defk-wfi.9)
+      # a fact from the remarks, whichever the target's result
       assert Enum.any?(moved_report, &match?({_, _, {:vectorize, _, _}}, &1))
     end
   end

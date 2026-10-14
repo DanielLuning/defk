@@ -1,4 +1,4 @@
-# The bitstring accumulator (defk-cmr): a local that starts as <<>> and is
+# The bitstring accumulator: a local that starts as <<>> and is
 # only appended to, acc = <<acc::bitstring, v::size(n)>>, returned as a real
 # bitstring. Natively a growable buffer kept in the frame across yields and
 # freed on an exception or process death; in Elixir mode the bitstring
@@ -15,7 +15,7 @@ defmodule Defk.BitstringTest.K do
     end
   end
 
-  # each element of a [u64] in n bits: 2^63 and up included (defk-dig)
+  # each element of a [u64] in n bits: 2^63 and up included
   defk pack_u64(xs :: [u64], n :: i64) :: bitstring do
     for x <- xs, reduce: <<>> do
       acc -> <<acc::bitstring, x::size(n)>>

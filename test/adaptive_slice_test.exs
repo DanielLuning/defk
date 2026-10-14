@@ -1,4 +1,4 @@
-# The adaptive slice (defk-04y): a yielding kernel's function passes how many
+# The adaptive slice: a yielding kernel's function passes how many
 # processes wait in the run queues (:erlang.statistics(:total_run_queue_lengths))
 # to its NIF, renamed __defk_native_<name>__ with the hint as an extra last
 # argument. A hint > 0 makes the call yield every 50 us instead of 250 us for

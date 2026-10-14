@@ -1,5 +1,5 @@
 defmodule Defk.BenchCacheTest do
-  # The --bench result cache (Defk.Bench.Cache, defk-30c.5), in-process:
+  # The --bench result cache (Defk.Bench.Cache), in-process:
   # each "run" is a fresh process, like one example script under
   # mix defk.examples, with the runner's environment variables set by hand.
   # Examples.Kernels (test/support) is a loaded kernel module, so the key's

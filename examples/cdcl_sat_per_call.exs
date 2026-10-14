@@ -11,7 +11,7 @@
 #
 #   elixir examples/cdcl_sat_per_call.exs
 #
-# PRE-REGISTERED (defk-9p6.25, from docs/research/sat-solver.md, before any
+# PRE-REGISTERED (from docs/research/sat-solver.md, before any
 # number here): "Ash-sized formulas (~27 variables, 63 clauses) solve in
 # 4-82 us in picosat_elixir, about what packing the CNF into binaries costs
 # (~31 us measured), so a kernel used as a per-call drop-in for
@@ -21,7 +21,7 @@
 #
 # MEASURED (M4 Pro, OTP 29, Elixir 1.20.2; load 3-7 from other agents'
 # builds, four runs, the last after merging main, provisional; baseline :optimized): the premise is wrong
-# at Ash size and right below it. defk-52v.15 had measured one solve per
+# at Ash size and right below it. cdcl_sat.exs had measured one solve per
 # call at 26-28 variables as good (2.3-5.3x) and this confirms it inside
 # Crux, the way a drop-in is used. The research's 31 us for packing does not
 # hold: SatEx.pack of a 5-variable formula is 0.75 us, a whole kernel call
@@ -54,7 +54,7 @@
 #   2. cdcl_sat_per_call_tiny: tiny formulas (P = 1-3, 5-11 vars), the
 #      pre-registered "poor": 0.67-0.82x under load (the DPLL sketch solves 5
 #      variables in 1.2 us, under the kernel's pack + call + unpack, 1.8 us).
-#      The quiet-machine snapshot (2026-10-13, defk-sgw.4) read 1.27x and
+#      The quiet-machine snapshot (2026-10-13) read 1.27x and
 #      0.71x in two runs minutes apart (Elixir 5.6-9.7 ms vs defk 7.6-7.9 ms
 #      per 200 enumerations: the Elixir side is the noisy one): the line
 #      sits on the 1x line, so `expected:` stays the pre-registered poor and

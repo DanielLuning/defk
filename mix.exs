@@ -26,13 +26,12 @@ defmodule Defk.MixProject do
 
   def application, do: [extra_applications: [:logger]]
 
-  # The Hex package (defk-djy.8; 0.1.0 made ready by the map defk-wfi). The
-  # package holds what a dependent's build needs: the compiler (lib/), the
-  # runtime header (priv/defk_runtime.h) and the user docs ex_doc builds
-  # from (the extras below). examples/, bench/, dev/, test/, the research
+  # The Hex package. It holds what a dependent's build needs: the compiler
+  # (lib/), the runtime header (priv/defk_runtime.h) and the user docs
+  # ex_doc builds from (the extras below). examples/, bench/, dev/, test/, the research
   # notes and docs/performance.md (a maintainers' record) stay out.
   # Defk.Errors' footer links the installed version's HexDocs page
-  # (@url_base, defk-djy.6).
+  # (@url_base).
   defp package do
     [
       licenses: ["MIT"],
@@ -45,7 +44,7 @@ defmodule Defk.MixProject do
   defp elixirc_paths(:test), do: ["lib", "dev", "test/support"]
   # bench/ (incl. demo.exs) uses the example kernels; deps compile as :prod and skip them.
   # dev/ holds the repo-only Mix tasks (mix defk.examples, later mix defk.verify):
-  # never compiled for a dependent, never in the Hex package (defk-30c.3).
+  # never compiled for a dependent, never in the Hex package.
   defp elixirc_paths(:dev),
     do: ["lib", "dev", "test/support/examples.ex", "test/support/catalog.ex"]
 
@@ -73,8 +72,8 @@ defmodule Defk.MixProject do
   end
 
   # `mix usage_rules.sync` writes these rules into the marked section of
-  # AGENTS.md; `mix ci` fails when that section is out of date. Choice
-  # (defk-mob): usage_rules' own rules (doc lookup with `mix usage_rules.docs`
+  # AGENTS.md; `mix ci` fails when that section is out of date. Choice:
+  # usage_rules' own rules (doc lookup with `mix usage_rules.docs`
   # and `search_docs`) and the generic Elixir and OTP rules. `:usage_rules`
   # brings its :elixir and :otp sub-rules with it; listing them as well
   # (usage_rules 1.2.8) repeats the main rules once per entry. igniter's
@@ -90,24 +89,24 @@ defmodule Defk.MixProject do
   # @guides (how-to pages) or @reference (lookup pages); the group is derived
   # from the list.
   #
-  # Choice (defk-djy.1): guides and docs/language.md are extras. ADRs,
+  # Choice: guides and docs/language.md are extras. ADRs,
   # research, cold tests, verdict.md, fast-path-report.md and beam-nifs.md are
   # project history for people inside the repo, so they are left out of
   # HexDocs (they stay in the repo and are linked from the README).
   #
-  # Choice (defk-djy.4): the how-to guides live in docs/guides/, apart from
+  # Choice: the how-to guides live in docs/guides/, apart from
   # the reference and the project history in docs/. README stays the main
   # page (what defk is and why, as on GitHub) and Getting started comes
   # right after it; the cheatsheet is a lookup page beside the reference.
   #
-  # Choice (defk-djy.14): README stays the main page and the GitHub landing
+  # Choice: README stays the main page and the GitHub landing
   # page, trimmed to what a user needs (what defk is, when not to use it,
   # a first kernel, links into the guides). The repo-internal parts (file
   # table, design decisions, results snapshot, roadmap with ticket ids,
   # tracker notes) moved to docs/project.md, which is not an extra; README
   # links it by its GitHub URL.
   #
-  # Choice (defk-djy.19): the extras are for users, so they carry no ticket
+  # Choice: the extras are for users, so they carry no ticket
   # ids and no ADR references (test/docs_checks_test.exs checks it).
   # docs/performance.md is a maintainers' record with a source line per
   # entry: it left the extras, and the pages link it by its GitHub URL.
@@ -147,7 +146,7 @@ defmodule Defk.MixProject do
   # ex_doc rewrites the links between pages in the HTML and the EPUB, but
   # writes each page's Markdown copy (doc/*.md, which llms.txt lists) as the
   # source has it, where `../language.md` or `cheatsheet.cheatmd` lead nowhere
-  # in the flat doc/ directory (found by the HexDocs cold test, defk-djy.9).
+  # in the flat doc/ directory (found by the HexDocs cold test).
   # After `mix docs`, point those links at the pages, then fail on any
   # relative link in doc/ that still leads nowhere.
   @md_link ~r/\]\(([^)\s]+)\)/
@@ -217,7 +216,7 @@ defmodule Defk.MixProject do
   defp aliases() do
     [
       docs: ["docs", &docs_links/1],
-      # the byte-identical gate (defk-mif): DEFK_DUMP_C=<dir> mix dump_c
+      # the byte-identical gate: DEFK_DUMP_C=<dir> mix dump_c
       dump_c: ["compile --force", "run dev/dump_c.exs"],
       ci: [
         "compile --warnings-as-errors",
@@ -226,7 +225,7 @@ defmodule Defk.MixProject do
         "docs --warnings-as-errors",
         "credo --strict",
         "dialyzer",
-        # every compiled path, tests included (defk-zdm.4); defk kernel
+        # every compiled path, tests included; defk kernel
         # bodies are skipped, as tests repeat a kernel on purpose (the same
         # kernel under other options). Helpers under ~30 AST nodes stay a
         # review concern: a lower --min-mass reports noise.

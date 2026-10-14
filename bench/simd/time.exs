@@ -9,7 +9,7 @@
 # `reps` calls per level (reps calibrated to ~50 ms per level); the speedup of
 # a level is default / level per round, reported as the median over rounds.
 # Relative numbers like these hold up under load better than absolute times.
-# Research tooling for defk-ulk.1 (docs/research/simd.md), not part of defk.
+# Research tooling for the SIMD study (docs/research/simd.md), not part of defk.
 Code.require_file("load.exs", __DIR__)
 Code.require_file("levels.exs", __DIR__)
 Code.require_file("cases.exs", __DIR__)

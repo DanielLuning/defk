@@ -1,6 +1,6 @@
 # cos and sin of one argument in one loop must not fuse into a platform
 # sincos (Darwin's __sincos_stret, glibc's sincos), whose sin differs from
-# libm's sin, and so from :math.sin, in the last bit (defk-6g6). The other
+# libm's sin, and so from :math.sin, in the last bit. The other
 # libm builtins are probed for substitutions the same way: pow(x, 0.5) as
 # sqrt, pow(x, 2.0) as x*x, exp(x) - 1.0 as expm1, log(1.0 + x) as log1p.
 
@@ -187,7 +187,7 @@ defmodule Defk.SincosTest do
 
   # the libm probes: the full edge mix (negative and huge arguments make
   # sqrt/log/pow raise, and exp/pow overflow to inf, which both modes must do
-  # alike: defk-i00) and the nearly-safe range
+  # alike) and the nearly-safe range
   defp probe_args, do: one_of([fixed_list([G.array(:f64)]), bounded()])
 
   agreement(K,

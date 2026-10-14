@@ -1,4 +1,4 @@
-# Binary literals in kernel bodies (defk-n4r.5): "abc" and <<1, 2, 3>> are a
+# Binary literals in kernel bodies: "abc" and <<1, 2, 3>> are a
 # read-only [u8] in static storage, as a binary module attribute is: indexed,
 # measured with length, walked by `for`, passed to a helper, compared byte by
 # byte. Elixir mode is the binary itself.
@@ -80,7 +80,7 @@ defmodule Defk.BinaryLiteralsTest.K do
     end
   end
 
-  # returned unwritten: a new binary of its bytes (defk-gqk)
+  # returned unwritten: a new binary of its bytes
   defk literal_back(c :: bool) :: [u8] do
     if c, do: "abc", else: <<1, 2>>
   end

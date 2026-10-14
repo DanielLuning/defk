@@ -1,4 +1,4 @@
-# Out-of-process isolation, measured (defk-7dm): what a port program costs per
+# Out-of-process isolation, measured: what a port program costs per
 # call against a kernel call, by input size. A port (or an erl_interface C
 # node) gives real OS-process isolation: a fault, or a wild write that never
 # faults, kills only that process. The price is two pipe transfers per call,

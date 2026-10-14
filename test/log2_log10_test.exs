@@ -1,5 +1,5 @@
-# log2 and log10 call the libm function :math.log2/1 and :math.log10/1 call
-# (defk-ngj), so the bits are the same: checked at edge values against :math
+# log2 and log10 call the libm function :math.log2/1 and :math.log10/1 call,
+# so the bits are the same: checked at edge values against :math
 # itself, and against Elixir mode by the properties in sincos_test.exs.
 
 defmodule Defk.Log2Log10Test.K do

@@ -1,7 +1,6 @@
 # Defk.Copies is one home for the copy analysis: the rules deciding whether
-# an array write reuses its buffer or copies first (defk-z8y). Each rule the
-# regression tickets defk-33b, defk-tif and defk-8tw fixed is restated here
-# as a one-assertion unit case against the rule itself — what used to need a
+# an array write reuses its buffer or copies first. Each rule an earlier
+# regression fix established is restated here as a one-assertion unit case against the rule itself — what used to need a
 # compiled module and a grep of its C. value_semantics_test.exs stays the
 # end-to-end net proving the lowering applies these decisions and the
 # runtime contract holds.
@@ -17,21 +16,21 @@ defmodule Defk.CopiesTest do
   end
 
   describe "what counts as a read after a write (taken/other_arms_out)" do
-    test "a sibling arm's reads do not count: they run instead (defk-33b)" do
+    test "a sibling arm's reads do not count: they run instead" do
       node = quote do: helper(a)
       stmt = quote do: if(keep, do: unquote(node), else: g(b))
 
       refute "b" in Enum.map(still_read(stmt, node), &to_string/1)
     end
 
-    test "the branch's own condition ran before the arm and does not count (defk-tif)" do
+    test "the branch's own condition ran before the arm and does not count" do
       node = quote do: helper(a)
       stmt = quote do: if(a[0] > lim, do: unquote(node), else: 0)
 
       assert still_read(stmt, node) == MapSet.new()
     end
 
-    test "a case subject and the clause heads that chose the arm do not count (defk-tif)" do
+    test "a case subject and the clause heads that chose the arm do not count" do
       node = quote do: helper(a)
 
       stmt =
@@ -62,7 +61,7 @@ defmodule Defk.CopiesTest do
     end
   end
 
-  describe "a loop's first range is read before the first write (defk-8tw)" do
+  describe "a loop's first range is read before the first write" do
     # `for k <- 0..(st[0] - 1)//1, reduce: st`: the range is evaluated once,
     # before the body writes anything, so st is not read during the loop
     test "the first generator's range does not read during the loop" do

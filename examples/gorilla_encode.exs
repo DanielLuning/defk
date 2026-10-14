@@ -57,9 +57,9 @@
 # options (scaled integers, counters) and Chimp are not reproduced.
 #
 # The split: the kernel builds both bit streams, timestamps then values,
-# into one bitstring accumulator (defk-cmr), pads it to a byte and returns
+# into one bitstring accumulator, pads it to a byte and returns
 # it with the two stream lengths. Each delta-of-delta bucket is one clause
-# of a helper that takes the accumulator (defk-u9c, defk-ooq). The caller
+# of a helper that takes the accumulator. The caller
 # has a list of {ts, float}, so packing it is part of defk's cost: one pass
 # writes each point as a native i64 and a native f64 into one binary (the
 # kernel reads the f64's 8 bytes as an i64: its bits), four points per
@@ -67,7 +67,7 @@
 # Elixir and defk sides.
 #
 # Kernel notes (Defk.Report): no bounds check left in either loop. A 64-bit
-# segment value must be an i64 (defk-oit), so the XOR's bits are shifted as
+# segment value must be an i64, so the XOR's bits are shifted as
 # a u64 (`bsr(band(x, 0xFFFFFFFFFFFFFFFF), s)`, a logical shift) and the one
 # case that keeps all 64 bits is written as `x::64-signed`. The kernel costs
 # ~5-6 ns per point plus ~0.12 us per call for a bitstring result (a scalar
@@ -123,10 +123,10 @@
 # 1M points the 16 MB binary's growth triggers GCs. Not tried: encoding
 # the two streams in two processes (the list is copied to each), and
 # encoding many series in parallel (it scales both sides alike, and the
-# kernel tasks stay on 2-3 schedulers, defk-8qs).
+# kernel tasks stay on 2-3 schedulers).
 #
 # Results (PROVISIONAL: taken while two other agents' benchmarks loaded the
-# machine; the quiet-machine run is defk-sgw.4). M-series Mac, OTP 29,
+# machine; a quiet-machine run was recorded separately). M-series Mac, OTP 29,
 # Elixir 1.20:
 #   100-point blocks (verdict), 1,000 series: Elixir 4.6-5.1 ms, defk
 #     2.1-2.45 ms: 1.96-2.38x, good in 8 of 8 runs under the 1.9x tie band (one 1.96x
@@ -193,7 +193,7 @@ defmodule Gorilla.Kernels do
   # zero by construction). x is the u64 pattern in an i64: a pattern with
   # the top bit set is negative, so it is shifted as a u64 (logical shift),
   # and the one case that keeps all 64 bits is written as a signed segment
-  # (a 64-bit segment value must be an i64, defk-oit).
+  # (a 64-bit segment value must be an i64).
   defk xor_bits(acc :: bitstring, x :: i64, s :: i64, k :: i64) :: bitstring do
     if k == 64 do
       <<acc::bitstring, x::64-signed>>

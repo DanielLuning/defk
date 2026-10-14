@@ -1,10 +1,9 @@
-# The narrow element types [i16], [i32] and [f32] (defk-4ai, decided in
-# defk-dtw.13). A read widens as Elixir's bitstring match does (i16/i32 to
-# i64, f32 to f64 exactly); an integer write out of range raises; an f32
+# The narrow element types [i16], [i32] and [f32]. A read widens as
+# Elixir's bitstring match does (i16/i32 to i64, f32 to f64 exactly); an integer write out of range raises; an f32
 # write rounds to nearest as <<v::float-32-native>> does and raises where
 # that gives +-inf (a limit: Elixir stores inf), while underflow to 0.0 and
-# subnormals follow Elixir. Inf/NaN bits in an [f32] input raise when read
-# (defk-q1c). An input whose byte size is not a multiple of the element
+# subnormals follow Elixir. Inf/NaN bits in an [f32] input raise when read.
+# An input whose byte size is not a multiple of the element
 # width raises ArgumentError at the call. Every case runs in both modes.
 
 defmodule Defk.ElementTypesTest.K do

@@ -1,8 +1,8 @@
-# An `if`, `cond` or `case` whose arms are tuples gives a tuple (defk-uew):
+# An `if`, `cond` or `case` whose arms are tuples gives a tuple:
 # natively one branch per element position, the conditions evaluated once,
 # with a select per element when the arms are pure; in Elixir mode the same
 # branch. Each position has its own type; an array inside such tuples is
-# tested in test/array_branch_test.exs (defk-gqk).
+# tested in test/array_branch_test.exs.
 
 defmodule Defk.TupleBranchTest.K do
   use Defk
@@ -117,7 +117,7 @@ defmodule Defk.TupleBranchTest.Select do
     if c, do: {x + y, y}, else: {x, y * 2}
   end
 
-  # a division in one element keeps the whole tuple a branch (defk-id9)
+  # a division in one element keeps the whole tuple a branch
   defk step_rem(c :: bool, x :: i64, y :: i64) :: {i64, i64} do
     if c, do: {x + y, y}, else: {x, rem(y, 7)}
   end
@@ -196,7 +196,7 @@ defmodule Defk.TupleBranchTest do
     assert [_, _] = Regex.scan(~r/= v_cond_\d+ \? /, c)
   end
 
-  test "a tuple arm with a division is a branch, not a select per element (defk-id9)" do
+  test "a tuple arm with a division is a branch, not a select per element" do
     c = File.read!(String.replace_suffix(Select.__defk_lib__(), ".so", ".c"))
 
     for name <- ~w(step_rem step_fdiv) do

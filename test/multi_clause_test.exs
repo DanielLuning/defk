@@ -1,4 +1,4 @@
-# Multi-clause kernels (defk-u9c): one bodiless typed head, then clauses
+# Multi-clause kernels: one bodiless typed head, then clauses
 # whose parameters are integer or bool literals, variables or `_`, each with
 # an optional guard, as Elixir writes a multi-clause function. They compile to
 # one `case` over the parameters; no clause matching raises

@@ -4,7 +4,7 @@
 # (272k) are hand-written C base64 that chunk their work by hand with
 # enif_consume_timeslice + enif_schedule_nif; ex_base58 (156k) is Rust over
 # the bs58 crate on a normal scheduler; the pure base58 packages (erl_base58,
-# b58) are bignum arithmetic. Anchors and baselines: defk-9p6.19,
+# b58) are bignum arithmetic. Anchors and baselines:
 # docs/research/string-workloads.md (category B, on research/string-workloads).
 #
 #   elixir examples/codecs.exs
@@ -26,7 +26,7 @@
 # klen bytes, decode58(chars, offs) for count strings at packed i64 offsets,
 # each returning {slots, [i64] lengths} with one slot per key, which the
 # Elixir wrapper splits into binaries (packing and splitting are timed).
-# Alphabets and 256-byte decode tables are module attributes (defk-ivt);
+# Alphabets and 256-byte decode tables are module attributes;
 # @b64[band(x, 63)] indexes a 64-byte attribute without a bounds check.
 #
 # Bad input raises ArgumentError, as Base.decode64! does: a kernel has no

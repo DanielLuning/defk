@@ -1,5 +1,5 @@
 # Defk.Errors.Diagnostics turns an AST node into line, column, span and
-# source text (defk-vlf). These units state the location rules on
+# source text. These units state the location rules on
 # pathological source directly — what used to be reachable only by
 # compiling a failing kernel and reading the rendered frame.
 defmodule Defk.DiagnosticsTest do

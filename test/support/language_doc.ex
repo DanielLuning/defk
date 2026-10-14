@@ -19,9 +19,10 @@ defmodule Defk.LanguageDoc do
   #     that error code
   #   - `<!-- defk-example skip: <reason> -->`: not checked (a fragment); the
   #     reason is required, and the tests list every skip
-  #   - `<!-- defk-example known-failure: <ticket> -->`, above a runnable or
+  #   - `<!-- defk-example known-failure: <reason> -->`, above a runnable or
   #     compile-only block: checked as usual, and the check must fail; the
-  #     ticket is the compiler bug, and the marker comes off when it is fixed
+  #     reason names the compiler bug in words, and the marker comes off when
+  #     it is fixed
   #
   #
   # Blocks with no kernel in them are checked too, in a separate BEAM (see
@@ -191,8 +192,8 @@ defmodule Defk.LanguageDoc do
       [_, "script", note] when is_binary(note) and note != "" ->
         {:script, note}
 
-      [_, "known-failure", t] when is_binary(t) ->
-        if t =~ ~r/^defk-\w+/, do: {:known_failure, t}, else: {:bad, spec}
+      [_, "known-failure", t] when is_binary(t) and t != "" ->
+        {:known_failure, t}
 
       _ ->
         {:bad, spec}

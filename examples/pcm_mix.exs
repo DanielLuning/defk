@@ -46,7 +46,7 @@
 # so there is no native twin to agree with; s24le needs a 24-bit element
 # type defk does not have; u8/s8 and the big-endian formats were not added.
 #
-# The split (defk-dtw.9): one kernel call per chunk does the sum over the N
+# The split: one kernel call per chunk does the sum over the N
 # streams, every sum clamped into an [i16] (check-free, vectorised at width
 # 8), and the sign scan that rescales each overflowing half-wave. The open
 # half-wave's i64 sums (a binary) and its sign stay in Elixir and are passed
@@ -55,15 +55,15 @@
 # s16le and s32le kernels come from one quoted source through a macro.
 # Kernel notes (Defk.Report):
 #   - the sum loop keeps two bounds checks, so it runs scalar: a block
-#     offset bufs[j * m + i] with m = div(length(bufs), n) cannot be proven
-#     (defk-siy). It is ~70% of the kernel at 1 s chunks (0.2-0.29 ms of
+#     offset bufs[j * m + i] with m = div(length(bufs), n) cannot be proven.
+#     It is ~70% of the kernel at 1 s chunks (0.2-0.29 ms of
 #     0.3-0.37 ms for 4 x 48k stereo frames, timed phase by phase);
 #   - out = alloc(t, total) with total = length(held) + m: out[i] is proven
-#     only with the loop bound min(length(all), length(out)) (cf. defk-pic);
+#     only with the loop bound min(length(all), length(out));
 #   - the rescale loop inside the scan makes the scan take a safepoint per
 #     iteration; it runs on 0.5% of half-waves at the realistic input;
 #   - Defk.Report puts every note of a macro-generated kernel on the macro
-#     call line (defk-xyz): tune a hand-written copy first.
+#     call line: tune a hand-written copy first.
 #
 # Agreement, checked on every run (a mismatch raises): the concatenated
 # mix + flush output of ClipPreventingAdder, every Elixir variant, the defk
@@ -101,7 +101,7 @@
 # splitting one chunk's sum across processes (10 us of work per call).
 #
 # Results (PROVISIONAL: taken while two other benchmarks loaded the
-# machine; the quiet-machine run is defk-sgw.4). M-series Mac, OTP 29,
+# machine; a quiet-machine run was recorded separately). M-series Mac, OTP 29,
 # Elixir 1.20:
 #   10 ms chunks (verdict): Elixir 2.6-2.7 ms, defk 0.41-0.49 ms: 5.4-6.6x,
 #     good. NativeAdder 0.73-0.75 ms: defk 1.5-1.8x faster.
@@ -377,7 +377,7 @@ end
 
 defmodule PCM.Defk do
   # The kernel does the sum and scale loops; the held-back half-wave and its
-  # sign stay in Elixir, passed back in on each call (defk-dtw.9).
+  # sign stay in Elixir, passed back in on each call.
   def init(format), do: {<<>>, true, format}
 
   def mix(buffers, {held, pos, format}) do

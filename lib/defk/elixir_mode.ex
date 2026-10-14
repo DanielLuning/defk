@@ -658,7 +658,7 @@ defmodule Defk.ElixirMode do
   defp em_builtin(:length, [a], [{:arr, e}], m), do: call(:"len_#{e}", [a], m)
   defp em_builtin(f, [a, i], [{:arr, :u8}, :i64], m) when f in @loads, do: call(f, [a, i], m)
 
-  # copy/5 and copy_back/4 (defk-52v.16): a new binary with the range
+  # copy/5 and copy_back/4: a new binary with the range
   # replaced, checked as the kernel checks it
   defp em_builtin(:copy, [a, at, s, from, n], [{:arr, e} | _], m),
     do: call(:copy, [a, at, s, from, n, esize(e)], m)
@@ -669,7 +669,7 @@ defmodule Defk.ElixirMode do
   defp em_builtin(f, [a, b], [:i64, :i64], m) when f in [:mulhi, :rotl, :rotr],
     do: remote(Defk.Bits, f, [a, b], m)
 
-  # clz/2, ctz/2, rotl/3, rotr/3, f64_bits/1 (defk-wlu): Defk.Bits as it
+  # clz/2, ctz/2, rotl/3, rotr/3, f64_bits/1: Defk.Bits as it
   # is; rotl/rotr of an i64 give an i64, checked
   defp em_builtin(f, [x, w], [_, _], m) when f in [:clz, :ctz],
     do: remote(Defk.Bits, f, [x, w], m)
@@ -873,7 +873,7 @@ defmodule Defk.ElixirMode do
   # (Defk.ElixirMode.Guard): an error Elixir itself would raise (a zero
   # divisor, a float result of inf) fails the guard (false) and the next
   # clause is tried, even beside an i64 limit; a limit alone raises, as the
-  # kernel does (defk-34l).
+  # kernel does.
   defp guard_expr(guard, env) do
     {q, _} = expr(guard, env)
 

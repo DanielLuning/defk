@@ -45,7 +45,7 @@
 #
 # One process against one call: Elixir 141-160 ms, defk 5.4-5.8 ms (about
 # 26-29x); the old 9-reads-per-pixel kernel was 15.3 ms in one call.
-# Numbers are provisional (shared machine under load, defk-9p6.8).
+# Numbers are provisional (shared machine under load).
 
 Mix.install([{:defk, path: Path.expand("..", __DIR__)}])
 

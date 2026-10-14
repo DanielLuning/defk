@@ -4,13 +4,13 @@ Runs the defk test suite inside the BEAM under Valgrind memcheck, in a Linux
 container. It finds what the compiler's elisions and the C runtime can get
 wrong and nothing else sees: invalid reads and writes of `alloc/2` outputs
 and input binaries, uses of uninitialised bytes (an unzeroed `alloc/2` that
-is not fully written; defk-i5r), and owned buffers leaked on a raise path.
+is not fully written), and owned buffers leaked on a raise path.
 Background, measurements and the failures seen:
 `docs/research/c-verification-macos.md` section 6.
 
 Valgrind does not build on macOS, so on a Mac this goes through a podman
-machine (arm64 Linux). Linux CI hosting is defk-a1p; an on-demand
-`mix defk.verify` is defk-96f.2. This directory is only the container, the
+machine (arm64 Linux). Linux CI hosting and an on-demand
+`mix defk.verify` are separate work. This directory is only the container, the
 runner and the suppressions.
 
 ## Run it
@@ -78,7 +78,7 @@ not run under Valgrind). `MIX_TEST_ARGS="--seed 1"` passes arguments to
 
 `defk.supp` holds one entry: the leak of `frame_tag_test.exs`'s "a frame with
 a foreign tag fails cleanly". `defk_frame_dtor` deliberately frees nothing for
-a frame with a foreign layout tag (defk-ls8), so the owned table and its
+a frame with a foreign layout tag, so the owned table and its
 buffers are by design lost. The entry is scoped to the kernel library that
 test builds (`Elixir.Defk.FrameTagTest.K-*.so`), so the same leak in any other
 kernel still fails.
@@ -92,7 +92,7 @@ normally everywhere else (`mix test --only erlang_memory` runs just them):
 class they check is covered here by Valgrind itself, which reports the leak
 directly.
 
-`agreement_test.exs` runs: since defk-bh3 its sides are bounded (Elixir mode
+`agreement_test.exs` runs: its sides are bounded (Elixir mode
 enforces the owned-buffer budget on `alloc/2`), so no case asks for GiBs.
 
 ## The self-test (planted bug)

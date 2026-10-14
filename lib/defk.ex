@@ -428,7 +428,7 @@ defmodule Defk do
         max_owned_bytes: max_owned_bytes!(env.module)
       )
 
-    # a yielding kernel's NIF takes the run-queue hint (defk-04y): it is
+    # a yielding kernel's NIF takes the run-queue hint: it is
     # renamed, and the kernel's function passes the hint
     all_sigs = Enum.map(all_sigs, &Map.update!(&1, :yields, fn y -> adaptive? and y end))
 
@@ -482,11 +482,10 @@ defmodule Defk do
     end
   end
 
-  # Mix's compile.elixir asks every module __mix_recompile__? on every compile
-  # (defk-srh): the build inputs read from the environment (the C compiler,
-  # the include dir, the sanitizer mode: defk-96f.1) are baked in, so a change
-  # recompiles the module. Raw values, so set-versus-unset counts; harmless
-  # outside Mix.
+  # Mix's compile.elixir asks every module __mix_recompile__? on every
+  # compile: the build inputs read from the environment (the C compiler, the
+  # include dir, the sanitizer mode) are baked in, so a change recompiles the
+  # module. Raw values, so set-versus-unset counts; harmless outside Mix.
   @build_env ["CC", "ERTS_INCLUDE_DIR", "DEFK_SANITIZE"]
 
   defp recompile_def do
@@ -500,7 +499,7 @@ defmodule Defk do
     end
   end
 
-  # The module's own `@on_load` (defk-6c4): a module may have only one, so take
+  # The module's own `@on_load`: a module may have only one, so take
   # the user's off here (defk sets its own) and chain it after the kernels load.
   @doc false
   def take_on_load(module) do
@@ -540,7 +539,7 @@ defmodule Defk do
 
   # __defk_load_nif__/0 and __defk_lib__/0 (Defk.Build.placement!/3). A Mix app's
   # module loads its library from beside its beams, wherever the app is at
-  # load time (a release, a moved _build: defk-n8f); anything else from the
+  # load time (a release, a moved _build); anything else from the
   # absolute build path. Only :code and :filename at load time: the on_load
   # function may run before other applications' modules are loaded.
   defp lib_defs({:path, base}) do
@@ -587,7 +586,7 @@ defmodule Defk do
 
   # DEFK_DUMP_C=<dir>: every module compiled while it is set writes its
   # generated C to <dir>/<Module>.c — the byte-identical gate for compiler
-  # refactors (dev/dump_c.exs, defk-mif). A pure side channel: the build
+  # refactors (dev/dump_c.exs). A pure side channel: the build
   # and the module are unchanged.
   defp dump_c!(dir, module, c_src) do
     File.mkdir_p!(dir)

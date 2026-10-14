@@ -5,14 +5,14 @@ defmodule Defk.ElixirMode.Ops do
   # checks. Each raises the same exception module as the kernel (and, where
   # the kernel's message is fixed, the same message), so the two modes agree.
   # Float arithmetic needs nothing here: Elixir already raises ArithmeticError
-  # where a float operation would give inf or NaN (defk-q1c).
+  # where a float operation would give inf or NaN.
 
   @min -0x8000000000000000
   @max 0x7FFFFFFFFFFFFFFF
   # alloc/2 over DEFK_ALLOC_MAX_BYTES raises "length too large", as native
-  # does (defk-gtv). From 2^47 bytes no platform's allocator serves the
-  # request (native raises "out of memory"), and asking the VM for it aborts
-  # the VM, so Elixir mode raises native's "out of memory" without trying.
+  # does. From 2^47 bytes no platform's allocator serves the request (native
+  # raises "out of memory"), and asking the VM for it aborts the VM, so
+  # Elixir mode raises native's "out of memory" without trying.
   @max_alloc_bytes 2 ** 48
   @no_alloc_bytes 2 ** 47
 
@@ -71,7 +71,7 @@ defmodule Defk.ElixirMode.Ops do
 
   def wbsl_var(a, n), do: wbsl(a, n)
 
-  # u64 (defk-wlu): + - * checked to 0..2^64 - 1, as the kernel's defk_add_u64
+  # u64: + - * checked to 0..2^64 - 1, as the kernel's defk_add_u64
   def add_u64(a, b), do: fit_u64(a + b, a, "+", b)
   def sub_u64(a, b), do: fit_u64(a - b, a, "-", b)
   def mul_u64(a, b), do: fit_u64(a * b, a, "*", b)
@@ -117,7 +117,7 @@ defmodule Defk.ElixirMode.Ops do
   @doc false
   # Whether an ArithmeticError is an i64 or u64 limit (the exact result leaves
   # the type) and not an error Elixir would raise: a case guard raises the
-  # first and fails its clause on the second (defk-7a6)
+  # first and fails its clause on the second
   def limit?(%ArithmeticError{message: m}),
     do: String.contains?(m, ["overflow in", "does not fit in"])
 
@@ -126,7 +126,7 @@ defmodule Defk.ElixirMode.Ops do
 
   # -------------------------------------------------------------- arrays --
   # [T] is a binary of native-endian T. Reads match it like the bitstring
-  # match would; writes rebuild it (value semantics, defk-i2e).
+  # match would; writes rebuild it (value semantics).
 
   def alloc(n, _esz) when n < 0, do: raise(ArgumentError, "alloc/2: negative length #{n}")
 
@@ -142,7 +142,7 @@ defmodule Defk.ElixirMode.Ops do
     <<0::size(bytes)-unit(8)>>
   end
 
-  # The owned-buffer budget (defk-4b2, defk-bh3). Native code keeps every
+  # The owned-buffer budget. Native code keeps every
   # buffer a call allocates until the kernel returns and raises once the
   # call's live bytes would pass max_owned_bytes (defk_owned_check). Elixir
   # mode counts the bytes of every alloc/2 of the call against the same
@@ -242,7 +242,7 @@ defmodule Defk.ElixirMode.Ops do
   end
 
   # an f64 or f32 element whose bits are inf or NaN (only an input array can hold
-  # one): ArgumentError, reason :non_finite_input (defk-q1c)
+  # one): ArgumentError, reason :non_finite_input
   defp get_failed(a, i, esz) do
     in_bounds!(a, i, esz)
     raise ArgumentError, "non-finite float (inf or NaN) read from an input array at index #{i}"
@@ -281,9 +281,9 @@ defmodule Defk.ElixirMode.Ops do
     <<pre::binary, bytes::binary, post::binary>>
   end
 
-  # copy/5 and copy_back/4 (defk-52v.16) on a packed array of esz-byte
-  # elements, checked in the kernel's order (defk_rcopy_T): the length, the
-  # destination range, then the source range (copy_back: the offset). copy_back is
+  # copy/5 and copy_back/4 on a packed array of esz-byte elements, checked in
+  # the kernel's order (defk_rcopy_T): the length, the destination range, then
+  # the source range (copy_back: the offset). copy_back is
   # out[at + j] = out[at + j - off] for j = 0..n-1 in order, so when off < n
   # the off elements before `at` repeat; the pattern copy below is that loop.
   def copy(a, at, s, from, n, esz) do
@@ -423,7 +423,7 @@ defmodule Defk.ElixirMode.Ops do
   # in Elixir; a zero step raises ArgumentError, as Range does and the kernel
   # does. A range whose last element is within one step of the i64 limit
   # raises before its loop starts, as the kernel does (defk_range_limit):
-  # the kernel's counter would overflow stepping past it (defk-gtv).
+  # the kernel's counter would overflow stepping past it.
   def range(a, b), do: range(a, b, if(a <= b, do: 1, else: -1))
 
   def range(a, b, step) do

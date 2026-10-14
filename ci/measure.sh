@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The Linux measurement run (defk-a1p): every example timed, with its
+# The Linux measurement run: every example timed, with its
 # verdict checked, and the snapshot table (mix defk.examples --bench --all
 # --snapshot --fresh), plus the conditions it ran under. Writes
 # tmp/measure/conditions.txt and tmp/measure/bench.log; the exit status is

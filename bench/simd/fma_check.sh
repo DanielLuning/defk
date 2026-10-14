@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Static check (defk-ulk.1): does any target level make clang fuse a*b+c into
+# Static check (SIMD study): does any target level make clang fuse a*b+c into
 # an FMA in defk's generated C? Compiles each given .c file to assembly with
 # defk's flags (lib/defk/build.ex) plus each level's, counts FMA instructions,
 # and, as a control, does the same with -ffp-contract=on.

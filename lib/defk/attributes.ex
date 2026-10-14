@@ -1,6 +1,6 @@
 defmodule Defk.Attributes do
   @moduledoc false
-  # Module attributes in kernel bodies (defk-ivt).
+  # Module attributes in kernel bodies.
   #
   # `@name` in a kernel body means what it means in a def: the attribute's
   # value where the kernel is defined. `defk` reads every attribute its body

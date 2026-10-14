@@ -1,4 +1,4 @@
-# defk-04y: a short yield slice only when the run queue is crowded.
+# Adaptive yield slice: a short yield slice only when the run queue is crowded.
 # Treatments, interleaved in one VM (medians):
 #   today     no hint: 250 us slices (what `adaptive_slice: false` compiles)
 #   adaptive  hint = the caller's own run queue

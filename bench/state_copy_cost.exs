@@ -1,4 +1,4 @@
-# Per-call state copy cost at catalog sizes (defk-sve.1): what "state
+# Per-call state copy cost at catalog sizes: what "state
 # travels as binaries" (ADR-0001) costs against the kernel's own work.
 #
 #   mix run bench/state_copy_cost.exs            # timings + GC run

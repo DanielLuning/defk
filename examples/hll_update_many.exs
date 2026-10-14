@@ -28,7 +28,7 @@
 #
 # All numbers below are PROVISIONAL, MEASURED UNDER LOAD (two other
 # benchmark runs shared the machine; M-series Mac, 12 schedulers, OTP 29,
-# Elixir 1.20). The quiet-machine run is defk-sgw.4.
+# Elixir 1.20). A quiet-machine run was recorded separately.
 #
 # Elixir baseline: optimised. Best of 7, ms (100 and 316 hashes: the mean of
 # 2000 calls); every variant returns the anchor's state byte for byte:
@@ -70,8 +70,8 @@
 #   P3 pack: comprehension, into: <<>>       0.003  0.014  0.12  2.4
 #   P4 pack: Enum.map + iodata (the NIF's)   0.002  0.015  0.12  2.3
 #
-# defk at 100k was 0.36-0.38 ms best of 7 but 1.06 ms best of 3 in the sweep
-# (defk-9p6.27): Defk.Bench's full GC left the caller's 100k-element list in
+# defk at 100k was 0.36-0.38 ms best of 7 but 1.06 ms best of 3 in the sweep:
+# Defk.Bench's full GC left the caller's 100k-element list in
 # the young heap, and a minor GC that copied it (~0.6 ms) landed in some runs.
 # Defk.Bench now follows the full sweep with a minor GC, so the list starts in
 # the old heap: report and sweep both give 0.36-0.40 ms (loaded, provisional).
