@@ -11,9 +11,15 @@
     "wayfinder:task"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution: done, merged to main.\n- The seven renames from defk-wfi.3, in place with no aliases: length/1, rotl/2, rotr/2, f64_bits/1 (builtins and Defk.Bits), use Defk, max_owned_bytes: (and the __defk_stats__ key and the out-of-memory text), Defk.Errors.entries/0, error codes undefined-function and u64-with-i64. CHANGELOG.md has the table; ADR-0006 points to the decision; 'codes are never renamed' now says 'from 0.1.0'.\n- Behaviour change: length(a) on an array is the builtin; byte_size/1 and tuple_size/1 get undefined-function with the hint and rewrite length(a).\n- Hidden C names stay: defk_rotl64, defk_rotr64, defk_f64_to_u64, defk_max_owned, DEFK_MAX_OWNED.\n- Kept as history: docs/adr, docs/research, docs/cold-tests (dated session logs with verbatim compiler output).\n- 111 files. lib by hand; test/, examples/+bench/ and the docs by three subagents with the Edit tool only. One test kernel renamed (f64_bits/1 -\u003e f64_bits_f/1: a kernel may not take a builtin's name).\n- Found on the way: the ex_slop check LengthComparison flags length(x) \u003e literal in a kernel (it takes it for a list walk); in this repo one fixture binds the length first. Users of ex_slop (and of checks like it) may see the same false positive in their kernels.\n- Results: mix ci 1737/1737 (credo and dialyzer clean); mix defk.examples --all 32/32 check-only on macOS; generated docs match the registry.",
+      "timestamp": "2026-10-14T19:23:44Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Apply the 0.1.0 renames",
   "type": "task",
-  "updated_at": "2026-10-14T18:42:06Z"
+  "updated_at": "2026-10-14T19:23:44Z"
 }
