@@ -32,7 +32,7 @@ One module, ordered by section dividers you can grep for
 | kernels | lowering one kernel, return handling | `lower_kernel`, `coerce_return`, `emit_result` |
 | blocks / statements | statement lowering, bindings | `lower_block`, `lower_stmts` |
 | array values | ownership, value semantics; the copy analysis's rules and tracking state live in `Defk.Copies` | `owned`, `before_write`, `hoist` |
-| expressions | arithmetic, comparisons, overflow checks | `i64_arith` |
+| expressions | arithmetic, comparisons, overflow checks; operands in Elixir's order (`lower_expr/2` wraps every `lower_node/2` clause) | `i64_arith`, `lower_ops/3`, `in_order/3` |
 | calls | kernel-to-kernel inlining, builtins | (inline size: `Defk.InlineSize.check/3`) |
 | loops | `for`, reduce accumulators, safepoints | `lower_quals`, `with_acc_facts/2`, `for_collect!/6`, `recover_for/4` |
 | case | clause dispatch (multi-clause kernels) | |

@@ -891,7 +891,7 @@ defmodule Defk.Compiler do
     match?({:arr, _}, a.t) || not_an_array!(target, arr, a)
     {si, i} = lower_expr(idx, env)
     i = coerce!(i, :i64, idx, "array index")
-    {sv, v} = lower_expr(rhs, env)
+    {[sa, si, sv], [a, i, v]} = in_order([{sa, a}, {si, i}, lower_expr(rhs, env)], env, :stmt)
     {:arr, e} = a.t
     stored = "value stored in [#{e}]"
 
@@ -1473,9 +1473,93 @@ defmodule Defk.Compiler do
   # lower_expr(ast, env) :: {c_statements, value}
   # value :: %{c: c_expr, t: type, owned: bool, var: cname | nil}
   #        | %{t: {:tuple, ts}, elems: [value]}
+  #
+  # Elixir evaluates the operands of an operation left to right, so the first
+  # error is the leftmost one, and the C must agree (defk-wfi.8). C orders
+  # neither the arguments of a call nor the operands of most operators (gcc
+  # on x86-64 evaluates arguments right to left), and an operand's statements
+  # run before the C expression that holds the operands left of it. So
+  # lower_ops/2 lowers the operands of one operation, and an operand that can
+  # raise is bound to a local when an operand right of it can raise too: by a
+  # statement when one right of it has statements, else by the comma operator
+  # in front of the C of the expression being lowered (lower_expr/2 adds it).
+  defp lower_expr(ast, env) do
+    outer = low(:operand_binds)
+    low_put(:operand_binds, [])
+
+    try do
+      {s, v} = lower_node(ast, env)
+      {s, with_binds(v, low(:operand_binds))}
+    after
+      low_put(:operand_binds, outer)
+    end
+  end
+
+  defp with_binds(v, []), do: v
+  defp with_binds(v, binds), do: %{Map.delete(v, :pure_read) | c: "(#{binds}#{v.c})"}
+
+  # how: :comma, or :stmt where the operation's value has no C of its own to
+  # put the bindings in front of (a tuple)
+  defp lower_ops(asts, env, how \\ :comma),
+    do: asts |> Enum.map(&lower_expr(&1, env)) |> in_order(env, how)
+
+  # [{stmts, value}] made to run in Elixir's order: {stmts, values}. Where
+  # errors set flags (a case guard, a speculated select: env.ovf) the order
+  # is the replay's, which is lowered without them.
+  defp in_order(lowered, env, how) do
+    flags? = Map.has_key?(env, :ovf)
+
+    {ordered, _, binds} =
+      List.foldr(lowered, {[], false, []}, fn {s, v}, {acc, right, binds} ->
+        raises? = not flags? and may_raise?(v)
+        stmts? = IO.iodata_length(s) > 0
+
+        {sv, binds} =
+          cond do
+            raises? and (right == :stmts or (right == :raises and how == :stmt)) ->
+              {bind_operand(s, v), binds}
+
+            raises? and right == :raises ->
+              {t, v} = operand_local(v)
+              {{s, %{v | c: t}}, ["#{t} = #{v.c}, " | binds]}
+
+            true ->
+              {{s, v}, binds}
+          end
+
+        right =
+          cond do
+            right == :stmts or stmts? -> :stmts
+            right == :raises or raises? -> :raises
+            true -> false
+          end
+
+        {[sv | acc], right, binds}
+      end)
+
+    low_update(:operand_binds, &(&1 ++ binds))
+    Enum.unzip(ordered)
+  end
+
+  # every error goes through ctx (a tuple has no C of its own)
+  defp may_raise?(%{c: c}), do: String.contains?(c, "ctx")
+  defp may_raise?(_v), do: false
+
+  defp bind_operand(s, v) do
+    {t, v} = operand_local(v)
+    {[s, "#{t} = #{v.c};\n"], %{v | c: t}}
+  end
+
+  # a local for the operand v: the local, and v with its C still the
+  # operand's (the caller assigns it and then refers to the local)
+  defp operand_local(v) do
+    t = fresh("op", v.t)
+    srec_assign(t, v.c)
+    {t, Map.delete(v, :pure_read)}
+  end
 
   # a literal is an i64; one in 2^63..2^64 - 1 is a u64
-  defp lower_expr(n, _env) when is_integer(n) do
+  defp lower_node(n, _env) when is_integer(n) do
     n in -0x8000000000000000..@max_u64 ||
       err!(n, "integer-literal", "the integer literal #{n} does not fit in i64 or u64",
         rewrite: "#{n * 1.0}"
@@ -1486,13 +1570,13 @@ defmodule Defk.Compiler do
   end
 
   # nonneg: the float is never below 0.0 (sqrt/1 of one needs no check)
-  defp lower_expr(f, _env) when is_float(f),
+  defp lower_node(f, _env) when is_float(f),
     do: {[], Map.put(val(:erlang.float_to_binary(f, [:short]), :f64), :nonneg, f >= 0)}
 
-  defp lower_expr(true, _env), do: {[], val("1", :bool)}
-  defp lower_expr(false, _env), do: {[], val("0", :bool)}
+  defp lower_node(true, _env), do: {[], val("1", :bool)}
+  defp lower_node(false, _env), do: {[], val("0", :bool)}
 
-  defp lower_expr({name, m, ctx}, env) when is_atom(name) and is_atom(ctx) do
+  defp lower_node({name, m, ctx}, env) when is_atom(name) and is_atom(ctx) do
     case env.vars do
       # bound by a rejected statement: this one is abandoned without a report
       %{^name => %{t: :poison}} ->
@@ -1509,7 +1593,7 @@ defmodule Defk.Compiler do
 
   # a module attribute that Defk.Attributes.inline/1 did not turn into a
   # literal: a binary is a read-only [u8] in static storage, as an input array
-  defp lower_expr({:@, _, [{name, _, ctx}]} = node, _env) when is_atom(name) and is_atom(ctx) do
+  defp lower_node({:@, _, [{name, _, ctx}]} = node, _env) when is_atom(name) and is_atom(ctx) do
     case Defk.Attributes.of(node) do
       {:ok, b} when is_binary(b) -> {[], static_u8(b)}
       _ -> attribute!(node)
@@ -1519,7 +1603,7 @@ defmodule Defk.Compiler do
   # a binary literal, `"abc"` or `<<1, 2, 3>>`: the same static read-only [u8]
   # as a binary attribute (defk-n4r.5); or an append to a bitstring
   # accumulator, `<<acc::bitstring, ...>>` (see "bitstrings")
-  defp lower_expr({:<<>>, _, segs} = node, env) do
+  defp lower_node({:<<>>, _, segs} = node, env) do
     case Defk.Bitstring.parse(node) do
       {:append, head, parts} -> lower_append(node, head, parts, env)
       {:error, at, what, opts} -> err!(at, "bitstring-segment", what, opts)
@@ -1527,19 +1611,19 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp lower_expr(b, _env) when is_binary(b), do: {[], static_u8(b)}
+  defp lower_node(b, _env) when is_binary(b), do: {[], static_u8(b)}
 
-  defp lower_expr({:__block__, _, _} = b, env), do: lower_block(b, env)
+  defp lower_node({:__block__, _, _} = b, env), do: lower_block(b, env)
 
-  defp lower_expr(tuple, env) when is_tuple(tuple) and tuple_size(tuple) == 2,
+  defp lower_node(tuple, env) when is_tuple(tuple) and tuple_size(tuple) == 2,
     do: lower_tuple(Tuple.to_list(tuple), env)
 
-  defp lower_expr({:{}, _, items}, env), do: lower_tuple(items, env)
+  defp lower_node({:{}, _, items}, env), do: lower_tuple(items, env)
 
-  defp lower_expr({{:., _, [Access, :get]}, _, [arr, idx]} = node, env) do
+  defp lower_node({{:., _, [Access, :get]}, _, [arr, idx]} = node, env) do
     {sa, a} = lower_expr(arr, env)
     match?({:arr, _}, a.t) || not_an_array!(node, arr, a)
-    {si, i} = lower_expr(idx, env)
+    {[sa, si], [a, i]} = in_order([{sa, a}, lower_expr(idx, env)], env, :comma)
     i = coerce!(i, :i64, idx, "array index")
     {:arr, e} = a.t
     raw = widen("(#{a.c}).data[#{i.c}]", e)
@@ -1577,7 +1661,7 @@ defmodule Defk.Compiler do
     {[sa, si], v}
   end
 
-  defp lower_expr({:if, _, [cond, kw]} = node, env) when is_list(kw) do
+  defp lower_node({:if, _, [cond, kw]} = node, env) when is_list(kw) do
     else_ast =
       Keyword.get(kw, :else) ||
         err!(node, "if-without-else", "this if is used as a value but has no else branch")
@@ -1585,21 +1669,21 @@ defmodule Defk.Compiler do
     lower_arms([{cond, Keyword.fetch!(kw, :do)}, {true, else_ast}], "if", node, env)
   end
 
-  defp lower_expr({:cond, _, [[do: clauses]]} = node, env) when is_list(clauses) do
+  defp lower_node({:cond, _, [[do: clauses]]} = node, env) when is_list(clauses) do
     {last_cond, _} = List.last(clauses) |> clause_parts()
     last_cond == true || cond_without_true!(node)
     lower_arms(Enum.map(clauses, &clause_parts/1), "cond", node, env)
   end
 
-  defp lower_expr({:case, _, [subject, [do: clauses]]} = node, env) do
+  defp lower_node({:case, _, [subject, [do: clauses]]} = node, env) do
     {ss, arms, cenv} = case_arms(subject, clauses, node, env)
     {sa, v} = lower_arms(arms, "case", node, cenv)
     {[ss, sa], v}
   end
 
-  defp lower_expr({:case, _, _} = node, _env), do: case_form!(node)
+  defp lower_node({:case, _, _} = node, _env), do: case_form!(node)
 
-  defp lower_expr({{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m, args} = node, env) do
+  defp lower_node({{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m, args} = node, env) do
     case args do
       [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}] ->
         lower_reduce_while(src, init, x, acc, body, env, m, node)
@@ -1610,7 +1694,7 @@ defmodule Defk.Compiler do
   end
 
   # Enum.all?/any? with a predicate fn are reduce_while with a bool accumulator
-  defp lower_expr({{:., _, [{:__aliases__, _, [:Enum]}, f]}, m, args} = node, env)
+  defp lower_node({{:., _, [{:__aliases__, _, [:Enum]}, f]}, m, args} = node, env)
        when f in [:all?, :any?] do
     {src, x, pred} =
       case args do
@@ -1624,7 +1708,7 @@ defmodule Defk.Compiler do
     lower_reduce_while(src, init, x, {:_, m, nil}, {:if, m, [pred, kw]}, env, m, node)
   end
 
-  defp lower_expr({:for, _, args} = node, env) do
+  defp lower_node({:for, _, args} = node, env) do
     case parse_for(args, node, env) do
       {quals, nil, body} ->
         for_collect!(
@@ -1641,19 +1725,18 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp lower_expr({:defk_guard, _, [guard]}, env), do: guard_expr(guard, env)
+  defp lower_node({:defk_guard, _, [guard]}, env), do: guard_expr(guard, env)
 
-  defp lower_expr({op, _, [a, b]} = node, env) when op in [:+, :-, :*, :/],
+  defp lower_node({op, _, [a, b]} = node, env) when op in [:+, :-, :*, :/],
     do: float_tree(node, env) || lower_arith(op, a, b, node, env)
 
-  defp lower_expr({op, _, [a, b]} = node, env)
+  defp lower_node({op, _, [a, b]} = node, env)
        when op in [:==, :!=, :===, :!==, :<, :>, :<=, :>=] do
-    {sa, va} = lower_expr(a, env)
-    {sb, vb} = lower_expr(b, env)
-    {[sa, sb], val(compare_c(op, va, vb, node), :bool)}
+    {stmts, [va, vb]} = lower_ops([a, b], env)
+    {stmts, val(compare_c(op, va, vb, node), :bool)}
   end
 
-  defp lower_expr({op, m, [a, b]}, env) when op in [:and, :or, :&&, :||] do
+  defp lower_node({op, m, [a, b]}, env) when op in [:and, :or, :&&, :||] do
     ref = make_ref()
     {sa, va} = lower_expr(a, env)
     {sb, vb} = srec_arm(ref, 0, fn -> lower_expr(b, env) end)
@@ -1677,13 +1760,13 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp lower_expr({op, _, [a]}, env) when op in [:not, :!] do
+  defp lower_node({op, _, [a]}, env) when op in [:not, :!] do
     {s, v} = lower_expr(a, env)
     bool!(v, a, op)
     {s, val("(!#{v.c})", :bool)}
   end
 
-  defp lower_expr({:-, _, [a]} = node, env) do
+  defp lower_node({:-, _, [a]} = node, env) do
     {s, v} = lower_expr(a, env)
     numeric!(v, a, :-)
 
@@ -1708,21 +1791,21 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp lower_expr({:+, _, [a]}, env) do
+  defp lower_node({:+, _, [a]}, env) do
     {s, v} = lower_expr(a, env)
     numeric!(v, a, :+)
     {s, v}
   end
 
   # dbg/IO.inspect are for Elixir mode (Defk.ElixirMode); native code ignores them
-  defp lower_expr({:dbg, _, [x | _]}, env), do: lower_expr(x, env)
+  defp lower_node({:dbg, _, [x | _]}, env), do: lower_expr(x, env)
 
-  defp lower_expr({{:., _, [{:__aliases__, _, [:IO]}, :inspect]}, _, [x | _]}, env),
+  defp lower_node({{:., _, [{:__aliases__, _, [:IO]}, :inspect]}, _, [x | _]}, env),
     do: lower_expr(x, env)
 
   # band(a, b), a &&& b, Bitwise.band(a, b) and :erlang.band(a, b) are one
   # builtin (see "bitwise"); a call of another arity may be a kernel
-  defp lower_expr({op, m, args} = node, env) when op in @bitwise_names and is_list(args) do
+  defp lower_node({op, m, args} = node, env) when op in @bitwise_names and is_list(args) do
     f = Defk.Builtins.bitwise_fun(op)
     arity = Defk.Builtins.bitwise_arity(f)
     label = if op == f, do: "#{f}/#{arity}", else: "#{op}"
@@ -1732,7 +1815,7 @@ defmodule Defk.Compiler do
       else: lower_call(op, args, m, env)
   end
 
-  defp lower_expr({{:., _, [mod, f]}, _, args} = node, env) when f in @bitwise do
+  defp lower_node({{:., _, [mod, f]}, _, args} = node, env) when f in @bitwise do
     arity = Defk.Builtins.bitwise_arity(f)
 
     if bitwise_module?(mod) and length(args) == arity,
@@ -1742,7 +1825,7 @@ defmodule Defk.Compiler do
 
   # wrap64(expr): the masked-arithmetic tree of expr wrapped to the low 64
   # bits as a signed i64 (Defk.Bits.wrap64/1); a leaf is returned as it is
-  defp lower_expr({:wrap64, _, [x]}, env) do
+  defp lower_node({:wrap64, _, [x]}, env) do
     if Defk.Masked.tree_node(x) do
       lower_masked(x, -1, "wrap64/1", env)
     else
@@ -1753,26 +1836,25 @@ defmodule Defk.Compiler do
   end
 
   # Defk.Bits.clz(x, w) etc. are the builtins (Defk.Bits is their Elixir meaning)
-  defp lower_expr({{:., _, [{:__aliases__, _, [:Defk, :Bits]}, f]}, m, args}, env)
+  defp lower_node({{:., _, [{:__aliases__, _, [:Defk, :Bits]}, f]}, m, args}, env)
        when f in [:wrap64 | @bits] and is_list(args),
        do: lower_expr({f, m, args}, env)
 
   # :math.sqrt(x) etc. map onto the builtins
-  defp lower_expr({{:., _, [:math, fun]}, m, args}, env) when fun in [:pow | @math1],
+  defp lower_node({{:., _, [:math, fun]}, m, args}, env) when fun in [:pow | @math1],
     do: lower_call(fun, args, m, env)
 
-  defp lower_expr({name, m, args}, env) when is_atom(name) and is_list(args),
+  defp lower_node({name, m, args}, env) when is_atom(name) and is_list(args),
     do: lower_call(name, args, m, env)
 
   # anything else (a map, a string, a remote call, ...) is outside the subset
-  defp lower_expr(other, env),
+  defp lower_node(other, env),
     do: unsupported!(other, Defk.Errors.Rewrites.unsupported(other, &type_in(&1, env)), env)
 
   # + - * / one operation at a time: i64 checked for overflow, f64 for a
   # result that is inf or NaN (defk-i00); see float_tree for the common case
   defp lower_arith(op, a, b, node, env) do
-    {sa, va} = lower_expr(a, env)
-    {sb, vb} = lower_expr(b, env)
+    {[sa, sb], [va, vb]} = lower_ops([a, b], env)
     numeric!(va, a, op)
     numeric!(vb, b, op)
     pair = if op != :/ and va.t in @ints and vb.t in @ints, do: int_pair!(va, vb, node)
@@ -2061,8 +2143,8 @@ defmodule Defk.Compiler do
   end
 
   defp lower_tuple(items, env) do
-    {stmts, elems} =
-      Enum.map_reduce(items, [], fn item, acc ->
+    lowered =
+      Enum.map(items, fn item ->
         {s, v} = lower_expr(item, env)
 
         match?(%{elems: _}, v) &&
@@ -2072,10 +2154,11 @@ defmodule Defk.Compiler do
             "nested tuples such as #{Macro.to_string(item)} are not in the kernel subset"
           )
 
-        {s, [v | acc]}
+        {s, v}
       end)
 
-    elems = Enum.reverse(elems)
+    # a tuple has no C of its own to put comma bindings in front of
+    {stmts, elems} = in_order(lowered, env, :stmt)
     {stmts, %{t: {:tuple, Enum.map(elems, & &1.t)}, elems: elems}}
   end
 
@@ -2450,7 +2533,7 @@ defmodule Defk.Compiler do
       lower_masked(expr, mask, label, env)
     else
       _ ->
-        {stmts, vals} = Enum.map(args, &lower_expr(&1, env)) |> Enum.unzip()
+        {stmts, vals} = lower_ops(args, env)
         Enum.zip_with(vals, args, &int!(&1, &2, label))
         {stmts, bitwise_val(f, vals, args, node, env)}
     end
@@ -2506,7 +2589,7 @@ defmodule Defk.Compiler do
       # raises (defk_wbsl)
       {:bsl_var, a, n} ->
         {s, c} = wrapped(a, top, {:bit, "bsl/2"}, env)
-        {sn, vn} = lower_expr(n, env)
+        {[s, sn], [%{c: c}, vn]} = in_order([{s, val(c, :u64)}, lower_expr(n, env)], env, :comma)
         int!(vn, n, "bsl/2")
 
         shift =
@@ -2521,6 +2604,10 @@ defmodule Defk.Compiler do
         parent = if op in [:band, :bor, :bxor], do: {:bit, "#{op}/2"}, else: {:arith, cop}
         {sa, ca} = wrapped(a, top, parent, env)
         {sb, cb} = wrapped(b, top, parent, env)
+
+        {[sa, sb], [%{c: ca}, %{c: cb}]} =
+          in_order([{sa, val(ca, :u64)}, {sb, val(cb, :u64)}], env, :comma)
+
         {[sa, sb], "(#{ca} #{cop} #{cb})"}
     end
   end
@@ -2656,13 +2743,13 @@ defmodule Defk.Compiler do
       unsupported!(node, r, env)
     end
 
-    {stmts, vals} =
-      Enum.map_reduce(args, [], fn a, acc ->
-        {s, v} = lower_expr(a, env)
-        {s, [v | acc]}
-      end)
+    # an inlined kernel and a range copy read their arguments in statements
+    how =
+      if name in [:copy, :copy_back] or Map.has_key?(env.sigs, {name, length(args)}),
+        do: :stmt,
+        else: :comma
 
-    vals = Enum.reverse(vals)
+    {stmts, vals} = lower_ops(args, env, how)
 
     for {%{elems: _}, a} <- Enum.zip(vals, args) do
       err!(
@@ -3668,8 +3755,7 @@ defmodule Defk.Compiler do
 
   # `range` is the range expression
   defp range_loop(name, a, b, step, rest, env, inner, range) do
-    {sa, va} = lower_expr(a, env)
-    {sb, vb} = lower_expr(b, env)
+    {[sa, sb], [va, vb]} = in_order([lower_expr(a, env), lower_expr(b, env)], env, :stmt)
     va = coerce!(va, :i64, a, "range start")
     vb = coerce!(vb, :i64, b, "range end")
     i = fresh(name, :i64)
