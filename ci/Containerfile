@@ -4,6 +4,9 @@
 # it reads from .github/workflows/ci.yml.
 ARG BEAM_IMAGE
 FROM ${BEAM_IMAGE}
+# setup-debian.sh runs mix (local.hex): under Rosetta the BEAM needs
+# +JMsingle true, which ci/local.sh passes for x86-64 (empty elsewhere)
+ARG ERL_FLAGS=""
 COPY setup-debian.sh /tmp/setup-debian.sh
-RUN /tmp/setup-debian.sh && rm /tmp/setup-debian.sh
+RUN ERL_FLAGS="$ERL_FLAGS" /tmp/setup-debian.sh && rm /tmp/setup-debian.sh
 ENV LANG=C.UTF-8

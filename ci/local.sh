@@ -46,6 +46,7 @@ for label in "${labels[@]}"; do
 
   echo "== $label ($platform, CC=$cc)"
   podman build -q --platform "$platform" --build-arg BEAM_IMAGE="$beam_image" \
+    --build-arg ERL_FLAGS="$erl_flags" \
     -t "$image" -f "$here/Containerfile" "$here" >/dev/null || exit 1
   podman run --rm --platform "$platform" \
     -v "$repo":/src:ro \
