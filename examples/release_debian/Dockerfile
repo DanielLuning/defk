@@ -5,7 +5,7 @@
 #   podman run --rm defk-release-debian
 #
 # See README.md for what had to be added and what it costs. The kernel
-# libraries ship inside the release (each app's ebin/, defk-n8f), so the
+# libraries ship inside the release (each app's ebin/), so the
 # runtime stage copies the release and nothing else.
 ARG BUILDER_IMAGE=hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713-slim
 ARG RUNNER_IMAGE=debian:trixie-20260713-slim

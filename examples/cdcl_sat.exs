@@ -25,7 +25,7 @@
 #   4. cdcl_sat_s4  S4: random 3-SAT, n = 200 at ratio 4.26, three seeds;
 #                   S5 beside it: the tick gaps at n = 300 (seed 7)
 #
-# Pre-registered (defk-52v.15) and measured (M4 Pro, OTP 29, Elixir 1.20.2,
+# Pre-registered and measured (M4 Pro, OTP 29, Elixir 1.20.2,
 # load 3.5-7.7 on a machine shared with other agents: provisional; four
 # runs, the last after merging main):
 #
@@ -58,7 +58,7 @@
 # saved phases, seen flags, two-watched-literal lists as intrusive linked
 # lists (a head per literal, a next and a blocker literal per watch), clause
 # starts, sizes and LBDs, the clause arena (input clauses, then learned
-# ones), and scratch for conflict analysis. Under the defk-n4r.4 rule a
+# ones), and scratch for conflict analysis. Under defk's rule, a
 # helper returns every array it writes, so with one array every helper is
 # `st = helper(st, ...)`; it reads like C with named offsets
 # (st[st[@o_lval] + l]), and nothing else would fit: seven arrays would make
@@ -120,8 +120,7 @@
 # (0.25-1,100 ms per call, 17-580 ms for P = 4 enumerations, not run above
 # P = 4). Not tried: a functional CDCL (clauses in tuples, assignment in a
 # map); keeping the :atomics state in the process across calls (Crux's API
-# is one stateless call per solve; the kernel cannot keep state either,
-# defk-sve).
+# is one stateless call per solve; the kernel cannot keep state either).
 #
 # picosat is ahead of both CDCLs on hard random instances: S4 seed 3
 # (UNSAT) 88 ms against the kernel's 170 ms, and at n = 300 the kernel
@@ -152,14 +151,14 @@
 #     condition read the accumulator array copied it every iteration (and
 #     so did a nested loop whose init holds it, in such a branch). The
 #     first kernel did that and copied the whole solver state per step:
-#     1.9 s instead of 1 ms at n = 100. Fixed in defk-tif (the condition
+#     1.9 s instead of 1 ms at n = 100. Since fixed (the condition
 #     that chose a branch ran before it, so it is not a read after the
 #     call); the kernels keep the workaround they were measured with: every
 #     helper is called on every step with an "active" flag (empty loop
 #     ranges and guarded writes when inactive).
 #     An array passed as a loop's initial value and also read in the loop's
 #     range (st[@h_n] in 0..st[@h_n]) was copied too, so the kernels read
-#     those bounds into a local first; fixed in defk-8tw (the range and init
+#     those bounds into a local first; since fixed (the range and init
 #     are evaluated before the first iteration), the locals are kept.
 #   - An array cannot be the value of an if, also inside a for reduce
 #     body's tuple: a branch gives numbers ({dp, dk}) and the tuple with
@@ -168,7 +167,7 @@
 #     so the solver's code is there in solve, solve_all, search and each
 #     helper's entry point: 2.35 MB of C, a 683 KB .so, about 3 minutes of
 #     clang at load 4 (the first run; cached after). Each helper has one
-#     call site per entry point (defk-6ag).
+#     call site per entry point.
 
 Mix.install(
   [

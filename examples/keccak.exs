@@ -35,7 +35,7 @@
 # (`[i64]`) and return k * 32 bytes.
 #
 # The round is written row by row (five rotated lanes, then their five chi
-# outputs). The order no longer matters (defk-zep): before, every safepoint
+# outputs). The order no longer matters: before, every safepoint
 # spilled every local of the kernel, so each round temporary stayed alive
 # out of the round loop into the block loop's safepoint, and clang spilled
 # 26-51 values per round depending on statement order and on whether a

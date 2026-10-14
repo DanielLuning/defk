@@ -325,7 +325,7 @@ defmodule Defk.CompileErrorsTest do
     end
   end
 
-  describe "module aliases (defk-kwl)" do
+  describe "module aliases" do
     test "an aliased unsupported module is rejected under its real name" do
       msg =
         compile(

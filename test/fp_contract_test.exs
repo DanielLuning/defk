@@ -1,6 +1,6 @@
 # Kernels build with -ffp-contract=off, so the C compiler never fuses a*b+c
 # into one FMA (a single rounding). Float results stay bit-exact with Elixir,
-# which rounds the product and the sum separately (defk-jlk, defk-dtw.16).
+# which rounds the product and the sum separately.
 
 defmodule Defk.FpContractTest.K do
   use Defk

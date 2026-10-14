@@ -1,4 +1,4 @@
-# Comparisons and min/max give Elixir's answer (defk-t11.2). Erlang compares
+# Comparisons and min/max give Elixir's answer. Erlang compares
 # an integer with a float by exact value (erts_cmp_compound in erts utils.c),
 # never by rounding the integer to a double; =:= tells -0.0 from 0.0; and
 # erlang:min/max return the first argument when the two compare equal.
@@ -172,7 +172,7 @@ defmodule Defk.ComparisonTest do
   end
 
   # ---------------------------------------------------- agreement properties --
-  # Every kernel here against its Elixir mode (defk-ne6), on the i64 and f64
+  # Every kernel here against its Elixir mode, on the i64 and f64
   # edge values: 2^53 and 2^63 and their neighbours, signed zeros.
 
   agreement(K, [:cmp_if, :cmp_fi, :cmp_ff, :cmp_ii, :minmax_f, :minmax_i, :count_below])

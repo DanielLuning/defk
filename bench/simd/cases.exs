@@ -1,4 +1,4 @@
-# The timed kernels of the defk-ulk.1 study: one or more per catalogue
+# The timed kernels of the SIMD study: one or more per catalogue
 # example, at a size the example measures (or a smaller one where the full
 # size takes seconds), with inputs built the way the example builds them.
 # Each case: {label, module, kernel, args}. `small/0` gives the same kernels

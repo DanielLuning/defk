@@ -1,9 +1,9 @@
 defmodule Mix.Tasks.Defk.Examples do
-  # Layout (defk-30c.3): repo-only Mix tasks live in dev/mix/tasks/ (with their
+  # Layout: repo-only Mix tasks live in dev/mix/tasks/ (with their
   # helpers under dev/defk/). mix.exs adds "dev" to elixirc_paths for :dev and
   # :test only, so a task that runs repo files (examples/, the fuzzy_search
   # app) is never compiled into a dependent's build, and "dev" is not among
-  # the files a Hex package takes by default. `mix defk.verify` (defk-96f.2)
+  # the files a Hex package takes by default. `mix defk.verify`
   # goes in the same directory.
   @shortdoc "Runs every example that `mix test` does not (check-only by default)"
 

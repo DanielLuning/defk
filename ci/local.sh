@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The podman fallback (defk-wfi.2): the Linux matrix of
+# The podman fallback: the Linux matrix of
 # .github/workflows/ci.yml without GitHub and without act. It reads the job
 # image and the labels from the workflow, so the two cannot drift.
 #

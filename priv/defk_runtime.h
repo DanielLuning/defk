@@ -32,8 +32,8 @@
 /* glibc's <setjmp.h> declares __sigsetjmp without returns_twice, and clang with
  * -fno-builtin does not recognise it either: guard_k*'s `return run_k*()` after
  * sigsetjmp then becomes a tail call, and a raise's siglongjmp lands in a dead
- * frame (Bus error on the first raise). Redeclaring it restores the attribute
- * (defk-o52). gcc and Apple clang are unaffected. */
+ * frame (Bus error on the first raise). Redeclaring it restores the attribute.
+ * gcc and Apple clang are unaffected. */
 #if defined(__GLIBC__)
 extern int __sigsetjmp(struct __jmp_buf_tag __env[1], int __savemask) __attribute__((returns_twice));
 #endif
@@ -62,7 +62,7 @@ typedef struct { double *data; int64_t len; } defk_arr_f64;
 typedef struct { int64_t *data; int64_t len; } defk_arr_i64;
 typedef struct { uint8_t *data; int64_t len; } defk_arr_u8;
 typedef struct { uint64_t *data; int64_t len; } defk_arr_u64;
-/* narrow element types (defk-4ai): only inside arrays; a read widens to
+/* narrow element types: only inside arrays; a read widens to
    int64_t / double, a write is range-checked (defk_to_i16 ... defk_to_f32) */
 typedef struct { int16_t *data; int64_t len; } defk_arr_i16;
 typedef struct { int32_t *data; int64_t len; } defk_arr_i32;
@@ -71,8 +71,8 @@ typedef struct { float *data; int64_t len; } defk_arr_f32;
 /* ---- per-call context (first member of every frame) --------------------- */
 
 /*
- * Frame layout tag (defk-ls8), defence in depth. Frames of one library image
- * only ever meet that image's own code (defk-nbl: a resource type per image),
+ * Frame layout tag, defence in depth. Frames of one library image only ever
+ * meet that image's own code (a resource type per image: "Hot code upgrade"),
  * so a mismatch should be impossible. If that invariant ever breaks (a shared
  * type name, a separate runtime NIF), the destructor and the step functions
  * must not read a foreign layout. defk_promote stamps every resource frame
@@ -100,7 +100,7 @@ typedef struct {
   uint64_t owned_bytes; /* bytes of the live binaries in owned, at most defk_max_owned */
   int finished;
   int is_resource;
-  /* this call's slice (defk-04y): slice_us until short_left us of kernel
+  /* this call's slice: slice_us until short_left us of kernel
      time have run (0: no limit), then DEFK_SLICE_US; see defk_slice_init */
   int64_t slice_us;
   int64_t short_left;
@@ -198,7 +198,7 @@ static void defk_finish(defk_ctx *ctx) {
 static void defk_frame_dtor(ErlNifEnv *env, void *obj) {
   (void)env;
   defk_ctx *ctx = (defk_ctx *)obj;
-  /* A foreign layout (defk-ls8): ctx->owned and ctx->finished are not where
+  /* A foreign layout: ctx->owned and ctx->finished are not where
      this code expects them, so neither is safe to touch. Free nothing and do
      not touch the frames_live counter, which a foreign frame was never counted
      in. The leak (the binaries it owned) is accepted; a crash is not. */
@@ -208,12 +208,12 @@ static void defk_frame_dtor(ErlNifEnv *env, void *obj) {
 }
 
 /*
- * The budget for a call's owned binaries (defk-4b2). Every alloc/2, every
+ * The budget for a call's owned binaries. Every alloc/2, every
  * value-semantics copy, every bitstring accumulator buffer and every aligned
  * copy of an input is a slot in ctx->owned and lives until the kernel returns,
  * so an alloc or a copy in a loop body keeps one buffer per iteration. On an
  * OS that overcommits, the node is OOM-killed long before enif_alloc_binary
- * fails (defk-33b: SIGKILL at ~1.6 GB of 4 MB copies), which breaks the
+ * fails (seen: SIGKILL at ~1.6 GB of 4 MB copies), which breaks the
  * runtime contract. So a call raises ArgumentError "out of memory" once its
  * live owned bytes would pass defk_max_owned.
  *
@@ -228,7 +228,7 @@ static void defk_frame_dtor(ErlNifEnv *env, void *obj) {
  *
  * The check is one compare and one add per allocation, never per element.
  * Elixir mode applies the same budget, with the same message, to the bytes
- * of the call's alloc/2 calls (Defk.ElixirMode.Ops.alloc/2, defk-bh3), so a
+ * of the call's alloc/2 calls (Defk.ElixirMode.Ops.alloc/2), so a
  * size no host could hold raises there too instead of aborting the VM.
  */
 #define DEFK_OWNED_FALLBACK ((uint64_t)1 << 32)
@@ -263,7 +263,7 @@ static inline void defk_owned_check(defk_ctx *ctx, size_t bytes) {
 }
 
 /*
- * The sanitizer build mode's `address` (DEFK_SANITIZE=address, defk-96f.1):
+ * The sanitizer build mode's `address` (DEFK_SANITIZE=address):
  * ERTS allocates every enif_alloc_binary buffer with CHICKEN_PAD
  * (sizeof(void *) - 1) bytes of slack after it "to counter buggy drivers"
  * (erl_binary.h), so under ASan with the stock emulator and +Mea min a write
@@ -277,7 +277,7 @@ static inline void defk_owned_check(defk_ctx *ctx, size_t bytes) {
  */
 #ifdef DEFK_SANITIZE_ADDRESS
 /* gcc ships no allocator_interface.h, but its libasan exports the two
- * functions (defk-wfi.7); the declarations are compiler-rt's */
+ * functions; the declarations are compiler-rt's */
 #if __has_include(<sanitizer/allocator_interface.h>)
 #include <sanitizer/allocator_interface.h>
 #else
@@ -330,8 +330,8 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
  * space of 64-bit platforms, so no allocator can serve more. Elixir mode
  * applies the same limit (Defk.ElixirMode.Ops.alloc/2), where asking the VM
  * for a binary that large aborts it; the two modes agree on it. The check also keeps n * sizeof(T) from wrapping: unchecked, alloc(f64, 2^61)
- * was a 0-byte buffer of length 2^61, and an in-bounds write crashed the VM
- * (defk-gtv). A size under the limit that the allocator cannot provide raises
+ * was a 0-byte buffer of length 2^61, and an in-bounds write crashed the VM.
+ * A size under the limit that the allocator cannot provide raises
  * "out of memory" (defk_own). It also bounds every array length below 2^61,
  * which the compiler relies on (range_limit: a range ending at length/1 cannot
  * step past the i64 limit).
@@ -343,7 +343,7 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
 #endif
 
 /*
- * alloc/2 (defk-ktw): defk_alloc_raw_T leaves the buffer uninitialised, and
+ * alloc/2: defk_alloc_raw_T leaves the buffer uninitialised, and
  * the compiler zeroes it after (defk_zero_strip, a loop with a safepoint per
  * strip) unless it proves every element is written before anything reads it.
  * defk_alloc_T zeroes at once, for a length known to be small.
@@ -373,7 +373,7 @@ DEFK_ALLOC_FN(i32, int32_t)
 DEFK_ALLOC_FN(f32, float)
 
 /*
- * Zeroing an alloc/2 buffer in strips (defk-ktw): one memset of 85 MB held
+ * Zeroing an alloc/2 buffer in strips: one memset of 85 MB held
  * the scheduler ~5 ms (cold pages) before the kernel's first loop ran. The
  * generated loop zeroes DEFK_ZERO_STRIP bytes at a time from byte `done` and
  * passes a safepoint after each strip, charged one back-edge per 16 bytes
@@ -395,7 +395,7 @@ static inline __attribute__((unused)) uint64_t defk_zero_strip(void *data, uint6
 }
 
 /*
- * Array value semantics (defk-auo): a copy of `src` in a new owned binary,
+ * Array value semantics: a copy of `src` in a new owned binary,
  * made before a write when another binding may still see src's buffer, or
  * src is the caller's binary (never written). The compiler decides where
  * statically; see "array values" in lib/defk/compiler.ex.
@@ -417,7 +417,7 @@ DEFK_COPY_FN(i32, int32_t)
 DEFK_COPY_FN(f32, float)
 
 /*
- * Range copies (defk-52v.16, defk_rcopy_T and defk_rcopy_back_T):
+ * Range copies (defk_rcopy_T and defk_rcopy_back_T):
  * copy(out, at, src, from, n) and
  * copy_back(out, at, off, n), checked once for the whole range. The
  * compiler has made `out` the kernel's own buffer (copied first where value
@@ -601,7 +601,7 @@ static ERL_NIF_TERM defk_make_arr(ErlNifEnv *env, defk_ctx *ctx, void *data) {
 }
 
 /*
- * Hand back an array the kernel may not own (defk-gqk): an owned buffer is
+ * Hand back an array the kernel may not own: an owned buffer is
  * handed over as defk_make_arr does; any other (a binary literal's or
  * attribute's static bytes) is copied into a new binary. The generated code
  * matches an input array first and returns the caller's own binary.
@@ -696,7 +696,7 @@ __attribute__((unused)) static int defk_get_bool_arg(ErlNifEnv *env, defk_ctx *c
 
 static ERL_NIF_TERM defk_make_f64(defk_ctx *ctx, ErlNifEnv *env, double d) {
   /* BEAM floats cannot be inf/nan. Every operation that could make one
-     already raised (defk-i00); this stays as defence in depth. */
+     already raised; this stays as defence in depth. */
   if (DEFK_UNLIKELY(!isfinite(d)))
     defk_fail(ctx, DEFK_E_ARITH, "kernel produced a non-finite float");
   return enif_make_double(env, d);
@@ -793,7 +793,7 @@ static inline int64_t defk_bsr_i64_s(int *ovf, int64_t a, int64_t n) { return de
 /* bsr by a shift known to be non-negative: it cannot overflow */
 static inline int64_t defk_bsr_nn(int64_t a, int64_t n) {
   /* n >= 0 is proved; the unsigned test keeps a wrong n from a failed flagged
-     operation (defk-hki) from shifting by a negative count */
+     operation from shifting by a negative count */
   return (uint64_t)n >= 64 ? (a < 0 ? -1 : 0) : a >> n;
 }
 static inline int64_t defk_div_i64(defk_ctx *ctx, int64_t a, int64_t b) {
@@ -810,7 +810,7 @@ static inline int64_t defk_abs_i64(defk_ctx *ctx, int64_t a) {
   return a < 0 ? defk_neg_i64(ctx, a) : a;
 }
 
-/* case guards (defk-7a6): an Elixir guard that errors fails its clause. A zero
+/* case guards: an Elixir guard that errors fails its clause. A zero
  * divisor sets *bad (an Elixir error: the clause fails); a result outside i64
  * sets *ovf (not an error in Elixir, which has bignums: the guard raises, as
  * the unguarded operation does). Neither form divides by zero or by -1 when
@@ -829,7 +829,7 @@ static inline int64_t defk_abs_i64_s(int *ovf, int64_t a) {
   return a < 0 ? defk_neg_i64_s(ovf, a) : a;
 }
 
-/* ---- u64 (defk-wlu) ------------------------------------------------------
+/* ---- u64 -----------------------------------------------------------------
  * Checked arithmetic in the u64 domain, 0..2^64 - 1: the exact result, or
  * ArithmeticError where it leaves u64 (a - b below 0 included). Masked
  * arithmetic (band(expr, 2^k - 1)) never comes here: it wraps in uint64_t. */
@@ -939,7 +939,7 @@ static inline int64_t defk_to_i64_elem(defk_ctx *ctx, uint64_t v) {
   return (int64_t)v;
 }
 
-/* ---- float arithmetic Elixir's way (defk-i00, decided in defk-q1c) -------
+/* ---- float arithmetic Elixir's way ---------------------------------------
  *
  * Elixir raises ArithmeticError at any float operation whose result would be
  * inf or NaN (BEAM floats are always finite), so each operation that can make
@@ -1011,7 +1011,7 @@ static inline double defk_pow(defk_ctx *ctx, double a, double b) {
 }
 /* __builtin_sqrt: one instruction where -fno-builtin would make it a libm
    call. IEEE 754 square root is correctly rounded, in hardware and in libm
-   (which :math.sqrt calls), so the result is the same bits (defk-hki). */
+   (which :math.sqrt calls), so the result is the same bits. */
 static inline double defk_sqrt(defk_ctx *ctx, double a) {
   if (DEFK_UNLIKELY(a < 0.0)) defk_fail(ctx, DEFK_E_ARITH, "sqrt of negative number %g", a);
   return __builtin_sqrt(a);
@@ -1109,7 +1109,7 @@ static inline uint64_t defk_rotl_i(defk_ctx *ctx, int64_t x, int64_t n, int64_t 
 static inline uint64_t defk_rotl_u(defk_ctx *ctx, uint64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotl/3", x, 0, n, w, 0); }
 static inline uint64_t defk_rotr_i(defk_ctx *ctx, int64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotr/3", (uint64_t)x, x < 0, n, w, 1); }
 static inline uint64_t defk_rotr_u(defk_ctx *ctx, uint64_t x, int64_t n, int64_t w) { return defk_rot_w(ctx, "rotr/3", x, 0, n, w, 1); }
-/* ---- hardware builtins (defk-ulk.4) --------------------------------------
+/* ---- hardware builtins ---------------------------------------------------
  *
  * Defk.Bits.crc32c/3: one CRC32C (Castagnoli, reflected polynomial
  * 0x82F63B78) update step over the w/8 bytes of x, least significant byte
@@ -1280,8 +1280,8 @@ static inline double defk_max_f64(double a, double b) { return a < b ? b : a; }
 /* -1, 0 or 1 as the exact value of i is below, equal to or above f, as Erlang
  * compares an integer with a float (erts_cmp_compound in erts utils.c): never
  * by rounding i to a double, which would make 2^53 + 1 == 2^53 + 0.0.
- * Kernel floats are never NaN (every operation that could make one raises,
- * defk-i00); one would compare below every integer. */
+ * Kernel floats are never NaN (every operation that could make one raises);
+ * one would compare below every integer. */
 static inline int defk_cmp_i64_f64(int64_t i, double f) {
   if (f >= 0x1p63) return -1;           /* above every i64 */
   if (!(f >= -0x1p63)) return 1;        /* below every i64 (or NaN) */
@@ -1388,7 +1388,7 @@ DEFK_LOAD_FN(u16_be, 16, DEFK_BE)
  * An f64 element read from an array the kernel did not create (an input) may
  * hold inf or NaN bits, which no BEAM float can: the read raises ArgumentError
  * like Elixir mode's <<x::float-64>> match, and only elements actually read
- * count (defk-q1c). Arrays from alloc/2 hold only finite values, so their
+ * count. Arrays from alloc/2 hold only finite values, so their
  * reads skip the check.
  */
 __attribute__((noreturn, cold)) static void defk_nonfinite_input(defk_ctx *ctx, int64_t i) {
@@ -1405,7 +1405,7 @@ static inline double defk_get_in_f64(defk_ctx *ctx, defk_arr_f64 a, int64_t i) {
 }
 
 /*
- * Flat strips (defk-6tt). A branch per float operation stops clang from
+ * Flat strips. A branch per float operation stops clang from
  * vectorising a flat loop, so the compiler runs a flat strip whose only
  * possible errors are float checks (+ - * /, sqrt, log, exp, pow, [f64] input
  * reads) with a flag instead: it #defines each checked helper below to its
@@ -1444,8 +1444,8 @@ static inline double defk_nf_r(int *nf, double r) {
 
 /*
  * A strip with float checks may also hold i64/u64 overflow checks, bounds
- * checks, narrow-write range checks and float-to-integer conversions
- * (defk-hki). Their DEFK_NF_ forms OR the failure into the same defk_nf and
+ * checks, narrow-write range checks and float-to-integer conversions.
+ * Their DEFK_NF_ forms OR the failure into the same defk_nf and
  * compute on: an overflowing + - * gives the wrapped value (the builtins
  * define it), a conversion out of range gives 0 or the truncated value. Any
  * failure replays the strip with the raising forms, so the first error in
@@ -1520,7 +1520,7 @@ static inline int32_t defk_to_i32(defk_ctx *ctx, int64_t v) {
     defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in i32", (long long)v);
   return (int32_t)v;
 }
-/* their flagged forms (defk-hki): the truncated value, the failure flagged */
+/* their flagged forms: the truncated value, the failure flagged */
 #define DEFK_NF_to_u8(C, V) defk_to_narrow_f(&defk_nf, (V), 0, 255, uint8_t)
 #define DEFK_NF_to_i16(C, V) defk_to_narrow_f(&defk_nf, (V), INT16_MIN, INT16_MAX, int16_t)
 #define DEFK_NF_to_i32(C, V) defk_to_narrow_f(&defk_nf, (V), INT32_MIN, INT32_MAX, int32_t)
@@ -1535,10 +1535,10 @@ static inline int32_t defk_to_i32(defk_ctx *ctx, int64_t v) {
  * An [f32] write: v rounded to nearest, as Elixir's <<v::float-32-native>>
  * (the C conversion under the default rounding mode). Underflow to 0.0 and
  * subnormals are Elixir's result too. A value that rounds to +-inf, which
- * Elixir would store, raises (a limit, defk-dtw.13). v is finite (every float
+ * Elixir would store, raises (a limit). v is finite (every float
  * operation checked it), so the converted value is inf exactly when it
  * overflowed. In a flagged strip the DEFK_NF_ form flags it instead, and the
- * replay raises here (defk-q1c: f32 writes feed the strip's flag).
+ * replay raises here (f32 writes feed the strip's flag).
  */
 __attribute__((noreturn, cold)) static void defk_f32_range(defk_ctx *ctx, double v) {
   defk_fail(ctx, DEFK_E_ARG, "value %.17g does not fit in f32", v);
@@ -1551,7 +1551,7 @@ static inline float defk_to_f32(defk_ctx *ctx, double v) {
 #define DEFK_NF_to_f32(C, V) ((float)defk_nf_r(&defk_nf, (double)(float)(V)))
 
 /*
- * The bitstring accumulator (defk-cmr): acc = <<acc::bitstring, v::size(n)>>.
+ * The bitstring accumulator: acc = <<acc::bitstring, v::size(n)>>.
  * A value is {nbits, slot + 1} (0: the empty bitstring, no buffer, which is
  * what a zeroed local holds). Its buffer is an owned binary, so it stays put
  * across yields, and is freed on an exception or process death like an array.
@@ -1719,7 +1719,7 @@ typedef struct {
 } defk_clock;
 
 /* overridable like DEFK_STRIP: the fuzz targets' small-strips build sets 1,
-   so a short input yields at every safepoint (verify/fuzz, defk-96f.4) */
+   so a short input yields at every safepoint (verify/fuzz) */
 #ifndef DEFK_BUDGET0
 #define DEFK_BUDGET0 256
 #endif
@@ -1743,14 +1743,14 @@ typedef struct {
  * stop vectorisation. Even expensive builtins (exp, pow) keep that below the
  * clock period. A loop just over the limit pays for a second, short strip:
  * at 512, count_primes' trial division (up to 1000 trips at 1M) ran 6%
- * slower than yield: false; at 2048 it is within 1% (defk-jaj). */
+ * slower than yield: false; at 2048 it is within 1%. */
 #ifndef DEFK_STRIP
 #define DEFK_STRIP 2048
 #endif
 
 /*
- * A crowded run queue gets a short slice for the call's first millisecond
- * (defk-04y). ERTS wakes an idle scheduler from a run queue with waiting
+ * A crowded run queue gets a short slice for the call's first millisecond.
+ * ERTS wakes an idle scheduler from a run queue with waiting
  * processes by the reductions run there, and a kernel charges a whole
  * timeslice (4000 reductions) per slice, so at 250 us short kernel calls
  * fanned out from one process (Task.async_stream) stayed on 2-3 of 12
@@ -1770,7 +1770,7 @@ typedef struct {
 
 /* hint: the run-queue length the caller saw (NULL: none passed) */
 __attribute__((unused)) static void defk_slice_init(ErlNifEnv *env, defk_ctx *ctx, const ERL_NIF_TERM *hint) {
-  ErlNifSInt64 waiting; /* not int64_t: enif_get_int64 takes long * on macOS (defk-o52) */
+  ErlNifSInt64 waiting; /* not int64_t: enif_get_int64 takes long * on macOS */
   if (hint && enif_get_int64(env, *hint, &waiting) && waiting > 0) {
     ctx->slice_us = DEFK_SHORT_SLICE_US;
     ctx->short_left = DEFK_SHORT_FOR_US;
@@ -1787,7 +1787,7 @@ static void defk_clock_init(defk_clock *c, defk_ctx *ctx) {
 }
 
 #ifdef DEFK_FAULT_HOOKS
-/* testing (defk-7dm): the next clock read faults on purpose; see defk_inject_fault */
+/* testing: the next clock read faults on purpose; see defk_inject_fault */
 static _Atomic int defk_inject_fault = 0;
 static void defk_inject_fault_now(int kind);
 #endif
@@ -1827,9 +1827,9 @@ __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c
  * A resume must reach the safepoint it yielded at before anything else yields
  * or the kernel returns: only the safepoint's arrival label, in front of its
  * own loop, clears F->resume, and each dispatch level matches only the depth
- * the level above handed on (defk-yqo). A missing or wrong case re-runs the
+ * the level above handed on. A missing or wrong case re-runs the
  * kernel from an earlier point instead, which silently recomputes, and under
- * forced yields restarts it at every yield so it never finishes (defk-juw).
+ * forced yields restarts it at every yield so it never finishes.
  * Generated code checks F->resume only where it yields and after a resumed
  * run returns, never inside a loop. `at` is the safepoint that yielded
  * instead, or 0 if the kernel returned.
@@ -1898,7 +1898,7 @@ static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
 }
 
 /*
- * Frame entry check for step functions (defk-ls8): one compare of the tag and
+ * Frame entry check for step functions: one compare of the tag and
  * one of the size, once per resume, never per loop iteration. Returns the frame
  * or NULL after setting *exc to a clean ArgumentError; a frame that is not ours
  * is never read beyond its first two words.
@@ -1920,7 +1920,7 @@ static inline void *defk_frame_of(ErlNifEnv *env, ERL_NIF_TERM t, size_t size, E
   return NULL;
 }
 
-/* ---- fault containment (defk-7dm) ---------------------------------------- */
+/* ---- fault containment --------------------------------------------------- */
 
 /*
  * A kernel never faults by construction (every access is checked or proven,
@@ -2077,7 +2077,7 @@ static void defk_fault_chain(int sig, siginfo_t *si, void *uc) {
     return;
   }
   /* the default action: put it back and return, so the faulting instruction
-     re-executes and the process dies with the signal, as before defk-7dm */
+     re-executes and the process dies with the signal, as without fault containment */
   struct sigaction dfl;
   memset(&dfl, 0, sizeof dfl);
   dfl.sa_handler = SIG_DFL;
@@ -2216,7 +2216,7 @@ static ERL_NIF_TERM defk_inject_fault_nif(ErlNifEnv *env, int argc, const ERL_NI
 static ERL_NIF_TERM defk_stats_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
   (void)argv;
-  /* which crc32c this library picked at its first call (defk-ulk.4) */
+  /* which crc32c this library picked at its first call */
   int crc = atomic_load(&defk_crc32c_state);
   const char *crc_impl = crc == 1 ? "instruction" : crc == 2 ? "table" : "not_called";
   ERL_NIF_TERM keys[5] = {enif_make_atom(env, "frames_live"), enif_make_atom(env, "promotions"),
@@ -2245,7 +2245,7 @@ static ERL_NIF_TERM defk_force_yields_nif(ErlNifEnv *env, int argc, const ERL_NI
 }
 
 /*
- * Hot code upgrade (defk-nbl). Each loaded library image gets its own frame
+ * Hot code upgrade. Each loaded library image gets its own frame
  * resource type, named after the address of one of its statics. A yielded
  * kernel's continuation (step_N, rescheduled with enif_schedule_nif) always
  * belongs to the library that started it, and ERTS keeps that library mapped
@@ -2285,7 +2285,7 @@ static int defk_upgrade(ErlNifEnv *env, void **priv, void **old, ERL_NIF_TERM in
 }
 /* the module was purged as old code and no new code took it over (ERTS does
    not call this for an upgraded image); frames it still owns keep the image
-   loaded until they are gone (defk-nbl) */
+   loaded until they are gone */
 static void defk_unload(ErlNifEnv *env, void *priv) {
   (void)env;
   (void)priv;

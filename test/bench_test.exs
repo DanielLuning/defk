@@ -166,7 +166,7 @@ defmodule Defk.BenchTest do
     assert is_number(json["speedup"]) and is_number(json["elixir_ms"])
   end
 
-  # the evidence bar's "best of N with spread" (defk-a1p)
+  # the evidence bar's "best of N with spread"
   test "each side's spread: the median and the slowest of its runs, beside the best" do
     {r, out, json} = report(runs: 3, native: {spin(2), "n"})
 
@@ -314,7 +314,7 @@ defmodule Defk.BenchTest do
     assert TickGap.percentile([5], 0.99) == 5
   end
 
-  # defk-96f.1: sanitized kernels are slower and optimised differently, so a
+  # Sanitized kernels are slower and optimised differently, so a
   # verdict measured on them would be wrong. Refused before anything runs.
   test "report refuses to measure in the sanitizer build mode" do
     restore_env_on_exit(["DEFK_SANITIZE"])

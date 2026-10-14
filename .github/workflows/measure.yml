@@ -1,4 +1,4 @@
-# The Linux measurement run (defk-a1p), on demand only: every example timed
+# The Linux measurement run, on demand only: every example timed
 # on a native x86-64 runner (ci/measure.sh). A hosted runner is a shared
 # VM, so its numbers are provisional. The log and the conditions are kept
 # as an artifact for 90 days.

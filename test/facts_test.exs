@@ -1,6 +1,6 @@
 # Defk.Facts is the range-facts lattice: the compiler asserts what it knows
 # about a value and asks prove_in_bounds / prove_i64 before dropping a
-# check (defk-k4x). These properties are the module's spec, stated against
+# check. These properties are the module's spec, stated against
 # ground truth: build facts that are TRUE of concrete integers and arrays
 # by construction, push them through each derivation, and check the derived
 # facts still hold of the derived concrete value. holds?/3 below restates

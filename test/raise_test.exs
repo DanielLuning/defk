@@ -1,4 +1,4 @@
-# raise in a kernel (defk-b4x): `raise Module, "literal"`, `raise Module` and
+# raise in a kernel: `raise Module, "literal"`, `raise Module` and
 # `raise "literal"`, a statement that raises the exception Elixir would, with
 # the same message natively and in Elixir mode.
 

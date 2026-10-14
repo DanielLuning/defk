@@ -1,4 +1,4 @@
-# Hot code upgrade with suspended kernel frames (defk-nbl).
+# Hot code upgrade with suspended kernel frames.
 #
 # A kernel is started and suspended in the middle of a run, its module is
 # recompiled with a different body and frame layout, and the suspended kernel
@@ -7,7 +7,7 @@
 # created by the old module instance, so it reads the old library's counters
 # after the upgrade.
 #
-# Suspending is racy (defk-vvy): :erlang.suspend_process/1 only takes effect
+# Suspending is racy::erlang.suspend_process/1 only takes effect
 # once the kernel next hands control back to the VM, so under load it can land
 # only after the whole run has already completed. start_suspended therefore
 # retries until it actually catches the kernel between two yields.

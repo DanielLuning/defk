@@ -1,12 +1,12 @@
 defmodule Defk.TestKit do
   @moduledoc false
-  # Helpers the test files share (defk-zdm.3): one copy each, instead of one
+  # Helpers the test files share: one copy each, instead of one
   # per file. `import Defk.TestKit` in a test module.
   #
   # Compiling a kernel module from a test: `compile/3` writes it to a file,
   # so errors have source lines, and names it by its source, so the next run
   # hits the build cache (a new library costs a C compile and a first dlopen,
-  # and the code server loads them one at a time: defk-dwa).
+  # and the code server loads them one at a time).
 
   import ExUnit.Assertions
 

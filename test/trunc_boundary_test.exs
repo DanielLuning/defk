@@ -46,6 +46,6 @@ defmodule Defk.TruncBoundaryTest do
     end
   end
 
-  # every f64, including the doubles either side of -2^63 and 2^63 (defk-ne6)
+  # every f64, including the doubles either side of -2^63 and 2^63
   agreement(K, [:trunc_f, :round_f])
 end

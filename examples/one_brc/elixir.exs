@@ -3,7 +3,7 @@
 # Why people reach for a NIF here: parsing and aggregating a huge text file
 # (the One Billion Row Challenge, https://github.com/gunnarmorling/1brc:
 # `<station>;<temp>\n` lines, min/mean/max per station) is the job that sends
-# Elixir developers to Rustler. The kernel side (defk-n4r.6) is not written
+# Elixir developers to Rustler. The kernel side is not written
 # yet, so this script only prints its own timings and does not call
 # Defk.Bench.report.
 #
@@ -88,7 +88,7 @@
 # at both sizes, tried in sequential and parallel form, and the winner uses
 # the same tricks a kernel would (no per-row term but the key). Not tried:
 # keying by a hash of the name bytes instead of the sub-binary, reading with
-# mmap (ticket defk-n4r.7), :prim_file or read-ahead tuning, a line-length-
+# mmap, :prim_file or read-ahead tuning, a line-length-
 # specialised matcher (stevensonmt's), Explorer/Polars (native, so not
 # pure Elixir).
 #

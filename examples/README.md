@@ -251,7 +251,7 @@ tried yet.
 
 ## Target workloads in progress
 
-[`one_brc/`](one_brc/) is the One Billion Row Challenge (parse `<station>;<temp>\n` lines, min/mean/max per station), **baseline only, kernel pending (defk-n4r.6)**. `gen.exs` writes a deterministic file outside the repo (`$ONE_BRC_FILE`, default `/tmp/one_brc/measurements.txt`); `elixir.exs` is the pure-Elixir baseline, marked **optimised**: five variants measured at 10M and 100M rows, fastest `Task.async_stream` over `:file.pread` chunks with an `:atomics` accumulator, 1.66 s for 100M rows (1.4 GB) on 12 schedulers, checked against an independent Enum reference (`--check`). It is not run by `mix defk.examples` (a directory) and does not call `Defk.Bench.report` yet. [`one_brc/rustler.exs`](one_brc/rustler.exs) (with the Mix project `one_brc/rustler/`, Rust 1.94.1, rustler 0.37.4) is the hand-written-NIF comparison: the same chunking and output code driving a Rustler `aggregate(chunk)` (std `HashMap<&[u8], Stats>`, integer x10 parse, returns `{name, min, max, sum, count}` tuples), as a plain NIF and as `schedule = "DirtyCpu"`; both match the Elixir reference (`--check`, two seeds). End to end (12 schedulers, loaded machine, best of 3): plain NIF 67 ms / 760 ms at 10M / 100M rows, DirtyCpu 34 ms / 318 ms, against the Elixir `par_map` 342 ms / 3535 ms. Tick gap (1 ms ticker, one scheduler, 100M rows): Elixir `par_map` 13.3 ms max (p99 2.2), plain NIF 55 ms, DirtyCpu 5.6 ms (p99 2.2).
+[`one_brc/`](one_brc/) is the One Billion Row Challenge (parse `<station>;<temp>\n` lines, min/mean/max per station), **baseline only, kernel pending**. `gen.exs` writes a deterministic file outside the repo (`$ONE_BRC_FILE`, default `/tmp/one_brc/measurements.txt`); `elixir.exs` is the pure-Elixir baseline, marked **optimised**: five variants measured at 10M and 100M rows, fastest `Task.async_stream` over `:file.pread` chunks with an `:atomics` accumulator, 1.66 s for 100M rows (1.4 GB) on 12 schedulers, checked against an independent Enum reference (`--check`). It is not run by `mix defk.examples` (a directory) and does not call `Defk.Bench.report` yet. [`one_brc/rustler.exs`](one_brc/rustler.exs) (with the Mix project `one_brc/rustler/`, Rust 1.94.1, rustler 0.37.4) is the hand-written-NIF comparison: the same chunking and output code driving a Rustler `aggregate(chunk)` (std `HashMap<&[u8], Stats>`, integer x10 parse, returns `{name, min, max, sum, count}` tuples), as a plain NIF and as `schedule = "DirtyCpu"`; both match the Elixir reference (`--check`, two seeds). End to end (12 schedulers, loaded machine, best of 3): plain NIF 67 ms / 760 ms at 10M / 100M rows, DirtyCpu 34 ms / 318 ms, against the Elixir `par_map` 342 ms / 3535 ms. Tick gap (1 ms ticker, one scheduler, 100M rows): Elixir `par_map` 13.3 ms max (p99 2.2), plain NIF 55 ms, DirtyCpu 5.6 ms (p99 2.2).
 
 ## Also not what defk is for
 
@@ -263,18 +263,18 @@ No script needed:
 
 ## Where a wrapper is the right choice
 
-Nothing here is excluded on principle: each row names the condition that would reopen it. The from-scratch epic `defk-52v` tracks what we do rewrite.
+Nothing here is excluded on principle: each row names the condition that would reopen it. The issue tracker records what we do rewrite from scratch.
 
 | Job | Wrapped today | Why not from scratch | What would change it |
 |---|---|---|---|
 | Signing, key exchange, secret-dependent crypto (secp256k1, ed25519, X25519, AEAD) | libsodium, secp256k1, ring via Rustler; `:crypto` | The one rule says nothing about timing: clang `-O3` may turn a select into a branch or a table lookup into a secret-dependent access, and a process dump or yielded frame holds key material. Public-input verification is allowed but gains little. | A constant-time mode: a restricted subset checked at compile time, codegen verified with dudect or ctgrind in CI, frame zeroisation, and an external audit. Until then, `:crypto`. |
-| Parsers that produce trees or term streams (HTML, Markdown, tree-sitter, JSON/CSV to terms, protobuf, msgpack) | html5ever, comrak, tree-sitter, jsont, rusty_csv, protox | The product is BEAM terms and building them is the cost: `docs/research/string-workloads.md` measured a 13x gap between scanning and term creation, and a NIF builds terms serially at the same price. A kernel cannot build terms, and if it could it would be no faster. | A "tape" output (flat `[i64]` of kind/start/len events, `defk-9p6.21` is the fused CSV form), plus a benchmark showing tape plus Elixir tree building beats Jason or NimbleCSV end to end. BPE tokenisation to `[i64]` ids is the exception: its product is packed. |
+| Parsers that produce trees or term streams (HTML, Markdown, tree-sitter, JSON/CSV to terms, protobuf, msgpack) | html5ever, comrak, tree-sitter, jsont, rusty_csv, protox | The product is BEAM terms and building them is the cost: `docs/research/string-workloads.md` measured a 13x gap between scanning and term creation, and a NIF builds terms serially at the same price. A kernel cannot build terms, and if it could it would be no faster. | A "tape" output (flat `[i64]` of kind/start/len events, of which a fused CSV parser is one form), plus a benchmark showing tape plus Elixir tree building beats Jason or NimbleCSV end to end. BPE tokenisation to `[i64]` ids is the exception: its product is packed. |
 | Regular expressions | `:re` (PCRE in C), Rust regex via Rustler | `:re` is already native and compiled once per pattern; a kernel cannot take a pattern as data without becoming an interpreter, and fixed-string search is `:binary.match`. | A specific pattern class with a known kernel form (glob, or a simple byte DFA compiled at Elixir compile time) and a benchmark showing `:re` loses on it. |
 | Large codecs and encoders (brotli, zstd encode, audio and video, PDF/typst rendering) | brotli, zstd, membrane_* FFmpeg/opus bindings, typst | The cost is spec surface and tuning, not the loop: 10^4-10^5 lines with SIMD everywhere. A kernel would be a worse implementation of a solved problem. | A narrow, named need: one compression level with fixed tables (zstd level 1 is the lz4-encode ticket plus FSE) or a decoder-only requirement for untrusted input. Each reopens one row, not the category. |
 | Systems: databases, dataframes, tensor compilers (SQLite, DuckDB, Polars/Explorer, XLA/EXLA, LibTorch) | exqlite, duckdbex, explorer, exla, torchx | The value is the library: query planners, columnar engines, autodiff, device backends. defk is a kernel, not a system. | Interop, not rewriting: zero-copy views over their packed buffers so a per-element loop beside them runs as a kernel. `docs/research/nx-boundary.md` says where that line is; file an interop ticket when a workload asks. |
-| Kernel-owned mutable state (SortedSet, in-place sketches, streaming decoders) | sorted_set_nif, xxh3 streaming, zstd streaming | A semantics question, not a rewrite one: ADR-0001 keeps state as values. | The design review of the kernel-owned-state epic (`defk-sve`). |
+| Kernel-owned mutable state (SortedSet, in-place sketches, streaming decoders) | sorted_set_nif, xxh3 streaming, zstd streaming | A semantics question, not a rewrite one: ADR-0001 keeps state as values. | A design review of kernel-owned state. |
 
-The verdict's Limitations (`defk-sgw.5`) will cite this table.
+The verdict's Limitations section will cite this table.
 
 ## Running the examples: `mix defk.examples`
 
@@ -300,7 +300,7 @@ mix defk.examples --bench --fresh          # the same, but measure every report 
 
 **Progress and time.** Long compiles are real (argon2 more than 7 minutes, cdcl_sat about 5, keccak about 1, hash_chain about 26 s per copy: see the table in [Examples in mix test](#examples-in-mix-test)). The task prints the example it is on (`[7/24] keccak`) and a line every 30 s of silence. Output of a passing example is not shown; a failing one prints its stdout and stderr. The exit status is non-zero if anything failed.
 
-**Where the task lives.** `dev/mix/tasks/defk.examples.ex` (helpers in `dev/defk/`). `mix.exs` adds `dev` to `elixirc_paths` for `:dev` and `:test` only, so it is not compiled into a dependent's build, and `dev/` is not among the files Hex packages by default (nor is `examples/`). `mix defk.verify` (defk-96f.2) goes in the same place.
+**Where the task lives.** `dev/mix/tasks/defk.examples.ex` (helpers in `dev/defk/`). `mix.exs` adds `dev` to `elixirc_paths` for `:dev` and `:test` only, so it is not compiled into a dependent's build, and `dev/` is not among the files Hex packages by default (nor is `examples/`). `mix defk.verify` goes in the same place.
 
 ## Measuring correctly
 
@@ -319,7 +319,7 @@ What we have learned about speed on the BEAM, with the numbers behind these rule
    - `Defk.Bench` forces a full GC and then a minor GC before each timed run, so one run's garbage isn't billed to the next and the inputs start in the old heap (a minor GC copying them lands in no timed run).
 5. **"As good" means Elixir wins.** Below the 2× bar (`marginal`), the recommendation is Elixir: the gain doesn't pay for native code.
 6. **Keep the poor fits.** Examples where Elixir wins are as valuable as the wins. They tell people what not to do.
-7. **Give each parallel kernel call a few milliseconds of work, or fewer, bigger chunks.** The BEAM wakes an idle scheduler when a crowded run queue has run enough reductions. A kernel charges one timeslice (4000 reductions) per 250 µs, while Elixir uses that many in about 5 µs. So kernel tasks under ~1 ms that one process spawns (`Task.async_stream` chunks) stay on 2–4 of 12 schedulers, while Elixir tasks of the same length spread over all 12 (`defk-8qs`). Chunks of ~5 ms spread (monte_carlo_rtp at 10M spins: 48 chunks on 11–12 schedulers). Starting every chunk at once also spreads: 48 short kernel tasks via `Task.async` + `Task.await_many` (or plain `spawn`) ran on 11 schedulers, against 3 under `Task.async_stream` with `max_concurrency: 12`. If the work can't be split that coarsely, `+swt very_low` (`elixir --erl "+swt very_low"`) spreads the short calls: batched_levenshtein's 12 chunks went from 5.1–5.6 to 2.3–2.5 ms and monte_carlo_rtp at 1M from 16.7 to 7.7 ms, while the Elixir chunks did not change (measured under load). Report the verdict on a default VM and give the flag's number beside it. Since `defk-04y` a kernel on a crowded run queue yields every 50 µs for its first millisecond, which recovers most of the spread without the flag (batched_levenshtein's 12 chunks 3.8–3.9 → 1.9 ms, monte_carlo_rtp at 1M 12.7 → 5.5 ms; `+swt very_low` 1.0–1.1 and 4.6 ms; [`docs/performance.md`](../docs/performance.md) 4.9). The numbers before that date are with 250 µs slices.
+7. **Give each parallel kernel call a few milliseconds of work, or fewer, bigger chunks.** The BEAM wakes an idle scheduler when a crowded run queue has run enough reductions. A kernel charges one timeslice (4000 reductions) per 250 µs, while Elixir uses that many in about 5 µs. So kernel tasks under ~1 ms that one process spawns (`Task.async_stream` chunks) stay on 2–4 of 12 schedulers, while Elixir tasks of the same length spread over all 12. Chunks of ~5 ms spread (monte_carlo_rtp at 10M spins: 48 chunks on 11–12 schedulers). Starting every chunk at once also spreads: 48 short kernel tasks via `Task.async` + `Task.await_many` (or plain `spawn`) ran on 11 schedulers, against 3 under `Task.async_stream` with `max_concurrency: 12`. If the work can't be split that coarsely, `+swt very_low` (`elixir --erl "+swt very_low"`) spreads the short calls: batched_levenshtein's 12 chunks went from 5.1–5.6 to 2.3–2.5 ms and monte_carlo_rtp at 1M from 16.7 to 7.7 ms, while the Elixir chunks did not change (measured under load). Report the verdict on a default VM and give the flag's number beside it. Since the adaptive slice (`bench/adaptive_slice.exs`), a kernel on a crowded run queue yields every 50 µs for its first millisecond, which recovers most of the spread without the flag (batched_levenshtein's 12 chunks 3.8–3.9 → 1.9 ms, monte_carlo_rtp at 1M 12.7 → 5.5 ms; `+swt very_low` 1.0–1.1 and 4.6 ms; [`docs/performance.md`](../docs/performance.md) 4.9). Numbers measured before that change are with 250 µs slices.
 
 ## How verdicts work
 
@@ -373,7 +373,7 @@ Either way the catalog gets updated.
 
 ## Examples in mix test
 
-`mix test` compiles a few examples' kernels (`Defk.Catalog`, `test/support/catalog.ex`) and checks them against their Elixir mode (`test/agreement_test.exs`). The rest of the examples are the job of `mix defk.examples` (above; `defk-30c.3`). This section is the measurement and the choice behind that split (`defk-30c.1`); `defk-30c.2` made the change.
+`mix test` compiles a few examples' kernels (`Defk.Catalog`, `test/support/catalog.ex`) and checks them against their Elixir mode (`test/agreement_test.exs`). The rest of the examples are the job of `mix defk.examples` (above). This section is the measurement and the choice behind that split, and the change that followed.
 
 **Rules.** An example whose expected verdict is `:poor` or `:out_of_scope` never runs in `mix test`: it measures where Elixir wins, and its kernels teach the compiler nothing the others don't. Pick the fewest, fastest examples whose kernels together cover the most compiler areas. Budget: a few seconds of cold compile in total.
 
@@ -397,7 +397,7 @@ Areas: F floats (bit-exact, `-ffp-contract=off`, libm), U64 u64 / `wrap64` / u64
 | `codecs` | good, good, good | Codecs.Kernels | 0.82-1.0 | 0.13 (stock generator: 6.6-8.4; bound `encode58` keys) | BL, EB, UA, RZ (via `alloc(-1)`), RT, MG, EX | fast64, b58, erl_base58 | no: 1 s for areas the others cover |
 | `cosine_topk` | good | Cosine.Kernels (+ Cosine.NxSearch, needs Nx: does not compile without it) | 0.42-0.71 | 0.04-0.06 | NE (f32), F, RT, RZ, EB | nx, exla, vettore | **yes** (load only the kernel module) |
 | `fft` | good | FFT.Kernels | 0.48-0.62 | 0.07-0.10 | F (`sin`/`cos`), RT, RZ, EX | none | no: floats covered by geo, rolling, cosine |
-| `fuzzy_search/.../kernels.ex` | none (an app) | FuzzySearch.Kernels | 0.48-0.57 | 0.06-0.09 | YF, MG, EX | n/a | stays (see `defk-30c.4`) |
+| `fuzzy_search/.../kernels.ex` | none (an app) | FuzzySearch.Kernels | 0.48-0.57 | 0.06-0.09 | YF, MG, EX | n/a | stays |
 | `geo_nearest` | good | Geo.Kernels | 0.44-0.57 | 0.16-0.27 | F (libm), RA, top-k arrays, EB | none | **stays** |
 | `geohash_crc` | good, good, marginal, marginal, **poor** | GeoCrc.Kernels, KernelsEM (a second copy for the script) | 0.92-1.28 (one copy 0.45-0.62) | 0.16-0.19 | F (trunc/float), U64 masks, RZ, BL, INL | geohash, crc | no: one of its verdicts is poor |
 | `gorilla_encode` | good, good | Gorilla.Kernels | 0.39-0.52 | 0.02 (needs a point generator) | BS, MC (guards), INL, HW (`clz`/`ctz`), RA, RT | gorilla_stream | **yes** |
@@ -425,7 +425,7 @@ No example's kernel module needs a `Mix.install` dependency to compile; only `Co
 
 ### The choice
 
-Eight examples (plus `fuzzy_search`'s `kernels.ex`, `defk-30c.4`):
+Eight examples (plus `fuzzy_search`'s `kernels.ex`):
 
 | Example | Why it is in |
 |---|---|
@@ -438,7 +438,7 @@ Eight examples (plus `fuzzy_search`'s `kernels.ex`, `defk-30c.4`):
 | `hll_update_many` | a `[u64]` input, `clz`, the one deliberate value-semantics copy, the cheapest of all (0.3-0.45 s) |
 | `cosine_topk` | the only f32 element type, eight-way float accumulators, a tuple of two arrays as the return |
 
-Cost, measured by `defk-30c.1` before the change: cold compile of the kernel modules is about 4.8 s in one VM (the six scripts of the old catalog took 2.2 s), and 2.0 s when the modules compile in parallel (the old six took 0.9 s).
+Cost, measured before the change: cold compile of the kernel modules is about 4.8 s in one VM (the six scripts of the old catalog took 2.2 s), and 2.0 s when the modules compile in parallel (the old six took 0.9 s).
 
 `Defk.Catalog` now loads exactly the eight chosen examples, one explicit module list per script (`test/support/catalog.ex`), the scripts compiling in parallel (`Task.async_stream`; the modules of one script in order). `Hashes.Kernels` is loaded without `Hashes.CRC32CPortable`, `Cosine.Kernels` without `Cosine.NxSearch`. `poor_list_data`, `poor_tiny_calls` (poor) and `_template` (a placeholder verdict; `Examples.Kernels.sum` covers the same kernel) left the catalog.
 
@@ -472,4 +472,4 @@ Tests that changed with it:
 8. Add or update the entries in [`docs/performance.md`](../docs/performance.md) for what you learned, including what didn't help: the numbers, the conditions (size, load: mark loaded runs provisional) and this script as the source.
 
 Planned examples, and the work to optimise each first-pass baseline, are
-tracked as children of epic `defk-9p6` (`bw show defk-9p6`).
+tracked in the project's issue tracker.

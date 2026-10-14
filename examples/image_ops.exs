@@ -3,8 +3,8 @@
 #
 # Why people reach for a NIF here: thumbnails, video preprocessing and
 # e-paper/Nerves displays touch every pixel of a 6 MB frame; people wrap
-# image/vix (libvips), cvt_color or dither. This script covers three of the
-# jobs of ticket defk-52v.11 with from-scratch kernels on raw bytes.
+# image/vix (libvips), cvt_color or dither. This script covers three of these
+# jobs with from-scratch kernels on raw bytes.
 # Expected verdict: good
 #
 #   elixir examples/image_ops.exs
@@ -15,7 +15,7 @@
 # when this script is run on its own (and are quoted below).
 #
 # Skipped: Lanczos-3 resize (a float-weights follow-up of the resize kernel),
-# RGB888 to RGB565 (needs bsr/band, defk-w38), and the libvips comparison
+# RGB888 to RGB565 (needs bsr/band), and the libvips comparison
 # (out of scope here: libvips is SIMD-tuned and expected to win resize on
 # speed; on Nerves there is no libvips). Decoding JPEG/PNG is out of scope.
 #

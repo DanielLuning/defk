@@ -1,5 +1,5 @@
 defmodule Defk.InlineSizeTest do
-  # defk-6ag: every kernel call is inlined, so a diamond call graph doubles
+  # Every kernel call is inlined, so a diamond call graph doubles
   # the code per level. Past 80,000 lines of C (Defk.InlineSize) an entry
   # kernel gets a compile warning naming the chain. The kernels go through
   # Defk.Compiler.compile/3 (lowering, no C compiler): the point is the

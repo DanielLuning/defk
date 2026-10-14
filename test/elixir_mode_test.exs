@@ -1,4 +1,4 @@
-# Elixir mode (defk-v5d): every test and catalog kernel compiled to plain
+# Elixir mode: every test and catalog kernel compiled to plain
 # Elixir, checked against the native kernel on the existing tests' inputs.
 # Two kernels agree when both return identical values (===, bit-exact
 # floats) or both raise the same exception (here also the same message,
@@ -11,7 +11,7 @@ Code.require_file("../examples/fuzzy_search/lib/fuzzy_search/kernels.ex", __DIR_
 
 defmodule Defk.ElixirModeTest.Agree do
   # This file's agreement default: exact message equality, through
-  # Defk.Test.assert_agrees (defk-0ha; the near-verbatim second
+  # Defk.Test.assert_agrees (the near-verbatim second
   # implementation that lived here is gone). `message: false` falls back to
   # the reason taxonomy, for raises whose messages carry formatted values.
   def agree(mod, fun, args, opts \\ []) do
@@ -460,7 +460,7 @@ defmodule Defk.ElixirModeTest do
         expect = Rolling.Elixir.mean_std(x, w, 1)
         assert Rolling.Kernels.__defk_elixir__(:mean_std, [x, w]) === expect
 
-        # bit-exact natively too: kernels build with -ffp-contract=off (defk-jlk)
+        # bit-exact natively too: kernels build with -ffp-contract=off
         assert Rolling.Kernels.mean_std(x, w) === expect
 
         chunked = Rolling.Elixir.mean_std(x, w, 7)
@@ -494,8 +494,8 @@ defmodule Defk.ElixirModeTest do
       agree(Blur.Kernels, :gray_blur, [<<>>, 0, 0])
     end
 
-    # poor_list_data, poor_tiny_calls and the template left the catalog
-    # (defk-30c.2): their kernels (a float sum, a clamp) are covered by
+    # poor_list_data, poor_tiny_calls and the template left the catalog:
+    # their kernels (a float sum, a clamp) are covered by
     # Examples.Kernels above. The properties of test/agreement_test.exs cover
     # every kernel of the modules below in Elixir mode; these are known
     # answers on realistic inputs.
@@ -664,12 +664,12 @@ defmodule Defk.ElixirModeTest do
       for n <- [0, 1, 2, 7], do: agree(K, :mixed, [n, 0.5]) && agree(K, :coerced, [n])
     end
 
-    test "value semantics: b keeps what it had when out is written, in both modes (defk-auo)" do
+    test "value semantics: b keeps what it had when out is written, in both modes" do
       assert K.snapshot(2.0) == 2.0
       agree(K, :snapshot, [2.0])
     end
 
-    test "inf or NaN raises at the operation or the read, in both modes (defk-i00)" do
+    test "inf or NaN raises at the operation or the read, in both modes" do
       # inf inside a kernel raises at the operation, also when never returned
       agree(K, :inf_inside, [10.0], message: false)
       assert_raise ArithmeticError, fn -> K.__defk_elixir__(:inf_inside, [10.0]) end

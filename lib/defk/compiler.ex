@@ -13,7 +13,6 @@ defmodule Defk.Compiler do
   # elem:   :f64 | :i64 | :u64 | :u8 | :i16 | :i32 | :f32; the narrow ones
   #         (u8, i16, i32, f32) exist only in arrays: a read widens to i64 or
   #         f64, a write must fit (see "element types"); u64 is a scalar too
-  #         (defk-wlu)
 
   @scalars [:i64, :u64, :f64, :bool]
   @elems [:f64, :i64, :u64, :u8, :i16, :i32, :f32]
@@ -23,7 +22,7 @@ defmodule Defk.Compiler do
   alias Defk.Copies
   alias Defk.Facts
 
-  # the one process-dictionary key (defk-euu): see Defk.Compiler.Ctx
+  # the one process-dictionary key: see Defk.Compiler.Ctx
   @ctx :defk_ctx
 
   defp ctx, do: Process.get(@ctx)
@@ -35,7 +34,7 @@ defmodule Defk.Compiler do
   defp low_put(key, value), do: ctx_update(:lowering, &Map.put(&1, key, value))
   defp low_update(key, fun), do: ctx_update(:lowering, &Map.update!(&1, key, fun))
 
-  # the copy analysis's tracking state (Defk.Copies is pure; defk-euu)
+  # the copy analysis's tracking state (Defk.Copies is pure)
   defp copies, do: low(:copies)
   defp copies_put(st), do: low_put(:copies, st)
 
@@ -61,7 +60,7 @@ defmodule Defk.Compiler do
   end
 
   # A rejection's literal code is checked against the registry while the
-  # compiler itself compiles (defk-vlf): a typo'd code fails mix compile
+  # compiler itself compiles: a typo'd code fails mix compile
   # here instead of a test later. A code built at run time passes through.
   defmacrop err!(node, code, what, opts \\ []) do
     Defk.Errors.validate_code!(code)
@@ -176,7 +175,7 @@ defmodule Defk.Compiler do
     entries_c = Enum.map(lowered, &IO.iodata_to_binary(emit_entry(&1)))
 
     # each entry inlines its callees once per call site: warn when that makes
-    # its C large (defk-6ag), before the C compiler spends minutes on it
+    # its C large, before the C compiler spends minutes on it
     Defk.InlineSize.check(Enum.zip(lowered, entries_c), kernels, file)
 
     body =
@@ -222,7 +221,7 @@ defmodule Defk.Compiler do
   defp max_owned_define(nil), do: ""
   defp max_owned_define(n) when is_integer(n), do: "#define DEFK_MAX_OWNED #{n}ULL\n"
 
-  # A helper (a kernel with a bitstring parameter, defk-ooq) has no NIF: it
+  # A helper (a kernel with a bitstring parameter) has no NIF: it
   # is compiled only where a kernel inlines it, since only a kernel has a
   # bitstring to pass. One that no entry kernel reaches would be an entry
   # kernel taking a bitstring from Elixir, so it is rejected.
@@ -1148,7 +1147,7 @@ defmodule Defk.Compiler do
   defp tuple_items(_), do: nil
 
   # -------------------------------------------------------- array values ---
-  # Arrays are values, as in Elixir (defk-i2e): a write `a[i] = v` gives `a`
+  # Arrays are values, as in Elixir: a write `a[i] = v` gives `a`
   # a new array from the write on, through enclosing branches and loops, and
   # every other variable keeps what it had. Natively a write is in place on
   # a's buffer when no other binding that may see that buffer is read later
@@ -1180,8 +1179,8 @@ defmodule Defk.Compiler do
   # the rest of the statement; this is conservative, so it may copy where
   # Elixir would not need to. An arm of an if, cond or case leaves out what
   # its other arms read (nested/2): they run instead of it, so a helper call
-  # in one arm that rebinds the array the other arm reads writes in place
-  # (defk-33b). Inside a callee, what the caller reads after the call is live.
+  # in one arm that rebinds the array the other arm reads writes in place.
+  # Inside a callee, what the caller reads after the call is live.
   #
   # Where copies go:
   #   * at a write `a[i] = v`: when a is an input array, or a binding that
@@ -1218,8 +1217,8 @@ defmodule Defk.Compiler do
 
   # the env of block `ast` nested in the statement `env` is at. An arm of an
   # if, cond or case runs instead of its other arms, so what they read is not
-  # read after it (defk-33b), and the condition, subject and clause heads that
-  # chose it ran before it (defk-tif): its live set is what is read after the
+  # read after it, and the condition, subject and clause heads that chose it
+  # ran before it: its live set is what is read after the
   # statement, and what the statement reads outside those. Any other nested
   # block (a loop or fn body, run again) keeps env.nest.
   defp nested(env, ast) do
@@ -1411,9 +1410,9 @@ defmodule Defk.Compiler do
 
   defp snapshot_writes(_a, env), do: {[], env}
 
-  # dtw.18: a callee that writes an array parameter must return it, or the
-  # write is lost to the caller (valid Elixir that does nothing). The array
-  # returned may be the parameter bound again (defk-3z5), as long as it
+  # A callee that writes an array parameter must return it, or the write is
+  # lost to the caller (valid Elixir that does nothing). The array returned
+  # may be the parameter bound again, as long as it
   # carries the written buffer: a helper's result that is its argument, a
   # reduce accumulator started from it, a copy of it.
   defp unreturned_writes!(k, params, returned) do
@@ -1475,7 +1474,7 @@ defmodule Defk.Compiler do
   #        | %{t: {:tuple, ts}, elems: [value]}
   #
   # Elixir evaluates the operands of an operation left to right, so the first
-  # error is the leftmost one, and the C must agree (defk-wfi.8). C orders
+  # error is the leftmost one, and the C must agree. C orders
   # neither the arguments of a call nor the operands of most operators (gcc
   # on x86-64 evaluates arguments right to left), and an operand's statements
   # run before the C expression that holds the operands left of it. So
@@ -1601,7 +1600,7 @@ defmodule Defk.Compiler do
   end
 
   # a binary literal, `"abc"` or `<<1, 2, 3>>`: the same static read-only [u8]
-  # as a binary attribute (defk-n4r.5); or an append to a bitstring
+  # as a binary attribute; or an append to a bitstring
   # accumulator, `<<acc::bitstring, ...>>` (see "bitstrings")
   defp lower_node({:<<>>, _, segs} = node, env) do
     case Defk.Bitstring.parse(node) do
@@ -1632,7 +1631,7 @@ defmodule Defk.Compiler do
     get =
       cond do
         # an f64 or f32 from an input array may hold inf or NaN bits: the read
-        # raises (defk-i00); an alloc/2 array holds only what the kernel wrote
+        # raises; an alloc/2 array holds only what the kernel wrote
         # (fin), a copy of an input array still holds the input's bits
         e in [:f64, :f32] and not a[:fin] and proven != :unproven ->
           srec_proven(:index, a, i, proven)
@@ -1852,7 +1851,7 @@ defmodule Defk.Compiler do
     do: unsupported!(other, Defk.Errors.Rewrites.unsupported(other, &type_in(&1, env)), env)
 
   # + - * / one operation at a time: i64 checked for overflow, f64 for a
-  # result that is inf or NaN (defk-i00); see float_tree for the common case
+  # result that is inf or NaN; see float_tree for the common case
   defp lower_arith(op, a, b, node, env) do
     {[sa, sb], [va, vb]} = lower_ops([a, b], env)
     numeric!(va, a, op)
@@ -1868,7 +1867,7 @@ defmodule Defk.Compiler do
         {:i64, va, vb} ->
           i64_arith(op, va, vb, env)
 
-        # a float result that is inf or NaN raises, as in Elixir (defk-i00)
+        # a float result that is inf or NaN raises, as in Elixir
         _ ->
           fun = Map.get(@float_ops, op, "fdiv")
           fs = [val(to_f(va), :f64), val(to_f(vb), :f64)]
@@ -1885,7 +1884,7 @@ defmodule Defk.Compiler do
   end
 
   # i64 + - * checked for overflow, with range facts; no check when the
-  # operands' facts keep every result inside i64 (defk-upc)
+  # operands' facts keep every result inside i64
   defp i64_arith(op, va, vb, env) do
     {fun, facts, {lo, hi}} =
       case op do
@@ -1952,7 +1951,7 @@ defmodule Defk.Compiler do
     end
   end
 
-  # The integer type of an operation on `va` and `vb` (defk-wlu):
+  # The integer type of an operation on `va` and `vb`:
   # {:i64 | :u64, va, vb}. Two i64 stay i64; a u64 with a u64, or with an
   # i64 its range facts prove non-negative (a literal, length(a), a mask ...),
   # is u64. A u64 with any other i64 has no type holding every result: it is
@@ -2007,7 +2006,7 @@ defmodule Defk.Compiler do
   # x / inf hides one (it gives 0.0), so a divisor that may be non-finite is
   # checked too. On a failed check the expression is replayed one operation at
   # a time, in Elixir's order, with the raising checks: it raises where Elixir
-  # would, with the same error (defk-i00). One check per expression instead of
+  # would, with the same error. One check per expression instead of
   # one per operation and read is most of the cost of matching Elixir in
   # float loops. Inside a speculated select (env.ovf) and over any other
   # operand, each operation is checked on its own (lower_arith).
@@ -2211,7 +2210,7 @@ defmodule Defk.Compiler do
   # A `case` without a catch-all ends in {:nomatch, stmts} instead, which
   # raises CaseClauseError.
   #
-  # Arms that are tuples give a tuple (defk-uew): one branch per element
+  # Arms that are tuples give a tuple: one branch per element
   # position, each with that position's type, all assigned in one if/else
   # chain (so every condition runs once), or a select per element when the
   # arms are pure. The value is a tuple of the element temporaries.
@@ -2297,7 +2296,7 @@ defmodule Defk.Compiler do
   end
 
   # The value of an if, cond or case in temporary `tmp` of type `t`, its arms
-  # giving `vals`. An array (defk-gqk) is any of the arms' arrays: owned when
+  # giving `vals`. An array is any of the arms' arrays: owned when
   # every arm's is, its buffer may be any of theirs (merge_bufs/1), and it
   # keeps the facts all of them have. An input array is not copied: the
   # temporary holds the caller's view, re-bound after a resume like a
@@ -2365,7 +2364,7 @@ defmodule Defk.Compiler do
   # raising checks. A raise inside one arm would otherwise keep clang from
   # if-converting the branch; it then threads the branch into the loop that
   # computed the condition, which made `if prime?(i), do: count + 1, else:
-  # count` 1.7x slower than C (defk-jp3). The first condition always runs, so
+  # count` 1.7x slower than C. The first condition always runs, so
   # it is evaluated once as written and may call kernels. A tuple value gets
   # one select per element over the same condition temporaries.
   # (A `case` with no catch-all ends in a :nomatch arm and is never a select.)
@@ -2469,12 +2468,12 @@ defmodule Defk.Compiler do
 
   # pure expressions that can only fail by i64 overflow or a non-finite float
   # result: safe to evaluate untaken, with the failure flagged. Only cheap
-  # arithmetic is speculated (defk-id9): a division (div, rem and the float
+  # arithmetic is speculated: a division (div, rem and the float
   # `/`, tens of cycles each) is not, so an arm holding one is a branch that
   # skips it when untaken. Array reads and calls are not speculated either.
   defp speculate?({:__block__, _, [e]}), do: speculate?(e)
   defp speculate?(x) when is_number(x) or is_boolean(x), do: true
-  # a tuple arm (defk-uew): each element
+  # a tuple arm: each element
   defp speculate?({a, b}), do: speculate?(a) and speculate?(b)
   defp speculate?({:{}, _, items}) when is_list(items), do: Enum.all?(items, &speculate?/1)
   defp speculate?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: true
@@ -2544,7 +2543,7 @@ defmodule Defk.Compiler do
   # modulo 2^64 without an overflow check, and masked once; its leaves are
   # lowered as usual. The low k bits are those of Elixir's exact result, so
   # nothing can raise but the leaves (and a bsl by a negative count that is
-  # not a literal). The 64-bit mask gives a u64 (defk-wlu); a narrower mask m
+  # not a literal). The 64-bit mask gives a u64; a narrower mask m
   # an i64 in 0..m; -1 stands for wrap64/1, the i64 bit pattern of the low
   # 64 bits.
   defp lower_masked(expr, mask, label, env) do
@@ -2649,7 +2648,7 @@ defmodule Defk.Compiler do
     end
   end
 
-  # a u64 shifted (defk-wlu): exact, bsr is logical, bsl raises when a bit
+  # a u64 shifted: exact, bsr is logical, bsl raises when a bit
   # leaves the 64; by a literal 0..63, bsr is one shift with a range
   defp bitwise_val(f, [%{t: :u64} = a, b], [_x, n], _node, env) when f in [:bsl, :bsr] do
     b = coerce!(b, :i64, n, "shift count")
@@ -2803,8 +2802,8 @@ defmodule Defk.Compiler do
     if w < 8, do: Facts.assert(v, lo: 0, hi: Bitwise.bsl(1, 8 * w) - 1), else: v
   end
 
-  # copy(out, at, src, from, n) and copy_back(out, at, off, n) (defk-52v.16):
-  # `out` with a range replaced, checked once for the whole range
+  # copy(out, at, src, from, n) and copy_back(out, at, off, n): `out` with a
+  # range replaced, checked once for the whole range
   # (defk_rcopy_T and defk_rcopy_back_T in defk_runtime.h).
   defp emit_builtin(:copy, [%{t: {:arr, _}} = a, at, s, from, n], node, env),
     do: range_copy(:copy, a, s, [at, from, n], node, env)
@@ -2825,7 +2824,7 @@ defmodule Defk.Compiler do
   defp emit_builtin(f, [%{t: :i64} = a, %{t: :i64} = b], _, _) when f in [:rotl, :rotr],
     do: val("defk_#{f}64(#{a.c}, #{b.c})", :i64)
 
-  # clz/2, ctz/2, rotl/3, rotr/3 (defk-wlu): x is a w-bit value, checked as
+  # clz/2, ctz/2, rotl/3, rotr/3: x is a w-bit value, checked as
   # Defk.Bits checks it; an i64 x passes its sign. rotl/rotr give x's type.
   defp emit_builtin(f, [%{t: t} = x, w], _node, _) when f in [:clz, :ctz] and t in @ints do
     c = "defk_#{f}_#{if t == :i64, do: "i", else: "u"}(ctx, #{x.c}, #{w.c})"
@@ -2837,7 +2836,7 @@ defmodule Defk.Compiler do
     if t == :i64, do: u64_to_i64(c), else: c
   end
 
-  # crc32c(crc, x, w) (defk-ulk.4): one CRC32C step, checked as Defk.Bits
+  # crc32c(crc, x, w): one CRC32C step, checked as Defk.Bits
   # checks it; the instruction or the table is picked at run time in
   # defk_runtime.h. The result is a 32-bit value.
   defp emit_builtin(:crc32c, [%{t: tc} = c, %{t: tx} = x, w], _node, _)
@@ -2905,7 +2904,7 @@ defmodule Defk.Compiler do
 
   # sqrt of a value never below 0.0 cannot raise, and its result is finite
   # when the value is (a non-finite one was checked where it was made), so it
-  # needs no check, also in a flagged strip (defk-hki)
+  # needs no check, also in a flagged strip
   defp emit_builtin(:sqrt, [%{t: :f64, nonneg: true} = a], _node, _),
     do: Map.put(val("__builtin_sqrt(#{a.c})", :f64), :nonneg, true)
 
@@ -3100,7 +3099,7 @@ defmodule Defk.Compiler do
   # caller's loops, so their safepoints spill and resume with the caller's
   # frame, and a long loop in a callee (several calls deep) yields like one in
   # the caller. A separately compiled callee would need its own frame and a
-  # resume path into the middle of the caller's loop body (defk-jaj). The
+  # resume path into the middle of the caller's loop body. The
   # arguments keep their range facts, so the callee may drop bounds checks a
   # standalone kernel needs. Code size grows with the number of call sites
   # along each call chain; recursion is rejected, so inlining terminates.
@@ -3220,8 +3219,8 @@ defmodule Defk.Compiler do
 
   # ------------------------------------------------------- alloc zeroing --
   # alloc/2 gives zeros, as in Elixir mode, but one memset of a large buffer
-  # held the scheduler (85 MB: ~5 ms cold) before the kernel's first loop
-  # (defk-ktw). So an alloc is zeroed one of three ways:
+  # held the scheduler (85 MB: ~5 ms cold) before the kernel's first loop.
+  # So an alloc is zeroed one of three ways:
   #   * not at all, when the next statement provably writes every element
   #     before anything reads it (unzeroed_allocs/1)
   #   * at once (defk_alloc_T), when its length is known to be at most
@@ -3285,7 +3284,7 @@ defmodule Defk.Compiler do
 
   # ---------------------------------------------------------- range copies --
   # copy(out, at, src, from, n) and copy_back(out, at, off, n) give `out`
-  # with a range replaced (defk-52v.16), as a kernel that writes and returns
+  # with a range replaced, as a kernel that writes and returns
   # its array parameter would: the buffer is written in place when it is the
   # kernel's own and no other binding of it is read after the call (what
   # inline/4 takes as live for a callee), and copied first otherwise. One
@@ -3547,7 +3546,7 @@ defmodule Defk.Compiler do
   end
 
   # ----------------------------------------------------------- bitstrings --
-  # The bitstring accumulator (defk-cmr, Defk.Bitstring): a value of type
+  # The bitstring accumulator (Defk.Bitstring): a value of type
   # :bitstring is a defk_bits {nbits, slot + 1} over a growable owned buffer
   # (priv/defk_runtime.h), kept in the frame across yields like any local.
   # `<<acc::bitstring, v::size(n), ...>>` evaluates acc and then every value
@@ -3958,10 +3957,10 @@ defmodule Defk.Compiler do
 
   # The checked helpers a flagged strip turns into flags (DEFK_NF_ forms):
   # the float checks, which make a strip worth flagging, and the other checks
-  # that may join them (defk-hki): i64/u64 overflow, element access, narrow
+  # that may join them: i64/u64 overflow, element access, narrow
   # ------------------------------------------------------- strip record ---
   # What the lowering declares, as it emits, about the statements that may
-  # end up inside a flat loop's strip (defk-ch4): whole-variable assignments
+  # end up inside a flat loop's strip: whole-variable assignments
   # with their right-hand side's C (so a float read, a float tree or a
   # scalar copy is recognisable from its row), addresses taken, raw element
   # accesses with their bounds proof's support (Defk.Facts.prove_in_bounds),
@@ -3970,7 +3969,7 @@ defmodule Defk.Compiler do
   # it sits in a conditional expression (cond). flag_strip/3 classifies from
   # these rows instead of re-parsing the C text it was handed. One
   # process-dictionary key: the defk_ prefix keeps with_acc_facts'
-  # backtracking snapshot covering it; defk-euu folds it into the context.
+  # backtracking snapshot covering it; it now lives in the compiler context.
 
   defp srec_get, do: low(:strip)
 
@@ -4213,10 +4212,10 @@ defmodule Defk.Compiler do
   # Whether a flat loop body can run flagged, and if so how: the snapshot
   # (decls, snap, restore), the flagged body and the extra end-of-strip test
   # (sticky_trees/1). It can when:
-  #   * it has a float check: a strip without one gains nothing (defk-60q);
+  #   * it has a float check: a strip without one gains nothing;
   #   * the only use of ctx (every error goes through it) is in a check that
   #     becomes a flag: a float check, or one that joins it (@nf_joins: i64
-  #     overflow, an element access, defk-hki). Any other error (a
+  #     overflow, an element access). Any other error (a
   #     CaseClauseError, a division by zero) could be raised before an earlier
   #     flagged one;
   #   * with a joined check, every unchecked a.data[i] has an index made only
@@ -4239,7 +4238,7 @@ defmodule Defk.Compiler do
   # ----------------------------------------------- the record classifier ---
   # Decisions from the strip record, each mirroring its text analysis
   # exactly (bug-for-bug: the gate demanded byte-identical C), except where
-  # a mirrored bug was fixed since (sr_reaches?/3, defk-zj8). Token-presence
+  # a mirrored bug was fixed since (sr_reaches?/3). Token-presence
   # scans over the body text stay (@nf_call, ctx-in-rest, the [vp]_ variable
   # roster): they reconstruct no structure and fail safe. What moved to rows
   # is everything that used to re-derive structure from the text: writes,
@@ -4338,10 +4337,10 @@ defmodule Defk.Compiler do
 
   # Whether `y`, assigned by row `from`, reaches a checked use later in the
   # strip. A tree whose own variable is one of its leaves (acc = acc + ...)
-  # is not a later use of itself: the old text scan counted it (defk-ch4
-  # mirrored that), which removed the check of an accumulator updated under
-  # a branch (a filter's) with no end-of-strip test behind it, so an inf
-  # never raised (defk-zj8). The unconditional accumulator still drops its
+  # is not a later use of itself: the old text scan counted it (and the
+  # first strip record mirrored that), which removed the check of an
+  # accumulator updated under a branch (a filter's) with no end-of-strip
+  # test behind it, so an inf never raised. The unconditional accumulator still drops its
   # check: it is sticky (sr_sticky/1), and the end-of-strip test covers it.
   defp sr_reaches?(rows, y, from) do
     uses =
@@ -4467,7 +4466,7 @@ defmodule Defk.Compiler do
   # the top of that loop's body dispatches to the next loop down, and so on.
   #
   # While resuming, defk_rs is the safepoint and the dispatch depth reached,
-  # n * 256 + depth (defk-yqo): each level matches only its own depth and
+  # n * 256 + depth: each level matches only its own depth and
   # hands the next one on, so a missing case above leaves the depth behind
   # and nothing below matches. The last step jumps to the safepoint's arrival
   # label, defk_a<n>, in front of its own loop (arrival_blocks/3): only
@@ -4574,7 +4573,7 @@ defmodule Defk.Compiler do
   end
 
   # An accumulator whose initial value is a non-negative integer literal is
-  # a u64 when a new value is (defk-wlu): `reduce: 0` with a body that ends
+  # a u64 when a new value is: `reduce: 0` with a body that ends
   # in band(..., 0xFFFFFFFFFFFFFFFF). The fold is lowered with i64
   # accumulators; assign_accs throws for such an accumulator meeting a u64,
   # and the fold is lowered again from the saved compiler state with it as a
@@ -4602,7 +4601,7 @@ defmodule Defk.Compiler do
   # written, and a halt jumps to a label after this loop. That leaves only
   # this loop (and the loops nested in it), so a halt in a nested
   # reduce_while ends the inner fold only, as in Elixir. Jumping out of loops
-  # keeps every loop's single entry, which resume relies on (defk-nua).
+  # keeps every loop's single entry, which resume relies on.
   # `for ..., reduce:` with {:cont, acc}/{:halt, acc} is not early exit in
   # Elixir (the tuple becomes the next accumulator), so it is not one here.
   # `node` is the whole call.
@@ -4651,7 +4650,7 @@ defmodule Defk.Compiler do
   # initial value, where acc is what the body sees: %{t: type}, and for an
   # array also its facts (owned, fin, len_lo).
   #
-  # An array accumulator is threaded through the loop in place (defk-n4r.10):
+  # An array accumulator is threaded through the loop in place:
   # its buffer is the loop's own, so the body writes it, and a helper returns
   # it, without a copy. The initial array is copied before the loop when it is
   # not owned (an input, a binary attribute), or when another binding of its
@@ -5152,14 +5151,14 @@ defmodule Defk.Compiler do
   end
 
   # Elixir allows only guard-safe expressions in guards: no kernel calls,
-  # indexing or `&&`. An error in a guard fails its clause (defk-7a6): a zero
+  # indexing or `&&`. An error in a guard fails its clause: a zero
   # divisor in div, rem or `/`, and a float result that is inf or NaN. The
   # guard is computed with flagged operations: `bad` is set by those errors,
   # and the guard is then false, as a whole (an error in the left of an `or`
   # fails the guard too, but an operand a short-circuit skips never runs).
   # A result outside i64 is not an Elixir error (Elixir has no i64 limit):
   # `ovf` is set, and the guard is replayed with the raising checks, which
-  # raise as the unguarded operation does. The guard error wins (defk-34l):
+  # raise as the unguarded operation does. The guard error wins:
   # Elixir fails such a guard whatever the exact value, so `bad` decides
   # before `ovf`, in either order. An overflowed value is not Elixir's value,
   # so it decides nothing (guard_poison/4): an error whose operands were
@@ -5432,7 +5431,7 @@ defmodule Defk.Compiler do
   end
 
   # ---------------------------------------------------------- range facts --
-  # The lattice lives in Defk.Facts (defk-k4x): what a value is known to
+  # The lattice lives in Defk.Facts: what a value is known to
   # satisfy, the derivations, and the proofs (in_bounds?, in_i64?) that drop
   # checks. This file creates facts and asks those questions; it holds no
   # fact algebra of its own.
@@ -5475,7 +5474,7 @@ defmodule Defk.Compiler do
 
   defp narrowed(v, _e), do: v.c
 
-  # The C value stored into an integer [e] from an integer v (defk-wlu): a
+  # The C value stored into an integer [e] from an integer v: a
   # value that doesn't fit raises ArgumentError, as a [u8] write of 300
   # does. A u64 above 2^63 - 1 saturates before a narrow check, which then
   # fails.
@@ -5558,7 +5557,7 @@ defmodule Defk.Compiler do
   # at the safepoint, so the C compiler keeps its value alive into it: a
   # temporary of an inner loop becomes a value that loop carries out to
   # the enclosing loop's safepoint. With Keccak's 25 lanes that spilled
-  # half the state on every round (defk-zep). The markers are removed.
+  # half the state on every round. The markers are removed.
   defp safepoint_saves(k, params) do
     text = IO.iodata_to_binary(k.stmts)
     marks = Regex.scan(~r{/\* defk:(in|out) (\d+) \*/\n}, text, return: :index)
@@ -5622,7 +5621,7 @@ defmodule Defk.Compiler do
 
   # Each safepoint restores what it spilled. An array local may hold an input
   # array's view (an array from a branch, an unwritten array a callee
-  # returns, a loop's walk over an input; defk-gqk), and the binary may have
+  # returns, a loop's walk over an input), and the binary may have
   # moved in a GC since the yield: a local whose data was an input's at the
   # yield (the input as the safepoint saved it, F->p_x) takes that input's
   # new data, bound above. A view of no input (an owned buffer, a binary
@@ -5708,7 +5707,7 @@ defmodule Defk.Compiler do
     end
   end
 
-  # An array the kernel may not own (defk-gqk): the caller's own binary when
+  # An array the kernel may not own: the caller's own binary when
   # it is an input array of the same type, the same data and length (so an
   # unwritten input is returned as it came, no copy); else an owned buffer
   # handed over, or a binary literal's bytes in a new binary
@@ -5754,7 +5753,7 @@ defmodule Defk.Compiler do
 
   # setjmp lives in a separate frame so it does not pessimise the kernel body.
   # defk_cur_ctx marks the call as running on this thread for the fault
-  # handler (defk-7dm): set before the body, cleared on every way out.
+  # handler: set before the body, cleared on every way out.
   defp guard_fn(k, f) do
     "static __attribute__((noinline)) int guard_#{k.cid}(ErlNifEnv *env, #{f} *F, const ERL_NIF_TERM *argv, ERL_NIF_TERM *result) {\n" <>
       "defk_ctx **defk_slot = &defk_cur_ctx; /* one thread-local lookup per call */\n" <>
@@ -5905,7 +5904,7 @@ defmodule Defk.Compiler do
 
   # a read-only [u8] view over a static C array; its length is a known fact.
   # The bytes are one `static const uint8_t` array per module, named by a hash
-  # of the contents (defk-qx3), however often a use site is inlined.
+  # of the contents, however often a use site is inlined.
   defp static_u8(b) do
     name = "defk_lit_" <> Base.encode16(binary_part(:crypto.hash(:sha256, b), 0, 8), case: :lower)
     ctx_update(:statics, &Map.put(&1, name, b))
@@ -6220,7 +6219,7 @@ defmodule Defk.Compiler do
   defp sanitize(name), do: name |> to_string() |> String.replace(~r/[^A-Za-z0-9_]/, "_")
 
   # --------------------------------------------------------------- report --
-  # The fast-path report (defk-6cn, Defk.Report): a handful of lowering sites
+  # The fast-path report (Defk.Report): a handful of lowering sites
   # note what they decided for the hot path with note/4, as {kernel, line,
   # {topic, verdict, text}}, and report/0 returns the notes of the last
   # compile/4 in this process. A note is never read back by the lowering, so
@@ -6251,7 +6250,7 @@ defmodule Defk.Compiler do
 
   # An alloc/2 or a copy runs inside a loop: every owned buffer lives until
   # the kernel returns, so the loop keeps one per iteration, bounded only by
-  # max_owned_bytes (defk-4b2). A copy hoisted before a loop is lowered outside it
+  # max_owned_bytes. A copy hoisted before a loop is lowered outside it
   # (the open loops are those around the loop statement), so it is not noted.
   defp note_per_iteration(topic, at) when topic in [:alloc, :copy] do
     if low(:loops) != [] do

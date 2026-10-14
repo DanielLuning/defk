@@ -102,10 +102,10 @@
 # quadratic (building a 1 MiB integer back into a binary did not finish in
 # two minutes). Not tried: splitting a big frame across processes (it scales
 # every side alike for frames of this kind, and kernel tasks stay on 2-3
-# schedulers, defk-8qs).
+# schedulers).
 #
 # Results (PROVISIONAL: taken while other benchmark agents loaded the
-# machine, load average ~15; the quiet-machine run is defk-sgw.4). M-series
+# machine, load average ~15; a quiet-machine run was recorded separately). M-series
 # Mac, OTP 29, Elixir 1.20. Verdict at the realistic size, 125 B frames,
 # 10,000 per run: hybrid 1.6 ms (~158 ns per frame), defk 1.3 ms (~134 ns),
 # NIF 1.4 ms (~141 ns): defk 1.18x (marginal; 1.18-1.31x over four runs, sweep and

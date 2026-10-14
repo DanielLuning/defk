@@ -45,8 +45,8 @@
 # and position checked before use; a malformed stream raises ArgumentError
 # with a message naming what was wrong ("lz4: match offset out of range"),
 # at the element where it is found. The message cannot carry the offset:
-# raise takes a literal message only (defk-sbp asks for an integer in it).
-# Copies are the range-copy builtins (defk-52v.16): a literal is
+# raise takes a literal message only.
+# Copies are the range-copy builtins: a literal is
 # out = copy(out, op, src, ip, ln), a match out = copy_back(out, op, off, ml),
 # whose meaning is the format's: out[op + j] = out[op + j - off] for j in
 # order, so an offset below the length repeats the last offset bytes. Each
@@ -65,19 +65,19 @@
 # copy ("copy(out, op, src, s, ln): one range check for the whole copy"),
 # and the tag/token and offset reads keep theirs; there is no per-byte check
 # and no copy loop in the kernels (the disassembly of either decoder has no
-# byte store, strb, outside the copy_back pattern fill). Before defk-52v.16
-# the copies were two helper kernels with a u64_le load and eight checked
+# byte store, strb, outside the copy_back pattern fill). Before the copy
+# builtins the copies were two helper kernels with a u64_le load and eight checked
 # byte stores per word (clang did not merge them), and a bounds and an
 # overflow check on every byte: the lz4 kernel had 36 strb and 74
 # overflow branches (b.vs), now 0 and 19.
 #
-# A copy trap found here (defk-33b): calling a helper kernel that writes and
+# A copy trap found here: calling a helper kernel that writes and
 # returns `out` inside one branch of an `if` in the loop body, when another
 # branch reads `out` (`if done, do: {:halt, {out, ...}}, else: (out =
 # copy_back(out, ...); ...)`), copied the whole output buffer on every
 # element and kept every copy until the kernel returned: 47 ms instead of
 # 0.1 ms at 64 KB, and the BEAM was SIGKILLed (exit 137, out of memory) at 4
-# MB. Fixed in defk-33b. The kernels then still called both copy helpers
+# MB. That is fixed. The kernels then still called both copy helpers
 # unconditionally, one with length 0; with the builtins that spelling (copy
 # and copy_back on every element) costs more than branching: 64 us against
 # 39-40 us for Snappy at 64 KB, while LZ4 is the same either way (44-46 us).
@@ -101,7 +101,7 @@
 #     input read by index (binary_part,
 #     :binary.at) instead of matching the rest
 #   defk kernel, byte-store helpers            63-72 us      70-77 us
-#   defk kernel, copy/copy_back (defk-52v.16)  39-46 us      42-49 us
+#   defk kernel, copy/copy_back builtins       39-46 us      42-49 us
 #     (load average 150-195, so provisional)
 #
 # The optimised Elixir times are bimodal (the same lz4 call measured 230 us
@@ -123,7 +123,7 @@
 # LZ_NIF_OPT=1 rebuilds them with CFLAGS=-O3 CXXFLAGS=-O2 in a separate
 # Mix.install directory. 64 KB JSON block / 4 MB JSON block:
 #
-#                                    byte stores (defk-52v.3)  copy builtins (defk-52v.16)
+#                                    byte stores               copy builtins
 #   defk snappy_decode               63-72 us / 4.5-4.9 ms     39-46 us / 3.2-3.3 ms
 #   snappyer as installed (-O0)      99-184 us / 5.9-6.8 ms    0.12-6.4 ms (dirty waits)
 #   snappyer rebuilt -O2             23-26 us / 1.6 ms         27-95 us / 1.6-1.7 ms
@@ -182,8 +182,8 @@
 #     rules: the last match ending within 12 bytes of the end, fewer than 5
 #     closing literals; the format lets a decoder accept them, and the
 #     output is still within max_out). No input decoded to a different value.
-# The VM surviving the fuzz is the point: defk-7dm (fault containment) is not
-# done, so a real out-of-bounds access in a kernel would crash the node. It
+# The VM surviving the fuzz is the point: there is no fault containment,
+# so a real out-of-bounds access in a kernel would crash the node. It
 # is the bounds and overflow checks that make that impossible here, not a
 # fault handler.
 
@@ -266,7 +266,7 @@ defmodule LzSnappy.Kernels do
         if t != 0 and (off == 0 or off > op),
           do: raise(ArgumentError, "snappy: copy offset out of range")
 
-        # a literal or a copy: one range copy, checked once (defk-52v.16)
+        # a literal or a copy: one range copy, checked once
         if t == 0 do
           out = copy(out, op, src, s, ln)
           nip = s + ln

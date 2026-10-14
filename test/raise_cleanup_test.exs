@@ -1,5 +1,5 @@
-# The runtime contract, entry: a raise after alloc frees every owned buffer
-# (defk-5fc). Buffers an array alloc/2 makes are owned by the call (ctx->owned
+# The runtime contract, entry: a raise after alloc frees every owned buffer.
+# Buffers an array alloc/2 makes are owned by the call (ctx->owned
 # in priv/defk_runtime.h): they are freed by defk_finish on the normal return,
 # on the error path of both frames (the stack frame of the first call and the
 # promoted frame of a yielded kernel), and by the frame destructor when the
@@ -11,8 +11,8 @@
 defmodule Defk.RaiseCleanupTest.K do
   use Defk
 
-  # one owned buffer and yield: false (zeroing a large alloc has safepoints,
-  # defk-ktw), so this kernel never yields: the raise runs on the stack frame
+  # one owned buffer and yield: false (zeroing a large alloc has safepoints),
+  # so this kernel never yields: the raise runs on the stack frame
   # of the first call (the nif_ wrapper's defk_finish)
   defk raise_one(n :: i64, at :: i64) :: i64, yield: false do
     buf = alloc(i64, n)

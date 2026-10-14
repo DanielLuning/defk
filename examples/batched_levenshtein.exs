@@ -17,7 +17,7 @@
 #
 # Expected verdict: marginal (use Elixir). It was pre-registered as good; the
 # optimised Elixir changed it. Earlier runs read 0.86-0.99x (poor or, from
-# 0.95x, marginal); the three runs of defk-9p6.24 read 1.30-1.82x, marginal
+# 0.95x, marginal); three later runs read 1.30-1.82x, marginal
 # (provisional, loaded machine). The tie band's marginal covers all of them.
 #
 #   elixir examples/batched_levenshtein.exs                 # agreement + report
@@ -25,7 +25,7 @@
 #
 # All numbers below are PROVISIONAL, MEASURED UNDER LOAD (two other
 # benchmark runs shared the machine; M-series Mac, 12 schedulers, OTP 29,
-# Elixir 1.20). The quiet-machine run is defk-sgw.4.
+# Elixir 1.20). A quiet-machine run was recorded separately.
 #
 # Elixir baseline: optimised. The anchor's Elixir version is the
 # tail-recursive two-row DP of examples/per_pair_distance.exs, one call per
@@ -70,12 +70,12 @@
 #
 # The chunks do not scale: the 12 kernel calls (~0.5 ms each) ran on 2 of
 # 12 schedulers (recorded with :erlang.system_info(:scheduler_id); the
-# Elixir chunks spread over 10-12), which is defk-8qs. An :erlang.yield()
+# Elixir chunks spread over 10-12): short kernel tasks stay on few schedulers. An :erlang.yield()
 # or a 1 ms sleep before the call did not spread them.
 #
 # Result at 234k words: the best Elixir (Myers in 12 chunks) 3.9-4.2 ms,
 # the best defk (Myers in 12 chunks) 4.3-4.6 ms: 0.86-0.99x, poor (from
-# 0.95x it reads marginal, the tie band of defk-9p6.24; either way: use Elixir). This
+# 0.95x it reads marginal, the tie band; either way: use Elixir). This
 # follows geo_nearest's rule (the verdict is the fastest each side can
 # answer one query). In one process, the CPU cost of a query, the kernel is
 # 2.4-2.8x (16-18 vs 6.6 ms), at every size from 1k to 234k; the script prints
@@ -715,5 +715,5 @@ Defk.Bench.report(
     native: native_run.(n_all)
   ],
   reason:
-    "Myers bit-parallel in Elixir over charlists, split across schedulers, is as fast as defk (whose chunks stay on 2 schedulers, defk-8qs); in one process the kernel is ~2.5x, and ex_strsim per pair is 2x slower than Elixir"
+    "Myers bit-parallel in Elixir over charlists, split across schedulers, is as fast as defk (whose chunks stay on 2 schedulers); in one process the kernel is ~2.5x, and ex_strsim per pair is 2x slower than Elixir"
 )

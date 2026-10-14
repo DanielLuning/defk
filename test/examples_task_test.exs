@@ -1,5 +1,5 @@
 defmodule Defk.ExamplesTaskTest do
-  # `mix defk.examples` (defk-30c.3): the selection and the check-only mode of
+  # `mix defk.examples`: the selection and the check-only mode of
   # Defk.Bench.report/1. The examples themselves are not run here (that is the
   # task's job, outside mix ci).
   use ExUnit.Case, async: false

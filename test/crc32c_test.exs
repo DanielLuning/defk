@@ -1,4 +1,4 @@
-# crc32c(crc, x, w) (defk-ulk.4): one CRC32C step, the hardware instruction
+# crc32c(crc, x, w): one CRC32C step, the hardware instruction
 # where the CPU has it and a slicing-by-8 table otherwise, picked at run time
 # per kernel library. Both implementations agree with Defk.Bits.crc32c/3
 # (Elixir mode) and with a bit-at-a-time reference written here.

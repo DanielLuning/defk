@@ -1,4 +1,4 @@
-# Range copies (defk-52v.16): copy(out, at, src, from, n) gives out with
+# Range copies: copy(out, at, src, from, n) gives out with
 # out[at..at+n-1] replaced by src[from..from+n-1] (src as it was before the
 # call, so src may be out itself), and copy_back(out, at, off, n) gives out
 # with out[at + j] = out[at + j - off] for j = 0..n-1 in that order: an LZ
@@ -353,8 +353,7 @@ defmodule Defk.RangeCopyTest do
     assert msg =~ "copy/5 takes an array, an i64 index, a source array of the same element type"
 
     # a float position fails the signature table like any other wrong type
-    # (defk-o49; it used to fail one step later, as a type-mismatch on the
-    # coercion)
+    # (it used to fail one step later, as a type-mismatch on the coercion)
     msg = rejection("a = copy_back(a, x, 1, 1)\nlength(a)", "a :: [u8], x :: f64")
     assert msg =~ "(defk builtin-arguments"
     assert msg =~ "called here with ([u8], f64, i64, i64)"

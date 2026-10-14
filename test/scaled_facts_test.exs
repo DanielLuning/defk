@@ -1,5 +1,5 @@
-# Range facts for constant multiples and quotients of array lengths
-# (defk-upc). In a hex encoder, out = alloc(u8, 2 * length(s)) and
+# Range facts for constant multiples and quotients of array lengths.
+# In a hex encoder, out = alloc(u8, 2 * length(s)) and
 # out[2 * i], out[2 * i + 1] for i <= length(s) - 1: the facts on `2 * i`
 # relate it to 2 * length(s), the length of out records the same multiple, and
 # the index needs no bounds check. The hex decoder's div(length(s), 2) gives
@@ -283,7 +283,7 @@ defmodule Defk.ScaledFactsTest do
 
   # Each case compiles a kernel (C codegen) and walks ~100 lengths, about
   # 0.5 ms (bounds) to 1 ms (overflow) of pure CPU. The default suite runs
-  # @runs cases; the :deep twins run @deep_runs (defk-o4n: 4_000 cases took
+  # @runs cases; the :deep twins run @deep_runs (4_000 cases took
   # 60 s under load and hit ExUnit's per-test timeout).
   @runs 500
   @deep_runs 4_000

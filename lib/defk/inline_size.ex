@@ -1,9 +1,9 @@
 defmodule Defk.InlineSize do
   @moduledoc false
   # The size of an entry kernel with its calls inlined, and the compile
-  # warning past a threshold (defk-6ag).
+  # warning past a threshold.
   #
-  # Every kernel call is inlined (defk-jaj), so an entry kernel's C holds a
+  # Every kernel call is inlined, so an entry kernel's C holds a
   # copy of each callee per call site along every call chain: a helper called
   # from two sites of a helper called from three sites is compiled six times,
   # and a diamond doubles per level. argon2's first draft gave 26.6 MB of C
@@ -80,7 +80,6 @@ defmodule Defk.InlineSize do
   # the kernels `key` reaches, callers before callees (reverse post-order);
   # an edge back into the current chain is skipped. `seen` is a plain map:
   # a MapSet in the accumulator tuple breaks its opaque type for dialyzer
-  # (defk-c9h)
   defp topo(key, graph) do
     {_, post} = visit(key, graph, [], {%{}, []})
     post

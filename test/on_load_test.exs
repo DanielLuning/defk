@@ -1,7 +1,7 @@
 defmodule Defk.OnLoadTest do
   use ExUnit.Case, async: false
 
-  # defk-6c4: a module's own @on_load is chained after defk's load
+  # A module's own @on_load is chained after defk's load
 
   defp compile(n, hook_body) do
     Code.compile_string("""

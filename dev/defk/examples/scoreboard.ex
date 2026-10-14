@@ -1,7 +1,7 @@
 defmodule Defk.Examples.Scoreboard do
   @moduledoc false
   # The `--bench` scoreboard: what `examples/run_all.exs` printed, over the
-  # first `DEFK_RESULT` line of each example (defk-30c.3). Also the check-only
+  # first `DEFK_RESULT` line of each example. Also the check-only
   # summary.
 
   @doc "The check-only summary: one line per outcome."
@@ -56,7 +56,7 @@ defmodule Defk.Examples.Scoreboard do
     if snapshot?, do: print_snapshot(results)
   end
 
-  # every report's cache outcome (Defk.Bench.Cache, defk-30c.5), not only
+  # every report's cache outcome (Defk.Bench.Cache), not only
   # the first report's
   defp print_cache(outcomes) do
     reports = for o <- outcomes, r <- o.results, do: r

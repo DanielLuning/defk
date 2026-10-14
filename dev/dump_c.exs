@@ -1,5 +1,5 @@
 # Dump the generated C of every test kernel and example: the byte-identical
-# gate the compiler-refactor tickets rely on (defk-mif; ADR-0007's migration
+# gate the compiler-refactor tickets rely on (ADR-0007's migration
 # step, Defk.Facts, Defk.Copies, the strip record). Run it on both sides of a
 # change and diff:
 #
