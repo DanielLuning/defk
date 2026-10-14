@@ -98,7 +98,7 @@ which uses `:dev`; the kernel module can live in `lib/` as usual.
 
 <!-- defk-example script: run with its Mix.install line removed (the project is loaded); the report must say the two sides agree -->
 ```elixir
-Mix.install([{:defk, path: "../defk"}])
+Mix.install([{:defk, "~> 0.1"}])
 
 defmodule Sum.Kernels do
   use Defk, elixir_mode: true
@@ -145,7 +145,7 @@ short calls). `binary_part/3` gives each chunk without copying the data:
 
 <!-- defk-example script: run with its Mix.install line removed (the project is loaded); the report must say the two sides agree -->
 ```elixir
-Mix.install([{:defk, path: "../defk"}])
+Mix.install([{:defk, "~> 0.1"}])
 
 defmodule ParSum.Kernels do
   use Defk, elixir_mode: true
