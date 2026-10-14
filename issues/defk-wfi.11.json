@@ -5,11 +5,13 @@
   "created": "2026-10-14T18:39:21Z",
   "description": "Apply the seven renames decided by 'Rename review: the public tier, the options, the builtins, the error codes' (defk-wfi.3, see its resolution comment for the list and the reasons). In place, no deprecated aliases (nothing outside the repo depends on these names yet).\n\n1. rotl64/2, rotr64/2 -\u003e rotl/2, rotr/2 (builtin and Defk.Bits)\n2. f64_to_u64/1 -\u003e f64_bits/1 (builtin and Defk.Bits)\n3. len/1 -\u003e length/1 (builtin; Elixir mode must not clash with Kernel.length/1; docs: constant time)\n4. use Defk, max_owned: -\u003e max_owned_bytes: (also the error text and docs; __defk_stats__ key is unstable, rename it to match)\n5. Defk.Errors.codes/0 -\u003e entries/0\n6. error code unknown-function -\u003e undefined-function\n7. error code u64-mix -\u003e u64-with-i64\n\nEvery caller in lib, test, examples, bench, docs and the guides changes in the same change. Regenerate docs/compile-errors.md and docs/scope.md (docs/agents/generated-docs.md). CHANGELOG.md lists old and new names. ADR-0006's rename candidates section points to the decision.\n\nDone when: no old name remains outside CHANGELOG.md and the ADR history, mix ci passes, and the examples still pass check-only (mix defk.examples --all).",
   "id": "defk-wfi.11",
-  "labels": [],
+  "labels": [
+    "wayfinder:task"
+  ],
   "parent": "defk-wfi",
   "priority": 2,
   "status": "open",
   "title": "Apply the 0.1.0 renames",
   "type": "task",
-  "updated_at": "2026-10-14T18:39:21Z"
+  "updated_at": "2026-10-14T18:39:28Z"
 }
