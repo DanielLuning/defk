@@ -8,6 +8,32 @@ often conflicts with in-progress changes.
 
 Committing, closing issues, and syncing are part of completing a task — not separate actions requiring additional permission.
 
+## Delivering code: pull requests
+
+Every change reaches `main` through a GitHub pull request. Never merge into
+`main` locally and never push to `main`. This rule overrides the "Land"
+step that `bw prime` prints.
+
+1. Start from the latest `main`: `git fetch origin`, then `git pull --ff-only` on `main`. One ticket, one branch, one worktree: `git worktree add ../defk-<id> -b <id>/<short-description> main`, then `bw start <id>`.
+2. Do the work. Run `mix ci` in the worktree; it must pass before the PR.
+3. Before you push, `git fetch origin` again. If `origin/main` moved since the branch started, `git merge origin/main` into the branch and run `mix ci` again.
+4. Commit with the ticket id in the message, push the branch, and open the PR with `gh pr create --base main`. The title starts with the ticket id; the body says what changed, the results (mark loaded runs provisional) and how it was checked.
+5. Stop there. The owner reviews and merges, with a merge commit. Do not merge a PR unless the owner says so for that PR.
+6. After the merge: `bw close <id>`, `bw sync`, remove the worktree, and `git pull --ff-only` on `main`. Until then the ticket stays in progress; a `bw comment` names the PR.
+
+**Keep `main` current.** The owner merges on GitHub, so local `main` falls
+behind without notice. Fetch and fast-forward `main` at the start of every
+session, before every new branch, and after every merge. Check open PRs too:
+when `gh pr view <n> --json mergeStateStatus` says `BEHIND` or `DIRTY`,
+merge `origin/main` into the branch, resolve any conflict, run `mix ci` and
+push. Never rebase or force-push a pushed branch. If `git pull --ff-only`
+refuses (local `main` has its own commits), stop and tell the owner: local
+`main` must not carry work, and resetting it is the owner's call.
+
+A branch that builds on another open PR's branch still targets `main`, and
+its PR body says which PR to merge first. The repository does not delete
+merged branches, so GitHub would not retarget a PR stacked on a branch.
+
 ## Purpose and measurement
 
 defk exists to help Elixir, not to beat it. We are looking for the jobs where
