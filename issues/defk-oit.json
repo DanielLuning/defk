@@ -5,6 +5,7 @@
     "defk-wlu"
   ],
   "blocks": [],
+  "closed_at": "2026-10-15T14:03:31Z",
   "created": "2026-10-10T09:30:08Z",
   "description": "Found in defk-cmr. A bitstring segment value is an i64 checked against 0..2^n-1, so a 64-bit segment cannot take a value with the top bit set (Gorilla's full-width XOR when signs differ): the kernel author splits it into two 32-bit halves (test/bitstring_test.exs gorilla kernel, docs/language.md 'The bitstring accumulator' Limits bullet). Once u64 lands (defk-wlu), a u64 value in a v::64 / v::size(n) segment should be accepted (check v \u003c 2^n on the unsigned value) in both modes, and the split in the Gorilla test kernel and the doc bullet can go. Touch points: defk_bits_put in priv/defk_runtime.h, lower_append in lib/defk/compiler.ex, Ops.bits/2 in lib/defk/elixir_mode/ops.ex.",
   "id": "defk-oit",
@@ -23,8 +24,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Accept u64 values in 64-bit bitstring segments",
   "type": "task",
-  "updated_at": "2026-10-15T13:32:31Z"
+  "updated_at": "2026-10-15T14:03:31Z"
 }
