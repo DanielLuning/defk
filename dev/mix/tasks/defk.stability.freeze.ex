@@ -55,6 +55,13 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
       (`Defk.Catalog`), each where it names no other module of its script, as
       a frozen file holds one module: compiled only, as the scripts measure
       their results instead of documenting them.
+    * `kernels/`: the test sample, `test-<name>.md`: the kernels
+      dev/stability/sample.exs lists, after the test suite's edge cases, with
+      the results the tag's code gives to the calls it lists. The tag is
+      checked out in a temporary worktree, compiled in the test environment,
+      and dev/stability/eval.exs runs every call there, natively and in
+      Elixir mode; the two must agree. This step fetches the tag's deps and
+      compiles them, so it takes a minute or two.
     * `rejections/`: the `error: <code>` blocks of the same doc pages, and
       the `example` of every entry of the error registry (lib/defk/errors.ex
       at the tag, read from its source), named after its code. An entry
@@ -88,7 +95,8 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
     root = Path.join(["test", "stability", version])
     pages = page_examples(tag)
 
-    write!(Path.join(root, "kernels"), doc_examples(tag, pages) ++ catalog_examples(tag))
+    kernels = doc_examples(tag, pages) ++ catalog_examples(tag) ++ sample_examples(tag)
+    write!(Path.join(root, "kernels"), kernels)
     write!(Path.join(root, "rejections"), doc_rejections(tag, pages) ++ registry_rejections(tag))
     write_api!(Path.join(root, "api.exs"), version, tag)
   end
@@ -283,6 +291,83 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
   defp example?(code, _),
     do: Mix.raise("#{@registry}: the example of #{code} is not a string literal")
 
+  # ---------------------------------------------------------------- sample --
+
+  # The test sample: @sample lists module bodies (kernels after the test
+  # suite's edge cases) and the calls to record; @eval runs them at the tag,
+  # in a temporary worktree compiled in the test environment, so the frozen
+  # results are the release's own, in both modes. One file per entry,
+  # `test-<name>.md`: the kernel block, then an iex> block with each call and
+  # the native result (a value as `inspect/2` writes it, or the exception).
+  @sample "dev/stability/sample.exs"
+  @eval "dev/stability/eval.exs"
+
+  defp sample_examples(tag) do
+    sample = sample()
+    results = Map.new(run_sample_at(tag))
+
+    for entry <- sample do
+      steps =
+        for {call, result} <- Map.fetch!(results, entry.file),
+            do: %{expr: call, expected: recorded(result, entry.file, call)}
+
+      ex = %Example{check: :run, source: entry.source, steps: steps}
+      {"test-#{entry.file}.md", sample_file(tag, entry, ex), ex}
+    end
+  end
+
+  # the entries, each source without its heredoc's final newline, as the
+  # extractor reads a fenced block back
+  defp sample do
+    {sample, _} = Code.eval_file(@sample)
+    for entry <- sample, do: %{entry | source: String.trim_trailing(entry.source, "\n")}
+  end
+
+  defp sample_file(tag, entry, ex) do
+    origin =
+      "<!-- after #{Enum.join(entry.from, ", ")} of #{tag}: the test sample " <>
+        "(#{@sample}), run at the tag. A frozen file is never edited. -->\n"
+
+    Enum.join([origin, fence(ex.source), "", fence(iex_block(ex.steps)), ""], "\n")
+  end
+
+  defp recorded({:value, value}, _file, _call),
+    do: {:value, inspect(value, limit: :infinity, printable_limit: :infinity)}
+
+  defp recorded({:raise, mod, msg}, file, call) do
+    if msg =~ "\n" do
+      Mix.raise(
+        "#{file}: #{call} raised a message of several lines, which the iex> form " <>
+          "cannot hold; change the call or the kernel:\n#{msg}"
+      )
+    end
+
+    {:raise, mod, msg}
+  end
+
+  # [{file, [{call, {:value, term} | {:raise, module, message}}]}], as @eval
+  # writes them at the tag: the tag in a temporary worktree (a stale one
+  # from an interrupted run is removed first), its deps fetched, and @eval
+  # run there with `MIX_ENV=test mix run`
+  defp run_sample_at(tag) do
+    dir = Path.join(System.tmp_dir!(), "defk_stability_freeze_#{tag}")
+    out = dir <> ".results"
+    System.cmd("git", ["worktree", "remove", "--force", dir], stderr_to_stdout: true)
+    File.rm_rf!(dir)
+    System.cmd("git", ["worktree", "prune"])
+    git!(["worktree", "add", "--detach", dir, tag])
+    Mix.shell().info("running #{@sample} at #{tag} in #{dir} (a minute or two)")
+
+    try do
+      mix_at!(dir, ["deps.get"])
+      mix_at!(dir, ["run", Path.expand(@eval), Path.expand(@sample), out])
+      out |> File.read!() |> :erlang.binary_to_term()
+    after
+      System.cmd("git", ["worktree", "remove", "--force", dir], stderr_to_stdout: true)
+      File.rm(out)
+    end
+  end
+
   # ------------------------------------------------------------------- api --
 
   # The unstable tier (docs/guides/stability.md, "What it does not cover"),
@@ -411,6 +496,16 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
     case System.cmd("git", args, stderr_to_stdout: true) do
       {out, 0} -> out
       {out, _} -> Mix.raise("git #{Enum.join(args, " ")} failed:\n#{out}")
+    end
+  end
+
+  # a mix command in the tag's worktree, its output shown only when it fails
+  defp mix_at!(dir, args) do
+    env = [{"MIX_ENV", "test"}]
+
+    case System.cmd("mix", args, cd: dir, env: env, stderr_to_stdout: true) do
+      {_, 0} -> :ok
+      {output, status} -> Mix.raise("mix #{hd(args)} at the tag failed (#{status}):\n#{output}")
     end
   end
 
