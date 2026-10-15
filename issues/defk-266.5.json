@@ -5,11 +5,13 @@
   "created": "2026-10-15T14:24:48Z",
   "description": "stability.md: an old name keeps working until the next major version, with a compile-time warning that names the replacement, and CHANGELOG.md lists it. No mechanism exists. Build one table (old name, new name, version deprecated) covering the promised kinds of names: builtins and their arities, use Defk options, public functions (defdelegate with @deprecated), config keys. The compiler accepts an old builtin/option, lowers it as the new one, and warns once per use site (IO.warn with the caller's location). A test calls/compiles every entry and captures the warning (test-output memory: assert on intentional warnings). The table may stay empty in the release; the test then uses a test-only entry. Done when the mechanism and its test exist and the stability guide's 'How a change is made' points to it (no ticket ids in HexDocs).",
   "id": "defk-266.5",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-266",
   "priority": 3,
   "status": "open",
   "title": "Stability: deprecation helper, before the first rename",
   "type": "task",
-  "updated_at": "2026-10-15T14:24:48Z"
+  "updated_at": "2026-10-15T14:24:51Z"
 }
