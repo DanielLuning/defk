@@ -197,6 +197,7 @@ defmodule Defk do
   @runtime_h Path.expand("../priv/defk_runtime.h", __DIR__)
 
   defmacro __using__(opts) do
+    opts = Defk.Deprecations.rename_options(opts, __CALLER__)
     elixir_mode = Keyword.get(opts, :elixir_mode, false)
     report = Keyword.get(opts, :report)
     adaptive = Keyword.get(opts, :adaptive_slice, true)
@@ -218,7 +219,8 @@ defmodule Defk do
       @defk_report unquote(report)
       import Defk, only: [defk: 1, defk: 2, defk: 3]
       Module.register_attribute(__MODULE__, :defk_kernels, accumulate: true)
-      @defk_mode Application.compile_env(:defk, :mode, :native)
+      require Defk.Deprecations
+      @defk_mode Defk.Deprecations.compile_env(:mode, :native)
       @external_resource unquote(@runtime_h)
       @before_compile Defk
     end
@@ -407,8 +409,11 @@ defmodule Defk do
     raw_kernels = env.module |> Module.get_attribute(:defk_kernels) |> Enum.reverse()
     attrs = fn_attrs(raw_kernels)
 
+    # a deprecated builtin is renamed here, once, so both backends lower
+    # the new one and each call site warns once
     kernels =
       raw_kernels
+      |> Defk.Deprecations.rename_builtins(env.file)
       |> Enum.map(&Defk.Attributes.inline/1)
       |> Defk.Clauses.merge()
 
