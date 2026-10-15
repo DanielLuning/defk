@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-15T14:24:47Z",
+  "description": "Every valid kernel shipped in v0.1.0 (doc examples of the HexDocs extras and usage rules, examples/ catalog kernels in test/support/examples.ex, and the test suite's kernels where cheap) copied from the v0.1.0 tag into test/stability/0.1.0/, with the results the docs give (iex lines). A test compiles each kernel, checks the recorded results natively, and checks agreement with Elixir mode (assert_agrees on the recorded inputs). The files are never edited: a kernel that stops compiling or changes a recorded result fails mix ci, unless the change is a CHANGELOG-named bug fix (then the test lists it as an explicit, commented exception). Keep the suite fast: stable module names so the build cache hits (see test-output memory), one module per source file. Reuse Defk.LanguageDoc.extract/1 on the tag's files rather than a new extractor. Done when: the corpus is committed, the test runs in mix ci, and a deliberately broken builtin makes it fail (try locally, do not commit).",
+  "id": "defk-266.1",
+  "labels": [],
+  "parent": "defk-266",
+  "priority": 2,
+  "status": "open",
+  "title": "Stability: frozen kernel corpus of 0.1.0 (acceptance and results)",
+  "type": "task",
+  "updated_at": "2026-10-15T14:24:47Z"
+}
