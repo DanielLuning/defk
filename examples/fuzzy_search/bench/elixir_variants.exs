@@ -5,8 +5,9 @@
 #
 # Every variant must return what the first pass returns. Each query runs in a
 # fresh process (Task), as a request would, and the catalog stays in
-# :persistent_term. Variants marked "not in comparison" use a trick the defk
-# kernel can't (yet) express, so they are reported but not used as the baseline.
+# :persistent_term. 0-10 are row DP; 7 and 11-14 are Myers bit-parallel. The
+# shipped backend is 14 (plus the DP for queries Myers does not take), and the
+# defk kernel uses the same algorithm.
 
 defmodule Variants do
   alias FuzzySearch.Catalog
@@ -173,7 +174,7 @@ defmodule Variants do
 
   defp brow_dist([], _q, prev, _i, _bound) do
     s = byte_size(prev) - 2
-    <<_::binary-size(s), last::16>> = prev
+    <<_::binary-size(^s), last::16>> = prev
     last
   end
 
@@ -239,7 +240,7 @@ defmodule Variants do
     end
   end
 
-  # ---- 10. as 2, plus a length pre-filter (not in comparison: extra trick) --
+  # ------------------------------- 10. as 2, plus a length pre-filter --
   # |len(word) - len(q)| is a lower bound on the distance, so a word whose
   # length differs by at least the bound is skipped without a row.
 
@@ -255,10 +256,9 @@ defmodule Variants do
     scan(Catalog.get().charlists, dist, q, k)
   end
 
-  # ---- 7. Myers/Hyyrö bit-parallel distance, no cut-off (not in comparison) --
+  # ----------------- 7. Myers/Hyyrö bit-parallel distance, no cut-off --
   # A different algorithm: one word-sized bit-vector step per character instead
-  # of a row. defk kernels have no bitwise operators yet, so the
-  # kernel cannot use it; this measures what it would be worth.
+  # of a row.
 
   def myers(query, k) do
     q = String.to_charlist(query)
@@ -294,6 +294,131 @@ defmodule Variants do
     pv = band(mh ||| bnot(xv ||| ph), mask)
     mv = ph &&& xv
     myers_dist(rest, peq, mask, hi, pv, mv, score)
+  end
+
+  # ------------------------- shared Myers setup for the variants below --
+  # m in 1..62 keeps every intermediate value in 0..2^63 - 1, so the kernel
+  # can use the same steps on i64 without masking
+
+  defp myers_setup(query) do
+    q = String.to_charlist(query)
+    m = length(q)
+    true = m in 1..62
+    peq = for c <- 0..255, do: Enum.reduce(Enum.with_index(q), 0, fn {qc, j}, b -> if qc == c, do: b ||| 1 <<< j, else: b end)
+    {List.to_tuple(peq), (1 <<< m) - 1, 1 <<< (m - 1), m}
+  end
+
+  # one Myers step on i64-sized values, no bignums (m <= 62)
+  defp step(eq, pv, mv, mask, hi, score) do
+    xv = eq ||| mv
+    xh = bxor((eq &&& pv) + pv, pv) ||| eq
+    ph = mv ||| band(bnot(xh ||| pv), mask)
+    mh = pv &&& xh
+
+    score =
+      cond do
+        (ph &&& hi) != 0 -> score + 1
+        (mh &&& hi) != 0 -> score - 1
+        true -> score
+      end
+
+    ph = band(ph <<< 1 ||| 1, mask)
+    mh = band(mh <<< 1, mask)
+    {mh ||| band(bnot(xv ||| ph), mask), ph &&& xv, score}
+  end
+
+  # ----------------------------- 11. Myers + length pre-filter --
+
+  def myers_len(query, k) do
+    {peq, mask, hi, m} = myers_setup(query)
+
+    dist = fn word, _q, bound ->
+      if abs(length(word) - m) >= bound, do: :cut, else: ml_dist(word, peq, mask, hi, mask, 0, m)
+    end
+
+    scan(Catalog.get().charlists, dist, nil, k)
+  end
+
+  defp ml_dist([], _peq, _mask, _hi, _pv, _mv, score), do: score
+
+  defp ml_dist([ch | rest], peq, mask, hi, pv, mv, score) do
+    {pv, mv, score} = step(elem(peq, ch), pv, mv, mask, hi, score)
+    ml_dist(rest, peq, mask, hi, pv, mv, score)
+  end
+
+  # --- 12. Myers + length pre-filter + score cut-off: after j of n chars the
+  # final distance is at least score - (n - j), so a word stops once that
+  # reaches the bound
+
+  def myers_cut(query, k) do
+    {peq, mask, hi, m} = myers_setup(query)
+
+    dist = fn word, _q, bound ->
+      n = length(word)
+      if abs(n - m) >= bound, do: :cut, else: mc_dist(word, peq, mask, hi, mask, 0, m, n, bound)
+    end
+
+    scan(Catalog.get().charlists, dist, nil, k)
+  end
+
+  defp mc_dist([], _peq, _mask, _hi, _pv, _mv, score, _left, _bound), do: score
+
+  defp mc_dist([ch | rest], peq, mask, hi, pv, mv, score, left, bound) do
+    {pv, mv, score} = step(elem(peq, ch), pv, mv, mask, hi, score)
+    left = left - 1
+    if score - left >= bound, do: :cut, else: mc_dist(rest, peq, mask, hi, pv, mv, score, left, bound)
+  end
+
+  # ------------- 13. as 12, but words read as binaries, not charlists --
+
+  def myers_cut_bin(query, k) do
+    {peq, mask, hi, m} = myers_setup(query)
+
+    dist = fn word, _q, bound ->
+      n = byte_size(word)
+      if abs(n - m) >= bound, do: :cut, else: mb_dist(word, peq, mask, hi, mask, 0, m, n, bound)
+    end
+
+    scan(Catalog.get().words, dist, nil, k)
+  end
+
+  defp mb_dist(<<>>, _peq, _mask, _hi, _pv, _mv, score, _left, _bound), do: score
+
+  defp mb_dist(<<ch, rest::binary>>, peq, mask, hi, pv, mv, score, left, bound) do
+    {pv, mv, score} = step(elem(peq, ch), pv, mv, mask, hi, score)
+    left = left - 1
+    if score - left >= bound, do: :cut, else: mb_dist(rest, peq, mask, hi, pv, mv, score, left, bound)
+  end
+
+  # ---------------- 14. as 13, but a branch-free score step (no cond) --
+
+  def myers_cut_bin_bf(query, k) do
+    {peq, mask, _hi, m} = myers_setup(query)
+    top = m - 1
+
+    dist = fn word, _q, bound ->
+      n = byte_size(word)
+      if abs(n - m) >= bound, do: :cut, else: bf_dist(word, peq, mask, top, mask, 0, m, n, bound)
+    end
+
+    scan(Catalog.get().words, dist, nil, k)
+  end
+
+  defp bf_dist(<<>>, _peq, _mask, _top, _pv, _mv, score, _left, _bound), do: score
+
+  defp bf_dist(<<ch, rest::binary>>, peq, mask, top, pv, mv, score, left, bound) do
+    eq = elem(peq, ch)
+    xv = eq ||| mv
+    xh = bxor((eq &&& pv) + pv, pv) ||| eq
+    ph = mv ||| band(bnot(xh ||| pv), mask)
+    mh = pv &&& xh
+    score = score + (ph >>> top &&& 1) - (mh >>> top &&& 1)
+    ph = band(ph <<< 1 ||| 1, mask)
+    mh = band(mh <<< 1, mask)
+    pv = mh ||| band(bnot(xv ||| ph), mask)
+    mv = ph &&& xv
+    left = left - 1
+    if score - left >= bound, do: :cut, else: bf_dist(rest, peq, mask, top, pv, mv, score, left, bound)
   end
 end
 
@@ -353,8 +478,12 @@ variants = [
   {"6 = 2, u16 binary rows", &Variants.binary_rows/2},
   {"8 = 2, :lists.min for the row min", &Variants.lists_min/2},
   {"9 = 2, tail-recursive catalog walk", &Variants.tail_scan/2},
-  {"10 = 2 + length pre-filter*", &Variants.length_filter/2},
-  {"7 Myers bit-parallel*", &Variants.myers/2},
+  {"10 = 2 + length pre-filter", &Variants.length_filter/2},
+  {"7 Myers bit-parallel", &Variants.myers/2},
+  {"11 Myers + length pre-filter", &Variants.myers_len/2},
+  {"12 = 11 + score cut-off", &Variants.myers_cut/2},
+  {"13 = 12, binary words", &Variants.myers_cut_bin/2},
+  {"14 = 13, branch-free score", &Variants.myers_cut_bin_bf/2},
   {"  ElixirBackend (shipped)", fn q, k -> FuzzySearch.ElixirBackend.search(q, k, parallel: false) end}
 ]
 
@@ -365,7 +494,7 @@ run = fn f, q -> Task.await(Task.async(fn -> :timer.tc(fn -> f.(q, 10) end) end)
 
 reference = Enum.map(qs, &Variants.first_pass(&1, 10))
 
-for {name, f} <- variants do
+for {_name, f} <- variants do
   ^reference = Enum.map(qs, &f.(&1, 10))
 end
 
@@ -385,5 +514,3 @@ for {name, _} <- variants do
   t = times[name]
   IO.puts("  #{String.pad_trailing(name, 34)} median #{Float.round(med.(t) / 1000, 1)} ms/query  mean #{Float.round(Enum.sum(t) / length(t) / 1000, 1)}")
 end
-
-IO.puts("\n* not used as the baseline: 7 is a different algorithm the kernel cannot express yet (no bitwise ops when it was written); 10 adds a trick the kernel does not have")
