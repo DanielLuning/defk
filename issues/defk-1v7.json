@@ -10,11 +10,15 @@
     {
       "text": "PR #5: https://github.com/DanielLuning/defk/pull/5. Prebuilt ghcr image not done (small gain with one PR job; needs registry credentials, changes local.sh/act).",
       "timestamp": "2026-10-15T11:41:25Z"
+    },
+    {
+      "text": "PR #5 measured: warm job 3m16s (tests 117 s), cold 10m02s; was 4 jobs ~5 min each plus a rerun on merge.",
+      "timestamp": "2026-10-15T12:06:50Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "CI: shorter, cheaper GitHub Actions runs; full matrix on release tags",
   "type": "task",
-  "updated_at": "2026-10-15T11:41:25Z"
+  "updated_at": "2026-10-15T12:06:50Z"
 }
