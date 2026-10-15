@@ -17,11 +17,15 @@
     {
       "text": "Related: defk-9p6.29 measures the cases nx-boundary.md says favour defk (early exit, small inputs, concurrency, variable length) against defn + EXLA.",
       "timestamp": "2026-10-12T09:52:12Z"
+    },
+    {
+      "text": "PR #20 opened (https://github.com/DanielLuning/defk/pull/20): EXLA 0.13.1 rows added to matmul.exs (from binaries and resident), EXLA is the report's native row. 256x256: EXLA 2.1-2.2 ms vs defk 13.1-15.5 ms (6x); 1024: 7.7 vs 833 ms (108x); defk wins only at 64x64 (0.21 vs 0.77 ms). Measured under load: provisional. mix ci green. Ticket stays in progress until the owner merges.",
+      "timestamp": "2026-10-15T20:45:20Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Re-measure matmul.exs with EXLA 0.13.1: it compiles here now",
   "type": "task",
-  "updated_at": "2026-10-15T20:34:58Z"
+  "updated_at": "2026-10-15T20:45:20Z"
 }
