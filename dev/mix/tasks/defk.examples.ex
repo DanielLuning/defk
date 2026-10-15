@@ -26,9 +26,15 @@ defmodule Mix.Tasks.Defk.Examples do
 
   **`--bench`** is the old `examples/run_all.exs`: examples run one at a time
   with their timings, the measured verdict must be the one each example
-  claims, and a scoreboard is printed (`--snapshot` adds the markdown table
-  for docs/verdict.md). Timings under load are meaningless: run it on a quiet
-  machine.
+  claims, and a scoreboard is printed. Timings under load are meaningless:
+  run it on a quiet machine.
+
+  **`--snapshot`** (with `--bench --all`, no `--only`) also prints the
+  markdown table and stores the run in examples/scoreboard.json: every
+  example's `DEFK_RESULT` lines, the commit, the machine and the load before
+  and after. That file is the one source of the catalog's numbers;
+  `mix defk.examples.tables` rewrites the README tables from it. It is
+  written only when every example behaves as claimed.
 
   **Result cache.** `--bench` reuses a stored result when nothing the
   measurement depends on changed: the kernel modules' `.beam` files, the C
@@ -57,16 +63,18 @@ defmodule Mix.Tasks.Defk.Examples do
     * `--list` - print the selection and stop
     * `--bench` - timed run with the verdict check
     * `--fresh` - with `--bench`, measure every example, reuse nothing
-    * `--snapshot` - with `--bench`, also print the markdown table (a reused
-      row is marked with the date it was measured)
+    * `--snapshot` - with `--bench --all`, also print the markdown table (a
+      reused row is marked with the date it was measured) and store the run
+      in examples/scoreboard.json
     * `--timeout SECONDS` - kill an example (or the app's tests) that runs longer;
       the default is no limit
   """
 
   use Mix.Task
 
+  alias Defk.Bench.Cache
   alias Defk.Examples
-  alias Defk.Examples.Scoreboard
+  alias Defk.Examples.{Scoreboard, Snapshot}
 
   @switches [
     only: :string,
@@ -83,6 +91,10 @@ defmodule Mix.Tasks.Defk.Examples do
     {opts, rest} = OptionParser.parse!(args, strict: @switches)
     rest == [] || Mix.raise("unexpected arguments: #{Enum.join(rest, " ")}")
     opts[:snapshot] && !opts[:bench] && Mix.raise("--snapshot needs --bench")
+
+    opts[:snapshot] && (!opts[:all] || opts[:only]) &&
+      Mix.raise("--snapshot stores the whole scoreboard: it needs --all and no --only")
+
     opts[:fresh] && !opts[:bench] && Mix.raise("--fresh needs --bench")
 
     only = opts[:only] && String.split(opts[:only], ",", trim: true)
@@ -116,6 +128,7 @@ defmodule Mix.Tasks.Defk.Examples do
     timeout = opts[:timeout]
     total = length(examples) + if(app?, do: 1, else: 0)
     t0 = System.monotonic_time(:second)
+    opts = Keyword.put(opts, :load_before, Cache.load_average())
 
     IO.puts("mix defk.examples (#{mode}): #{total} to run#{load_note()}")
     if mode == :bench, do: IO.puts(cache_note(opts[:fresh]))
@@ -186,6 +199,27 @@ defmodule Mix.Tasks.Defk.Examples do
         "failed: " <> Enum.map_join(failed, ", ", &"#{&1.name} (#{&1.status}: #{&1.note})")
       )
     end
+
+    if opts[:snapshot], do: store_snapshot(outcomes, opts)
+  end
+
+  # every example behaved as claimed (a failure raised above)
+  defp store_snapshot(outcomes, opts) do
+    command =
+      "mix defk.examples --bench --all --snapshot" <> if(opts[:fresh], do: " --fresh", else: "")
+
+    loads = {opts[:load_before], Cache.load_average()}
+    snapshot = Snapshot.build(outcomes, loads, command)
+    Snapshot.write(snapshot)
+
+    IO.puts(
+      "stored #{Path.relative_to_cwd(Snapshot.path())}" <>
+        if(snapshot["quiet"],
+          do: "",
+          else: " (NOT a quiet machine: the tables will say provisional)"
+        ) <>
+        "; run mix defk.examples.tables to rewrite the README tables"
+    )
   end
 
   defp load_note do
