@@ -79,8 +79,34 @@ before the C build, so the corpus costs well under a second.
 
 ## Releasing
 
-At the release commit, after tagging: `mix defk.stability.freeze
-<version>`, then commit `test/stability/<version>/`. The task runs in the
-`:test` environment (it needs `Defk.LanguageDoc`) and writes the version's
-`kernels/` and `rejections/` directories afresh. Rerun for a version
-already frozen, it reproduces that version's files byte for byte.
+The stability checks are part of `mix test`, so every label of the CI
+matrix runs them (`ci/README.md`, "Release evidence"). A pull request runs
+one label; the full matrix runs on a release tag or by hand. Before a
+version is published, the release commit needs a passing run of every
+label, with the previous versions' frozen files in place: a kernel that
+compiles on one platform and not on another breaks the promise there.
+
+The release's own files are frozen from its tag, after the matrix has
+passed on the release commit, in a commit that follows the tag:
+
+1. `mix defk.stability.freeze <version>` writes
+   `test/stability/<version>/kernels/` and `rejections/` from the tag. The
+   task runs in the `:test` environment (it needs `Defk.LanguageDoc`).
+   Rerun for a version already frozen, it reproduces that version's files
+   byte for byte.
+2. `test/stability/<version>/api.exs`: copy the previous version's file,
+   set `version:`, and add what the release added to the promised surface
+   (`docs/guides/stability.md`, "The public API", at the tag: the
+   documented functions of the public modules by `Code.fetch_docs/1`, minus
+   the unstable tier and `@doc false`). Nothing is removed: a removal needs
+   a deprecation first, and the next major version is where it happens.
+3. `test/stability/codes.txt`: append a `# <version>` line and, under it,
+   the codes the release added, in registry order. Nothing is removed or
+   reordered.
+4. Commit `test/stability/<version>/` and the ledger, and open the pull
+   request. `mix test` passes on it when the new files agree with the tag;
+   the owner reviews every change under `test/stability/` (CODEOWNERS).
+
+The frozen files of a version are evidence about that version. A later
+commit that fails one of them has broken the promise, whichever version the
+file belongs to.
