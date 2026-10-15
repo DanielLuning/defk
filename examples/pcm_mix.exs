@@ -61,9 +61,10 @@
 #   - out = alloc(t, total) with total = length(held) + m: out[i] is proven
 #     only with the loop bound min(length(all), length(out));
 #   - the rescale loop inside the scan makes the scan take a safepoint per
-#     iteration; it runs on 0.5% of half-waves at the realistic input;
-#   - Defk.Report puts every note of a macro-generated kernel on the macro
-#     call line: tune a hand-written copy first.
+#     iteration; it runs on 0.5% of half-waves at the realistic input.
+# The macro quotes with `location: :keep`, so Defk.Report puts each note of
+# the generated kernels on its line in the macro (without it, every note
+# would be on the macro call line).
 #
 # Agreement, checked on every run (a mismatch raises): the concatenated
 # mix + flush output of ClipPreventingAdder, every Elixir variant, the defk
