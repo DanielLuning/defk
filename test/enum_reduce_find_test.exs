@@ -34,6 +34,8 @@ defmodule Defk.EnumReduceFindTest.K do
 
   defk nested(n :: i64) :: i64 do
     Enum.reduce(0..(n - 1)//1, 0, fn i, acc ->
+      # a kernel has no Enum.sum/1: the fold is the point here
+      # credo:disable-for-next-line ExSlop.Check.Refactor.ExplicitSumReduce
       acc + Enum.reduce(0..i//1, 0, fn j, s -> s + j end)
     end)
   end
