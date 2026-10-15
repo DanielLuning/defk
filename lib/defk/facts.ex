@@ -148,17 +148,38 @@ defmodule Defk.Facts do
   # the compiler, which owns the re-lowering protocol; fin is a contents
   # fact and stays on the carrier).
 
-  # the accumulator carries facts a new value may not have
-  def carries?(carrier), do: is_integer(len_lo(carrier))
+  # The length facts are len_lo, a constant lower bound, and len_lb, lower
+  # bounds relative to other arrays. A len_lb key names an array's C
+  # variable, assigned before the loop and never changed while it runs (the
+  # accumulator's own variable is fresh, so no key names it), which is what
+  # makes the fact true at every iteration when every new value has it.
 
-  # a new value `r` keeps every length assumption the body made about `a`
+  # the accumulator carries facts a new value may not have
+  def carries?(carrier), do: is_integer(len_lo(carrier)) or len_lb(carrier) != %{}
+
+  # A new value `r` keeps every length assumption the body made about `a`.
+  # A len_lb fact `q * len >= p * len(y) + d` is kept by the same key with
+  # an offset of at least d; any other form counts as lost (sound, if weak:
+  # the loop is lowered again without it).
   def covers?(a, r) do
     al = len_lo(a)
-    not is_integer(al) or (is_integer(len_lo(r)) and len_lo(r) >= al)
+    rb = len_lb(r)
+
+    (not is_integer(al) or (is_integer(len_lo(r)) and len_lo(r) >= al)) and
+      Enum.all?(len_lb(a), fn {key, d} -> is_integer(rb[key]) and rb[key] >= d end)
   end
 
-  # drop what the body may no longer assume
-  def weaken(carrier), do: assert(carrier, len_lo: nil)
+  # Drop what the body may no longer assume, in two steps, so that losing a
+  # relative fact does not cost the constant one: first len_lb, and on a
+  # second retry len_lo (weakest?/1 says which step is left).
+  def weaken(carrier) do
+    if len_lb(carrier) != %{},
+      do: assert(carrier, len_lb: %{}),
+      else: assert(carrier, len_lo: nil)
+  end
+
+  # the next weaken/1 drops the last length fact
+  def weakest?(carrier), do: len_lb(carrier) == %{}
 
   # --------------------------------------------------------- derivations --
 
