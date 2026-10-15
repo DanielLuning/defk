@@ -77,5 +77,78 @@ defmodule Defk.DiagnosticsTest do
     assert e.description =~ "untyped-parameter"
     # at most 10 are rendered; the rest are counted
     assert e.description =~ "2 more"
+
+    # and diagnostics/1 reads back the ten it shows
+    ds = Defk.Errors.diagnostics(e)
+    assert [%{code: "untyped-parameter", line: 1, column: 1, kernel: {:f, 1}} | _] = ds
+    assert Enum.map(ds, & &1.line) == Enum.to_list(1..10)
+  end
+
+  describe "Defk.Errors.diagnostics/1" do
+    test "reads each rejection's code, message and place back from a compile error" do
+      src = """
+      defmodule Defk.DiagnosticsTest.Two do
+        use Defk
+
+        defk f(x :: i64, b :: bool) :: i64 do
+          x + b
+        end
+
+        defk g(m :: i64) :: i64 do
+          %{a: m}
+        end
+      end
+      """
+
+      e = assert_raise CompileError, fn -> Code.compile_string(src, "lib/two.ex") end
+
+      assert Defk.Errors.diagnostics(e) == [
+               %{
+                 code: "operand-type",
+                 message: "+ takes numbers, and b is bool",
+                 file: "lib/two.ex",
+                 line: 5,
+                 column: 9,
+                 module: Defk.DiagnosticsTest.Two,
+                 kernel: {:f, 2}
+               },
+               %{
+                 code: "unsupported-map",
+                 message: "maps are not in the kernel subset",
+                 file: "lib/two.ex",
+                 line: 9,
+                 column: 5,
+                 module: Defk.DiagnosticsTest.Two,
+                 kernel: {:g, 1}
+               }
+             ]
+
+      # the message text gives the same
+      assert Defk.Errors.diagnostics(Exception.message(e)) == Defk.Errors.diagnostics(e)
+    end
+
+    test "a rejection without a place, and errors defk did not render" do
+      e = Diagnostics.no_compiler(M, "lib/m.ex", "no-such-cc")
+
+      assert [%{code: "no-c-compiler", file: nil, line: nil, kernel: nil}] =
+               Defk.Errors.diagnostics(e)
+
+      assert Defk.Errors.diagnostics(%CompileError{description: "defk: unknown mode :x"}) == []
+      assert Defk.Errors.diagnostics(%RuntimeError{message: "boom"}) == []
+    end
+
+    test "a message from elsewhere creates no atoms" do
+      msg = """
+      error: maps are not in the kernel subset
+      └─ lib/x.ex:3:5: NoSuchModuleAnywhere.no_such_kernel_anywhere/1
+
+      why: w
+      hint: h
+      (defk unsupported-map: docs/compile-errors.md#unsupported-map)
+      """
+
+      assert [%{module: nil, kernel: nil, line: 3, column: 5}] = Defk.Errors.diagnostics(msg)
+      assert_raise ArgumentError, fn -> String.to_existing_atom("no_such_kernel_anywhere") end
+    end
   end
 end

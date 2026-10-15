@@ -157,6 +157,8 @@ state in as a binary and return the new one.
 A compile error gives why, a hint, and a footer `(defk <code>: <url>)`. The
 code's entry has a failing example and its rewrite; print it with
 `mix run -e 'Defk.Errors.explain!("unsupported-map")'`. Apply the rewrite.
+Code that compiles kernels and rescues the `CompileError` gets each
+rejection's code and place from `Defk.Errors.diagnostics/1`.
 When the construct is outside the subset, do that part in Elixir, before or
 after the call. `defk: C compilation failed` is a defk bug or a broken
 toolchain, not a mistake in the kernel.

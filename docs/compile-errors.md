@@ -657,7 +657,7 @@ end
 Arithmetic takes numbers, bitwise operators take integers, and/or/not take booleans, comparisons take two numbers or two booleans.
 
 - kind: a mistake to fix (in the kernel or the build)
-- why: booleans are not numbers in Elixir, and defk keeps that
+- why: each operator takes the types Elixir allows for it, and defk never converts a value to another type implicitly
 - hint: turn the value into the type the operator takes
 
 Rejected:
