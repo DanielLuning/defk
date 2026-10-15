@@ -175,6 +175,9 @@ MyApp.Live.add(2, 3)
   Mix project, else in the system temp directory, loaded from that absolute
   path. It is not copied into `ebin/` and is not part of a release, so the
   module is gone after a restart until it is defined again.
+- **A rejected kernel raises a `CompileError`.** `Defk.Errors.diagnostics/1`
+  reads its rejections as data (code, line, column, kernel), so a caller
+  can act on the code without parsing the message.
 - **Defining the module again** builds and loads the new version; a kernel
   still running the old one finishes in it, as in a
   [hot code upgrade](runtime-contract.md#4-hot-code-upgrade-a-suspended-kernel-finishes-in-its-own-code).
