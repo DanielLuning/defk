@@ -62,17 +62,6 @@ defmodule Defk.AdaptiveSliceTest do
     if t >= us, do: n, else: calibrate(n * 2, us)
   end
 
-  # {yields, microseconds} of one call
-  defp timed_yields(fun) do
-    {t, {_, y}} = :timer.tc(fn -> yields(K, fun) end)
-    {y, t}
-  end
-
-  # The yields a call of t microseconds is due: one per 250 us, or for a
-  # crowded call one per 50 us in its first millisecond
-  defp due(:lone, t), do: t / 250
-  defp due(:crowded, t), do: min(t, 1000) / 50 + max(t - 1000, 0) / 250
-
   test "only a yielding kernel's NIF takes the run-queue hint" do
     assert function_exported?(K, :__defk_native_spin__, 2)
     refute function_exported?(K, :__defk_native_spin__, 1)
@@ -96,20 +85,20 @@ defmodule Defk.AdaptiveSliceTest do
 
     pairs =
       for _ <- 1..5 do
-        {timed_yields(fn -> K.__defk_native_spin__(n, 0) end),
-         timed_yields(fn -> K.__defk_native_spin__(n, 5) end)}
+        {_, lone} = yields(K, fn -> K.__defk_native_spin__(n, 0) end)
+        {_, crowded} = yields(K, fn -> K.__defk_native_spin__(n, 5) end)
+        {lone, crowded}
       end
 
-    # Yields follow the clock, so the extra yields a crowded call is due come
-    # from how long each call really ran, not from the calibration: a faster
-    # or slower machine moves the expectation with it. At least half of what
-    # is due, summed over five pairs, so one call slowed by the OS does not
-    # decide (a 1.5 ms call is due about 16 extra).
-    got = Enum.sum(for {{yl, _}, {yc, _}} <- pairs, do: yc - yl)
-    due = Enum.sum(for {{_, tl}, {_, tc}} <- pairs, do: due(:crowded, tc) - due(:lone, tl))
-
-    assert due >= 10, "calls too short to tell: #{inspect(pairs)}"
-    assert got >= due / 2, "#{got} extra yields, #{Float.round(due, 1)} due: #{inspect(pairs)}"
+    # How many yields a call makes depends on how much of it the OS lets run:
+    # on a shared 2-vCPU runner a 1.5 ms call took 1.5-8 ms of wall time and
+    # yielded 5-7 times, so neither the calibrated length nor the wall time
+    # says how many are due. The difference does: crowded calls yielded 3 to
+    # 17 times more per pair on every machine tried (macOS, Linux arm64 and
+    # x86-64 runners, Rosetta), the same call without the hint about 0.
+    # Summed over five pairs, at least 10.
+    extra = Enum.sum(for {lone, crowded} <- pairs, do: crowded - lone)
+    assert extra >= 10, "#{extra} extra yields over five pairs: #{inspect(pairs)}"
   end
 
   test "the slice never changes a result, also under forced yields" do
