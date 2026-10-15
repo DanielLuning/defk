@@ -3,9 +3,13 @@
 # order. The file grows at release time, when the release's new codes are
 # appended, and is never pruned: a code keeps its name and is never reused,
 # and a code whose construct became valid is retired, not removed
-# (docs/guides/stability.md). The test suite checks that every code here is
-# in the registry and that a retired code is never raised; a code added
-# since the last release is not here yet.
+# (docs/guides/stability.md). A retired code's line ends in
+# `retired <version>`, the version that retired it; the mark is the only
+# change a line ever gets, and a code marked retired stays retired. The test
+# suite checks that every code here is in the registry, that the marks and
+# the registry agree, and that a retired code is never raised; a code added
+# since the last release is not here yet. ci/frozen.sh fails a pull request
+# that drops a code.
 #
 # 0.1.0
 kernel-head
@@ -81,8 +85,8 @@ raise-message
 raise-module
 array-rebind-in-loop
 write-not-returned
-bitwise
-module-attribute
-read-only-array
-tuple-return-call
-array-accumulator
+bitwise retired 0.0.1
+module-attribute retired 0.0.1
+read-only-array retired 0.0.1
+tuple-return-call retired 0.0.1
+array-accumulator retired 0.0.1
