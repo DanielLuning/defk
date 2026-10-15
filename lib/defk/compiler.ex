@@ -4648,7 +4648,7 @@ defmodule Defk.Compiler do
 
   # Accumulators [{name, cvar, acc}] from `acc` or `{a, b, ...}` and the
   # initial value, where acc is what the body sees: %{t: type}, and for an
-  # array also its facts (owned, fin, len_lo).
+  # array also its facts (owned, fin, len_lo, len_lb).
   #
   # An array accumulator is threaded through the loop in place:
   # its buffer is the loop's own, so the body writes it, and a helper returns
@@ -4720,7 +4720,8 @@ defmodule Defk.Compiler do
                   fin: v[:fin] || false,
                   buf: carried(make_ref(), v[:buf])
                 },
-                len_lo: Facts.len_lo(v)
+                len_lo: Facts.len_lo(v),
+                len_lb: Facts.len_lb(v)
               )
 
             {{{name, c, acc}, ic}, seen}
@@ -4751,9 +4752,10 @@ defmodule Defk.Compiler do
 
   # Lower a loop with accumulators `accs` by `lower.(accs, fix)`. The body is
   # lowered assuming each array accumulator keeps the facts of its initial
-  # value (fin, len_lo); a new value without them is noted in `fix` by
+  # value (fin, len_lo, len_lb); a new value without them is noted in `fix` by
   # assign_accs/6, and the loop is lowered again (from the same compiler
-  # state) with those facts dropped.
+  # state) with those facts dropped: first the relative length facts, then,
+  # if the new value still lacks one, the rest (drop_facts/2).
   defp with_acc_facts(accs, lower) do
     if Enum.any?(accs, fn {_, _, a} -> facts?(a) end) do
       fix = make_ref()
@@ -4774,8 +4776,13 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp drop_facts({name, c, a} = acc, weak),
-    do: if(c in weak, do: {name, c, Facts.weaken(%{a | fin: false})}, else: acc)
+  defp drop_facts({name, c, a} = acc, weak) do
+    cond do
+      c not in weak -> acc
+      Facts.weakest?(a) -> {name, c, Facts.weaken(%{a | fin: false})}
+      true -> {name, c, Facts.weaken(a)}
+    end
+  end
 
   # {C expression, seen}: array value `v` as an accumulator's, copied unless
   # it is owned and no binding whose buffer is in `seen` (the live ones and
