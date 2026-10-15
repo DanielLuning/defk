@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-266.6"
+  ],
   "created": "2026-10-15T14:24:47Z",
   "description": "Commit test/stability/0.1.0/api.exs (or .txt): the promised surface of stability.md, 'The public API': public modules and their documented functions with arities (from Code.fetch_docs, excluding @doc false and the unstable tier), the generated public functions of a kernel module (__defk_elixir__/2, __defk_force_yields__/1, the kernel function and its @spec), the use Defk options (elixir_mode:, report: :full, max_owned_bytes:, yield: false as a kernel option), config :defk, mode:, and the env vars CC and ERTS_INCLUDE_DIR. A test fails when one is missing or its arity changed; additions pass. The option checks compile a small module with each option. Done when the test runs in mix ci and removing a public function locally makes it fail.",
   "id": "defk-266.4",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Stability: public API snapshot of 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-15T14:24:47Z"
+  "updated_at": "2026-10-15T14:24:49Z"
 }
