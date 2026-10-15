@@ -13,11 +13,15 @@
     {
       "text": "Decided by the owner (2026-10-15): keep raising CompileError; add public Defk.Errors.diagnostics/1 that takes the exception (or its message) and returns one map per rejection (code, kernel, file, line, column). No Defk.CompileError.",
       "timestamp": "2026-10-15T19:14:39Z"
+    },
+    {
+      "text": "PR #18: Defk.Errors.diagnostics/1 (public) parses CompileError messages into code/message/file/line/column/module/kernel; parser in Defk.Errors.Diagnostics next to render/1. mix ci green.",
+      "timestamp": "2026-10-15T19:23:36Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Compile errors carry their code as data",
   "type": "task",
-  "updated_at": "2026-10-15T19:14:39Z"
+  "updated_at": "2026-10-15T19:23:36Z"
 }
