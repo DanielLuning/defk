@@ -19,11 +19,15 @@
     {
       "text": "PR #7: https://github.com/DanielLuning/defk/pull/7 (sweep with defk-vcx.1, defk-9qv, defk-sbp, defk-nii, defk-xyz).",
       "timestamp": "2026-10-15T14:03:29Z"
+    },
+    {
+      "text": "PR #7: origin/main merged in (the stability checks); the frozen rejections for enum-reduce and raise-message now compile and are listed in @newly_supported with their CHANGELOG words; mix ci green (1966 tests).",
+      "timestamp": "2026-10-15T18:33:46Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Guide: call a kernel only above a size, with an Elixir clause below it",
   "type": "task",
-  "updated_at": "2026-10-15T14:03:29Z"
+  "updated_at": "2026-10-15T18:33:46Z"
 }
