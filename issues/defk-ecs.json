@@ -12,11 +12,15 @@
     {
       "text": "PR #3 (https://github.com/DanielLuning/defk/pull/3). Close after the owner merges it.",
       "timestamp": "2026-10-15T09:26:22Z"
+    },
+    {
+      "text": "Merged as PR #3 (353855b).",
+      "timestamp": "2026-10-15T10:14:48Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Deliver code through pull requests, not direct merges to main",
   "type": "task",
-  "updated_at": "2026-10-15T09:26:22Z"
+  "updated_at": "2026-10-15T10:14:48Z"
 }
