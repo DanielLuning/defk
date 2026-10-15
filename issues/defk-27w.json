@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-12T20:07:25Z",
@@ -10,8 +10,8 @@
   ],
   "parent": "defk-vcx",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Single-source the runtime error message fragments between defk_runtime.h and ElixirMode.Ops",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:14Z"
+  "updated_at": "2026-10-15T19:38:08Z"
 }
