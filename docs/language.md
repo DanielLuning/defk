@@ -2266,7 +2266,9 @@ is a URL in a project that depends on defk, and the page's path inside the
 defk repository. From 0.1.0, codes are never renamed. `Defk.Errors.entries/0` lists them,
 and `mix run -e 'Defk.Errors.explain!("unsupported-map")'` prints one entry.
 The [compile errors](compile-errors.md) page has every code, its default why
-and hint, a failing example and the rewrite.
+and hint, a failing example and the rewrite. A tool that compiles kernels
+reads the rejections as data with `Defk.Errors.diagnostics/1`: each one's
+code, `error:` text, file, line, column, module and kernel.
 
 ## 12. Limits
 

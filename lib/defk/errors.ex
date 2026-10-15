@@ -15,7 +15,8 @@ defmodule Defk.Errors do
   (`:retired`, with the version and why): it stays in the list and in the
   catalogue, and is never reused.
 
-  The codes are the stable part: `entries/0` and `explain!/1` are public. The
+  The codes are the stable part: `entries/0` and `explain!/1` are public, and
+  so is `diagnostics/1`, which reads the codes back out of a compile error. The
   keys of an entry map may change in any version, and so may `fetch!/1`,
   which is unstable. The rest of this module is the compiler's.
 
@@ -336,7 +337,8 @@ defmodule Defk.Errors do
       kind: :error,
       summary:
         "Arithmetic takes numbers, bitwise operators take integers, and/or/not take booleans, comparisons take two numbers or two booleans.",
-      why: "booleans are not numbers in Elixir, and defk keeps that",
+      why:
+        "each operator takes the types Elixir allows for it, and defk never converts a value to another type implicitly",
       hint: "turn the value into the type the operator takes",
       example: "defk f(x :: i64, b :: bool) :: i64 do\n  x + b\nend",
       rewrite: "defk f(x :: i64, b :: bool) :: i64 do\n  if b, do: x + 1, else: x\nend"
@@ -1033,6 +1035,52 @@ defmodule Defk.Errors do
       indent_block(entry.rewrite)
     ]
   end
+
+  @typedoc """
+  One rejection of a compile error, as `diagnostics/1` reads it. `file` is
+  the path as the message prints it (relative to the working directory at
+  compile time, or `"nofile"`); `line`, `column`, `module` and `kernel` are
+  `nil` when the message has none.
+  """
+  @type diagnostic() :: %{
+          code: String.t(),
+          message: String.t(),
+          file: String.t() | nil,
+          line: pos_integer() | nil,
+          column: pos_integer() | nil,
+          module: module() | nil,
+          kernel: {atom(), arity()} | nil
+        }
+
+  @doc """
+  The rejections in a defk compile error, as data: one map per rejection,
+  in the order the message shows them, with its error `code` (the key for
+  `fetch!/1`, `explain!/1` and the [compile errors](compile-errors.md)
+  page), the text of its `error:` line, and where it is.
+
+  Takes the `CompileError` (or any exception) or its message text. A
+  message has at most ten rejections and says how many more there are; a
+  compile error that defk did not render from the registry (a C compiler
+  failure, a bad configuration) gives `[]`.
+
+  For a tool or an agent that compiles kernels at run time and needs to
+  know which error it got without parsing the text:
+
+      try do
+        Code.compile_string(source)
+      rescue
+        e in CompileError ->
+          for %{code: code, line: line} <- Defk.Errors.diagnostics(e) do
+            {code, line, Defk.Errors.fetch!(code).hint}
+          end
+      end
+
+      iex> Defk.Errors.diagnostics("not a defk error")
+      []
+  """
+  @spec diagnostics(Exception.t() | String.t()) :: [diagnostic()]
+  def diagnostics(message) when is_binary(message), do: Defk.Errors.Diagnostics.parse(message)
+  def diagnostics(exception), do: exception |> Exception.message() |> diagnostics()
 
   @doc false
   def indent_block(text), do: text |> String.split("\n") |> Enum.map_join("\n", &indent/1)

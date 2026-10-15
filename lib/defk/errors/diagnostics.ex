@@ -100,6 +100,90 @@ defmodule Defk.Errors.Diagnostics do
   defp relative(nil), do: "nofile"
   defp relative(file), do: Path.relative_to_cwd(file)
 
+  # -------------------------------------------------------------- parsing --
+  # The rendering read back (Defk.Errors.diagnostics/1): each rejection is the
+  # lines from an `error: ` line to its footer, with at most one location
+  # line (`└─ file[:line[:col]][: Module.name/arity]`) in its frame. A change
+  # to frame/1 or Defk.Errors.footer/1 changes this too.
+
+  @footer ~r/^\(defk ([a-z0-9-]+): \S+\)$/
+  @where ~r/^\s*└─ (.+?)(?::(\d+))?(?::(\d+))?(?:: (\S+)\.([^.\s]+)\/(\d+))?$/
+
+  @doc false
+  def parse(message) do
+    [first | rest] = String.split(message, "\n")
+
+    # a CompileError's message puts "file: " before its first line
+    first =
+      case String.split(first, ": error: ", parts: 2) do
+        [_file, what] -> "error: " <> what
+        _ -> first
+      end
+
+    {diags, _open} =
+      Enum.reduce([first | rest], {[], nil}, fn line, {done, open} ->
+        cond do
+          String.starts_with?(line, "error: ") ->
+            {done, %{message: String.replace_prefix(line, "error: ", "")}}
+
+          open == nil ->
+            {done, nil}
+
+          match = Regex.run(@footer, line, capture: :all_but_first) ->
+            {[finish(open, hd(match)) | done], nil}
+
+          not Map.has_key?(open, :where) and Regex.match?(@where, line) ->
+            {done, Map.put(open, :where, Regex.run(@where, line, capture: :all_but_first))}
+
+          true ->
+            {done, open}
+        end
+      end)
+
+    Enum.reverse(diags)
+  end
+
+  defp finish(open, code) do
+    {file, line, col, module, kernel} =
+      case open[:where] do
+        nil ->
+          {nil, nil, nil, nil, nil}
+
+        [file | rest] ->
+          {file, int(Enum.at(rest, 0)), int(Enum.at(rest, 1)), module(rest), kernel(rest)}
+      end
+
+    %{
+      code: code,
+      message: open.message,
+      file: file,
+      line: line,
+      column: col,
+      module: module,
+      kernel: kernel
+    }
+  end
+
+  defp int(nil), do: nil
+  defp int(""), do: nil
+  defp int(digits), do: String.to_integer(digits)
+
+  defp module([_, _, mod, _, _]) when mod != "", do: existing_atom("Elixir." <> mod)
+  defp module(_), do: nil
+
+  defp kernel([_, _, _, name, arity]) when name != "",
+    do: with(atom when atom != nil <- existing_atom(name), do: {atom, int(arity)})
+
+  defp kernel(_), do: nil
+
+  # the module and kernel names exist as atoms once their module was compiled;
+  # a message from elsewhere must not create atoms
+  defp existing_atom(name) do
+    String.to_existing_atom(name)
+  rescue
+    ArgumentError -> nil
+  end
+
   # ------------------------------------------------------------- location --
 
   @doc false
