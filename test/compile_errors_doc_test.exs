@@ -1,8 +1,8 @@
 defmodule Defk.CompileErrorsDocTest do
   # docs/compile-errors.md, the error catalogue: every error code
-  # has its anchor (the compile error footer links <page>#<code>), the "Codes"
-  # section is the registry's text. Its links are checked in
-  # test/docs_checks_test.exs.
+  # has its anchor (the compile error footer links <page>#<code>), and the
+  # "Codes" section with the "Retired" section after it are the registry's
+  # text. Its links are checked in test/docs_checks_test.exs.
   use ExUnit.Case, async: true
 
   import Defk.LanguageDoc, only: [headings: 1, anchors: 1]
@@ -13,21 +13,28 @@ defmodule Defk.CompileErrorsDocTest do
     %{doc: File.read!(@doc_path)}
   end
 
-  # the text of the "Codes" section
-  defp codes_section(doc) do
+  # the generated part: from the "Codes" heading to the end of the file
+  defp generated(doc) do
     [_, rest] = String.split(doc, ~r/^## Codes$/m, parts: 2)
+    rest
+  end
+
+  # the text of the `## <title>` section, up to the next ## heading
+  defp section(doc, title) do
+    [_, rest] = String.split(doc, ~r/^## #{title}$/m, parts: 2)
     [section | _] = String.split(rest, ~r/^## /m, parts: 2)
     section
   end
 
-  test "every error code has a ### heading in the Codes section, and every heading there is a code",
+  defp codes(retired?),
+    do: for(%{kind: k, code: code} <- Defk.Errors.entries(), k == :retired == retired?, do: code)
+
+  test "the Codes section has a ### heading per active code, Retired one per retired code, and nothing else",
        %{doc: doc} do
-    codes = Enum.map(Defk.Errors.entries(), & &1.code)
-
-    in_section =
-      for {3, text} <- headings(codes_section(doc)), do: text
-
-    assert in_section == codes
+    for {title, retired?} <- [{"Codes", false}, {"Retired", true}] do
+      in_section = for {3, text} <- headings(section(doc, title)), do: text
+      assert in_section == codes(retired?), title
+    end
   end
 
   test "each code's anchor belongs to its heading and to no other", %{doc: doc} do
@@ -47,10 +54,10 @@ defmodule Defk.CompileErrorsDocTest do
     end
   end
 
-  # the whole section, not just a match inside it: a stray line pasted with
-  # the output (mix run's "Compiling N files (.ex)") fails here
-  test "the Codes section is the registry's text and nothing else", %{doc: doc} do
-    assert codes_section(doc) == "\n\n" <> Defk.Errors.reference(),
+  # the whole generated part, not just a match inside it: a stray line pasted
+  # with the output (mix run's "Compiling N files (.ex)") fails here
+  test "the Codes and Retired sections are the registry's text and nothing else", %{doc: doc} do
+    assert generated(doc) == "\n\n" <> Defk.Errors.reference(),
            "regenerate with: mix run -e 'IO.write(Defk.Errors.reference())' (docs/agents/generated-docs.md)"
   end
 end

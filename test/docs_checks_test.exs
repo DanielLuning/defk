@@ -210,8 +210,11 @@ defmodule Defk.DocsChecksTest do
     # codes raised by the build environment, not by a kernel, so no example
     @no_example ["no-c-compiler"]
 
-    test "every error code has a failing example and a rewrite (compile_errors_test runs them)" do
-      for %{code: code, example: example, rewrite: rewrite} <- Defk.Errors.entries() do
+    # a retired code is not raised, so it has no example
+    test "every active error code has a failing example and a rewrite (compile_errors_test runs them)" do
+      for %{kind: kind, code: code} = e <- Defk.Errors.entries(), kind != :retired do
+        %{example: example, rewrite: rewrite} = e
+
         if code in @no_example do
           assert example == nil and rewrite == nil,
                  "#{code} has an example: remove it from @no_example"

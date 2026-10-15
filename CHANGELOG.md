@@ -17,6 +17,10 @@
 - Fixed: a `@doc` written before a `defk` was lost, and moved to the next
   `def` of the module. It now documents the kernel's function, as `@impl`
   already did.
+- The compile error catalogue lists the retired codes (`bitwise`,
+  `module-attribute`, `read-only-array`, `tuple-return-call`,
+  `array-accumulator`, all retired in 0.0.1) under "Retired", each with the
+  version and why. `Defk.Errors.entries/0` returns them, marked retired.
 
 ## 0.1.0
 
