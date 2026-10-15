@@ -5,11 +5,13 @@
   "created": "2026-10-15T14:15:30Z",
   "description": "Found while writing the Enum.reduce/find tests for defk-nii (2026-10-15).\n\nThe registry entry operand-type (lib/defk/errors.ex) has one fixed why: 'booleans are not numbers in Elixir, and defk keeps that'. Every operand-type error prints it, also when the operands have no boolean in them.\n\nRepro: defk f(x :: i64) :: i64, do: x + -0x8000000000000000\nOutput: 'error: - takes i64 or f64, and 9_223_372_036_854_775_808 is u64' / 'why: booleans are not numbers in Elixir, and defk keeps that' / hint about negating a u64 inside a mask. The error line and the hint are right; the why is wrong. Other likely cases: a float operand to a bitwise operator, a number to and/or/not, a u64 negation, mixing f64 and u64.\n\nFix: give the why per case at the err! sites (as the hint already is), and keep the registry why general ('each operator takes the types Elixir allows for it; defk never converts implicitly'), or make the boolean text apply only when an operand is a bool. Check every operand-type err! site.\n\nDone when: each operand-type error's why matches its operands, a test in compile_errors_test or diagnostics_test covers at least the u64 negation, a float in band and a bool in +, and the generated docs are regenerated if the registry text changes (docs/agents/generated-docs.md).",
   "id": "defk-vcx.4",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-vcx",
   "priority": 3,
   "status": "open",
   "title": "operand-type errors always say 'booleans are not numbers', also when no boolean is involved",
   "type": "bug",
-  "updated_at": "2026-10-15T14:15:30Z"
+  "updated_at": "2026-10-15T14:15:38Z"
 }
