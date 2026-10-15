@@ -7,9 +7,15 @@
   "id": "defk-0et.1",
   "labels": [],
   "parent": "defk-0et",
+  "comments": [
+    {
+      "text": "PR #14 opened: ci/frozen.sh guard on pull requests, retired marks in the ledger, the frozen form's contract in docs/agents/stability.md",
+      "timestamp": "2026-10-15T17:59:52Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Stability: guard the frozen files in CI, mark retired codes in the ledger, write down the extractor's format contract",
   "type": "task",
-  "updated_at": "2026-10-15T17:53:32Z"
+  "updated_at": "2026-10-15T17:59:52Z"
 }
