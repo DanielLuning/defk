@@ -347,16 +347,13 @@ defmodule Defk.Errors.Rewrites do
      hint: "walk the index with i <- 0..(length(#{a}) - 1)//1 and read #{a}[i]"}
   end
 
-  defp call_rejection("Enum", :reduce, [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}], _node) do
-    rewrite = "for #{s(x)} <- #{s(src)}, reduce: #{s(init)} do\n  #{s(acc)} -> #{s(body)}\nend"
-    {"enum-reduce", "Enum.reduce/3 is not supported yet", rewrite: rewrite}
-  end
+  # Enum.reduce/3 and Enum.find/3 are supported (Defk.EnumForms); the
+  # compiler rejects them with another function than a literal fn itself
+  defp call_rejection("Enum", :reduce, [_, _] = args, _node),
+    do: {"enum-reduce", "Enum.reduce/#{length(args)} is not in the kernel subset", []}
 
-  defp call_rejection("Enum", :reduce, args, _node),
-    do: {"enum-reduce", "Enum.reduce/#{length(args)} is not supported yet", []}
-
-  defp call_rejection("Enum", fun, args, _node) when fun in [:find, :find_index, :find_value] do
-    {"enum-find", "Enum.#{fun}/#{length(args)} is not supported yet",
+  defp call_rejection("Enum", fun, [_, _] = args, _node) when fun in [:find, :find_index] do
+    {"enum-find", "Enum.#{fun}/#{length(args)} is not in the kernel subset",
      rewrite: find_index_rewrite(fun, args)}
   end
 

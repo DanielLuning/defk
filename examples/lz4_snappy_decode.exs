@@ -43,9 +43,8 @@
 # Each is one Enum.reduce_while over the elements (at most one element per
 # input byte, so the range 0..n bounds the loop), with every length, offset
 # and position checked before use; a malformed stream raises ArgumentError
-# with a message naming what was wrong ("lz4: match offset out of range"),
-# at the element where it is found. The message cannot carry the offset:
-# raise takes a literal message only.
+# with a message naming what was wrong and where ("lz4: match offset 9 out of
+# range at byte 4"), at the element where it is found.
 # Copies are the range-copy builtins: a literal is
 # out = copy(out, op, src, ip, ln), a match out = copy_back(out, op, off, ml),
 # whose meaning is the format's: out[op + j] = out[op + j - off] for j in
@@ -242,7 +241,8 @@ defmodule LzSnappy.Kernels do
             true -> 5
           end
 
-        if ip + hdr > n, do: raise(ArgumentError, "snappy: truncated element header")
+        if ip + hdr > n,
+          do: raise(ArgumentError, "snappy: truncated element header at byte #{ip}")
 
         {ln, off} =
           cond do
@@ -257,14 +257,16 @@ defmodule LzSnappy.Kernels do
           end
 
         if op + ln > ulen,
-          do: raise(ArgumentError, "snappy: output longer than the preamble says")
+          do: raise(ArgumentError, "snappy: output longer than the preamble says at byte #{ip}")
 
         s = ip + hdr
         lit = if t == 0, do: ln, else: 0
-        if s + lit > n, do: raise(ArgumentError, "snappy: literal runs past the input")
+
+        if s + lit > n,
+          do: raise(ArgumentError, "snappy: literal at byte #{ip} runs past the input")
 
         if t != 0 and (off == 0 or off > op),
-          do: raise(ArgumentError, "snappy: copy offset out of range")
+          do: raise(ArgumentError, "snappy: copy offset #{off} out of range at byte #{ip}")
 
         # a literal or a copy: one range copy, checked once
         if t == 0 do
@@ -300,8 +302,12 @@ defmodule LzSnappy.Kernels do
             {bsr(token, 4), ip + 1}
           end
 
-        if ip1 + lit > n, do: raise(ArgumentError, "lz4: literals run past the input")
-        if op + lit > max_out, do: raise(ArgumentError, "lz4: output longer than max_out")
+        if ip1 + lit > n,
+          do: raise(ArgumentError, "lz4: literals at byte #{ip} run past the input")
+
+        if op + lit > max_out,
+          do: raise(ArgumentError, "lz4: output longer than max_out at byte #{ip}")
+
         out = copy(out, op, src, ip1, lit)
         ip2 = ip1 + lit
         op2 = op + lit
@@ -309,9 +315,11 @@ defmodule LzSnappy.Kernels do
         if ip2 == n do
           {:halt, {out, ip2, op2, true}}
         else
-          if ip2 + 2 > n, do: raise(ArgumentError, "lz4: truncated match offset")
+          if ip2 + 2 > n, do: raise(ArgumentError, "lz4: truncated match offset at byte #{ip2}")
           o = u16_le(src, ip2)
-          if o == 0 or o > op2, do: raise(ArgumentError, "lz4: match offset out of range")
+
+          if o == 0 or o > op2,
+            do: raise(ArgumentError, "lz4: match offset #{o} out of range at byte #{ip2}")
 
           {m, ip3} =
             if band(token, 15) == 15 do
@@ -320,7 +328,9 @@ defmodule LzSnappy.Kernels do
               {band(token, 15) + 4, ip2 + 2}
             end
 
-          if op2 + m > max_out, do: raise(ArgumentError, "lz4: output longer than max_out")
+          if op2 + m > max_out,
+            do: raise(ArgumentError, "lz4: output longer than max_out at byte #{ip2}")
+
           out = copy_back(out, op2, o, m)
           {:cont, {out, ip3, op2 + m, false}}
         end
@@ -336,7 +346,7 @@ defmodule LzSnappy.Kernels do
     n = length(src)
 
     Enum.reduce_while(ip..n//1, {base, ip}, fn i, {acc, _p} ->
-      if i >= n, do: raise(ArgumentError, "lz4: truncated length")
+      if i >= n, do: raise(ArgumentError, "lz4: truncated length at byte #{i}")
       b = src[i]
       if b == 255, do: {:cont, {acc + 255, i + 1}}, else: {:halt, {acc + b, i + 1}}
     end)

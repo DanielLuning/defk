@@ -23,9 +23,14 @@ defmodule Defk.StabilityRejectionsTest do
   # that covers nothing else is retired instead, in the registry):
   # `{file, words}`, the file relative to test/stability/ and words that the
   # CHANGELOG entry contains. The example then must compile. An entry is
-  # never removed, as the file is never edited. Empty: no 0.1.0 rejection has
-  # become valid under an active code yet.
-  @newly_supported []
+  # never removed, as the file is never edited.
+  @newly_supported [
+    # Enum.reduce/3 became a kernel form; enum-reduce still rejects Enum.reduce/2
+    {"0.1.0/rejections/lib-defk-errors-enum-reduce.md", "Added: `Enum.reduce/3` in kernels"},
+    # a raise message may interpolate integers; raise-message still rejects other values
+    {"0.1.0/rejections/lib-defk-errors-raise-message.md",
+     "a kernel's `raise` message may interpolate integer values"}
+  ]
 
   @examples Corpus.examples(:rejections)
   for path <- Corpus.files(:rejections), do: @external_resource(path)
