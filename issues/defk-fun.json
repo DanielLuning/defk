@@ -21,11 +21,15 @@
     {
       "text": "Blocked by defk-2mz: the relational-facts design changes the fact model this fix lives in (2mz's plan item 5 names fun's len_lb in reduce accumulators).",
       "timestamp": "2026-10-12T10:12:07Z"
+    },
+    {
+      "text": "PR #6: https://github.com/DanielLuning/defk/pull/6 (sweep with defk-vcx.3, defk-oit, defk-fun).",
+      "timestamp": "2026-10-15T13:32:31Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Array reduce accumulators drop alloc's length facts (len_lb): o[2 * i] keeps its bounds check",
   "type": "task",
-  "updated_at": "2026-10-15T12:58:50Z"
+  "updated_at": "2026-10-15T13:32:31Z"
 }
