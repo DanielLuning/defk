@@ -7,9 +7,15 @@
   "id": "defk-0et.3",
   "labels": [],
   "parent": "defk-0et",
+  "comments": [
+    {
+      "text": "PR #16 opened: https://github.com/DanielLuning/defk/pull/16 - the test sample (11 modules, 102 kernels, 302 calls) frozen under test/stability/0.1.0/kernels/test-*.md from the tag; dev/stability/sample.exs lists it, dev/stability/eval.exs runs it at the tag; mix ci passed; two break checks failed the new files as expected. Ticket stays in progress until the owner merges.",
+      "timestamp": "2026-10-15T18:16:15Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Stability: freeze a sample of the test suite's kernels with recorded inputs and outputs",
   "type": "task",
-  "updated_at": "2026-10-15T17:53:41Z"
+  "updated_at": "2026-10-15T18:16:15Z"
 }
