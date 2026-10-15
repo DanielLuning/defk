@@ -10,11 +10,15 @@
     {
       "text": "PR #7 adds CHANGELOG lines for its changes to promised surfaces (enum-reduce, enum-find, raise-message); see the PR for the judgement calls.",
       "timestamp": "2026-10-15T14:25:21Z"
+    },
+    {
+      "text": "Done: PRs #8 (kernel corpus), #9 (API snapshot), #10 (code ledger, retired codes), #11 (deprecation helper), #12 (rejection corpus), #13 (CODEOWNERS, PR template, release step) all merged into main; the four checks run in mix ci against test/stability/0.1.0/.",
+      "timestamp": "2026-10-15T16:40:52Z"
     }
   ],
   "priority": 2,
   "status": "open",
   "title": "Stability promise: check it mechanically in mix ci",
   "type": "epic",
-  "updated_at": "2026-10-15T14:25:21Z"
+  "updated_at": "2026-10-15T16:40:52Z"
 }
