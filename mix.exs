@@ -32,12 +32,25 @@ defmodule Defk.MixProject do
   # notes and docs/performance.md (a maintainers' record) stay out.
   # Defk.Errors' footer links the installed version's HexDocs page
   # (@url_base).
+  #
+  # Choice: the package ships usage rules for a dependent's agent
+  # (usage-rules.md and usage-rules/, which `mix usage_rules.sync` reads
+  # from deps/defk or a path dependency). The main file is short, as it is
+  # inlined into someone else's AGENTS.md; the sub-rules (language.md,
+  # testing.md) hold the longer parts, to inline or link. Measuring stays in
+  # the main file and the guide: a few rules, no code of its own. No
+  # pre-built skill: usage_rules builds a `use-defk` skill from these
+  # files (`skills: [deps: [:defk]]`), so a skill of ours would be a second
+  # copy; the Getting started guide shows a skill whose description names
+  # what to look for. The links are this version's HexDocs URLs, like the
+  # error footer, and test/usage_rules_test.exs keeps the rules true.
   defp package do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url, "Changelog" => @source_url <> "/blob/main/CHANGELOG.md"},
       files: ~w(lib priv/defk_runtime.h mix.exs README.md LICENSE CHANGELOG.md CONTEXT.md
-                docs/guides docs/language.md docs/compile-errors.md docs/scope.md)
+                docs/guides docs/language.md docs/compile-errors.md docs/scope.md
+                usage-rules.md usage-rules)
     ]
   end
 

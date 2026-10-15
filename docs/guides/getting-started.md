@@ -289,6 +289,49 @@ From people writing their first kernels:
 - **Measure outside `:test`.** In `:test` every kernel call first checks
   whether to run in Elixir mode; time kernels in `:dev` or `:prod`.
 
+## Writing kernels with a coding agent
+
+An agent that knows Elixir but not defk writes lists, maps and `Enum`
+pipelines in a kernel body. defk ships usage rules for agents: a short main
+file, and sub-rules on the subset and on testing. The
+[usage_rules](https://hexdocs.pm/usage_rules) package copies them into your
+project. Add `{:usage_rules, "~> 1.2", only: :dev, runtime: false}` to your
+deps, add one of the configs below to `project/0` in `mix.exs`, and run
+`mix usage_rules.sync`.
+
+To put the main rules in `AGENTS.md` and link the sub-rules:
+
+<!-- defk-example skip: a fragment of a project's mix.exs -->
+```elixir
+usage_rules: [
+  file: "AGENTS.md",
+  usage_rules: [{:defk, sub_rules: []}, {:defk, sub_rules: :all, main: false, link: :markdown}]
+]
+```
+
+The links point into `deps/defk`, which a path dependency does not have. A
+plain `:defk` entry puts all the rules in `AGENTS.md`.
+
+To make a skill, which the agent loads only when it works on a kernel (it
+holds all the rules, so it also suits a path dependency):
+
+<!-- defk-example skip: a fragment of a project's mix.exs -->
+```elixir
+usage_rules: [
+  skills: [
+    build: [
+      "defk-kernels": [
+        description:
+          "Use when writing, changing or testing a defk kernel: a module with `use Defk`, " <>
+            "a `defk` function, `Defk.Test.assert_agrees`, or a compile error with a " <>
+            "`(defk <code>: ...)` footer.",
+        usage_rules: [:defk]
+      ]
+    ]
+  ]
+]
+```
+
 ## Next
 
 - [Testing kernels](testing.md): check a kernel against its Elixir mode.
