@@ -25,11 +25,15 @@
     {
       "text": "Reopened 2026-10-15: code moved into PR #2 (https://github.com/DanielLuning/defk/pull/2), merge after #1. Close after the owner merges it.",
       "timestamp": "2026-10-15T09:26:22Z"
+    },
+    {
+      "text": "Merged as PR #2 (dfc4f4c).",
+      "timestamp": "2026-10-15T10:14:49Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "One source for the catalog results: the scoreboard snapshot, not hand-written tables",
   "type": "task",
-  "updated_at": "2026-10-15T09:26:22Z"
+  "updated_at": "2026-10-15T10:14:49Z"
 }
