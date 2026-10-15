@@ -63,7 +63,25 @@ before the C build, so the corpus costs well under a second.
 
 - **A frozen file is never edited.** Not for a typo, not for a renamed
   builtin, not to make a failing check pass. A release adds a directory;
-  nothing changes an old one.
+  nothing changes an old one. `ci/frozen.sh <base>` checks it: it fails
+  when the commits since `<base>` modify, rename or delete a file under a
+  version's directory, or drop a code from the ledger. Every pull request
+  runs it against its base (`.github/workflows/ci.yml`); run
+  `ci/frozen.sh origin/main` by hand before a push.
+- **The ledger only grows.** `test/stability/codes.txt` lists every
+  released code; a release appends its new codes under a `# <version>`
+  line. The one change a line ever gets is the mark `retired <version>`
+  when the code's construct becomes valid, and the test checks the marks
+  and the registry agree both ways, so a code marked retired cannot come
+  back.
+- **The frozen form is a contract.** A frozen file is Markdown in the form
+  `Defk.LanguageDoc.extract/1` reads (`test/support/language_doc.ex`): a
+  comment, a kernel or module block, then an `iex>` block or a
+  `compiles:` or `error:` annotation. The extractor may grow, but it must
+  keep reading every frozen file of every version as it was written: a
+  change to the annotation syntax, the `iex>` step parsing or the module
+  wrapping is a change to frozen files, and `mix test` on the corpus is
+  its check.
 - **A failing frozen check is a broken promise**, to be fixed in the code,
   with one exception: a bug fix that changes a recorded result or
   acceptance, named in the CHANGELOG. Then the test's `@fixed` list gets an
