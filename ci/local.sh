@@ -17,7 +17,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/.." && pwd)
 workflow=$repo/.github/workflows/ci.yml
 beam_image=$(sed -n 's/^ *container: *//p' "$workflow" | head -1)
-all_labels=$(sed -n 's/.*label: *\(linux-[a-z0-9_]*-[a-z]*\).*/\1/p' "$workflow")
+all_labels=$(sed -n 's/^ *- *\(linux-[a-z0-9_]*-[a-z]*\) *$/\1/p' "$workflow")
 [ -n "$beam_image" ] && [ -n "$all_labels" ] || { echo "cannot read the matrix from $workflow" >&2; exit 2; }
 
 if [ $# -gt 0 ]; then labels=("$@"); else read -r -d '' -a labels <<<"$all_labels"; fi
