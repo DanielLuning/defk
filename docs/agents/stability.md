@@ -17,7 +17,9 @@ shipped, one example per file, written by `mix defk.stability.freeze
 - the catalog's example kernels (`test/support/examples.ex`) and the kernel
   modules of the catalog scripts `mix test` compiles, acceptance only
   (a module that names another module of its script stays out; the task
-  prints which).
+  prints which);
+- the test sample (`test-<name>.md`, below): kernels after the test
+  suite's edge cases, with the results the release's code gave.
 
 Rejected examples, sketches, test files and scripts are not valid kernels
 and stay out (the rejections are their own corpus, below).
@@ -27,6 +29,35 @@ comment naming the source, the kernel block, then its `iex>` block or a
 `compiles:` annotation. `test/stability_kernels_test.exs` compiles each
 kernel natively and in Elixir mode, runs each recorded step in both, and
 requires the two to agree and the native result to be the recorded one.
+
+### The test sample
+
+The doc examples record one call per kernel, and Elixir mode is no
+independent oracle (both backends share the builtin typing, ADR-0008), so
+the corpus has a second source of meaning: `test-<name>.md`, a sample of
+the test suite's kernels at their edges (overflow at the `i64` and `u64`
+limits, index and range errors, non-finite floats, masked arithmetic and
+the bit builtins, bitstring segments, early exit, `case` guards,
+multi-clause heads, `raise`, the narrow element types), each with a
+handful of calls and the result the release's code gave: a value, or the
+exception with its message.
+
+- `dev/stability/sample.exs` is the one list of what is frozen: an entry
+  per file, with the test files it is written after, a module body
+  (kernels and attributes, self-contained: nothing from test/support) and
+  the calls, as `iex>` expressions over `M`. Add an entry, or a call, and
+  the next release freezes it by the same command; what a release already
+  froze is never edited.
+- The task runs the calls at the tag: it checks the tag out in a temporary
+  worktree, fetches its deps, and runs `dev/stability/eval.exs` there with
+  `MIX_ENV=test mix run`, so the kernels are compiled, and every call
+  evaluated, by the release's own compiler. Each call runs natively and in
+  Elixir mode; a disagreement stops the task, as does an exception message
+  of several lines (the `iex>` form holds one line). That step takes a
+  minute or two.
+- The frozen file holds the module and the `iex>` block; the test checks it
+  like a doc example. Modules are few (one per file, several kernels each),
+  as each is one C build on a cold run.
 
 ### Rejections
 
