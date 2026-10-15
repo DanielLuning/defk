@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-15T14:24:48Z",
@@ -10,8 +10,8 @@
   ],
   "parent": "defk-266",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Stability: deprecation helper, before the first rename",
   "type": "task",
-  "updated_at": "2026-10-15T14:24:51Z"
+  "updated_at": "2026-10-15T14:30:53Z"
 }
