@@ -78,6 +78,10 @@ lowering declares as it emits; defk-ch4), not from the C text.
   `examples/README.md` and AGENTS.md.
 - `lib/defk/report.ex`, `lib/defk/bits.ex`, `lib/defk/test.ex`
   (`assert_agrees`): user-facing helpers.
+- `lib/defk/deprecations.ex`: the deprecation table and the renames it
+  drives (a builtin in `__before_compile__`, a `use Defk` option, a config
+  key), warning once per use site. How to add an entry:
+  `docs/agents/deprecations.md`.
 
 ## priv/defk_runtime.h (~1,900 lines)
 

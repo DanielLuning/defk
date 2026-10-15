@@ -121,5 +121,14 @@ name keeps working until the next major version, with a warning at compile
 time that names the replacement, and `CHANGELOG.md` lists it. The next major
 version may then remove it.
 
+The warning comes once per use site and points at it: the call of a
+deprecated builtin in a kernel, the `use Defk` line that passes a
+deprecated option, or the module that reads a deprecated `config :defk`
+key. It says which name replaced the old one and in which version. A
+deprecated builtin, option or key does what its replacement does, natively
+and in Elixir mode. A deprecated function delegates to its replacement and
+is marked `@deprecated`, so Elixir's own warning names the replacement at
+each call.
+
 The names in `0.1.0` are the first ones the promise covers. The renames made
 just before it are listed in `CHANGELOG.md`.
