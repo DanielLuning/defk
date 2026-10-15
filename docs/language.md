@@ -106,7 +106,10 @@ iex> Stats.dot(<<1.0::float-native, 2.0::float-native>>, <<3.0::float-native, 4.
 ```
 
 - `use Defk` imports the `defk` macro. A module may mix kernels with ordinary
-  `def`s.
+  `def`s. A `@doc` or `@impl` written before a `defk` applies to the
+  kernel's function, as before a `def` (for a multi-clause kernel, write it
+  before the head). `@doc` metadata such as `since:` is not carried yet: it
+  goes to the next `def`.
 - The head is `defk name(param :: type, ...) :: return_type`. Every parameter
   has a type ([`untyped-parameter`](compile-errors.md#untyped-parameter)) and the return type is
   required ([`kernel-head`](compile-errors.md#kernel-head)). A kernel may have no parameters:

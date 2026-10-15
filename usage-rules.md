@@ -46,8 +46,7 @@ iex> Stats.dot(a, a)
 
 - Every parameter has a type, and the return type is required.
 - A module can mix kernels and ordinary `def`s, but a kernel cannot call a `def`.
-- A `@doc` before `defk` is not attached to the kernel yet (it moves to the
-  next `def`). Describe kernels in the `@moduledoc`.
+- `@doc` and `@impl` before `defk` apply to the kernel's function, as before a `def`.
 - A kernel gives the result Elixir would, or raises where its types can't
   hold it (`ArithmeticError` on `i64` overflow, `Enum.OutOfBoundsError` on a
   bad index). It never gives a different answer.
