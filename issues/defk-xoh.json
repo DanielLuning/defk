@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-15T07:42:58Z",
+  "description": "## Destination\n\nThe published catalog results use fair baselines and live in one place, and a first user (or their agent) has the rules and patterns to write, test and call a kernel. Charted 2026-10-15 after the 0.1.0 readiness check (defk-wfi).\n\n## Steps\n\n- defk-l2g: Myers bit-parallel Levenshtein in both fuzzy_search backends. The only open ticket where a published verdict is likely too favourable to defk.\n- defk-djy.18: usage-rules.md for kernel authors and their agents.\n- defk-vcx.1: guide section: call a kernel only above a size, with an Elixir clause below it.\n- defk-9p6.31: one source for the catalog results (the scoreboard snapshot). After defk-l2g, so the fuzzy_search numbers change once.\n\n```mermaid\ngraph LR\n    l2g[defk-l2g] --\u003e r31[defk-9p6.31]\n    djy18[defk-djy.18]\n    vcx1[defk-vcx.1]\n```\n\n## Out of scope\n\n- Publishing on Hex (the user's call; the user leans to publishing after defk-l2g).\n- The per-call cost work (defk-25s): a separate measurement map after this one.\n- The deferred exploration epics.\n\nDone when the four tickets are closed and mix ci is green on main.",
+  "id": "defk-xoh",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Map: honest results and first-user docs around 0.1.0",
+  "type": "epic",
+  "updated_at": "2026-10-15T07:42:58Z"
+}
