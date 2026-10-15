@@ -13,6 +13,7 @@ defmodule Defk.StabilityKernelsTest do
   use ExUnit.Case, async: true
 
   alias Defk.LanguageDoc
+  alias Defk.StabilityCorpus, as: Corpus
 
   # A frozen example a CHANGELOG-named bug fix changed: `{file, words}`, the
   # file relative to test/stability/ and words that the CHANGELOG entry
@@ -22,39 +23,12 @@ defmodule Defk.StabilityKernelsTest do
   # check may fail. Empty: no fix has changed a 0.1.0 result yet.
   @fixed []
 
-  @root "test/stability"
-  @files Path.wildcard(Path.join(@root, "*/kernels/*.md")) |> Enum.sort()
-  for path <- @files, do: @external_resource(path)
+  @examples Corpus.examples(:kernels)
+  for path <- Corpus.files(:kernels), do: @external_resource(path)
 
-  # {file relative to the root, examples}; a frozen file holds exactly one
-  # (the per-file test says so when it does not)
-  @examples for path <- @files,
-                do: {Path.relative_to(path, @root), LanguageDoc.extract(File.read!(path))}
-
-  @dir Path.join(System.tmp_dir!(), "defk_stability_kernels_test")
-
-  # every frozen example's module, compiled concurrently: %{file => result}.
-  # A module is named after its file's path and source, so an unchanged
-  # example reuses its native build (the build cache keys on the C source)
-  # and never shares a name with the live doc examples' modules
+  # every frozen example's module, compiled concurrently: %{file => result}
   setup_all do
-    File.mkdir_p!(@dir)
-
-    compiled =
-      @examples
-      |> Enum.flat_map(fn {file, exs} -> for ex <- exs, do: {file, named(file, ex)} end)
-      |> Task.async_stream(fn {file, ex} -> {file, LanguageDoc.compile(ex, @dir)} end,
-        timeout: :infinity,
-        ordered: false
-      )
-      |> Map.new(fn {:ok, r} -> r end)
-
-    %{compiled: compiled}
-  end
-
-  defp named(file, ex) do
-    hash = :crypto.hash(:md5, file <> ex.source) |> Base.encode16(case: :lower)
-    %{ex | module: "Defk.Stability.K#{binary_part(hash, 0, 12)}"}
+    %{compiled: Corpus.compile_all(@examples, :kernels)}
   end
 
   defp frozen?(%{check: :run, known_failure: nil}), do: true
@@ -64,15 +38,10 @@ defmodule Defk.StabilityKernelsTest do
   for {file, exs} <- @examples do
     @path file
     @exs exs
-    label =
-      case exs do
-        [ex] -> LanguageDoc.label(ex)
-        _ -> "#{length(exs)} example(s)"
-      end
 
-    test "#{file} #{label}", %{compiled: compiled} do
+    test "#{file} #{Corpus.label(exs)}", %{compiled: compiled} do
       assert [ex] = @exs, "#{@path}: a frozen file holds one example, not #{length(@exs)}"
-      ex = named(@path, ex)
+      ex = Corpus.named(@path, ex, :kernels)
 
       assert frozen?(ex),
              "#{@path}: a frozen example runs or compiles, this one is #{inspect(ex.check)}"
@@ -93,14 +62,10 @@ defmodule Defk.StabilityKernelsTest do
   end
 
   test "the corpus holds every release's kernels" do
-    assert @examples != [], "no frozen kernels under #{@root}/*/kernels/"
+    assert @examples != [], "no frozen kernels under test/stability/*/kernels/"
   end
 
   test "every exception names a frozen file" do
-    files = Enum.map(@examples, &elem(&1, 0))
-
-    for {file, _} <- @fixed do
-      assert file in files, "@fixed names #{file}, which is not a frozen file"
-    end
+    assert Corpus.not_frozen(@fixed, @examples) == [], "@fixed names files that are not frozen"
   end
 end
