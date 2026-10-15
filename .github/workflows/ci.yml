@@ -56,6 +56,13 @@ jobs:
       - uses: actions/checkout@v7
       # the workspace belongs to the runner's user, the job runs as root
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # a pull request never edits a frozen stability file (ci/frozen.sh):
+      # the checkout is the pull request's merge commit, whose parent is the
+      # base's tip, so fetching that tip is enough for the diff
+      - if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+          ci/frozen.sh "origin/$GITHUB_BASE_REF"
       - run: ci/setup-debian.sh
       # act runs JavaScript actions inside the job container, which has no node
       - uses: actions/cache@v6
