@@ -6,6 +6,7 @@
   "blocks": [
     "defk-266.6"
   ],
+  "closed_at": "2026-10-15T15:49:03Z",
   "created": "2026-10-15T14:24:47Z",
   "description": "For each code in v0.1.0's registry, its example (and rejected doc examples with defk-example error: annotations) copied from the v0.1.0 tag into test/stability/0.1.0/rejections. A test checks each: still rejected with the same code, or it compiles now and its code is retired in the registry (the ledger) or the construct is listed as newly supported for that code (e.g. enum-reduce covering Enum.reduce/2 only after Enum.reduce/3 became valid). Which error comes first is not promised: assert the code is among the errors, not that it is first. Done when the test runs in mix ci.",
   "id": "defk-266.3",
@@ -20,8 +21,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Stability: frozen rejection corpus of 0.1.0 (a rejection keeps its code)",
   "type": "task",
-  "updated_at": "2026-10-15T15:41:34Z"
+  "updated_at": "2026-10-15T15:49:03Z"
 }
