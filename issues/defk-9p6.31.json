@@ -17,11 +17,15 @@
     {
       "text": "Part of map defk-xoh (2026-10-15).",
       "timestamp": "2026-10-15T07:43:01Z"
+    },
+    {
+      "text": "Done in d7db7de (merge a86de10), design chosen by the owner: generator + stored JSON. --snapshot (needs --all, no --only) writes examples/scoreboard.json when every example passes; mix defk.examples.tables [--check] renders the examples/README.md scoreboard and README.md summary between marker comments; text in examples/_tables.exs with placeholders {speedup|native|crossover[:REPORT]}; test/scoreboard_doc_test.exs (render rules on a made-up scoreboard, placeholder names vs the scripts' report names, tables vs JSON once seeded). Trial: two real examples -\u003e JSON -\u003e tables rendered with no problems (under load, discarded). Notes no longer repeat report numbers; one-liners no longer repeat a note's figure. Not done here: the seed run on a quiet machine and switching the tables to generated -\u003e defk-9p6.33 (ready-for-human, blocks defk-xoh). docs/verdict.md untouched (frozen record).",
+      "timestamp": "2026-10-15T09:11:42Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "One source for the catalog results: the scoreboard snapshot, not hand-written tables",
   "type": "task",
-  "updated_at": "2026-10-15T08:56:27Z"
+  "updated_at": "2026-10-15T09:11:42Z"
 }
