@@ -232,7 +232,7 @@ unstable (debugging output that may change in any version):
 | `__defk_report__/0` | the fast-path report as data, `[{kernel, line, fact}]` (see `Defk.Report`; `Defk.Report.print/1` prints it) |
 | `__defk_lib__/0` | the path of the compiled NIF library (`.so`) |
 | `__defk_kernels__/0` | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
-| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:, crc32c:, max_owned_bytes:}` (`crc32c` is `:instruction` or `:table`, the [crc32c](#hardware-builtins) implementation it picked at its first call, or `:not_called`; `max_owned_bytes` is the [owned-buffer budget](#the-owned-buffer-budget) in bytes) |
+| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:, crc32c:, max_owned_bytes:}` (`crc32c` is `:instruction` or `:table`, the [crc32c](#hardware-builtins) implementation it picked at its first call, or `:not_called`; `max_owned_bytes` is the [owned-buffer budget](#the-owned-buffer-budget) in bytes). The counters are per loaded library: a reload that builds a new library starts them at zero ([hot code upgrade](guides/runtime-contract.md#4-hot-code-upgrade-a-suspended-kernel-finishes-in-its-own-code)) |
 | `__defk_force_yields__/1` | testing: `true` makes this module's kernels yield at every clock read, so every resume path runs; `false` turns it off |
 | `__defk_elixir__/2` | Elixir mode: `Mod.__defk_elixir__(:name, args)` runs one call as plain Elixir (only where Elixir mode is compiled, see [section 10](#10-elixir-mode)) |
 | `__defk_elixir_source__/0` | the generated Elixir mode code (same condition) |

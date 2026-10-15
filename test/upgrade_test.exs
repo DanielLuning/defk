@@ -160,6 +160,28 @@ defmodule Defk.UpgradeTest do
     assert mod.spin(10) == 20_769
   end
 
+  test "stats count per library: a new library starts at zero, an old call stays in the old one" do
+    mod = Module.concat(__MODULE__, "Stats")
+    load(mod, :a)
+    {pid, old_stats} = start_suspended(mod)
+    old_yields = old_stats.().yields
+    assert old_yields > 0
+
+    load(mod, :b)
+    assert %{frames_live: 0, promotions: 0, yields: 0} = mod.__defk_stats__()
+    assert %{frames_live: 1} = old_stats.()
+
+    :erlang.resume_process(pid)
+    assert_receive {:spin, ^pid, result}, @timeout
+    assert result == spin_a(@n)
+    wait_until(fn -> old_stats.().frames_live == 0 end)
+
+    # the old call's yields after the reload went to the old library
+    assert old_stats.().yields > old_yields
+    assert %{frames_live: 0, promotions: 0, yields: 0} = mod.__defk_stats__()
+    assert :code.soft_purge(mod)
+  end
+
   test "reloading the same library while a kernel is suspended" do
     mod = Module.concat(__MODULE__, "Same")
     lib = load(mod, :a)
