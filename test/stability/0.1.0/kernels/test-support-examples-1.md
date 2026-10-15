@@ -1,0 +1,121 @@
+<!-- test/support/examples.ex line 1 of v0.1.0. A frozen file is never edited. -->
+
+<!-- defk-example compiles: the catalog's example kernels -->
+```elixir
+defmodule Examples.Kernels do
+  @moduledoc "Example kernels, each exercising one defk feature."
+  use Defk
+
+  # boundary cost: smallest possible kernel
+  defk add(a :: i64, b :: i64) :: i64 do
+    a + b
+  end
+
+  # element generator: index in range by construction, no bounds checks
+  defk sum(a :: [f64]) :: f64 do
+    for x <- a, reduce: 0.0 do
+      acc -> acc + x
+    end
+  end
+
+  # indexed access: i provably in range for a and b, so a[i]/b[i] are unchecked
+  defk dot(a :: [f64], b :: [f64]) :: f64 do
+    n = min(length(a), length(b))
+
+    for i <- 0..(n - 1)//1, reduce: 0.0 do
+      acc -> acc + a[i] * b[i]
+    end
+  end
+
+  # tuple accumulator + tuple return (Welford, one pass)
+  defk mean_var(a :: [f64]) :: {f64, f64} do
+    {_n, mean, m2} =
+      for x <- a, reduce: {0, 0.0, 0.0} do
+        {n, mean, m2} ->
+          n1 = n + 1
+          d = x - mean
+          mean1 = mean + d / n1
+          {n1, mean1, m2 + d * (x - mean1)}
+      end
+
+    {mean, m2 / length(a)}
+  end
+
+  # allocate + write + return a new packed array (zero-copy back to Elixir)
+  defk scale(a :: [f64], k :: f64) :: [f64] do
+    out = alloc(f64, length(a))
+
+    for i <- 0..(length(a) - 1)//1 do
+      out[i] = a[i] * k
+    end
+
+    out
+  end
+
+  # u8 input, i64 output, checked integer arithmetic
+  defk histogram(bytes :: [u8]) :: [i64] do
+    h = alloc(i64, 256)
+
+    for b <- bytes do
+      h[b] = h[b] + 1
+    end
+
+    h
+  end
+
+  # long-running integer kernel: automatic yielding + kernel-to-kernel calls
+  defk count_primes(n :: i64) :: i64 do
+    for i <- 2..n//1, reduce: 0 do
+      count -> if prime?(i), do: count + 1, else: count
+    end
+  end
+
+  # same kernel with safepoints compiled out: blocks its scheduler
+  defk count_primes_noyield(n :: i64) :: i64, yield: false do
+    for i <- 2..n//1, reduce: 0 do
+      count -> if prime?(i), do: count + 1, else: count
+    end
+  end
+
+  # all the work happens two calls deep; callees are inlined, so it still yields
+  defk count_primes_via_call(n :: i64) :: i64 do
+    count_primes(n)
+  end
+
+  defk prime?(x :: i64) :: bool do
+    limit = trunc(:math.sqrt(x))
+
+    for d <- 2..limit//1, reduce: true do
+      p -> p and rem(x, d) != 0
+    end
+  end
+
+  # trial division that stops at the first divisor (Enum.all? exits early);
+  # bench/demo.exs and bench/native.c compare it with the same algorithm in Elixir and C
+  defk count_primes_early(n :: i64) :: i64 do
+    for i <- 2..n//1, reduce: 0 do
+      count -> if prime_early?(i), do: count + 1, else: count
+    end
+  end
+
+  defk count_primes_early_noyield(n :: i64) :: i64, yield: false do
+    for i <- 2..n//1, reduce: 0 do
+      count -> if prime_early?(i), do: count + 1, else: count
+    end
+  end
+
+  defk prime_early?(x :: i64) :: bool do
+    Enum.all?(2..trunc(:math.sqrt(x))//1, fn d -> rem(x, d) != 0 end)
+  end
+
+  # error paths
+  defk oob(a :: [f64]) :: f64 do
+    a[length(a)]
+  end
+
+  defk overflow(a :: i64) :: i64 do
+    a * a
+  end
+end
+
+```
