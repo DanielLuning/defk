@@ -65,7 +65,7 @@ defmodule Defk.MixProject do
 
   def cli do
     [
-      preferred_envs: [ci: :test, dump_c: :test]
+      preferred_envs: [ci: :test, "ci.test": :test, dump_c: :test]
     ]
   end
 
@@ -231,6 +231,10 @@ defmodule Defk.MixProject do
       docs: ["docs", &docs_links/1],
       # the byte-identical gate: DEFK_DUMP_C=<dir> mix dump_c
       dump_c: ["compile --force", "run dev/dump_c.exs"],
+      # the part of `ci` that can differ between machines and C compilers:
+      # the release matrix runs it on the machines other than the one
+      # that runs `ci` (ci/README.md)
+      "ci.test": ["compile --warnings-as-errors", "test"],
       ci: [
         "compile --warnings-as-errors",
         "format --check-formatted",
