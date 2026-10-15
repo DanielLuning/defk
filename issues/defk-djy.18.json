@@ -15,11 +15,15 @@
     {
       "text": "Part of map defk-xoh (2026-10-15).",
       "timestamp": "2026-10-15T07:42:59Z"
+    },
+    {
+      "text": "PR #4: https://github.com/DanielLuning/defk/pull/4. Decided: main + sub-rules (language, testing), no pre-built skill (usage_rules builds one). Cold test done; it found defk-vcx.3 (@doc before defk lost).",
+      "timestamp": "2026-10-15T10:29:13Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Ship a usage-rules.md for kernel authors (and their agents)",
   "type": "task",
-  "updated_at": "2026-10-15T10:16:05Z"
+  "updated_at": "2026-10-15T10:29:13Z"
 }
