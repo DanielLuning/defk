@@ -29,6 +29,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "defk_messages.h" /* generated: the DEFK_MSG_ defines */
+
 /* glibc's <setjmp.h> declares __sigsetjmp without returns_twice, and clang with
  * -fno-builtin does not recognise it either: guard_k*'s `return run_k*()` after
  * sigsetjmp then becomes a tail call, and a raise's siglongjmp lands in a dead
@@ -146,7 +148,7 @@ defk_user_raise_ints(defk_ctx *ctx, int kind, int n, const char *const *parts, c
   size_t size = 1 + (size_t)n * 21;
   for (int i = 0; i <= n; i++) size += lens[i];
   char *buf = enif_alloc(size);
-  if (!buf) defk_fail(ctx, kind, "out of memory building a raise message");
+  if (!buf) defk_fail(ctx, kind, DEFK_MSG_RAISE_MESSAGE_OOM);
   size_t at = 0;
   for (int i = 0; i <= n; i++) {
     memcpy(buf + at, parts[i], lens[i]);
@@ -163,7 +165,7 @@ defk_user_raise_ints(defk_ctx *ctx, int kind, int n, const char *const *parts, c
 
 __attribute__((noreturn, cold)) static void defk_oob(defk_ctx *ctx, int64_t i, int64_t len) {
   ctx->err_index = i;
-  defk_fail(ctx, DEFK_E_OOB, "index %lld out of bounds for array of length %lld",
+  defk_fail(ctx, DEFK_E_OOB, DEFK_MSG_OOB,
             (long long)i, (long long)len);
 }
 
@@ -181,7 +183,7 @@ __attribute__((cold, unused)) static void defk_range_limit(defk_ctx *ctx, int64_
   int64_t last = (int64_t)(step > 0 ? (uint64_t)first + back : (uint64_t)first - back);
   if (step > 0 ? last > INT64_MAX - step : last < INT64_MIN - step)
     defk_fail(ctx, DEFK_E_ARITH,
-              "range element %lld is within one step of the i64 limit (stepping past it overflows)",
+              DEFK_MSG_RANGE_LIMIT,
               (long long)last);
 }
 
@@ -276,9 +278,9 @@ static void defk_max_owned_init(void) {
 
 __attribute__((noreturn, cold)) static void defk_over_budget(defk_ctx *ctx, size_t bytes) {
   if ((uint64_t)bytes >= DEFK_NO_ALLOC_BYTES)
-    defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", bytes);
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY_BYTES, bytes);
   defk_fail(ctx, DEFK_E_ARG,
-            "out of memory (allocating %zu bytes would take this call's buffers past max_owned_bytes, %llu bytes)",
+            DEFK_MSG_OVER_BUDGET,
             bytes, (unsigned long long)defk_max_owned);
 }
 
@@ -329,16 +331,16 @@ static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
   if (ctx->nowned == ctx->cap) {
     /* one slot per alloc/2 call, so a loop can grow the table without bound:
        a failed grow raises and keeps the old table, whose binaries are freed */
-    if (ctx->cap > INT_MAX / 2) defk_fail(ctx, DEFK_E_ARG, "out of memory");
+    if (ctx->cap > INT_MAX / 2) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
     int ncap = ctx->cap ? ctx->cap * 2 : 4;
     ErlNifBinary *grown = enif_realloc(ctx->owned, sizeof(ErlNifBinary) * (size_t)ncap);
-    if (!grown) defk_fail(ctx, DEFK_E_ARG, "out of memory");
+    if (!grown) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
     ctx->owned = grown;
     ctx->cap = ncap;
   }
   ErlNifBinary *b = &ctx->owned[ctx->nowned];
   if (!enif_alloc_binary(bytes, b))
-    defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", bytes);
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY_BYTES, bytes);
   DEFK_POISON_SLACK(b);
   ctx->owned_bytes += bytes;
   return ctx->nowned++;
@@ -376,11 +378,11 @@ static int defk_own(defk_ctx *ctx, size_t bytes) {
  */
 #define DEFK_ALLOC_FN(T, CT)                                                     \
   static inline defk_arr_##T defk_alloc_raw_##T(defk_ctx *ctx, int64_t n) {      \
-    if (n < 0) defk_fail(ctx, DEFK_E_ARG, "alloc/2: negative length %lld", (long long)n); \
+    if (n < 0) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_ALLOC_NEGATIVE, (long long)n); \
     uint64_t bytes;                                                              \
     if (DEFK_UNLIKELY(__builtin_mul_overflow((uint64_t)n, (uint64_t)sizeof(CT), &bytes) || \
                       bytes > DEFK_ALLOC_MAX_BYTES))                             \
-      defk_fail(ctx, DEFK_E_ARG, "alloc/2: length too large");                   \
+      defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_ALLOC_TOO_LARGE);                   \
     int slot = defk_own_raw(ctx, (size_t)bytes);                                 \
     defk_arr_##T a = {(CT *)ctx->owned[slot].data, n};                           \
     return a;                                                                    \
@@ -468,22 +470,22 @@ DEFK_COPY_FN(f32, float)
 
 __attribute__((noreturn, cold, unused)) static void defk_copy_negative(defk_ctx *ctx,
                                                                      const char *f, int64_t n) {
-  defk_fail(ctx, DEFK_E_ARG, "%s: negative length %lld", f, (long long)n);
+  defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_COPY_NEGATIVE, f, (long long)n);
 }
 __attribute__((noreturn, cold, unused)) static void defk_copy_oob(defk_ctx *ctx, const char *f,
                                                                 int64_t n, const char *where,
                                                                 int64_t i, const char *what,
                                                                 int64_t len) {
   ctx->err_index = i;
-  defk_fail(ctx, DEFK_E_OOB, "%s: %lld elements %s index %lld out of bounds for %s of length %lld",
+  defk_fail(ctx, DEFK_E_OOB, DEFK_MSG_COPY_OOB,
             f, (long long)n, where, (long long)i, what, (long long)len);
 }
 __attribute__((noreturn, cold, unused)) static void defk_copy_back_off(defk_ctx *ctx, int64_t off,
                                                                      int64_t at) {
   if (off < 1)
-    defk_fail(ctx, DEFK_E_ARG, "copy_back/4: offset %lld is not positive", (long long)off);
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_COPY_BACK_OFFSET, (long long)off);
   ctx->err_index = at - off;
-  defk_fail(ctx, DEFK_E_OOB, "copy_back/4: offset %lld from index %lld is before the start of the array",
+  defk_fail(ctx, DEFK_E_OOB, DEFK_MSG_COPY_BACK_BEFORE_START,
             (long long)off, (long long)at);
 }
 
@@ -662,11 +664,11 @@ static void defk_bind(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t, size_t esz,
   }
   ErlNifBinary bin;
   if (!enif_inspect_binary(env, t, &bin))
-    defk_fail(ctx, DEFK_E_ARG, "argument %d (%s) must be a binary of packed %s", argn,
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_ARG_BINARY, argn,
               pname, tname);
   if (bin.size % esz)
     defk_fail(ctx, DEFK_E_ARG,
-              "argument %d (%s): byte size %zu is not a multiple of %zu (%s)", argn, pname,
+              DEFK_MSG_ARG_SIZE, argn, pname,
               bin.size, esz, tname);
   if (((uintptr_t)bin.data) % esz) {
     int slot = defk_own_raw(ctx, bin.size);
@@ -685,7 +687,7 @@ static int64_t defk_get_i64_arg(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t, i
                                 const char *pname) {
   ErlNifSInt64 v;
   if (!enif_get_int64(env, t, &v))
-    defk_fail(ctx, DEFK_E_ARG, "argument %d (%s) must be an integer fitting in i64", argn,
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_ARG_I64, argn,
               pname);
   return (int64_t)v;
 }
@@ -696,14 +698,14 @@ static double defk_get_f64_arg(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t, in
   ErlNifSInt64 v;
   if (enif_get_double(env, t, &d)) return d;
   if (enif_get_int64(env, t, &v)) return (double)v;
-  defk_fail(ctx, DEFK_E_ARG, "argument %d (%s) must be a number", argn, pname);
+  defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_ARG_F64, argn, pname);
 }
 
 __attribute__((unused)) static uint64_t defk_get_u64_arg(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t,
                                                         int argn, const char *pname) {
   ErlNifUInt64 v;
   if (!enif_get_uint64(env, t, &v))
-    defk_fail(ctx, DEFK_E_ARG, "argument %d (%s) must be an integer fitting in u64", argn,
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_ARG_U64, argn,
               pname);
   return (uint64_t)v;
 }
@@ -715,7 +717,7 @@ __attribute__((unused)) static int defk_get_bool_arg(ErlNifEnv *env, defk_ctx *c
     if (!strcmp(buf, "true")) return 1;
     if (!strcmp(buf, "false")) return 0;
   }
-  defk_fail(ctx, DEFK_E_ARG, "argument %d (%s) must be a boolean", argn, pname);
+  defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_ARG_BOOL, argn, pname);
 }
 
 /* ---- result encoding ----------------------------------------------------- */
@@ -724,7 +726,7 @@ static ERL_NIF_TERM defk_make_f64(defk_ctx *ctx, ErlNifEnv *env, double d) {
   /* BEAM floats cannot be inf/nan. Every operation that could make one
      already raised; this stays as defence in depth. */
   if (DEFK_UNLIKELY(!isfinite(d)))
-    defk_fail(ctx, DEFK_E_ARITH, "kernel produced a non-finite float");
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_NONFINITE_RESULT);
   return enif_make_double(env, d);
 }
 
@@ -737,19 +739,19 @@ static ERL_NIF_TERM defk_make_bool(ErlNifEnv *env, int b) {
 static inline int64_t defk_add_i64(defk_ctx *ctx, int64_t a, int64_t b) {
   int64_t r;
   if (DEFK_UNLIKELY(__builtin_add_overflow(a, b, &r)))
-    defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in %lld + %lld", (long long)a, (long long)b);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_I64_OVERFLOW, (long long)a, "+", (long long)b);
   return r;
 }
 static inline int64_t defk_sub_i64(defk_ctx *ctx, int64_t a, int64_t b) {
   int64_t r;
   if (DEFK_UNLIKELY(__builtin_sub_overflow(a, b, &r)))
-    defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in %lld - %lld", (long long)a, (long long)b);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_I64_OVERFLOW, (long long)a, "-", (long long)b);
   return r;
 }
 static inline int64_t defk_mul_i64(defk_ctx *ctx, int64_t a, int64_t b) {
   int64_t r;
   if (DEFK_UNLIKELY(__builtin_mul_overflow(a, b, &r)))
-    defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in %lld * %lld", (long long)a, (long long)b);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_I64_OVERFLOW, (long long)a, "*", (long long)b);
   return r;
 }
 static inline int64_t defk_neg_i64(defk_ctx *ctx, int64_t a) {
@@ -804,14 +806,14 @@ static inline int64_t defk_bsl_i64(defk_ctx *ctx, int64_t a, int64_t n) {
   int ovf = 0;
   int64_t r = defk_bsl_core(&ovf, a, n);
   if (DEFK_UNLIKELY(ovf))
-    defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in bsl(%lld, %lld)", (long long)a, (long long)n);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_I64_OVERFLOW_SHIFT, "bsl", (long long)a, (long long)n);
   return r;
 }
 static inline int64_t defk_bsr_i64(defk_ctx *ctx, int64_t a, int64_t n) {
   int ovf = 0;
   int64_t r = defk_bsr_core(&ovf, a, n);
   if (DEFK_UNLIKELY(ovf))
-    defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in bsr(%lld, %lld)", (long long)a, (long long)n);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_I64_OVERFLOW_SHIFT, "bsr", (long long)a, (long long)n);
   return r;
 }
 static inline int64_t defk_bsl_i64_s(int *ovf, int64_t a, int64_t n) { return defk_bsl_core(ovf, a, n); }
@@ -823,12 +825,12 @@ static inline int64_t defk_bsr_nn(int64_t a, int64_t n) {
   return (uint64_t)n >= 64 ? (a < 0 ? -1 : 0) : a >> n;
 }
 static inline int64_t defk_div_i64(defk_ctx *ctx, int64_t a, int64_t b) {
-  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "div/2 by zero");
-  if (DEFK_UNLIKELY(a == INT64_MIN && b == -1)) defk_fail(ctx, DEFK_E_ARITH, "i64 overflow in div/2");
+  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_DIV_BY_ZERO);
+  if (DEFK_UNLIKELY(a == INT64_MIN && b == -1)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_I64_OVERFLOW_DIV);
   return a / b; /* C truncates toward zero, like Elixir div/2 */
 }
 static inline int64_t defk_rem_i64(defk_ctx *ctx, int64_t a, int64_t b) {
-  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "rem/2 by zero");
+  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_REM_BY_ZERO);
   if (DEFK_UNLIKELY(b == -1)) return 0;
   return a % b; /* sign follows dividend, like Elixir rem/2 */
 }
@@ -863,8 +865,8 @@ static inline int64_t defk_abs_i64_s(int *ovf, int64_t a) {
   static inline uint64_t defk_##NAME##_u64(defk_ctx *ctx, uint64_t a, uint64_t b) { \
     uint64_t r;                                                                     \
     if (DEFK_UNLIKELY(BUILTIN(a, b, &r)))                                           \
-      defk_fail(ctx, DEFK_E_ARITH, "u64 overflow in %llu " OP " %llu",              \
-                (unsigned long long)a, (unsigned long long)b);                      \
+      defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_U64_OVERFLOW,                             \
+                (unsigned long long)a, OP, (unsigned long long)b);                      \
     return r;                                                                       \
   }                                                                                 \
   static inline uint64_t defk_##NAME##_u64_s(int *ovf, uint64_t a, uint64_t b) {    \
@@ -900,7 +902,7 @@ static inline uint64_t defk_bsl_u64(defk_ctx *ctx, uint64_t a, int64_t n) {
   int ovf = 0;
   uint64_t r = defk_bsl_u64_core(&ovf, a, n);
   if (DEFK_UNLIKELY(ovf))
-    defk_fail(ctx, DEFK_E_ARITH, "u64 overflow in bsl(%llu, %lld)", (unsigned long long)a,
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_U64_OVERFLOW_SHIFT, "bsl", (unsigned long long)a,
               (long long)n);
   return r;
 }
@@ -908,18 +910,18 @@ static inline uint64_t defk_bsr_u64(defk_ctx *ctx, uint64_t a, int64_t n) {
   int ovf = 0;
   uint64_t r = defk_bsr_u64_core(&ovf, a, n);
   if (DEFK_UNLIKELY(ovf))
-    defk_fail(ctx, DEFK_E_ARITH, "u64 overflow in bsr(%llu, %lld)", (unsigned long long)a,
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_U64_OVERFLOW_SHIFT, "bsr", (unsigned long long)a,
               (long long)n);
   return r;
 }
 static inline uint64_t defk_bsl_u64_s(int *ovf, uint64_t a, int64_t n) { return defk_bsl_u64_core(ovf, a, n); }
 static inline uint64_t defk_bsr_u64_s(int *ovf, uint64_t a, int64_t n) { return defk_bsr_u64_core(ovf, a, n); }
 static inline uint64_t defk_div_u64(defk_ctx *ctx, uint64_t a, uint64_t b) {
-  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "div/2 by zero");
+  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_DIV_BY_ZERO);
   return a / b;
 }
 static inline uint64_t defk_rem_u64(defk_ctx *ctx, uint64_t a, uint64_t b) {
-  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, "rem/2 by zero");
+  if (DEFK_UNLIKELY(b == 0)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_REM_BY_ZERO);
   return a % b;
 }
 static inline uint64_t defk_div_u64_g(int *bad, uint64_t a, uint64_t b) {
@@ -934,11 +936,11 @@ static inline uint64_t defk_rem_u64_g(int *bad, uint64_t a, uint64_t b) {
  * same integer, or ArithmeticError when the other type cannot hold it */
 static inline int64_t defk_u64_to_i64(defk_ctx *ctx, uint64_t a) {
   if (DEFK_UNLIKELY(a > (uint64_t)INT64_MAX))
-    defk_fail(ctx, DEFK_E_ARITH, "%llu does not fit in i64", (unsigned long long)a);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_U64_TO_I64, (unsigned long long)a);
   return (int64_t)a;
 }
 static inline uint64_t defk_i64_to_u64(defk_ctx *ctx, int64_t a) {
-  if (DEFK_UNLIKELY(a < 0)) defk_fail(ctx, DEFK_E_ARITH, "%lld does not fit in u64", (long long)a);
+  if (DEFK_UNLIKELY(a < 0)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_I64_TO_U64, (long long)a);
   return (uint64_t)a;
 }
 /* bsl inside a mask by a count that is not a literal: the low 64 bits of
@@ -946,7 +948,7 @@ static inline uint64_t defk_i64_to_u64(defk_ctx *ctx, int64_t a) {
  * which the wrapped 64 bits no longer hold: it raises (a limit). */
 static inline uint64_t defk_wbsl(defk_ctx *ctx, uint64_t a, int64_t n) {
   if (DEFK_UNLIKELY(n < 0))
-    defk_fail(ctx, DEFK_E_ARITH, "bsl/2 by the negative count %lld inside a mask", (long long)n);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_WBSL_NEGATIVE, (long long)n);
   return n >= 64 ? 0 : a << n;
 }
 static inline uint64_t defk_wbsl_s(int *ovf, uint64_t a, int64_t n) {
@@ -956,12 +958,12 @@ static inline uint64_t defk_wbsl_s(int *ovf, uint64_t a, int64_t n) {
 /* a value written to a [u64] or [i64] that its element type cannot hold:
  * ArgumentError, as for a [u8] */
 static inline uint64_t defk_to_u64(defk_ctx *ctx, int64_t v) {
-  if (DEFK_UNLIKELY(v < 0)) defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in u64", (long long)v);
+  if (DEFK_UNLIKELY(v < 0)) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_VALUE_U64, (long long)v);
   return (uint64_t)v;
 }
 static inline int64_t defk_to_i64_elem(defk_ctx *ctx, uint64_t v) {
   if (DEFK_UNLIKELY(v > (uint64_t)INT64_MAX))
-    defk_fail(ctx, DEFK_E_ARG, "value %llu does not fit in i64", (unsigned long long)v);
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_VALUE_I64, (unsigned long long)v);
   return (int64_t)v;
 }
 
@@ -992,8 +994,8 @@ static inline int64_t defk_to_i64_elem(defk_ctx *ctx, uint64_t v) {
 __attribute__((noreturn, cold)) static void defk_nonfinite(defk_ctx *ctx, double a, char op,
                                                            double b) {
   if (op == '/' && b == 0.0)
-    defk_fail(ctx, DEFK_E_ARITH, "bad argument in arithmetic expression: division by zero");
-  defk_fail(ctx, DEFK_E_ARITH, "float result of %.17g %c %.17g is inf or NaN", a, op, b);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_FLOAT_DIV_ZERO);
+  defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_FLOAT_NONFINITE, a, op, b);
 }
 
 #define DEFK_FLOAT_OP(NAME, OP)                                                   \
@@ -1015,15 +1017,15 @@ DEFK_FLOAT_OP(fdiv, /)
 /* a float expression's check failed but its replay did not raise (a defk bug;
    raising is still Elixir's outcome, see float_tree in the compiler) */
 __attribute__((noreturn, cold, unused)) static void defk_nonfinite_lost(defk_ctx *ctx) {
-  defk_fail(ctx, DEFK_E_ARITH, "float result is inf or NaN");
+  defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_FLOAT_NONFINITE_LOST);
 }
 
 /* libm calls: Erlang's :math raises when the result is not finite */
 __attribute__((noreturn, cold)) static void defk_nonfinite_call(defk_ctx *ctx, const char *f,
                                                                 double a, double b, int arity) {
   if (arity == 1)
-    defk_fail(ctx, DEFK_E_ARITH, "float result of %s(%.17g) is inf or NaN", f, a);
-  defk_fail(ctx, DEFK_E_ARITH, "float result of %s(%.17g, %.17g) is inf or NaN", f, a, b);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_FLOAT_CALL_NONFINITE_1, f, a);
+  defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_FLOAT_CALL_NONFINITE_2, f, a, b);
 }
 static inline double defk_exp(defk_ctx *ctx, double a) {
   double r = exp(a);
@@ -1039,24 +1041,24 @@ static inline double defk_pow(defk_ctx *ctx, double a, double b) {
    call. IEEE 754 square root is correctly rounded, in hardware and in libm
    (which :math.sqrt calls), so the result is the same bits. */
 static inline double defk_sqrt(defk_ctx *ctx, double a) {
-  if (DEFK_UNLIKELY(a < 0.0)) defk_fail(ctx, DEFK_E_ARITH, "sqrt of negative number %g", a);
+  if (DEFK_UNLIKELY(a < 0.0)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_SQRT_NEGATIVE, a);
   return __builtin_sqrt(a);
 }
 static inline double defk_log(defk_ctx *ctx, double a) {
-  if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, "log of non-positive number %g", a);
+  if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_LOG_NON_POSITIVE, a);
   return log(a);
 }
 static inline double defk_log2(defk_ctx *ctx, double a) {
-  if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, "log2 of non-positive number %g", a);
+  if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_LOG2_NON_POSITIVE, a);
   return log2(a);
 }
 static inline double defk_log10(defk_ctx *ctx, double a) {
-  if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, "log10 of non-positive number %g", a);
+  if (DEFK_UNLIKELY(a <= 0.0)) defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_LOG10_NON_POSITIVE, a);
   return log10(a);
 }
 static inline int64_t defk_trunc(defk_ctx *ctx, double a) {
   if (DEFK_UNLIKELY(!(a >= -0x1p63 && a < 0x1p63)))
-    defk_fail(ctx, DEFK_E_ARITH, "trunc/1: %g does not fit in i64", a);
+    defk_fail(ctx, DEFK_E_ARITH, DEFK_MSG_TRUNC_FIT, a);
   return (int64_t)a;
 }
 static inline int64_t defk_round(defk_ctx *ctx, double a) { return defk_trunc(ctx, round(a)); }
@@ -1093,11 +1095,11 @@ static inline int64_t defk_rotr64(int64_t x, int64_t n) {
 __attribute__((noreturn, cold, unused)) static void defk_field_fail(defk_ctx *ctx, const char *f,
                                                            uint64_t x, int neg, int64_t w) {
   if (w < 1 || w > 64)
-    defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.%s: width %lld is not in 1..64", f, (long long)w);
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_BITS_WIDTH, f, (long long)w);
   if (neg)
-    defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.%s: %lld does not fit in a %lld-bit field", f,
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_BITS_FIELD, f,
               (long long)x, (long long)w);
-  defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.%s: %llu does not fit in a %lld-bit field", f,
+  defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_BITS_FIELD_U64, f,
             (unsigned long long)x, (long long)w);
 }
 static inline uint64_t defk_field_arg(defk_ctx *ctx, const char *f, uint64_t x, int neg, int64_t w) {
@@ -1270,7 +1272,7 @@ static inline uint64_t defk_crc32c(uint64_t c, uint64_t x, int w) {
  * 32-bit value, then x as a w-bit value; the forms the compiler calls take
  * an i64 (sign checked) or a u64 crc and x */
 __attribute__((noreturn, cold, unused)) static void defk_crc32c_width(defk_ctx *ctx, int64_t w) {
-  defk_fail(ctx, DEFK_E_ARG, "Defk.Bits.crc32c/3: width %lld is not 8, 16, 32 or 64", (long long)w);
+  defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_CRC32C_WIDTH, (long long)w);
 }
 static inline int64_t defk_crc32c_k(defk_ctx *ctx, uint64_t c, int cneg, uint64_t x, int xneg,
                                     int64_t w) {
@@ -1383,7 +1385,7 @@ DEFK_ACCESS_FN(f32, float)
 __attribute__((noreturn, cold, unused)) static void defk_oob_load(defk_ctx *ctx, int64_t i, int w,
                                                           int64_t len) {
   ctx->err_index = i;
-  defk_fail(ctx, DEFK_E_OOB, "%d-byte load at index %lld out of bounds for array of length %lld",
+  defk_fail(ctx, DEFK_E_OOB, DEFK_MSG_OOB_LOAD,
             w, (long long)i, (long long)len);
 }
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
@@ -1419,7 +1421,7 @@ DEFK_LOAD_FN(u16_be, 16, DEFK_BE)
  */
 __attribute__((noreturn, cold)) static void defk_nonfinite_input(defk_ctx *ctx, int64_t i) {
   defk_fail(ctx, DEFK_E_ARG,
-            "non-finite float (inf or NaN) read from an input array at index %lld", (long long)i);
+            DEFK_MSG_NONFINITE_INPUT, (long long)i);
 }
 /* an element read whose index is in range (checked or proved) */
 static inline double defk_in_f64(defk_ctx *ctx, double x, int64_t i) {
@@ -1528,7 +1530,7 @@ typedef union {
 #define DEFK_NF_put_f32(C, A, I, V) defk_put_f32_f(&defk_nf, &defk_sink.f32, (A), (I), (V))
 
 static inline uint8_t defk_to_u8(defk_ctx *ctx, int64_t v) {
-  if (DEFK_UNLIKELY(v < 0 || v > 255)) defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in u8", (long long)v);
+  if (DEFK_UNLIKELY(v < 0 || v > 255)) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_VALUE_U8, (long long)v);
   return (uint8_t)v;
 }
 /* a u64 as an i64 for a narrow write's range check: one above 2^63 - 1
@@ -1538,12 +1540,12 @@ static inline int64_t defk_u64_sat(uint64_t v) {
 }
 static inline int16_t defk_to_i16(defk_ctx *ctx, int64_t v) {
   if (DEFK_UNLIKELY(v < INT16_MIN || v > INT16_MAX))
-    defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in i16", (long long)v);
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_VALUE_I16, (long long)v);
   return (int16_t)v;
 }
 static inline int32_t defk_to_i32(defk_ctx *ctx, int64_t v) {
   if (DEFK_UNLIKELY(v < INT32_MIN || v > INT32_MAX))
-    defk_fail(ctx, DEFK_E_ARG, "value %lld does not fit in i32", (long long)v);
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_VALUE_I32, (long long)v);
   return (int32_t)v;
 }
 /* their flagged forms: the truncated value, the failure flagged */
@@ -1567,7 +1569,7 @@ static inline int32_t defk_to_i32(defk_ctx *ctx, int64_t v) {
  * replay raises here (f32 writes feed the strip's flag).
  */
 __attribute__((noreturn, cold)) static void defk_f32_range(defk_ctx *ctx, double v) {
-  defk_fail(ctx, DEFK_E_ARG, "value %.17g does not fit in f32", v);
+  defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_VALUE_F32, v);
 }
 static inline float defk_to_f32(defk_ctx *ctx, double v) {
   float f = (float)v;
@@ -1608,7 +1610,7 @@ static inline uint64_t defk_bits_end(defk_ctx *ctx, defk_bits b) {
 __attribute__((noinline, unused)) static defk_bits defk_bits_reserve(defk_ctx *ctx, defk_bits b,
                                                              int64_t more) {
   uint64_t need = ((uint64_t)b.nbits + (uint64_t)more + 7) / 8 + 8 + DEFK_BITS_HDR;
-  if (need > DEFK_ALLOC_MAX_BYTES) defk_fail(ctx, DEFK_E_ARG, "bitstring too large");
+  if (need > DEFK_ALLOC_MAX_BYTES) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_BITSTRING_TOO_LARGE);
   if (b.slot1 && defk_bits_end(ctx, b) == (uint64_t)b.nbits) {
     /* ours, at its end: grow in place, doubling */
     ErlNifBinary *bin = &ctx->owned[b.slot1 - 1];
@@ -1616,7 +1618,7 @@ __attribute__((noinline, unused)) static defk_bits defk_bits_reserve(defk_ctx *c
     if (cap < need) cap = (size_t)need;
     defk_owned_check(ctx, cap - old);
     if (!enif_realloc_binary(bin, cap))
-      defk_fail(ctx, DEFK_E_ARG, "out of memory (allocating %zu bytes)", cap);
+      defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY_BYTES, cap);
     DEFK_POISON_SLACK(bin);
     ctx->owned_bytes += cap - old;
     memset(bin->data + old, 0, cap - old);
@@ -1652,8 +1654,8 @@ static inline void defk_bits_or(uint8_t *p, uint64_t pos, uint64_t v, int64_t n)
 __attribute__((noreturn, cold, unused)) static void defk_bits_fail(defk_ctx *ctx, int64_t v, int64_t n,
                                                                     int is_signed) {
   if (n < 0 || n > 64)
-    defk_fail(ctx, DEFK_E_ARG, "bitstring segment size %lld is outside 0..64", (long long)n);
-  defk_fail(ctx, DEFK_E_ARG, "bitstring segment value %lld does not fit in %lld%s bits",
+    defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_SEGMENT_SIZE, (long long)n);
+  defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_SEGMENT_FIT,
             (long long)v, (long long)n, is_signed ? " signed" : "");
 }
 
@@ -1671,7 +1673,7 @@ static inline defk_bits defk_bits_put(defk_ctx *ctx, defk_bits b, int64_t v, int
 static inline defk_bits defk_bits_put_u64(defk_ctx *ctx, defk_bits b, uint64_t v, int64_t n) {
   if (DEFK_UNLIKELY((uint64_t)n > 64 || (n < 64 && (v >> n) != 0))) {
     if ((uint64_t)n <= 64 && v > (uint64_t)INT64_MAX)
-      defk_fail(ctx, DEFK_E_ARG, "bitstring segment value %llu does not fit in %lld bits",
+      defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_SEGMENT_FIT_U64,
                 (unsigned long long)v, (long long)n);
     defk_bits_fail(ctx, (int64_t)v, n, 0);
   }
@@ -1863,13 +1865,9 @@ __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c
 __attribute__((cold, unused)) static void defk_lost_resume(defk_ctx *ctx, int from, int at) {
   ctx->err = DEFK_E_RESUME;
   if (at)
-    snprintf(ctx->msg, sizeof ctx->msg,
-             "defk bug: kernel resumed at safepoint %d but yielded at safepoint %d "
-             "without reaching it (missing or wrong resume dispatch)", from, at);
+    snprintf(ctx->msg, sizeof ctx->msg, DEFK_MSG_LOST_RESUME_YIELDED, from, at);
   else
-    snprintf(ctx->msg, sizeof ctx->msg,
-             "defk bug: kernel resumed at safepoint %d but returned without reaching it "
-             "(missing or wrong resume dispatch)", from);
+    snprintf(ctx->msg, sizeof ctx->msg, DEFK_MSG_LOST_RESUME_RETURNED, from);
 }
 
 static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
@@ -1942,7 +1940,7 @@ static inline void *defk_frame_of(ErlNifEnv *env, ERL_NIF_TERM t, size_t size, E
     return ctx;
   ERL_NIF_TERM keys[3] = {enif_make_atom(env, "__struct__"), enif_make_atom(env, "__exception__"),
                           enif_make_atom(env, "message")};
-  static const char text[] = "defk: suspended kernel frame has a foreign layout (layout tag mismatch)";
+  static const char text[] = DEFK_MSG_FOREIGN_FRAME;
   ERL_NIF_TERM msg;
   memcpy(enif_make_new_binary(env, sizeof text - 1, &msg), text, sizeof text - 1);
   ERL_NIF_TERM vals[3] = {enif_make_atom(env, "Elixir.ArgumentError"), enif_make_atom(env, "true"), msg};
@@ -2137,11 +2135,8 @@ static void defk_fault_handler(int sig, siginfo_t *si, void *uc) {
   if (ctx && si && si->si_code > 0 && pc >= defk_text_lo && pc < defk_text_hi) {
     defk_in_fault_handler = 0;
     defk_cur_ctx = NULL;
-    snprintf(ctx->msg, sizeof ctx->msg,
-             "defk bug: %s inside kernel native code (signal %d, code %d, address %p, pc +0x%lx); "
-             "the call was aborted and the node kept running",
-             defk_fault_name(sig), sig, (int)si->si_code, si->si_addr,
-             (unsigned long)(pc - defk_text_lo));
+    snprintf(ctx->msg, sizeof ctx->msg, DEFK_MSG_FAULT, defk_fault_name(sig), sig,
+             (int)si->si_code, si->si_addr, (unsigned long)(pc - defk_text_lo));
     ctx->err = DEFK_E_FAULT;
     siglongjmp(ctx->jb, 1); /* SA_NODEFER: the signal is not blocked here */
   }

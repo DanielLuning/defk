@@ -3861,7 +3861,7 @@ defmodule Defk.Compiler do
               [
                 ss,
                 "#{st} = #{vs.c};\n",
-                "if (#{st} == 0) defk_fail(ctx, DEFK_E_ARG, \"range step cannot be zero\");\n"
+                "if (#{st} == 0) defk_fail(ctx, DEFK_E_ARG, #{Defk.Messages.c_literal(:range_step_zero)});\n"
               ]
             end
 
