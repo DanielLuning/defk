@@ -65,7 +65,12 @@ defmodule Defk.MixProject do
 
   def cli do
     [
-      preferred_envs: [ci: :test, "ci.test": :test, dump_c: :test]
+      preferred_envs: [
+        ci: :test,
+        "ci.test": :test,
+        dump_c: :test,
+        "defk.stability.freeze": :test
+      ]
     ]
   end
 
