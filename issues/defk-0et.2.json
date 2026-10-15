@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-15T17:52:26Z",
@@ -8,8 +8,8 @@
   "labels": [],
   "parent": "defk-0et",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Stability: the freeze task writes the API snapshot from the tag",
   "type": "task",
-  "updated_at": "2026-10-15T17:52:26Z"
+  "updated_at": "2026-10-15T17:53:40Z"
 }
