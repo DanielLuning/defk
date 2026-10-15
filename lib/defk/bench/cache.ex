@@ -231,7 +231,9 @@ defmodule Defk.Bench.Cache do
      :erlang.system_info(:logical_processors), :erlang.system_info(:schedulers_online)}
   end
 
-  defp cpu_model do
+  @doc false
+  # also names the machine in the examples' stored scoreboard
+  def cpu_model do
     case :os.type() do
       {:unix, :darwin} ->
         case System.cmd("sysctl", ["-n", "machdep.cpu.brand_string"], stderr_to_stdout: true) do
