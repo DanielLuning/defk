@@ -10,9 +10,13 @@ regenerate and paste. Run `mix compile` first: otherwise `mix run` prints
   compile error footer links `<page>#<code>`): run
   `mix run -e 'IO.write(Defk.Errors.reference())'` and replace everything from
   the "Codes" section's first `###` heading to the end of the file with the
-  output. `test/compile_errors_doc_test.exs` fails until they match. The
-  headings are the codes (plain `[a-z0-9-]` slugs), so the anchors are the same
-  on GitHub and on ex_doc; keep it that way for any new code.
+  output (the output ends with the "Retired" section, one heading per retired
+  code, so a retired code keeps its anchor). `test/compile_errors_doc_test.exs`
+  fails until they match. The headings are the codes (plain `[a-z0-9-]`
+  slugs), so the anchors are the same on GitHub and on ex_doc; keep it that
+  way for any new code. To retire a code, set its entry's `kind` to `:retired`
+  and give it `retired: %{version:, why:}`; `test/stability/codes.txt`, the
+  ledger of released codes, grows only at release time.
 - `docs/scope.md`, the two generated lists: run
   `mix run -e 'IO.write(Defk.Errors.scope(:planned))'` and
   `mix run -e 'IO.write(Defk.Errors.scope(:subset))'`, and replace each list

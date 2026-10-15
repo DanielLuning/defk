@@ -476,6 +476,29 @@ defmodule Defk.LanguageDoc do
     |> List.flatten()
   end
 
+  # ---------------------------------------------------------------- tables --
+
+  @doc """
+  The rows of the first Markdown table after `heading` in `doc`, without
+  the header and the separator row, each the trimmed text of its cells (a
+  cell holds no `|`).
+  """
+  def table(doc, heading) do
+    [_, rest] = String.split(doc, heading, parts: 2)
+
+    rest
+    |> String.split("\n")
+    |> Enum.drop_while(&(not row?(&1)))
+    |> Enum.take_while(&row?/1)
+    |> Enum.drop(2)
+    |> Enum.map(&cells/1)
+  end
+
+  defp row?(line), do: String.starts_with?(String.trim(line), "|")
+
+  defp cells(line),
+    do: line |> String.trim() |> String.trim("|") |> String.split("|") |> Enum.map(&String.trim/1)
+
   # --------------------------------------------------------------- anchors --
 
   @doc """

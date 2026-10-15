@@ -124,6 +124,13 @@ a tag whose run fails is not released. An x86-64 label run under
 Rosetta counts only when it passes; a failure there is checked on native
 x86-64 (the GitHub workflow) before it is called a bug.
 
+The stability checks (`test/stability/`: the frozen kernels, rejections,
+API snapshot and code ledger of every released version) are part of
+`mix test`, so a passing run of every label is also the evidence that the
+stability promise holds on every platform. After the tag, the release's
+own files are frozen and committed; `docs/agents/stability.md`
+("Releasing") has the steps.
+
 Valgrind (`verify/valgrind`) and the measurement run (`ci/measure.sh`, or
 `.github/workflows/measure.yml` on a native runner) are not part of CI.
 They run by hand at release time.

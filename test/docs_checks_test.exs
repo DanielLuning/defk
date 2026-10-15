@@ -210,8 +210,11 @@ defmodule Defk.DocsChecksTest do
     # codes raised by the build environment, not by a kernel, so no example
     @no_example ["no-c-compiler"]
 
-    test "every error code has a failing example and a rewrite (compile_errors_test runs them)" do
-      for %{code: code, example: example, rewrite: rewrite} <- Defk.Errors.entries() do
+    # a retired code is not raised, so it has no example
+    test "every active error code has a failing example and a rewrite (compile_errors_test runs them)" do
+      for %{kind: kind, code: code} = e <- Defk.Errors.entries(), kind != :retired do
+        %{example: example, rewrite: rewrite} = e
+
         if code in @no_example do
           assert example == nil and rewrite == nil,
                  "#{code} has an example: remove it from @no_example"
@@ -230,15 +233,12 @@ defmodule Defk.DocsChecksTest do
     # the `__defk_*__/n` names in the first column of the Markdown table that
     # follows `heading` in `text`
     defp table_names(text, heading) do
-      [_, after_heading] = String.split(text, heading, parts: 2)
+      names =
+        for [first | _] <- LanguageDoc.table(text, heading),
+            [name] <- Regex.scan(~r/^`(__defk_\w+__\/\d)`$/, first, capture: :all_but_first),
+            do: name
 
-      after_heading
-      |> String.split("\n")
-      |> Enum.drop_while(&(not String.starts_with?(String.trim(&1), "|")))
-      |> Enum.take_while(&String.starts_with?(String.trim(&1), "|"))
-      |> Enum.flat_map(&Regex.scan(~r/^\s*\| `(__defk_\w+__\/\d)`/, &1, capture: :all_but_first))
-      |> List.flatten()
-      |> Enum.sort()
+      Enum.sort(names)
     end
 
     # what a kernel module with Elixir mode exports, less the hidden ones
@@ -291,6 +291,30 @@ defmodule Defk.DocsChecksTest do
     test "the known gaps list holds only functions that are still undocumented" do
       fixed = @known_gaps -- undocumented()
       assert fixed == [], "remove from @known_gaps: #{inspect(fixed)}"
+    end
+  end
+
+  # ------------------------------------------------------- stability guide --
+
+  describe "the stability guide" do
+    # the unstable tier is a list in code (the freeze task keeps it out of a
+    # release's API snapshot); the guide's section names each item, so a
+    # reader learns what may change from the page, not from the code
+    test "'What it does not cover' names every item of the unstable tier" do
+      [_, rest] =
+        String.split(File.read!("docs/guides/stability.md"), "\n## What it does not cover\n",
+          parts: 2
+        )
+
+      [section | _] = String.split(rest, "\n## ", parts: 2)
+
+      missing =
+        for name <- Mix.Tasks.Defk.Stability.Freeze.unstable(),
+            not String.contains?(section, name),
+            do: name
+
+      assert missing == [],
+             "name these under \"What it does not cover\" in docs/guides/stability.md: #{inspect(missing)}"
     end
   end
 end
