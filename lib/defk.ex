@@ -196,6 +196,21 @@ defmodule Defk do
   # credo:disable-for-next-line ExSlop.Check.Warning.PathExpandPriv
   @runtime_h Path.expand("../priv/defk_runtime.h", __DIR__)
 
+  @doc false
+  # The options `use Defk` accepts, each with its tier: `:public` ones are
+  # promised (the stability guide, "The public API"), `:unstable` ones may
+  # change in any release ("What it does not cover"). The one list:
+  # __using__/1 rejects any other key, `mix defk.stability.freeze` writes the
+  # public ones into a release's API snapshot, and the docs checks hold the
+  # guide to the unstable ones.
+  def __options__,
+    do: [
+      elixir_mode: :public,
+      report: :public,
+      adaptive_slice: :unstable,
+      max_owned_bytes: :public
+    ]
+
   defmacro __using__(opts) do
     opts = Defk.Deprecations.rename_options(opts, __CALLER__)
     elixir_mode = Keyword.get(opts, :elixir_mode, false)
@@ -206,7 +221,7 @@ defmodule Defk do
     # checked in __before_compile__/1 (max_owned_bytes!/1)
     max_owned_bytes = Keyword.get(opts, :max_owned_bytes)
 
-    if Keyword.keys(opts) -- [:elixir_mode, :report, :adaptive_slice, :max_owned_bytes] != [] or
+    if Keyword.keys(opts) -- Keyword.keys(__options__()) != [] or
          not is_boolean(elixir_mode) or not is_boolean(adaptive) or report not in [nil, :full] do
       raise ArgumentError,
             "use Defk accepts only `elixir_mode: true | false`, `report: :full`, `adaptive_slice: true | false` and `max_owned_bytes: n`, got: #{Macro.to_string(opts)}"
