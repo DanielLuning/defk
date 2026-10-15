@@ -393,7 +393,7 @@ defmodule Defk do
 
     kernels =
       raw_kernels
-      |> Enum.map(&Defk.Attributes.inline/1)
+      |> Enum.map(&(&1 |> Defk.Attributes.inline() |> Defk.EnumForms.desugar()))
       |> Defk.Clauses.merge()
 
     # Elixir mode: compiled in :test, wherever it is the configured mode, and

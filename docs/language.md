@@ -1902,9 +1902,46 @@ false
 - `Enum.all?(src, fn x -> bool end)` and `Enum.any?/2` stop at the first
   element that decides the result; over an empty range or array they give
   `true` and `false`.
-- There is no `while`, `break` or `return`, and no `Enum.reduce/3`
-  ([`enum-reduce`](compile-errors.md#enum-reduce)) or `Enum.find`/`find_index`
-  ([`enum-find`](compile-errors.md#enum-find)) yet.
+- There is no `while`, `break` or `return`.
+
+### `Enum.reduce/3` and `Enum.find/3`
+
+**Supported with restrictions**, with the same enumerables and literal `fn`
+as above. `Enum.reduce(src, init, fn x, acc -> ... end)` is the same fold as
+`for x <- src, reduce: init do acc -> ... end`, with the same accumulators
+(scalars, tuples, arrays). `Enum.find(src, default, fn x -> ... end)` gives
+the first element for which the `fn` is true, or `default`, and stops at
+that element.
+
+```elixir
+defk sum_sq(xs :: [i64]) :: i64 do
+  Enum.reduce(xs, 0, fn x, acc -> acc + x * x end)
+end
+
+defk first_over(xs :: [f64], t :: f64) :: f64 do
+  Enum.find(xs, -1.0, fn x -> x > t end)
+end
+```
+
+```elixir
+iex> M.sum_sq(<<1::signed-native-64, 2::signed-native-64, 3::signed-native-64>>)
+14
+iex> M.first_over(<<1.0::float-native-64, 2.5::float-native-64>>, 2.0)
+2.5
+iex> M.first_over(<<1.0::float-native-64>>, 2.0)
+-1.0
+```
+
+- The default and the elements have one type: `Enum.find(xs, -1, ...)` over
+  `[f64]` is [`type-mismatch`](compile-errors.md#type-mismatch). An `i64`
+  element is not widened to a float default either, since Elixir would
+  return the integer.
+- `Enum.find/2` and `Enum.find_index/2` return `nil` when nothing matches,
+  and a kernel has no `nil`
+  ([`enum-find`](compile-errors.md#enum-find)): use `Enum.find/3` with a
+  default, or `Enum.reduce_while/3` with a value that means "not found" for
+  an index. `Enum.reduce/2`, which starts from the first element, is
+  [`enum-reduce`](compile-errors.md#enum-reduce).
 
 ### Array accumulators
 

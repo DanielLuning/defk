@@ -69,9 +69,12 @@ and return the new one.
   the step: `0..(n - 1)` with `n = 0` visits 0 and -1.
 - `for ..., reduce: acc0 do acc -> ... end` has one clause; the accumulator
   may be a tuple of scalars and arrays, `{a, b} -> ...`.
+- `Enum.reduce(src, acc0, fn x, acc -> ... end)` is the same fold.
 - There is no `while`, `break` or `return`. Stop early with
-  `Enum.reduce_while/3`, `Enum.all?/2` or `Enum.any?/2`, over a range or an
-  array, with a literal `fn`. Every path of a `reduce_while` body ends in a
+  `Enum.reduce_while/3`, `Enum.find/3` (with a default of the element type;
+  `Enum.find/2` and `Enum.find_index/2` are rejected, as a kernel has no
+  `nil`), `Enum.all?/2` or `Enum.any?/2`, over a range or an array, with a
+  literal `fn`. Every path of a `reduce_while` body ends in a
   literal `{:cont, acc}` or `{:halt, acc}`:
 
 ```elixir
@@ -165,8 +168,10 @@ Every construct the compiler rejects for good, with the code of its error:
 - [`nested-tuple`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#nested-tuple): Tuples don't nest.
 - [`tuple-argument`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#tuple-argument): Tuples are not passed as arguments.
 - [`recursion`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#recursion): A kernel can't call itself, directly or through other kernels; write the recursion as a loop.
-- [`unsupported-call`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-call): Calls into other modules are not in the kernel subset, except Enum.reduce_while/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.
-- [`fn-argument`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#fn-argument): Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.
+- [`unsupported-call`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-call): Calls into other modules are not in the kernel subset, except Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.
+- [`enum-reduce`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#enum-reduce): Enum.reduce/2 (no initial value) is not in the kernel subset; give the initial value, Enum.reduce/3.
+- [`enum-find`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#enum-find): Enum.find/2 and Enum.find_index/2 are not in the kernel subset; use Enum.find/3 with a default, or Enum.reduce_while/3 for an index.
+- [`fn-argument`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#fn-argument): Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.
 - [`pipe`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#pipe): The pipe operator |> is not in the kernel subset; write the nested call.
 - [`for-collect`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#for-collect): A `for` collects nothing: without reduce: it is a statement, and into: is not in the kernel subset.
 - [`for-option`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#for-option): `for` takes `reduce:` and `do`; other options are not in the kernel subset.
@@ -180,7 +185,7 @@ Every construct the compiler rejects for good, with the code of its error:
 - [`unsupported-atom`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-atom): Atoms (other than true and false) and nil are not in the kernel subset.
 - [`unsupported-list`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-list): Lists are not in the kernel subset; a kernel takes packed arrays.
 - [`unsupported-fn`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-fn): Anonymous functions are not values in a kernel; define another kernel and call it.
-- [`unsupported-construct`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-construct): A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and throw are not in the kernel subset.
+- [`unsupported-construct`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-construct): A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and throw are not in the kernel subset.
 - [`unsupported-expression`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-expression): Any other expression is not in the kernel subset.
 - [`attribute-value`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#attribute-value): A module attribute read in a kernel holds an integer (in i64 or u64), a float, a boolean or a binary.
 - [`binary-literal`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#binary-literal): A binary literal in a kernel is a string or <<...>> of integer bytes (0..255); anything else is built in Elixir.
