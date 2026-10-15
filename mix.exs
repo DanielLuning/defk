@@ -61,9 +61,18 @@ defmodule Defk.MixProject do
   defp elixirc_paths(:test), do: ["lib", "dev", "test/support"]
   # bench/ (incl. demo.exs) uses the example kernels; deps compile as :prod and skip them.
   # dev/ holds the repo-only Mix tasks (mix defk.examples, later mix defk.verify):
-  # never compiled for a dependent, never in the Hex package.
+  # never compiled for a dependent, never in the Hex package. The dev compile
+  # compiles every task under dev/, so it also needs the test/support modules
+  # the tasks name (mix defk.stability.freeze reads docs with Defk.LanguageDoc).
   defp elixirc_paths(:dev),
-    do: ["lib", "dev", "test/support/examples.ex", "test/support/catalog.ex"]
+    do: [
+      "lib",
+      "dev",
+      "test/support/examples.ex",
+      "test/support/catalog.ex",
+      "test/support/language_doc.ex",
+      "test/support/language_doc"
+    ]
 
   defp elixirc_paths(_), do: ["lib"]
 
