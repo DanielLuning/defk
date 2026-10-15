@@ -52,6 +52,7 @@ extern int __sigsetjmp(struct __jmp_buf_tag __env[1], int __savemask) __attribut
 #define DEFK_E_FUN_CLAUSE 8 /* FunctionClauseError: module\0function in umsg (module ulen bytes), arity in err_index */
 #define DEFK_E_FAULT 9     /* RuntimeError: a hardware fault inside kernel native code (a defk bug), contained */
 #define DEFK_E_USER 16     /* flag on a kind: a kernel's own raise, message in umsg/ulen */
+#define DEFK_E_UHEAP 32    /* flag with DEFK_E_USER: umsg was built at run time (enif_alloc), defk_raise frees it */
 
 #define DEFK_LIKELY(x) __builtin_expect(!!(x), 1)
 #define DEFK_UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -132,6 +133,31 @@ defk_user_raise(defk_ctx *ctx, int kind, const char *msg, size_t len) {
   ctx->umsg = msg;
   ctx->ulen = len;
   ctx->err = kind | DEFK_E_USER;
+  siglongjmp(ctx->jb, 1);
+}
+
+/* raise Module, "text #{v} text" in a kernel: n integer values between n + 1
+ * literal parts (lens[i] bytes each), each value in decimal as Elixir prints
+ * it (unsigned where u[i] is set). The message is built in an enif_alloc
+ * buffer, so it has no length limit; defk_raise frees it. */
+__attribute__((noreturn, cold, unused)) static void
+defk_user_raise_ints(defk_ctx *ctx, int kind, int n, const char *const *parts, const size_t *lens,
+                     const int64_t *vals, const unsigned char *u) {
+  size_t size = 1 + (size_t)n * 21;
+  for (int i = 0; i <= n; i++) size += lens[i];
+  char *buf = enif_alloc(size);
+  if (!buf) defk_fail(ctx, kind, "out of memory building a raise message");
+  size_t at = 0;
+  for (int i = 0; i <= n; i++) {
+    memcpy(buf + at, parts[i], lens[i]);
+    at += lens[i];
+    if (i < n)
+      at += (size_t)(u[i] ? snprintf(buf + at, size - at, "%llu", (unsigned long long)vals[i])
+                          : snprintf(buf + at, size - at, "%lld", (long long)vals[i]));
+  }
+  ctx->umsg = buf;
+  ctx->ulen = at;
+  ctx->err = kind | DEFK_E_USER | DEFK_E_UHEAP;
   siglongjmp(ctx->jb, 1);
 }
 
@@ -1875,7 +1901,8 @@ static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
     return enif_raise_exception(env, exc);
   }
   int user = ctx->err & DEFK_E_USER;
-  int kind = ctx->err & ~DEFK_E_USER;
+  int heap = ctx->err & DEFK_E_UHEAP;
+  int kind = ctx->err & ~(DEFK_E_USER | DEFK_E_UHEAP);
   const char *mod = kind == DEFK_E_ARITH    ? "Elixir.ArithmeticError"
                     : kind == DEFK_E_OOB    ? "Elixir.Enum.OutOfBoundsError"
                     : kind == DEFK_E_RESUME || kind == DEFK_E_RUNTIME || kind == DEFK_E_FAULT
@@ -1885,6 +1912,11 @@ static ERL_NIF_TERM defk_raise(ErlNifEnv *env, defk_ctx *ctx) {
   const char *text = user ? ctx->umsg : ctx->msg;
   size_t n = user ? ctx->ulen : strlen(ctx->msg);
   memcpy(enif_make_new_binary(env, n, &msg), text, n);
+  if (heap) {
+    enif_free((void *)ctx->umsg);
+    ctx->umsg = NULL;
+    ctx->err &= ~DEFK_E_UHEAP;
+  }
   ERL_NIF_TERM keys[5] = {enif_make_atom(env, "__struct__"), enif_make_atom(env, "__exception__"),
                           enif_make_atom(env, "message"), enif_make_atom(env, "index"),
                           enif_make_atom(env, "enumerable")};

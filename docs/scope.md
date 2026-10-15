@@ -116,10 +116,6 @@ Constructs the compiler rejects as planned say "not supported yet" in the
 compile error. Under the [stability promise](guides/stability.md), each can
 arrive in a minor release.
 
-- `Enum.reduce/3`, and `Enum.find/2` and `Enum.find_index/2` in a form that
-  keeps their meaning without `nil`:
-  [`enum-reduce`](compile-errors.md#enum-reduce),
-  [`enum-find`](compile-errors.md#enum-find).
 - More bitstring accumulator segments (little-endian, float, binary) and
   reading a bitstring, when a workload needs them:
   [`bitstring-segment`](compile-errors.md#bitstring-segment),
@@ -131,8 +127,6 @@ arrive in a minor release.
 
 Every compile error the compiler marks as planned:
 
-- [`enum-reduce`](compile-errors.md#enum-reduce): Enum.reduce/3 is planned; write the same fold as `for ..., reduce:`.
-- [`enum-find`](compile-errors.md#enum-find): Enum.find/2 and Enum.find_index/2 are planned; stop early with Enum.reduce_while/3.
 - [`bitstring-segment`](compile-errors.md#bitstring-segment): An append to a bitstring accumulator takes big-endian integer segments, unsigned or `signed`: `v::size(n)`, `v::k` or `v`.
 - [`bitstring-use`](compile-errors.md#bitstring-use): A bitstring accumulator starts from `<<>>`, is appended to (also in a kernel it is passed to), measured with `bit_size/1` and returned; nothing else.
 
@@ -204,8 +198,10 @@ Every compile error the compiler marks as outside the kernel subset for good:
 - [`nested-tuple`](compile-errors.md#nested-tuple): Tuples don't nest.
 - [`tuple-argument`](compile-errors.md#tuple-argument): Tuples are not passed as arguments.
 - [`recursion`](compile-errors.md#recursion): A kernel can't call itself, directly or through other kernels; write the recursion as a loop.
-- [`unsupported-call`](compile-errors.md#unsupported-call): Calls into other modules are not in the kernel subset, except Enum.reduce_while/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.
-- [`fn-argument`](compile-errors.md#fn-argument): Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.
+- [`unsupported-call`](compile-errors.md#unsupported-call): Calls into other modules are not in the kernel subset, except Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.
+- [`enum-reduce`](compile-errors.md#enum-reduce): Enum.reduce/2 (no initial value) is not in the kernel subset; give the initial value, Enum.reduce/3.
+- [`enum-find`](compile-errors.md#enum-find): Enum.find/2 and Enum.find_index/2 are not in the kernel subset; use Enum.find/3 with a default, or Enum.reduce_while/3 for an index.
+- [`fn-argument`](compile-errors.md#fn-argument): Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.
 - [`pipe`](compile-errors.md#pipe): The pipe operator |> is not in the kernel subset; write the nested call.
 - [`for-collect`](compile-errors.md#for-collect): A `for` collects nothing: without reduce: it is a statement, and into: is not in the kernel subset.
 - [`for-option`](compile-errors.md#for-option): `for` takes `reduce:` and `do`; other options are not in the kernel subset.
@@ -219,11 +215,11 @@ Every compile error the compiler marks as outside the kernel subset for good:
 - [`unsupported-atom`](compile-errors.md#unsupported-atom): Atoms (other than true and false) and nil are not in the kernel subset.
 - [`unsupported-list`](compile-errors.md#unsupported-list): Lists are not in the kernel subset; a kernel takes packed arrays.
 - [`unsupported-fn`](compile-errors.md#unsupported-fn): Anonymous functions are not values in a kernel; define another kernel and call it.
-- [`unsupported-construct`](compile-errors.md#unsupported-construct): A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and throw are not in the kernel subset.
+- [`unsupported-construct`](compile-errors.md#unsupported-construct): A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and throw are not in the kernel subset.
 - [`unsupported-expression`](compile-errors.md#unsupported-expression): Any other expression is not in the kernel subset.
 - [`attribute-value`](compile-errors.md#attribute-value): A module attribute read in a kernel holds an integer (in i64 or u64), a float, a boolean or a binary.
 - [`binary-literal`](compile-errors.md#binary-literal): A binary literal in a kernel is a string or <<...>> of integer bytes (0..255); anything else is built in Elixir.
-- [`raise-message`](compile-errors.md#raise-message): A kernel's `raise` message is a string literal: no interpolation or computed value.
+- [`raise-message`](compile-errors.md#raise-message): A kernel's `raise` message is a string literal, which may interpolate integers: no other computed value.
 - [`raise-module`](compile-errors.md#raise-module): A kernel raises ArgumentError, ArithmeticError or RuntimeError.
 
 ## Keeping this page true

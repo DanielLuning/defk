@@ -235,7 +235,7 @@ unstable (debugging output that may change in any version):
 | `__defk_report__/0` | the fast-path report as data, `[{kernel, line, fact}]` (see `Defk.Report`; `Defk.Report.print/1` prints it) |
 | `__defk_lib__/0` | the path of the compiled NIF library (`.so`) |
 | `__defk_kernels__/0` | each kernel's signature: `%{name:, arity:, params: [{name, type}], ret:}` |
-| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:, crc32c:, max_owned_bytes:}` (`crc32c` is `:instruction` or `:table`, the [crc32c](#hardware-builtins) implementation it picked at its first call, or `:not_called`; `max_owned_bytes` is the [owned-buffer budget](#the-owned-buffer-budget) in bytes) |
+| `__defk_stats__/0` | runtime counters of this library: `%{frames_live:, promotions:, yields:, crc32c:, max_owned_bytes:}` (`crc32c` is `:instruction` or `:table`, the [crc32c](#hardware-builtins) implementation it picked at its first call, or `:not_called`; `max_owned_bytes` is the [owned-buffer budget](#the-owned-buffer-budget) in bytes). The counters are per loaded library: a reload that builds a new library starts them at zero ([hot code upgrade](guides/runtime-contract.md#4-hot-code-upgrade-a-suspended-kernel-finishes-in-its-own-code)) |
 | `__defk_force_yields__/1` | testing: `true` makes this module's kernels yield at every clock read, so every resume path runs; `false` turns it off |
 | `__defk_elixir__/2` | Elixir mode: `Mod.__defk_elixir__(:name, args)` runs one call as plain Elixir (only where Elixir mode is compiled, see [section 10](#10-elixir-mode)) |
 | `__defk_elixir_source__/0` | the generated Elixir mode code (same condition) |
@@ -1907,9 +1907,46 @@ false
 - `Enum.all?(src, fn x -> bool end)` and `Enum.any?/2` stop at the first
   element that decides the result; over an empty range or array they give
   `true` and `false`.
-- There is no `while`, `break` or `return`, and no `Enum.reduce/3`
-  ([`enum-reduce`](compile-errors.md#enum-reduce)) or `Enum.find`/`find_index`
-  ([`enum-find`](compile-errors.md#enum-find)) yet.
+- There is no `while`, `break` or `return`.
+
+### `Enum.reduce/3` and `Enum.find/3`
+
+**Supported with restrictions**, with the same enumerables and literal `fn`
+as above. `Enum.reduce(src, init, fn x, acc -> ... end)` is the same fold as
+`for x <- src, reduce: init do acc -> ... end`, with the same accumulators
+(scalars, tuples, arrays). `Enum.find(src, default, fn x -> ... end)` gives
+the first element for which the `fn` is true, or `default`, and stops at
+that element.
+
+```elixir
+defk sum_sq(xs :: [i64]) :: i64 do
+  Enum.reduce(xs, 0, fn x, acc -> acc + x * x end)
+end
+
+defk first_over(xs :: [f64], t :: f64) :: f64 do
+  Enum.find(xs, -1.0, fn x -> x > t end)
+end
+```
+
+```elixir
+iex> M.sum_sq(<<1::signed-native-64, 2::signed-native-64, 3::signed-native-64>>)
+14
+iex> M.first_over(<<1.0::float-native-64, 2.5::float-native-64>>, 2.0)
+2.5
+iex> M.first_over(<<1.0::float-native-64>>, 2.0)
+-1.0
+```
+
+- The default and the elements have one type: `Enum.find(xs, -1, ...)` over
+  `[f64]` is [`type-mismatch`](compile-errors.md#type-mismatch). An `i64`
+  element is not widened to a float default either, since Elixir would
+  return the integer.
+- `Enum.find/2` and `Enum.find_index/2` return `nil` when nothing matches,
+  and a kernel has no `nil`
+  ([`enum-find`](compile-errors.md#enum-find)): use `Enum.find/3` with a
+  default, or `Enum.reduce_while/3` with a value that means "not found" for
+  an index. `Enum.reduce/2`, which starts from the first element, is
+  [`enum-reduce`](compile-errors.md#enum-reduce).
 
 ### Array accumulators
 
@@ -1985,6 +2022,25 @@ iex> M.fft_size(12)
 ** (ArgumentError) n must be a power of two
 ```
 
+A message can say where the problem is:
+
+```elixir
+defk first_zero(bytes :: [u8], from :: i64) :: i64 do
+  if from < 0 or from > length(bytes), do: raise(ArgumentError, "start #{from} is outside 0..#{length(bytes)}")
+
+  Enum.reduce_while(from..(length(bytes) - 1)//1, -1, fn i, acc ->
+    if bytes[i] == 0, do: {:halt, i}, else: {:cont, acc}
+  end)
+end
+```
+
+```elixir
+iex> M.first_zero(<<1, 0, 2>>, 0)
+1
+iex> M.first_zero(<<1, 0, 2>>, 7)
+** (ArgumentError) start 7 is outside 0..3
+```
+
 - **A statement**, anywhere a statement goes: in a block before its value, in
   `if`/`case` statements, in a branch before the branch's value, in a loop
   body, and in an `Enum.reduce_while/3` `fn` before its tail. A `raise` as a
@@ -1994,10 +2050,16 @@ iex> M.fft_size(12)
   `if not ok, do: raise(...)`, then the value. A `cond` whose arms only
   raise needs a value in each; write the checks as `if` statements instead.
 - **The message is a string literal**, of any length and any bytes (also
-  `raise Module, message: "..."`). Interpolation and computed messages are
-  [`raise-message`](compile-errors.md#raise-message): the message is a C string in the
-  kernel's static storage. Put the value in Elixir, before or after the
-  call. Other modules are [`raise-module`](compile-errors.md#raise-module).
+  `raise Module, message: "..."`). It may interpolate integer values
+  (`i64`, `u64`, and elements of the narrow integer arrays), which print as
+  Elixir prints them: a `u64` above 2^63 - 1 as its unsigned value, a
+  negative `i64` with a minus sign. The values are evaluated left to right
+  before anything is raised, so one that raises (an index out of range, an
+  overflow) raises its own error first. Interpolating anything else (a
+  float, a `bool`, an array) and computed messages (`"a" <> b`) are
+  [`raise-message`](compile-errors.md#raise-message): put the value in
+  Elixir, before or after the call. Other modules are
+  [`raise-module`](compile-errors.md#raise-module).
 - Natively the exception is raised in the calling process like the
   kernel's own errors, after its buffers are freed, also from inside a
   yielding loop or an inlined call. In Elixir mode it is the `raise` itself,

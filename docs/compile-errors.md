@@ -884,7 +884,7 @@ end
 
 ### unsupported-call
 
-Calls into other modules are not in the kernel subset, except Enum.reduce_while/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.
+Calls into other modules are not in the kernel subset, except Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.
 
 - kind: outside the kernel subset (permanent)
 - why: a kernel runs as native code and can't call Elixir functions
@@ -914,17 +914,17 @@ end
 
 ### enum-reduce
 
-Enum.reduce/3 is planned; write the same fold as `for ..., reduce:`.
+Enum.reduce/2 (no initial value) is not in the kernel subset; give the initial value, Enum.reduce/3.
 
-- kind: not supported yet (planned)
-- why: Enum.reduce/3 is planned; `for ..., reduce:` is the same fold
-- hint: write it as a for ..., reduce: loop
+- kind: outside the kernel subset (permanent)
+- why: Enum.reduce/2 starts from the first element and raises Enum.EmptyError on an empty one; a kernel's fold starts from a value you give
+- hint: give the initial value: Enum.reduce(enum, init, fn x, acc -> ... end), and decide what an empty input gives
 
 Rejected:
 
 ```elixir
 defk f(a :: [f64]) :: f64 do
-  Enum.reduce(a, 0.0, fn x, acc -> acc + x end)
+  Enum.reduce(a, fn x, acc -> acc + x end)
 end
 ```
 
@@ -932,19 +932,17 @@ Write instead:
 
 ```elixir
 defk f(a :: [f64]) :: f64 do
-  for x <- a, reduce: 0.0 do
-    acc -> acc + x
-  end
+  Enum.reduce(a, 0.0, fn x, acc -> acc + x end)
 end
 ```
 
 ### enum-find
 
-Enum.find/2 and Enum.find_index/2 are planned; stop early with Enum.reduce_while/3.
+Enum.find/2 and Enum.find_index/2 are not in the kernel subset; use Enum.find/3 with a default, or Enum.reduce_while/3 for an index.
 
-- kind: not supported yet (planned)
-- why: Enum.find/2 and Enum.find_index/2 return nil when nothing is found, a kernel has no nil, and a form that keeps their meaning is planned
-- hint: stop at the first match with Enum.reduce_while/3 and a value that means not found
+- kind: outside the kernel subset (permanent)
+- why: Enum.find/2 and Enum.find_index/2 return nil when nothing is found, and a kernel has no nil; Enum.find/3 returns the default you give
+- hint: use Enum.find(enum, default, fn x -> ... end) for the element; for its index, stop at the first match with Enum.reduce_while/3 and a value that means not found
 
 Rejected:
 
@@ -966,7 +964,7 @@ end
 
 ### fn-argument
 
-Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.
+Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.
 
 - kind: outside the kernel subset (permanent)
 - why: the fn is inlined as the loop body, so it must be written out where it is passed
@@ -1585,10 +1583,10 @@ end
 
 ### unsupported-construct
 
-A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and throw are not in the kernel subset.
+A kernel uses the Elixir forms =, if, cond, case, for, Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2; others such as unless, with, try, receive and throw are not in the kernel subset.
 
 - kind: outside the kernel subset (permanent)
-- why: a kernel uses a fixed set of Elixir forms: =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2
+- why: a kernel uses a fixed set of Elixir forms: =, if, cond, case, for, Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2
 - hint: write it with those forms
 
 Rejected:
@@ -1612,7 +1610,7 @@ end
 Any other expression is not in the kernel subset.
 
 - kind: outside the kernel subset (permanent)
-- why: a kernel uses a fixed set of Elixir forms: =, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2, over numbers, booleans, tuples and arrays
+- why: a kernel uses a fixed set of Elixir forms: =, if, cond, case, for, Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2, over numbers, booleans, tuples and arrays
 - hint: write it with those forms, or compute it in Elixir and pass the result in
 
 Rejected:
@@ -1827,27 +1825,27 @@ end
 
 ### raise-message
 
-A kernel's `raise` message is a string literal: no interpolation or computed value.
+A kernel's `raise` message is a string literal, which may interpolate integers: no other computed value.
 
 - kind: outside the kernel subset (permanent)
-- why: the message is a C string in the kernel's static storage, so it is known when the kernel compiles; formatting a value would need a BEAM binary
-- hint: a kernel raises with a literal message: put the value in Elixir, before or after the call
+- why: the message is a C string in the kernel's static storage with integers formatted into it when it raises; printing a float, an array or a tuple the way Elixir does would need Elixir's own formatting
+- hint: a kernel raises with a literal message that may interpolate integer values ("bad offset #{i}"): put any other value in Elixir, before or after the call
 
 Rejected:
 
 ```elixir
-defk f(n :: i64) :: i64 do
-  if n < 1, do: raise(ArgumentError, "bad length #{n}")
-  n
+defk f(x :: f64) :: f64 do
+  if x < 0.0, do: raise(ArgumentError, "bad value #{x}")
+  x
 end
 ```
 
 Write instead:
 
 ```elixir
-defk f(n :: i64) :: i64 do
-  if n < 1, do: raise(ArgumentError, "length must be positive")
-  n
+defk f(x :: f64) :: f64 do
+  if x < 0.0, do: raise(ArgumentError, "value must not be negative")
+  x
 end
 ```
 

@@ -131,6 +131,13 @@ and the old library stays loaded until it does. A second reload (or
 `:code.purge/1`) before it finishes kills the process, like any process
 still running old Erlang code.
 
+`Mod.__defk_stats__/0` counts per loaded library. After a reload that builds
+a new library, the new library's counters (`frames_live`, `promotions`,
+`yields`) start at zero. A kernel still running in the old library is
+counted in the old library's counters, also when it finishes after the
+reload, so the new `frames_live` does not show it. A recompile that gives the
+same library (the same kernel source) keeps the counters.
+
 ## How it is checked
 
 - Agreement of every kernel with its Elixir mode, on edge values and

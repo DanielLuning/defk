@@ -52,8 +52,7 @@ defmodule Defk.CompileRewritesTest do
     {"Enum.min_max(a)", "a :: [f64]", "f64", "{lo, hi} = @@\nhi - lo", :rewrite},
     # other Enum functions
     {"Enum.with_index(a)", "a :: [f64]", "f64", "@@", :none},
-    {"Enum.reduce(a, 0.0, fn x, acc -> acc + x end)", "a :: [f64]", "f64", "@@", :rewrite},
-    {"Enum.reduce(a, 0.0, &+/2)", "a :: [f64]", "f64", "@@", :none},
+    {"Enum.reduce(a, fn x, acc -> acc + x end)", "a :: [f64]", "f64", "@@", :none},
     {"Enum.find_index(a, fn x -> x > t end)", "a :: [f64], t :: f64", "i64", "@@", :rewrite},
     {"Enum.find_index(a, fn x -> x > i end)", "a :: [f64], i :: f64", "i64", "@@", :rewrite},
     {"Enum.find(a, fn x -> x > t end)", "a :: [f64], t :: f64", "f64", "@@", :none},

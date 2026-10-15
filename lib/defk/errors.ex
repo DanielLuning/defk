@@ -53,7 +53,7 @@ defmodule Defk.Errors do
   # Rejections reported per module; later ones are counted, not shown.
 
   @calls Enum.join(Defk.Builtins.all() -- [:alloc], ", ")
-  @forms "=, if, cond, case, for, Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2"
+  @forms "=, if, cond, case, for, Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2"
 
   # ------------------------------------------------------------- registry --
   # Active codes first, in the catalogue's order, then the retired ones. A
@@ -432,7 +432,7 @@ defmodule Defk.Errors do
       code: "unsupported-call",
       kind: :subset,
       summary:
-        "Calls into other modules are not in the kernel subset, except Enum.reduce_while/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.",
+        "Calls into other modules are not in the kernel subset, except Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2, Enum.any?/2 and :math functions with a builtin.",
       why: "a kernel runs as native code and can't call Elixir functions",
       hint: "compute it in Elixir before or after the call and pass the result in",
       example: "defk f(a :: [f64]) :: [f64] do\n  Enum.map(a, fn x -> x * 2.0 end)\nend",
@@ -441,23 +441,26 @@ defmodule Defk.Errors do
     },
     %{
       code: "enum-reduce",
-      kind: :planned,
-      summary: "Enum.reduce/3 is planned; write the same fold as `for ..., reduce:`.",
-      why: "Enum.reduce/3 is planned; `for ..., reduce:` is the same fold",
-      hint: "write it as a for ..., reduce: loop",
-      example:
-        "defk f(a :: [f64]) :: f64 do\n  Enum.reduce(a, 0.0, fn x, acc -> acc + x end)\nend",
+      kind: :subset,
+      summary:
+        "Enum.reduce/2 (no initial value) is not in the kernel subset; give the initial value, Enum.reduce/3.",
+      why:
+        "Enum.reduce/2 starts from the first element and raises Enum.EmptyError on an empty one; a kernel's fold starts from a value you give",
+      hint:
+        "give the initial value: Enum.reduce(enum, init, fn x, acc -> ... end), and decide what an empty input gives",
+      example: "defk f(a :: [f64]) :: f64 do\n  Enum.reduce(a, fn x, acc -> acc + x end)\nend",
       rewrite:
-        "defk f(a :: [f64]) :: f64 do\n  for x <- a, reduce: 0.0 do\n    acc -> acc + x\n  end\nend"
+        "defk f(a :: [f64]) :: f64 do\n  Enum.reduce(a, 0.0, fn x, acc -> acc + x end)\nend"
     },
     %{
       code: "enum-find",
-      kind: :planned,
+      kind: :subset,
       summary:
-        "Enum.find/2 and Enum.find_index/2 are planned; stop early with Enum.reduce_while/3.",
+        "Enum.find/2 and Enum.find_index/2 are not in the kernel subset; use Enum.find/3 with a default, or Enum.reduce_while/3 for an index.",
       why:
-        "Enum.find/2 and Enum.find_index/2 return nil when nothing is found, a kernel has no nil, and a form that keeps their meaning is planned",
-      hint: "stop at the first match with Enum.reduce_while/3 and a value that means not found",
+        "Enum.find/2 and Enum.find_index/2 return nil when nothing is found, and a kernel has no nil; Enum.find/3 returns the default you give",
+      hint:
+        "use Enum.find(enum, default, fn x -> ... end) for the element; for its index, stop at the first match with Enum.reduce_while/3 and a value that means not found",
       example:
         "defk f(a :: [f64], t :: f64) :: i64 do\n  Enum.find_index(a, fn x -> x > t end)\nend",
       rewrite:
@@ -467,7 +470,7 @@ defmodule Defk.Errors do
       code: "fn-argument",
       kind: :subset,
       summary:
-        "Enum.reduce_while/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.",
+        "Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2 take a literal fn with one clause and no guard.",
       why: "the fn is inlined as the loop body, so it must be written out where it is passed",
       hint: "write the function as a literal fn",
       example: "defk f(x :: i64) :: bool do\n  Enum.all?(1..x//1, &(&1 > 0))\nend",
@@ -839,15 +842,15 @@ defmodule Defk.Errors do
       code: "raise-message",
       kind: :subset,
       summary:
-        "A kernel's `raise` message is a string literal: no interpolation or computed value.",
+        "A kernel's `raise` message is a string literal, which may interpolate integers: no other computed value.",
       why:
-        "the message is a C string in the kernel's static storage, so it is known when the kernel compiles; formatting a value would need a BEAM binary",
+        "the message is a C string in the kernel's static storage with integers formatted into it when it raises; printing a float, an array or a tuple the way Elixir does would need Elixir's own formatting",
       hint:
-        "a kernel raises with a literal message: put the value in Elixir, before or after the call",
+        "a kernel raises with a literal message that may interpolate integer values (\"bad offset \#{i}\"): put any other value in Elixir, before or after the call",
       example:
-        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(ArgumentError, \"bad length \#{n}\")\n  n\nend",
+        "defk f(x :: f64) :: f64 do\n  if x < 0.0, do: raise(ArgumentError, \"bad value \#{x}\")\n  x\nend",
       rewrite:
-        "defk f(n :: i64) :: i64 do\n  if n < 1, do: raise(ArgumentError, \"length must be positive\")\n  n\nend"
+        "defk f(x :: f64) :: f64 do\n  if x < 0.0, do: raise(ArgumentError, \"value must not be negative\")\n  x\nend"
     },
     %{
       code: "raise-module",
