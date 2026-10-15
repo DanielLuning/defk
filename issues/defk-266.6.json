@@ -9,11 +9,13 @@
   "created": "2026-10-15T14:24:48Z",
   "description": "After the checks exist: CODEOWNERS makes the owner review any change under test/stability/; a PR template line 'Touches a promised surface (kernel subset, runtime contract, public API, error codes)? Then a CHANGELOG entry.'; the release checklist (docs/agents or ci/README) gains a step: copy the new version's corpus, rejections, API snapshot and codes into test/stability/\u003cversion\u003e/ from the tag. Also: the full platform matrix runs on release tags only (defk-1v7); state in the release step that the stability checks must pass on the matrix before publishing. Done when the three are committed.",
   "id": "defk-266.6",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-266",
   "priority": 3,
   "status": "open",
   "title": "Stability: process around the frozen files (CODEOWNERS, PR template, release step)",
   "type": "task",
-  "updated_at": "2026-10-15T14:24:49Z"
+  "updated_at": "2026-10-15T14:24:51Z"
 }
