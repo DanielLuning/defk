@@ -7,9 +7,15 @@
   "id": "defk-0et.2",
   "labels": [],
   "parent": "defk-0et",
+  "comments": [
+    {
+      "text": "PR #15 opened: https://github.com/DanielLuning/defk/pull/15. The freeze task writes api.exs from the tag (temporary worktree, prod compile, Code.fetch_docs); unstable tier is a list in code checked against the guide; 0.1.0/api.exs regenerated (comments, order, plus assert_agrees/3 from the documented default). mix ci passes. Awaiting review and merge; ticket stays in progress.",
+      "timestamp": "2026-10-15T18:08:55Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Stability: the freeze task writes the API snapshot from the tag",
   "type": "task",
-  "updated_at": "2026-10-15T17:53:40Z"
+  "updated_at": "2026-10-15T18:08:55Z"
 }
