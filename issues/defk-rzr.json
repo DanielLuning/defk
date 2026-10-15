@@ -8,7 +8,7 @@
   "labels": [],
   "priority": 2,
   "status": "open",
-  "title": "[BUG] The fast-path report's .remarks cache holds absolute source paths, so a _build copied into another checkout fails report_test",
+  "title": "The fast-path report's .remarks cache holds absolute source paths, so a _build copied into another checkout fails report_test",
   "type": "bug",
-  "updated_at": "2026-10-15T14:58:18Z"
+  "updated_at": "2026-10-15T15:00:53Z"
 }
