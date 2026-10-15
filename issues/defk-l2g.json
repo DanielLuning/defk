@@ -14,9 +14,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Part of map defk-xoh (2026-10-15).",
+      "timestamp": "2026-10-15T07:42:59Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Myers bit-parallel Levenshtein in both fuzzy_search backends",
   "type": "task",
-  "updated_at": "2026-10-15T07:42:58Z"
+  "updated_at": "2026-10-15T07:42:59Z"
 }
