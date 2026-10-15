@@ -23,6 +23,17 @@ defmodule Defk.TestKit do
   is part of the hash.
   """
   def compile(ns, body, opts \\ []) do
+    case compiled(ns, body, opts) do
+      {:ok, _mod} -> :ok
+      {:error, msg} -> msg
+    end
+  end
+
+  @doc """
+  `compile/3` that returns `{:ok, module}`, to call the compiled kernels,
+  or `{:error, message}`.
+  """
+  def compiled(ns, body, opts \\ []) do
     use_line = if u = opts[:use], do: "use Defk, #{u}", else: "use Defk"
 
     id =
@@ -34,7 +45,7 @@ defmodule Defk.TestKit do
     src = "defmodule #{inspect(mod)} do\n  #{use_line}\n\n#{indent(body)}\nend\n"
 
     if Code.ensure_loaded?(mod) do
-      :ok
+      {:ok, mod}
     else
       dir = Path.join([System.tmp_dir!(), "defk_test_kit", inspect(ns)])
       File.mkdir_p!(dir)
@@ -43,9 +54,9 @@ defmodule Defk.TestKit do
 
       try do
         Code.compile_file(path)
-        :ok
+        {:ok, mod}
       rescue
-        e in CompileError -> Exception.message(e)
+        e in CompileError -> {:error, Exception.message(e)}
       end
     end
   end
