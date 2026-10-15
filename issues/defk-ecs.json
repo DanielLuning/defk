@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-15T10:14:48Z",
   "created": "2026-10-15T09:22:56Z",
   "description": "Owner decision 2026-10-15: now that the repo has a remote, every change lands through a GitHub PR. One branch and worktree per ticket; the agent pushes the branch and opens the PR (ticket id in the title), the owner reviews and merges with a merge commit; the ticket closes after the merge. Also: CI runs on push to main and on pull_request only, so a PR commit does not run the matrix twice (private repo, metered minutes).",
   "id": "defk-ecs",
@@ -19,7 +20,7 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Deliver code through pull requests, not direct merges to main",
   "type": "task",
   "updated_at": "2026-10-15T10:14:48Z"
