@@ -9,9 +9,11 @@
 #
 #   elixir examples/matmul.exs
 #
-# Recommendation (the catalog's): for tensor work use Nx; defk fits a custom
-# loop beside it. docs/research/nx-boundary.md (branch research/nx-boundary)
-# puts the line here: "Nx is the right tool when the work is whole-tensor,
+# Recommendation (the catalog's): for tensor work use Nx with EXLA, which is
+# 6x faster than defk at 256x256 and 108x at 1024x1024 here; defk fits a
+# custom loop beside it, and wins only below ~100x100, where EXLA's dispatch
+# and buffer copies outweigh the product. docs/research/nx-boundary.md
+# (branch research/nx-boundary) puts the line here: "Nx is the right tool when the work is whole-tensor,
 # shape-static, and big enough to amortise a compile and a dirty-scheduler
 # round trip: elementwise maps, reductions, windows, cumulative sums,
 # sort/argsort, linear algebra, convolutions, anything with gradients,
@@ -37,7 +39,9 @@
 #
 # Elixir baselines (:optimized after three variants), all from and to packed
 # f64 binaries, like the kernels, and timed with MATMUL_VARIANTS=1 elixir
-# examples/matmul.exs. M-series Mac, OTP 29, Elixir 1.20, best of 3:
+# examples/matmul.exs. M-series Mac (12 cores), OTP 29, Elixir 1.20, best of
+# 3; the EXLA rows measured 2026-10-15 under load (load average ~3.3, one
+# unrelated BEAM at 100% of a core: provisional), the rest on 2026-10-13:
 #
 #                                  64x64       256x256
 #   lists of rows, Enum.zip transpose of b, one
@@ -47,37 +51,47 @@
 #   defk matmul (i-k-j)                    0.20 ms      13.4 ms
 #   defk matmul_blocked (64 x 64 tiles)    0.27 ms      13.9 ms
 #   Nx.dot, binary backend                    36 ms     2790 ms
-#   EXLA                                   not measured (does not compile here)
+#   Nx + EXLA, from packed binaries        0.77 ms     2.2 ms   <- native row
+#   Nx + EXLA, operands resident           0.09 ms     0.28 ms
 #
 # The report's sweep (one run per size, Elixir = the reported variant):
-# 64: 4.3 vs 0.24 ms (17x), 256: 346 vs 13.4 ms (26x), 512: 3.6 s vs 104 ms
-# (34x), 1024: 31 s vs 827 ms (38x); the blocked kernel is no faster at 1024
-# (983 ms, one run), so only the plain loop is reported. defk's 13.4 ms at 256
+# 64: 4.2 vs 0.21 ms (20x), 256: 320 vs 13.1 ms (24x), 512: 2.7 s vs 103 ms
+# (26x), 1024: 29 s vs 833 ms (35x); the blocked kernel is no faster at 1024
+# (941 ms, one run), so only the plain loop is reported. defk's 13.1 ms at 256
 # is ~2.5 GFLOP/s (2 x 256^3 flops): one scalar-width f64 multiply-add per
 # cycle, far below a BLAS.
 #
-# Verdict at 256x256: defk 25x over the best Elixir (good). Native speedup
-# (Nx binary backend over defk): defk is ~210x faster at 256 and ~150x at 64,
-# but only because that backend is Elixir; pure Elixir lists beat it by
-# ~8x. That is no argument for defk over Nx: with EXLA or Torchx the
-# comparison flips (see above; not measured).
+# Verdict at 256x256: defk 25x over the best Elixir (good). The native row is
+# Nx with EXLA: defk is 0.16x of it (EXLA 6x faster, 2.1-2.2 vs 13.1-15.5
+# ms), and the gap widens with size: 512: 2.9 vs 106 ms (37x), 1024: 7.7 vs
+# 833 ms (108x; ~280 GFLOP/s, XLA's multithreaded SIMD GEMM on all cores).
+# With both operands already resident on EXLA.Backend the 256 product is
+# 0.28 ms, 50x defk. Only at 64x64 does defk win (0.21 vs 0.77 ms from
+# binaries): there the copies into XLA buffers and the dispatch cost more
+# than the product, the "small inputs" case of the research note. The resident
+# form wins even there (0.09 ms). Nx's binary backend is Elixir and ~8x slower
+# than plain lists, so its 150-200x against defk says nothing about Nx.
 #
-# Nx: Nx 0.13.1 on the binary backend (Nx.BinaryBackend, which is Elixir, not
-# native), end to end from the same packed binaries:
-# Nx.from_binary |> Nx.reshape |> Nx.dot |> Nx.to_binary. Nx is a dependency
-# of this script (Mix.install works from the hex cache with HEX_OFFLINE=1).
-# EXLA was tried once and skipped: {:exla, "0.10.0"} (xla 0.9.1) does not
-# compile on this machine (the xla_extension headers specialise std::is_signed,
-# which the current Apple clang/libc++ rejects with -Winvalid-specialization
-# as a hard error; CXXFLAGS=-Wno-invalid-specialization did not help). So the
-# EXLA/BLAS comparison is not measured here. Expectation, from the research
-# note and not measured: EXLA calls an optimised, multithreaded SIMD GEMM and
-# wins by a large factor at 256 and above; defk's scalar-vectorised loop is
-# nowhere near BLAS.
+# Nx: Nx 0.13.1 and EXLA 0.13.1, both dependencies of this script
+# (Mix.install works from the hex cache with HEX_OFFLINE=1; EXLA builds its
+# NIF in ~25 s on first install, against the precompiled XLA 0.10.0 for
+# aarch64-darwin-cpu). The binary backend row (Nx.BinaryBackend, which is
+# Elixir, not native) runs end to end from the same packed binaries:
+# Nx.from_binary |> Nx.reshape |> Nx.dot |> Nx.to_binary; it is kept as a
+# check, not reported. The EXLA row is Nx.dot jitted with compiler: EXLA (the
+# CPU client), timed the same way from the packed binaries a caller holds, so
+# the copies into XLA buffers and the copy of the result back are inside the
+# timing; the "resident" row has both operands already on EXLA.Backend and
+# only reads the result back. XLA compiles one executable per shape on the
+# first call (26-40 ms at 64x64 including the client start, ~5 ms at 256x256);
+# the script makes that call before any timing and prints it, so no timed run
+# includes a compile. ({:exla, "0.10.0"} did not compile on this machine
+# against Apple clang's -Winvalid-specialization; 0.13.1 passes
+# -Wno-invalid-specialization itself.)
 #
 # Agreement: every implementation is checked against a pure-Elixir reference
 # (plain sum over k, ascending) with a 1e-9 relative tolerance per element,
-# and against Nx.dot on the binary backend. Bit-exactness is not expected
+# and against Nx.dot on the binary backend and with EXLA. Bit-exactness is not expected
 # across implementations: the summation order differs (each Elixir
 # dot sums k ascending from 0.0, the same order as the kernel, so these
 # usually match to the last bit, but Nx's accumulation order is its own). The inputs are positive,
@@ -86,7 +100,11 @@
 #
 # Kernel notes: nothing special needed; 2D indexing is row * n + col.
 
-Mix.install([{:defk, path: Path.expand("..", __DIR__)}, {:nx, "== 0.13.1"}])
+Mix.install([
+  {:defk, path: Path.expand("..", __DIR__)},
+  {:nx, "== 0.13.1"},
+  {:exla, "== 0.13.1"}
+])
 
 defmodule Matmul.Kernels do
   use Defk
@@ -230,6 +248,44 @@ defmodule Matmul.Check do
     ta |> Nx.dot(tb) |> Nx.to_binary()
   end
 
+  # Nx.dot jitted with EXLA (XLA's CPU client), end to end from the packed
+  # binaries a caller holds: the copies into XLA buffers and the copy of the
+  # result back are inside the timing, as a caller with binaries pays them.
+  # The jitted fun is built once (exla_dot_fun/0) and warmed before timing, so
+  # XLA's compile is not in any measured run; it is reported on its own.
+  def exla_dot(a, b, n, m, p) do
+    ta = a |> Nx.from_binary(:f64) |> Nx.reshape({n, m})
+    tb = b |> Nx.from_binary(:f64) |> Nx.reshape({m, p})
+    exla_dot_fun().(ta, tb) |> Nx.to_binary()
+  end
+
+  # the same with both operands already resident on EXLA.Backend (what an
+  # app that keeps its tensors in Nx pays), the result read back
+  def exla_dot_resident(ta, tb), do: exla_dot_fun().(ta, tb) |> Nx.to_binary()
+
+  def exla_tensor(bin, rows, cols),
+    do: bin |> Nx.from_binary(:f64, backend: EXLA.Backend) |> Nx.reshape({rows, cols})
+
+  def exla_dot_fun do
+    case :persistent_term.get({__MODULE__, :exla_dot}, nil) do
+      nil ->
+        f = Nx.Defn.jit(&Nx.dot/2, compiler: EXLA)
+        :persistent_term.put({__MODULE__, :exla_dot}, f)
+        f
+
+      f ->
+        f
+    end
+  end
+
+  # XLA compiles one executable per shape: the first call at a shape pays it
+  def exla_warm(n) do
+    {a, b} = {gen(n * n, 5), gen(n * n, 6)}
+    {us, _} = :timer.tc(fn -> exla_dot(a, b, n, n, n) end)
+    {us2, _} = :timer.tc(fn -> exla_dot(a, b, n, n, n) end)
+    {us / 1000, us2 / 1000}
+  end
+
   def gen(count, seed) do
     :rand.seed(:exsss, {seed, 2, 3})
     for _ <- 1..count, into: <<>>, do: <<:rand.uniform()::float-native-64>>
@@ -239,6 +295,15 @@ end
 inputs = fn n -> {Matmul.Check.gen(n * n, 1), Matmul.Check.gen(n * n, 2)} end
 {a64, b64} = inputs.(64)
 {a256, b256} = inputs.(256)
+
+# EXLA's compile per shape, before any timing (reported, never timed)
+for n <- [64, 256] do
+  {first, second} = Matmul.Check.exla_warm(n)
+
+  IO.puts(
+    "EXLA #{n}x#{n}: first call #{Float.round(first, 1)} ms (XLA compile + run), second #{Float.round(second, 2)} ms"
+  )
+end
 
 if System.get_env("MATMUL_VARIANTS") do
   time = fn label, f ->
@@ -264,20 +329,25 @@ if System.get_env("MATMUL_VARIANTS") do
     if n <= 256 do
       time.("Nx binary backend", fn -> Matmul.Check.nx_dot(a, b, n, n, n) end)
     end
+
+    time.("Nx + EXLA, from binaries", fn -> Matmul.Check.exla_dot(a, b, n, n, n) end)
+    {ta, tb} = {Matmul.Check.exla_tensor(a, n, n), Matmul.Check.exla_tensor(b, n, n)}
+    time.("Nx + EXLA, resident", fn -> Matmul.Check.exla_dot_resident(ta, tb) end)
   end
 
-  {a1k, b1k} = inputs.(1024)
-  IO.puts("1024x1024 (one run each)")
+  for n <- [512, 1024] do
+    {a, b} = inputs.(n)
+    IO.puts("#{n}x#{n} (one run each)")
 
-  time1 = fn label, f ->
-    IO.puts("  #{label} #{Float.round(elem(:timer.tc(f), 0) / 1000, 1)} ms")
+    time1 = fn label, f ->
+      IO.puts("  #{String.pad_trailing(label, 24)} #{Float.round(elem(:timer.tc(f), 0) / 1000, 1)} ms")
+    end
+
+    time1.("defk matmul", fn -> Matmul.Kernels.matmul(a, b, n, n, n) end)
+    time1.("defk matmul_blocked", fn -> Matmul.Kernels.matmul_blocked(a, b, n, n, n) end)
+    Matmul.Check.exla_warm(n)
+    time1.("Nx + EXLA, from binaries", fn -> Matmul.Check.exla_dot(a, b, n, n, n) end)
   end
-
-  time1.("defk matmul        ", fn -> Matmul.Kernels.matmul(a1k, b1k, 1024, 1024, 1024) end)
-
-  time1.("defk matmul_blocked", fn ->
-    Matmul.Kernels.matmul_blocked(a1k, b1k, 1024, 1024, 1024)
-  end)
 end
 
 best_elixir = &Matmul.Elixir.lists_dot/5
@@ -291,6 +361,7 @@ agree = fn ->
     Matmul.Check.close?(Matmul.Kernels.matmul(sa, sb, 7, 5, 9), sref) and
       Matmul.Check.close?(Matmul.Kernels.matmul_blocked(sa, sb, 7, 5, 9), sref) and
       Matmul.Check.close?(Matmul.Check.nx_dot(sa, sb, 7, 5, 9), sref) and
+      Matmul.Check.close?(Matmul.Check.exla_dot(sa, sb, 7, 5, 9), sref) and
       Matmul.Check.close?(Matmul.Elixir.lists_dot(sa, sb, 7, 5, 9), sref) and
       Matmul.Check.close?(Matmul.Elixir.lists_ikj(sa, sb, 7, 5, 9), sref) and
       Matmul.Check.close?(Matmul.Elixir.binary_cols(sa, sb, 7, 5, 9), sref)
@@ -305,6 +376,8 @@ agree = fn ->
         d == Matmul.Kernels.matmul_blocked(a, b, n, n, n) and
         Matmul.Check.close?(Matmul.Check.nx_dot(a, b, n, n, n), ref) and
         Matmul.Check.close?(Matmul.Check.nx_dot(a, b, n, n, n), d) and
+        Matmul.Check.close?(Matmul.Check.exla_dot(a, b, n, n, n), ref) and
+        Matmul.Check.close?(Matmul.Check.exla_dot(a, b, n, n, n), d) and
         Matmul.Check.close?(Matmul.Elixir.lists_dot(a, b, n, n, n), ref) and
         Matmul.Check.close?(Matmul.Elixir.binary_cols(a, b, n, n, n), ref) and
         Matmul.Check.close?(Matmul.Elixir.lists_ikj(a, b, n, n, n), d)
@@ -334,10 +407,12 @@ Defk.Bench.report(
   realistic_size: "256x256",
   elixir: fn -> best_elixir.(a256, b256, 256, 256, 256) end,
   defk: fn -> Matmul.Kernels.matmul(a256, b256, 256, 256, 256) end,
-  native: {fn -> Matmul.Check.nx_dot(a256, b256, 256, 256, 256) end, "Nx 0.13.1 binary backend"},
+  native:
+    {fn -> Matmul.Check.exla_dot(a256, b256, 256, 256, 256) end,
+     "Nx 0.13.1 + EXLA 0.13.1 (CPU), from packed binaries"},
   check: agree,
   sweep: {[64, 256, 512, 1024], sweep_fun},
   sweep_runs: 1,
   reason:
-    "good against pure Elixir, but the tensor answer is Nx: defk beats Nx's Elixir binary backend, not EXLA's BLAS (not measured, did not compile); for tensor work use Nx, defk fits a custom loop beside it"
+    "good against pure Elixir, but the tensor answer is Nx: with EXLA, Nx.dot is 6x faster than defk at 256x256 and 108x at 1024x1024 (defk wins only at 64x64, where EXLA's dispatch and copies cost more than the product); for tensor work use Nx with EXLA, defk fits a custom loop beside it"
 )
