@@ -1,0 +1,4 @@
+# The frozen stability corpus (docs/agents/stability.md): a file under
+# test/stability/ is never edited, and a release adds a directory. Any
+# change there asks the owner for a review.
+/test/stability/ @DanielLuning
