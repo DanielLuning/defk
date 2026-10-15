@@ -40,9 +40,13 @@ defmodule Defk.Deprecations do
 
   def entries, do: @entries
 
+  # read outside the loop: the loop body never compiles when the table is
+  # empty, and an attribute read only there would warn as unused
+  kinds = @kinds
+
   for e <- @entries do
     well_formed? =
-      is_map(e) and Map.has_key?(e, :old) and Map.has_key?(e, :new) and e[:kind] in @kinds and
+      is_map(e) and Map.has_key?(e, :old) and Map.has_key?(e, :new) and e[:kind] in kinds and
         is_binary(e[:since])
 
     if not well_formed?,
