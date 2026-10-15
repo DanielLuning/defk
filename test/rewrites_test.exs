@@ -23,9 +23,7 @@ defmodule Defk.RewritesTest do
       {quote(do: Enum.min(a)), arr},
       {quote(do: Enum.max([a, b, c])), int},
       {quote(do: Enum.with_index(a)), arr},
-      # credo:disable-for-next-line ExSlop.Check.Refactor.ExplicitSumReduce
-      {quote(do: Enum.reduce(a, 0, fn x, acc -> acc + x end)), arr},
-      {quote(do: Enum.reduce(a, 0, &+/2)), arr},
+      {quote(do: Enum.reduce(a, fn x, acc -> acc + x end)), arr},
       {quote(do: Enum.find(a, fn x -> x > 0 end)), arr},
       {quote(do: Enum.count(a, fn x -> x > 0 end)), arr},
       {quote(do: Enum.each(a, fn x -> g(x) end)), arr},

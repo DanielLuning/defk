@@ -1726,6 +1726,14 @@ defmodule Defk.Compiler do
     end
   end
 
+  # Enum.reduce/3 and Enum.find/3 with a literal fn were rewritten before
+  # compiling (Defk.EnumForms); what is left takes some other function
+  defp lower_node({{:., _, [{:__aliases__, _, [:Enum]}, :reduce]}, _, [_, _, _]} = node, _env),
+    do: fn_argument!(node, "Enum.reduce/3", [:x, :acc])
+
+  defp lower_node({{:., _, [{:__aliases__, _, [:Enum]}, :find]}, _, [_, _, _]} = node, _env),
+    do: fn_argument!(node, "Enum.find/3", [:x])
+
   # Enum.all?/any? with a predicate fn are reduce_while with a bool accumulator
   defp lower_node({{:., _, [{:__aliases__, _, [:Enum]}, f]}, m, args} = node, env)
        when f in [:all?, :any?] do
@@ -4854,6 +4862,21 @@ defmodule Defk.Compiler do
     end)
   end
 
+  # Enum.find/3 (Defk.EnumForms): the element found and the default are one
+  # type, as no conversion keeps Elixir's result (an i64 element found under
+  # a float default would come back as a float)
+  defp find_types!(t, t, _at), do: :ok
+  defp find_types!(e, d, _at) when e in @ints and d in @ints, do: :ok
+
+  defp find_types!(e, d, at) do
+    err!(
+      at,
+      "type-mismatch",
+      "Enum.find/3's default has type #{fmt(d)} and the elements have type #{fmt(e)}",
+      hint: "give a default of the element type, #{fmt(e)}"
+    )
+  end
+
   # `at` is the expression that gives the new value; `live` the {id, buf}
   # live across iterations (and after the loop); `fix` collects array
   # accumulators whose new value lacks the facts assumed (with_acc_facts/2)
@@ -4872,6 +4895,7 @@ defmodule Defk.Compiler do
     outs =
       Enum.zip_with([accs, results, items], fn [{name, _c, a}, r, item] ->
         if a[:u64_ref] && a.t == :i64 && r.t == :u64, do: throw({:defk_u64_acc, a.u64_ref, name})
+        name == Defk.EnumForms.find_default() && find_types!(r.t, a.t, item)
         coerce!(r, a.t, item, "the new value of #{name}")
       end)
 

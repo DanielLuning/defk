@@ -71,8 +71,8 @@ atoms, `nil` or anonymous functions.
 ## The subset
 
 - Forms: `=`, `if` (with an `else` when used as a value), `cond`, `case` on
-  an `i64` or `bool`, `for`, `Enum.reduce_while/3`, `Enum.all?/2`,
-  `Enum.any?/2`, and `raise` with a literal message (which may interpolate
+  an `i64` or `bool`, `for`, `Enum.reduce/3`, `Enum.reduce_while/3`,
+  `Enum.find/3` (with a default), `Enum.all?/2`, `Enum.any?/2`, and `raise` with a literal message (which may interpolate
   integers: `"bad offset #{i}"`).
 - Write the step of a range: `0..(n - 1)//1`. Without it, `0..-1` counts down
   and runs twice.
@@ -116,8 +116,6 @@ atoms, `nil` or anonymous functions.
 These are planned, not built. Do not write them; use the rewrite.
 
 <!-- generated: mix run -e 'IO.write(Defk.Errors.scope(:planned, :hexdocs))' -->
-- [`enum-reduce`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#enum-reduce): Enum.reduce/3 is planned; write the same fold as `for ..., reduce:`.
-- [`enum-find`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#enum-find): Enum.find/2 and Enum.find_index/2 are planned; stop early with Enum.reduce_while/3.
 - [`bitstring-segment`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#bitstring-segment): An append to a bitstring accumulator takes big-endian integer segments, unsigned or `signed`: `v::size(n)`, `v::k` or `v`.
 - [`bitstring-use`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#bitstring-use): A bitstring accumulator starts from `<<>>`, is appended to (also in a kernel it is passed to), measured with `bit_size/1` and returned; nothing else.
 <!-- end generated -->

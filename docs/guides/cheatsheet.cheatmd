@@ -178,8 +178,10 @@ against literals, `^pinned`, `_` and variables, with guards.
 | `for x <- a do ... end` | statement over an array |
 | `for i <- 0..(n - 1)//1 do` | over a range (write the step) |
 | `for x <- a, reduce: acc0 do acc -> ... end` | fold, also with a tuple accumulator |
+| `Enum.reduce(a, acc0, fn x, acc -> ... end)` | the same fold |
 | `Enum.reduce_while(a, acc, fn x, acc -> {:cont, acc} end)` | early exit |
 | `Enum.all?(a, fn x -> ... end)`, `Enum.any?/2` | early exit |
+| `Enum.find(a, default, fn x -> ... end)` | early exit: the first match, or the default |
 
 ### Early exit
 
