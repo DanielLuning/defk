@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-15T10:26:59Z",
@@ -8,8 +8,8 @@
   "labels": [],
   "parent": "defk-vcx",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "@doc before defk is lost: the kernel's function has no doc",
   "type": "bug",
-  "updated_at": "2026-10-15T10:26:59Z"
+  "updated_at": "2026-10-15T12:58:50Z"
 }
