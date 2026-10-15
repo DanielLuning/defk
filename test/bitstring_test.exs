@@ -147,10 +147,9 @@ defmodule Defk.BitstringTest.K do
   end
 
   # gorilla_stream's XOR value encoder (Defk.GorillaReference), over the f64
-  # bit patterns: the [f64] binary read as an [i64]. A u64 segment value with
-  # the top bit set is a negative i64 here, so the meaningful bits (up to 64)
-  # are appended as two segments of at most 32 bits.
-  defk gorilla(vs :: [i64]) :: bitstring do
+  # bit patterns: the [f64] binary read as a [u64], so a pattern with the top
+  # bit set is one u64 segment value, as in gorilla_stream's own code
+  defk gorilla(vs :: [u64]) :: bitstring do
     n = length(vs)
 
     if n == 0 do
@@ -158,7 +157,7 @@ defmodule Defk.BitstringTest.K do
     else
       first = vs[0]
       acc = <<>>
-      acc = <<acc::bitstring, band(bsr(first, 32), 0xFFFFFFFF)::32, band(first, 0xFFFFFFFF)::32>>
+      acc = <<acc::bitstring, first::64>>
 
       {acc, _, _, _} =
         for i <- 1..(n - 1)//1, reduce: {acc, first, 0, 0} do
@@ -171,11 +170,8 @@ defmodule Defk.BitstringTest.K do
             # the previous window holds the meaningful bits
             same = x != 0 and lz >= plz and tz >= ptz and ml > 0
             k = if x == 0, do: 0, else: if(same, do: ml, else: 64 - lz - tz)
+            # the k meaningful bits; a logical shift, as x is a u64
             w = bsr(x, if(same, do: ptz, else: tz))
-            khi = max(k - 32, 0)
-            klo = min(k, 32)
-            hi = band(bsr(w, 32), bsl(1, khi) - 1)
-            lo = band(w, bsl(1, klo) - 1)
 
             acc =
               cond do
@@ -183,10 +179,10 @@ defmodule Defk.BitstringTest.K do
                   <<acc::bitstring, 0::1>>
 
                 same ->
-                  <<acc::bitstring, 2::2, hi::size(khi), lo::size(klo)>>
+                  <<acc::bitstring, 2::2, w::size(k)>>
 
                 true ->
-                  <<acc::bitstring, 3::2, min(31, lz)::5, k - 1::6, hi::size(khi), lo::size(klo)>>
+                  <<acc::bitstring, 3::2, min(31, lz)::5, k - 1::6, w::size(k)>>
               end
 
             keep = x == 0 or same
