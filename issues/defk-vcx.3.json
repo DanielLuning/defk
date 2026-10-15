@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-15T10:26:59Z",
+  "description": "Found by the usage-rules cold test (defk-djy.18). In a module with `use Defk`, `@doc \"...\"` written before a `defk` is not attached to the kernel's function: Code.fetch_docs shows the kernel with doc :none, and the @doc moves to the next def (Elixir warns 'redefining @doc attribute previously set at line N' when that def has its own @doc). Repro: defmodule D do use Defk; @doc \"one\"; defk one(x :: i64) :: i64, do: x + 1; @doc \"plain\"; def plain, do: 1 end -\u003e one/1 doc :none.\n\nFix: the def that defk generates for the kernel takes the pending @doc (and @spec?). When fixed, remove the line about it from usage-rules.md (\"A `@doc` before `defk` is not attached yet\") and add a test.",
+  "id": "defk-vcx.3",
+  "labels": [],
+  "parent": "defk-vcx",
+  "priority": 2,
+  "status": "open",
+  "title": "@doc before defk is lost: the kernel's function has no doc",
+  "type": "bug",
+  "updated_at": "2026-10-15T10:26:59Z"
+}
