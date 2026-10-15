@@ -5,7 +5,9 @@
   "created": "2026-10-15T09:11:29Z",
   "description": "Follow-up of defk-9p6.31, which built the generator (2026-10-15). The tables in examples/README.md (scoreboard) and README.md (summary) are still the hand-written 2026-10-13 copies; the first stored run makes them generated.\n\nSteps, on a quiet machine (no builds, no other agents; ~28 min):\n1. mix defk.examples --bench --all --snapshot --fresh  (writes examples/scoreboard.json only when every example behaves as claimed; check its \"quiet\": true).\n2. Wrap the two tables in markers: examples/README.md's scoreboard table and its 'Measured on ...' paragraph go between \u003c!-- scoreboard:start --\u003e and \u003c!-- scoreboard:end --\u003e; README.md's intro sentence and summary table between \u003c!-- summary:start --\u003e and \u003c!-- summary:end --\u003e.\n3. mix defk.examples.tables, review the diff (verdict changes, new numbers), fix examples/_tables.exs text if a placeholder fails.\n4. Drop the 'From the next quiet run on (the table below is still the 2026-10-13 copy)' clause in examples/README.md.\n5. mix ci (test/scoreboard_doc_test.exs then checks the tables against the JSON).\n\nDone when: scoreboard.json is committed from a quiet run, both tables are generated, and mix ci is green.",
   "id": "defk-9p6.33",
-  "labels": [],
+  "labels": [
+    "ready-for-human"
+  ],
   "parent": "defk-9p6",
   "priority": 2,
   "status": "open",
