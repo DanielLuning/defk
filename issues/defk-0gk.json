@@ -6,9 +6,15 @@
   "description": "Two defects that only the dev environment shows; CI and mix ci run in the test environment, so they pass. Reproduce with MIX_ENV=dev mix compile on main (76fd9d8). 1. error: Defk.LanguageDoc.Example.__struct__/1 is undefined, cannot expand struct Defk.LanguageDoc.Example, at dev/mix/tasks/defk.stability.freeze.ex (the task builds %Example{} and calls Defk.LanguageDoc, which lives in test/support/language_doc.ex; elixirc_paths(:dev) compiles lib, dev and only test/support/examples.ex and catalog.ex). mix.exs names the task's preferred env as :test, but the dev compile still compiles dev/. Fixes to weigh: add test/support/language_doc.ex (and language_doc/isolated.ex if needed) to the dev paths; or move Defk.LanguageDoc under dev/; or keep the task out of the dev compile. 2. warning: module attribute @kinds was set but never used, lib/defk/deprecations.ex: the only use is inside the for over @entries, which is empty outside the test environment (config/config.exs sets the test entries), so the loop body never compiles and the attribute goes unused. Use @kinds in a function head or guard, or validate entries in a function called once, so the attribute is used whatever the table holds. Done when MIX_ENV=dev mix compile --warnings-as-errors passes on a clean build, and mix ci still passes.",
   "id": "defk-0gk",
   "labels": [],
+  "comments": [
+    {
+      "text": "PR #17 (branch defk-0gk-rzr/dev-compile-and-remarks-cache): dev paths add test/support/language_doc*, @kinds read before the loop. mix ci green; MIX_ENV=dev mix compile --warnings-as-errors passes.",
+      "timestamp": "2026-10-15T18:58:17Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "mix compile in the dev environment fails on the stability freeze task and warns in Defk.Deprecations",
   "type": "bug",
-  "updated_at": "2026-10-15T18:52:08Z"
+  "updated_at": "2026-10-15T18:58:17Z"
 }
