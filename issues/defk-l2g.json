@@ -26,11 +26,15 @@
     {
       "text": "Reopened 2026-10-15: code moved from a local merge into PR #1 (https://github.com/DanielLuning/defk/pull/1) under the new PR workflow (defk-ecs). Close after the owner merges it.",
       "timestamp": "2026-10-15T09:26:21Z"
+    },
+    {
+      "text": "Merged as PR #1 (6eeffce).",
+      "timestamp": "2026-10-15T10:14:48Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Myers bit-parallel Levenshtein in both fuzzy_search backends",
   "type": "task",
-  "updated_at": "2026-10-15T09:26:21Z"
+  "updated_at": "2026-10-15T10:14:48Z"
 }
