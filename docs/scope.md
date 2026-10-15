@@ -121,7 +121,6 @@ arrive in a minor release.
   [`bitstring-segment`](compile-errors.md#bitstring-segment),
   [`bitstring-use`](compile-errors.md#bitstring-use).
 - Sub-array views: `slice(a, start, len)` as an array without a copy.
-- `u64` values in 64-bit bitstring segments.
 - SIMD and builds for a specific CPU: research and prototypes first, then
   how to choose between a portable build and a faster one for one
   architecture.

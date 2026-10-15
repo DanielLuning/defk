@@ -345,51 +345,67 @@ defmodule Defk do
                       :attrs,
                       unquote(Defk.Attributes.capture(kernel.body))
                     )
-                    |> Map.put(:impl, Defk.take_impl(__MODULE__))
+                    |> Map.merge(Defk.take_fn_attrs(__MODULE__))
     end
   end
 
-  # An `@impl` written before a `defk` is meant for the kernel's function,
-  # not for the first function defk generates (`__defk_load__/0`): take it
-  # off the module here and put it before the kernel's `def` (impl_before/2).
+  # An `@impl` or `@doc` written before a `defk` is meant for the kernel's
+  # function. Left on the module, the `@impl` would go to the first function
+  # defk generates (`__defk_load__/0`) and the `@doc` to the next `def`
+  # written after the kernel. Take them off the module here and put them
+  # before the kernel's `def` (attrs_before/2). The `@doc` keeps its line
+  # (`{line, text}`). Metadata such as `@doc since: ...` is not an attribute
+  # this can take: it still goes to the next `def`.
   @doc false
-  def take_impl(module) do
-    impl = Module.get_attribute(module, :impl)
-    Module.delete_attribute(module, :impl)
-    impl
-  end
-
-  # The `@impl` of each kernel, by {name, arity}
-  defp impls(raw_kernels) do
-    for %{impl: impl} = k <- raw_kernels,
-        impl != nil,
-        key = Defk.Clauses.key(k.head),
-        into: %{},
-        do: {key, impl}
-  end
-
-  # `@impl` ahead of the public `def` of a kernel that had one before its
-  # `defk`; the generated helpers and renamed NIFs never get one
-  defp impl_before(stubs, impls) do
-    Enum.map(stubs, fn
-      {:__block__, meta, exprs} -> {:__block__, meta, Enum.flat_map(exprs, &put_impl(&1, impls))}
-      expr -> put_impl(expr, impls) |> then(&{:__block__, [], &1})
+  def take_fn_attrs(module) do
+    Map.new([:impl, :doc], fn attr ->
+      value = Module.get_attribute(module, attr)
+      Module.delete_attribute(module, attr)
+      {attr, value}
     end)
   end
 
-  defp put_impl({:def, _, [{name, _, args}, _]} = expr, impls) when is_list(args) do
-    case Map.fetch(impls, {name, length(args)}) do
-      {:ok, impl} -> [quote(do: @impl(unquote(Macro.escape(impl)))), expr]
+  # The `@impl` and `@doc` of each kernel, by {name, arity}: a multi-clause
+  # kernel takes them from its head, the first entry that has them
+  defp fn_attrs(raw_kernels) do
+    Enum.reduce(raw_kernels, %{}, fn k, acc ->
+      case for({attr, v} <- Map.take(k, [:impl, :doc]), v != nil, into: %{}, do: {attr, v}) do
+        none when map_size(none) == 0 -> acc
+        attrs -> Map.update(acc, Defk.Clauses.key(k.head), attrs, &Map.merge(attrs, &1))
+      end
+    end)
+  end
+
+  # `@doc` and `@impl` ahead of the public `def` of a kernel that had them
+  # before its `defk`; the generated helpers and renamed NIFs never get them
+  defp attrs_before(stubs, attrs) do
+    Enum.map(stubs, fn
+      {:__block__, meta, exprs} -> {:__block__, meta, Enum.flat_map(exprs, &put_attrs(&1, attrs))}
+      expr -> put_attrs(expr, attrs) |> then(&{:__block__, [], &1})
+    end)
+  end
+
+  defp put_attrs({:def, _, [{name, _, args}, _]} = expr, attrs) when is_list(args) do
+    case Map.fetch(attrs, {name, length(args)}) do
+      {:ok, a} -> doc_attr(a[:doc]) ++ impl_attr(a[:impl]) ++ [expr]
       :error -> [expr]
     end
   end
 
-  defp put_impl(expr, _impls), do: [expr]
+  defp put_attrs(expr, _attrs), do: [expr]
+
+  defp doc_attr(nil), do: []
+
+  defp doc_attr(doc),
+    do: [quote(do: Module.put_attribute(__MODULE__, :doc, unquote(Macro.escape(doc))))]
+
+  defp impl_attr(nil), do: []
+  defp impl_attr(impl), do: [quote(do: @impl(unquote(Macro.escape(impl))))]
 
   @doc false
   defmacro __before_compile__(env) do
     raw_kernels = env.module |> Module.get_attribute(:defk_kernels) |> Enum.reverse()
-    impls = impls(raw_kernels)
+    attrs = fn_attrs(raw_kernels)
 
     kernels =
       raw_kernels
@@ -446,7 +462,7 @@ defmodule Defk do
     # a helper (a kernel taking a bitstring) is only inlined: no function
     sigs = Enum.reject(all_sigs, &Defk.Bitstring.helper?/1)
 
-    stubs = sigs |> kernel_defs(elixir?, mode, bits) |> impl_before(impls)
+    stubs = sigs |> kernel_defs(elixir?, mode, bits) |> attrs_before(attrs)
 
     elixir_mode =
       if elixir?, do: Defk.ElixirMode.definitions(kernels, all_sigs, env.file), else: []
