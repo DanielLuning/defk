@@ -29,20 +29,24 @@ concurrency:
 jobs:
   linux:
     name: ${{ matrix.label }}
-    runs-on: ${{ matrix.runner }}
+    # linux-<arch>-<cc>: the runner, the compiler and the task follow from
+    # the label (an `include:` list would come back after `exclude:`)
+    runs-on: ${{ contains(matrix.label, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     container: docker.io/hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { label: linux-x86_64-clang, runner: ubuntu-24.04, cc: clang, task: ci }
-          - { label: linux-x86_64-gcc, runner: ubuntu-24.04, cc: gcc, task: ci.test }
-          - { label: linux-aarch64-clang, runner: ubuntu-24.04-arm, cc: clang, task: ci.test }
+        label:
+          - linux-x86_64-clang
+          - linux-x86_64-gcc
+          - linux-aarch64-clang
         # the small run: linux-x86_64-clang only
-        exclude: ${{ fromJSON(contains(fromJSON('["pull_request", "schedule"]'), github.event_name) && '[{"cc":"gcc"},{"runner":"ubuntu-24.04-arm"}]' || '[]') }}
+        exclude: ${{ fromJSON(contains(fromJSON('["pull_request", "schedule"]'), github.event_name) && '[{"label":"linux-x86_64-gcc"},{"label":"linux-aarch64-clang"}]' || '[]') }}
     env:
-      CC: ${{ matrix.cc }}
+      CC: ${{ endsWith(matrix.label, '-gcc') && 'gcc' || 'clang' }}
+      # the lint steps once, on linux-x86_64-clang
+      TASK: ${{ matrix.label == 'linux-x86_64-clang' && 'ci' || 'ci.test' }}
       CI_PATH: github-actions
       LANG: C.UTF-8
     steps:
@@ -70,7 +74,7 @@ jobs:
       # modules go too: they expect their libraries in that cache)
       - if: ${{ github.event_name == 'schedule' }}
         run: rm -rf _build/test/defk _build/test/lib/defk
-      - run: ci/run.sh ${{ matrix.label }} ${{ matrix.task }}
+      - run: ci/run.sh ${{ matrix.label }} "$TASK"
       - uses: actions/upload-artifact@v7
         if: ${{ always() && !env.ACT }}
         with:
