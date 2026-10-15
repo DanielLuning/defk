@@ -12,13 +12,27 @@ defmodule Defk.StabilityCodesTest do
 
   @ledger "test/stability/codes.txt"
 
-  # the codes of the ledger, in file order; # lines are comments
-  defp ledger do
-    @ledger
-    |> File.read!()
-    |> String.split("\n", trim: true)
-    |> Enum.reject(&String.starts_with?(&1, "#"))
+  # the lines of the ledger as `{code, retired version | nil}`, in file
+  # order; # lines are comments, and a retired code's line is
+  # `<code> retired <version>`
+  defp ledger_lines do
+    for line <- String.split(File.read!(@ledger), "\n", trim: true),
+        not String.starts_with?(line, "#") do
+      case String.split(line) do
+        [code] ->
+          {code, nil}
+
+        [code, "retired", version] ->
+          {code, version}
+
+        _ ->
+          flunk("#{@ledger}: a line is `<code>` or `<code> retired <version>`: #{inspect(line)}")
+      end
+    end
   end
+
+  # the codes of the ledger, in file order
+  defp ledger, do: Enum.map(ledger_lines(), &elem(&1, 0))
 
   defp retired, do: for(%{kind: :retired} = e <- Defk.Errors.entries(), do: e)
 
@@ -33,10 +47,26 @@ defmodule Defk.StabilityCodesTest do
 
   # The other direction is open: a code added since the last release is in
   # the registry and not yet in the ledger. Only a released code can be
-  # retired; an unreleased one whose construct became valid is removed.
-  test "a retired code is a released code" do
+  # retired; an unreleased one whose construct became valid is removed. The
+  # ledger's mark and the registry agree both ways, so a retired code stays
+  # retired (reviving it in the registry fails here) and retiring one is a
+  # ledger edit the owner reviews.
+  test "a retired code is a released code, marked retired in the ledger, with its version" do
+    marked =
+      for {code, version} when version != nil <- ledger_lines(), into: %{}, do: {code, version}
+
     assert retired() != []
-    assert Enum.map(retired(), & &1.code) -- ledger() == []
+
+    for e <- retired() do
+      assert marked[e.code] == e.retired.version,
+             "#{e.code}: retired in #{e.retired.version} in the registry, " <>
+               "in the ledger #{marked[e.code] || "not marked"}"
+    end
+
+    for {code, version} <- marked do
+      assert Defk.Errors.fetch!(code).kind == :retired,
+             "#{code}: marked retired #{version} in the ledger, but active in the registry"
+    end
   end
 
   test "a retired entry keeps its summary and says the version and why, without an example" do
