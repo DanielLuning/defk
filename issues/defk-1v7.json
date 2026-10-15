@@ -6,9 +6,15 @@
   "description": "PR runs cost ~34 billed minutes (macOS 10x on a private repo), merges rerun the matrix, and the kernel cache (_build/test/defk) is never refreshed (key = mix.lock). Changes: one Linux job on PRs (full mix ci); the full matrix (gcc, aarch64, macOS) on release tags v* and on demand; no run on push to main; kernel cache key per week + sha with restore-keys, seeded by a weekly scheduled run on main; lint steps once; prebuilt CI image; timeout-minutes. Owner decision 2026-10-15: defer the full matrix to a release/tag.",
   "id": "defk-1v7",
   "labels": [],
+  "comments": [
+    {
+      "text": "PR #5: https://github.com/DanielLuning/defk/pull/5. Prebuilt ghcr image not done (small gain with one PR job; needs registry credentials, changes local.sh/act).",
+      "timestamp": "2026-10-15T11:41:25Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "CI: shorter, cheaper GitHub Actions runs; full matrix on release tags",
   "type": "task",
-  "updated_at": "2026-10-15T11:35:15Z"
+  "updated_at": "2026-10-15T11:41:25Z"
 }
