@@ -106,7 +106,10 @@ iex> Stats.dot(<<1.0::float-native, 2.0::float-native>>, <<3.0::float-native, 4.
 ```
 
 - `use Defk` imports the `defk` macro. A module may mix kernels with ordinary
-  `def`s.
+  `def`s. A `@doc` or `@impl` written before a `defk` applies to the
+  kernel's function, as before a `def` (for a multi-clause kernel, write it
+  before the head). `@doc` metadata such as `since:` is not carried yet: it
+  goes to the next `def`.
 - The head is `defk name(param :: type, ...) :: return_type`. Every parameter
   has a type ([`untyped-parameter`](compile-errors.md#untyped-parameter)) and the return type is
   required ([`kernel-head`](compile-errors.md#kernel-head)). A kernel may have no parameters:
@@ -967,9 +970,11 @@ iex> M.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
   negative value's two's complement bits. A `signed` segment's range is
   `-2^(n-1)..2^(n-1) - 1`, and its message ends "in n signed bits". A size outside `0..64` raises
   `ArgumentError` "bitstring segment size n is outside 0..64". Elixir mode
-  raises both too. A value with the top bit of a 64-bit segment set is a
-  negative `i64`, so it does not fit `::64`; append it as two 32-bit halves
-  (`band(bsr(v, 32), 0xFFFFFFFF)::32, band(v, 0xFFFFFFFF)::32`).
+  raises both too. A 64-bit pattern with the top bit set (a hash, the bits
+  of an `f64`) is a negative `i64` and does not fit `::64`: make it a
+  [`u64`](#u64) (a `[u64]` element, or `band(v, 0xFFFFFFFFFFFFFFFF)`), which
+  fits any segment of up to 64 bits that holds its value, or write the
+  segment `signed`.
 - **Runtime.** The buffer belongs to the call: it is kept across yields, and
   freed when the kernel raises or its process dies, like an array the kernel
   allocated. The NIF copies the bits into a binary and returns it with the

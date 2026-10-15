@@ -70,6 +70,66 @@ defmodule Defk.ScaledFactsTest.K do
     out
   end
 
+  # the encoder's write through a reduce accumulator: the accumulator keeps
+  # alloc's length fact, length(o) >= 2 * length(a), at every iteration
+  defk spread2_acc(a :: [u8]) :: [u8] do
+    n = length(a)
+
+    for i <- 0..(n - 1)//1, reduce: alloc(u8, 2 * n) do
+      o ->
+        o[2 * i] = a[i]
+        o
+    end
+  end
+
+  # the same in a tuple accumulator
+  defk spread2_pair(a :: [u8]) :: {[u8], i64} do
+    n = length(a)
+
+    for i <- 0..(n - 1)//1, reduce: {alloc(u8, 2 * n), 0} do
+      {o, sum} ->
+        o[2 * i] = a[i]
+        o[2 * i + 1] = a[i]
+        {o, sum + a[i]}
+    end
+  end
+
+  # a body that may give a shorter array: the next iteration cannot assume
+  # the fact, so the write keeps its check (and raises when it is past the end)
+  defk shrink_acc(a :: [u8], k :: i64) :: [u8] do
+    n = length(a)
+
+    for i <- 0..(n - 1)//1, reduce: alloc(u8, 2 * n) do
+      o ->
+        o[2 * i] = a[i]
+        if i == k, do: alloc(u8, n), else: o
+    end
+  end
+
+  # a new array every iteration, whose fact has the same key: an offset below
+  # the assumed one (2 * n - 1 < 2 * n) is lost, one above it (2 * n + 1) is
+  # kept. (An `if` that gives either array keeps no relative length fact, so
+  # these do not branch.)
+  defk regrow_short(a :: [u8]) :: [u8] do
+    n = length(a)
+
+    for i <- 0..(n - 1)//1, reduce: alloc(u8, 2 * n) do
+      o ->
+        o[2 * i] = a[i]
+        alloc(u8, 2 * n - 1)
+    end
+  end
+
+  defk regrow_long(a :: [u8]) :: [u8] do
+    n = length(a)
+
+    for i <- 0..(n - 1)//1, reduce: alloc(u8, 2 * n) do
+      o ->
+        o[2 * i] = a[i]
+        alloc(u8, 2 * n + 1)
+    end
+  end
+
   # every other element, from a quotient of the length
   defk evens(a :: [i64]) :: [i64] do
     h = div(length(a) + 1, 2)
@@ -97,6 +157,13 @@ defmodule Defk.ScaledFactsTest do
   defp kernel_c(name) do
     [_, c] = String.split(K.__defk_c_source__(), "/* ---- #{name}/", parts: 2)
     c |> String.split("/* ---- ", parts: 2) |> hd()
+  end
+
+  # [bytes, k]: k from just before the array to just past it
+  def bytes_and_index do
+    StreamData.bind(G.array(:u8), fn a ->
+      StreamData.fixed_list([StreamData.constant(a), StreamData.integer(-1..(byte_size(a) + 1))])
+    end)
   end
 
   describe "the hex encoder" do
@@ -168,10 +235,54 @@ defmodule Defk.ScaledFactsTest do
     end
   end
 
+  describe "array reduce accumulators" do
+    test "keep alloc's relative length fact: o[2 * i] has no bounds check" do
+      for n <- [0, 1, 5, 3000] do
+        a = :crypto.strong_rand_bytes(n)
+        spread = for <<b <- a>>, into: <<>>, do: <<b, 0>>
+        assert K.spread2_acc(a) == spread
+        Defk.Test.assert_agrees(K, :spread2_acc, [a])
+
+        pair = {for(<<b <- a>>, into: <<>>, do: <<b, b>>), Enum.sum(:binary.bin_to_list(a))}
+        assert K.spread2_pair(a) == pair
+        Defk.Test.assert_agrees(K, :spread2_pair, [a])
+      end
+
+      refute kernel_c("spread2_acc") =~ "defk_put_"
+      refute kernel_c("spread2_pair") =~ "defk_put_"
+    end
+
+    test "a body that may give a shorter array keeps the check, and raises past the end" do
+      assert kernel_c("shrink_acc") =~ "defk_put_u8"
+
+      a = "abcdef"
+      assert K.shrink_acc(a, -1) == for(<<b <- a>>, into: <<>>, do: <<b, 0>>)
+
+      # after i == 1 the accumulator has 6 bytes: the write at 2 * 3 is past it
+      assert {:raise, %Enum.OutOfBoundsError{}} = Defk.Test.assert_agrees(K, :shrink_acc, [a, 1])
+      # after the last iteration nothing is written to the shorter array
+      assert {:ok, <<_::binary-size(6)>>} = Defk.Test.assert_agrees(K, :shrink_acc, [a, 5])
+    end
+
+    test "a new value with the same fact keeps it only with an offset as large" do
+      assert kernel_c("regrow_short") =~ "defk_put_u8"
+      refute kernel_c("regrow_long") =~ "defk_put_"
+
+      for fun <- [:regrow_short, :regrow_long], a <- ["", "a", "abcd"] do
+        Defk.Test.assert_agrees(K, fun, [a])
+      end
+    end
+  end
+
   agreement(K, [
     :encode16,
     :spread3,
     :evens,
+    :spread2_acc,
+    :spread2_pair,
+    :regrow_short,
+    :regrow_long,
+    shrink_acc: [args: Defk.ScaledFactsTest.bytes_and_index()],
     decode16: [
       args:
         StreamData.fixed_list([

@@ -12,6 +12,12 @@
   its bug fixes that change a result or reject a kernel, its deprecations,
   and any rise in the minimum Elixir or OTP version.
 
+## Unreleased
+
+- Fixed: a `@doc` written before a `defk` was lost, and moved to the next
+  `def` of the module. It now documents the kernel's function, as `@impl`
+  already did.
+
 ## 0.1.0
 
 The first release on Hex, after the project's verdict (go) and the release

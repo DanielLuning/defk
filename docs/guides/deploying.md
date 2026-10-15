@@ -39,8 +39,9 @@ running system needs nothing extra.
 
 ## Where defk is tested
 
-The whole test suite runs on every change, with OTP 29 and Elixir 1.20, on
-these four targets:
+The whole test suite runs for every release, with OTP 29 and Elixir 1.20,
+on these four targets. Every change between releases runs it on Linux
+x86-64 with clang and on macOS arm64.
 
 | OS and CPU | C library | Compiler |
 |---|---|---|
@@ -49,7 +50,7 @@ these four targets:
 | Linux arm64 (Debian) | glibc | clang |
 | macOS arm64 | | Apple clang |
 
-Linux arm64 with gcc passed the suite too, but is not run on every change.
+Linux arm64 with gcc passed the suite too, but is not run for every release.
 
 Not tested: Alpine and other musl systems (the table above lists their
 compiler packages, but no kernel has been run there), macOS on x86-64,

@@ -254,12 +254,17 @@ defmodule Defk.FactsTest do
             name <- member_of(Map.keys(lens)),
             {a, len} <- arr_gen(lens, name)
           ) do
-      assert Facts.carries?(a) == is_integer(Facts.len_lo(a))
+      assert Facts.carries?(a) == (is_integer(Facts.len_lo(a)) or Facts.len_lb(a) != %{})
+      # the relative facts go first, the constant one keeps
       w = Facts.weaken(a)
-      refute Facts.carries?(w)
-      # weaken keeps len_lb: only the body's len_lo assumption is dropped
-      assert Facts.len_lb(w) == Facts.len_lb(a)
+      assert Facts.len_lb(w) == %{}
+      assert Facts.weakest?(w)
+      if Facts.len_lb(a) != %{}, do: assert(Facts.len_lo(w) == Facts.len_lo(a))
       assert len_holds?(w, len, lens)
+      # at most two steps drop every length assumption
+      w2 = if Facts.carries?(w), do: Facts.weaken(w), else: w
+      refute Facts.carries?(w2)
+      assert len_holds?(w2, len, lens)
     end
   end
 
@@ -270,11 +275,16 @@ defmodule Defk.FactsTest do
             {a, _} <- arr_gen(lens, name),
             {r, _} <- arr_gen(lens, name)
           ) do
-      if Facts.covers?(a, r) and is_integer(Facts.len_lo(a)) do
-        assert Facts.len_lo(r) >= Facts.len_lo(a)
+      if Facts.covers?(a, r) do
+        if is_integer(Facts.len_lo(a)), do: assert(Facts.len_lo(r) >= Facts.len_lo(a))
+
+        # each relative bound of `a` is in `r`, at least as strong
+        for {key, d} <- Facts.len_lb(a), do: assert(Facts.len_lb(r)[key] >= d)
       end
 
-      refute Facts.covers?(Facts.assert(a, len_lo: 1), Facts.weaken(r))
+      none = Facts.assert(r, len_lo: nil, len_lb: %{})
+      refute Facts.covers?(Facts.assert(a, len_lo: 1), none)
+      if Facts.len_lb(a) != %{}, do: refute(Facts.covers?(a, none))
     end
   end
 
