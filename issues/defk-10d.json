@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-vcx",
+  "comments": [
+    {
+      "text": "Decided by the owner (2026-10-15): keep raising CompileError; add public Defk.Errors.diagnostics/1 that takes the exception (or its message) and returns one map per rejection (code, kernel, file, line, column). No Defk.CompileError.",
+      "timestamp": "2026-10-15T19:14:39Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Compile errors carry their code as data",
   "type": "task",
-  "updated_at": "2026-10-15T19:11:31Z"
+  "updated_at": "2026-10-15T19:14:39Z"
 }
