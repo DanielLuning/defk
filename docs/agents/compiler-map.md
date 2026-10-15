@@ -63,6 +63,10 @@ lowering declares as it emits; defk-ch4), not from the C text.
   `Defk.Errors.Diagnostics`, the rewrite-suggestion engine in
   `Defk.Errors.Rewrites` (defk-vlf); a literal code passed to `err!` is
   checked against the registry when the compiler compiles.
+- `lib/defk/messages.ex`: the runtime error messages as templates, the one
+  source of `priv/defk_messages.h` (generated: `mix defk.messages`), Elixir
+  mode's raise texts (`text/2`) and the agreement reasons (`reason/1`);
+  see `docs/agents/generated-docs.md`.
 - `lib/defk/facts.ex`: the range-facts lattice (one opaque value under
   `v.facts`; assert/derive in, `prove_in_bounds`/`prove_i64` with support
   out). ADR-0007's representation migration happens here.
@@ -90,7 +94,9 @@ buffers, `owned_bytes` budget, stats), frames and safepoints (yield,
 resume, forced yields), input binding on every entry (binaries move across
 GC), `defk_make_arr` / `defk_make_arr_view`, strips
 (`DEFK_ZERO_STRIP`/`DEFK_COPY_STRIP`), range copies, crc32c. The
-"Responsibilities" comment at the top is the index.
+"Responsibilities" comment at the top is the index. Its raise sites use the
+`DEFK_MSG_` defines of the generated `priv/defk_messages.h`, never a
+literal message (`Defk.Messages`).
 
 ## Tests
 

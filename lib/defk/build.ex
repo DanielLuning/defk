@@ -7,7 +7,8 @@ defmodule Defk.Build do
   @priv Path.expand("../../priv", __DIR__)
 
   # The cache key (see cache_key/2) covers: these cflags, the generated C
-  # source, the contents of priv/defk_runtime.h, the ERTS version (whose
+  # source, the contents of priv/defk_runtime.h and the generated
+  # priv/defk_messages.h it includes, the ERTS version (whose
   # erl_nif.h the library is built against), the resolved compiler (`CC` or
   # "cc") and the first line of its `--version` output, and the sanitizer
   # mode's flags (`DEFK_SANITIZE`, sanitize/0).
@@ -478,8 +479,9 @@ defmodule Defk.Build do
         }) :: String.t()
   def cache_key(src, %{erts: erts, cc: cc, cc_version: cc_version} = env) do
     header = File.read!(Path.join(@priv, "defk_runtime.h"))
+    messages = File.read!(Path.join(@priv, "defk_messages.h"))
 
-    [@cflags, src, header, erts, cc, cc_version, Map.get(env, :sanitize, [])]
+    [@cflags, src, header, messages, erts, cc, cc_version, Map.get(env, :sanitize, [])]
     |> :erlang.md5()
     |> Base.encode16(case: :lower)
     |> binary_part(0, 10)

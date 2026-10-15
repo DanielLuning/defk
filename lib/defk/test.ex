@@ -139,58 +139,16 @@ defmodule Defk.Test do
     if opts[:message] == :exact, do: Exception.message(e), else: agreement_reason(e)
   end
 
-  # message fragments -> reason, first match wins; messages of the kernel
-  # (priv/defk_runtime.h), Elixir mode (Defk.ElixirMode.Ops) and Elixir itself
-  @arith [
-    {"i64 overflow", :overflow},
-    {"does not fit in i64", :overflow},
-    # u64 arithmetic leaving 0..2^64 - 1, an i64 < 0 where a u64 is expected
-    {"u64 overflow", :overflow},
-    {"does not fit in u64", :overflow},
-    {"negative count", :negative_shift},
-    # Elixir's float arithmetic giving inf or NaN, and the kernel's checks for
-    # the same (x / 0.0, sqrt/log out of domain, a non-finite result)
-    {"bad argument in arithmetic expression", :non_finite},
-    {"by zero", :zero_divisor},
-    {"within one step of the i64 limit", :range_limit},
-    {"non-finite", :non_finite},
-    {"inf or NaN", :non_finite},
-    {"sqrt of negative", :non_finite},
-    {"log of non-positive", :non_finite},
-    {"log2 of non-positive", :non_finite},
-    {"log10 of non-positive", :non_finite}
-  ]
-
-  @arg [
-    # the argument checks at entry: "argument 2 (step) must be ..."
-    {{:prefix, "argument "}, :badarg},
-    {"non-finite float", :non_finite_input},
-    {"length too large", :length_too_large},
-    {"out of memory", :out_of_memory},
-    {"negative length", :negative_length},
-    {"does not fit in u8", :element_range},
-    {"does not fit in u64", :element_range},
-    {"does not fit in i64", :element_range},
-    # Defk.Bits.clz/2 and friends
-    {"is not in 1..64", :bits_width},
-    {"is not 8, 16, 32 or 64", :bits_width},
-    {"-bit field", :bits_range},
-    {"does not fit in i16", :element_range},
-    {"does not fit in i32", :element_range},
-    {"does not fit in f32", :element_range},
-    {"bitstring segment size", :segment_size},
-    {"bitstring segment value", :segment_fit},
-    {"step", :zero_step}
-  ]
-
   @doc """
   The reason of a kernel or Elixir mode exception, as agreement compares it:
   what went wrong, without the message text, which may differ between the two
   (a kernel prints floats as C does, Elixir mode with `inspect/1`, and
   Elixir's own float errors say "bad argument in arithmetic expression").
 
-  An exception no rule covers gives `{:other, message}`, so it agrees only
-  with the identical message. Use it to assert why a kernel raised.
+  The rules are the runtime's own message templates, the ones the kernel and
+  Elixir mode raise with, so a message and its reason cannot drift apart. An
+  exception no rule covers gives `{:other, message}`, so it agrees only with
+  the identical message. Use it to assert why a kernel raised.
 
       iex> Defk.Test.agreement_reason(%ArithmeticError{message: "i64 overflow in 1 + 2"})
       :overflow
@@ -202,16 +160,5 @@ defmodule Defk.Test do
       {:other, "boom"}
   """
   @spec agreement_reason(Exception.t()) :: reason()
-  def agreement_reason(%ArithmeticError{message: m}), do: match_reason(m, @arith)
-  def agreement_reason(%ArgumentError{message: m}), do: match_reason(m, @arg)
-  def agreement_reason(%Enum.OutOfBoundsError{}), do: :index
-  def agreement_reason(%CaseClauseError{}), do: :clause
-  def agreement_reason(e), do: {:other, Exception.message(e)}
-
-  defp match_reason(m, rules) do
-    Enum.find_value(rules, {:other, m}, fn {pat, r} -> if matches?(m, pat), do: r end)
-  end
-
-  defp matches?(m, {:prefix, p}), do: String.starts_with?(m, p)
-  defp matches?(m, p), do: String.contains?(m, p)
+  def agreement_reason(e), do: Defk.Messages.reason(e)
 end

@@ -25,6 +25,9 @@ defmodule Defk.Bits do
   [Masked arithmetic](language.md#masked-arithmetic) (for `wrap64/1`).
   """
 
+  # the error messages, shared with the kernel's runtime
+  require Defk.Messages, as: Messages
+
   @doc """
   The low 64 bits of `x` as a signed 64-bit integer (two's complement).
 
@@ -285,7 +288,7 @@ defmodule Defk.Bits do
   end
 
   def crc32c(_crc, _x, width),
-    do: raise(ArgumentError, "Defk.Bits.crc32c/3: width #{inspect(width)} is not 8, 16, 32 or 64")
+    do: raise(ArgumentError, Messages.text(:crc32c_width, w: width))
 
   defp crc32c_bytes(c, _x, 0), do: c
 
@@ -298,11 +301,11 @@ defmodule Defk.Bits do
 
   # x is a width-bit value, 1 <= width <= 64
   defp field!(f, _x, width) when not is_integer(width) or width < 1 or width > 64,
-    do: raise(ArgumentError, "Defk.Bits.#{f}: width #{inspect(width)} is not in 1..64")
+    do: raise(ArgumentError, Messages.text(:bits_width, f: f, w: width))
 
   defp field!(f, x, width) do
     (is_integer(x) and x >= 0 and Bitwise.bsr(x, width) == 0) ||
-      raise ArgumentError, "Defk.Bits.#{f}: #{inspect(x)} does not fit in a #{width}-bit field"
+      raise ArgumentError, Messages.text(:bits_field, f: f, x: x, w: width)
   end
 
   defp rotate(x, 0, _width), do: x

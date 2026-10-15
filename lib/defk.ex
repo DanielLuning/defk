@@ -195,6 +195,9 @@ defmodule Defk do
   # answer yet; a source-relative path is the only honest option.
   # credo:disable-for-next-line ExSlop.Check.Warning.PathExpandPriv
   @runtime_h Path.expand("../priv/defk_runtime.h", __DIR__)
+  # the generated message defines the runtime header includes (Defk.Messages)
+  # credo:disable-for-next-line ExSlop.Check.Warning.PathExpandPriv
+  @messages_h Path.expand("../priv/defk_messages.h", __DIR__)
 
   @doc false
   # The options `use Defk` accepts, each with its tier: `:public` ones are
@@ -237,6 +240,7 @@ defmodule Defk do
       require Defk.Deprecations
       @defk_mode Defk.Deprecations.compile_env(:mode, :native)
       @external_resource unquote(@runtime_h)
+      @external_resource unquote(@messages_h)
       @before_compile Defk
     end
   end
