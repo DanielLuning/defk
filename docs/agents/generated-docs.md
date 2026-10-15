@@ -22,3 +22,24 @@ place, `@url_base` in `lib/defk/errors.ex`.
 
 `reference/0` and `scope/1` are `@doc false` (ADR-0006): they exist for this
 step and the tests, not for users.
+
+## The catalog's result tables
+
+Two tables hold the measured catalog numbers: the scoreboard in
+`examples/README.md` and the summary in `README.md`. Each sits between
+`<!-- scoreboard:start -->`/`<!-- scoreboard:end -->` (and `summary:`)
+comments and is generated; nothing else in either file is.
+
+- The numbers come from `examples/scoreboard.json`, which
+  `mix defk.examples --bench --all --snapshot --fresh` writes after a run in
+  which every example behaved as claimed. Run it on a quiet machine: the
+  file records the load before and after, and a loaded run is marked
+  provisional in the tables.
+- The text around the numbers (each row's job, the native comparison, the
+  one-line note, the summary's groups) is in `examples/_tables.exs`. A
+  number a report measures is a placeholder there (`{speedup:crc16}`), never
+  typed.
+- `mix defk.examples.tables` rewrites both tables; `--check` only reports.
+  `test/scoreboard_doc_test.exs` fails when a table and the JSON disagree.
+- A new example needs an entry in `examples/_tables.exs` before the tables
+  render.
