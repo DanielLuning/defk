@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-cmr",
     "defk-wlu"
@@ -19,8 +19,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Accept u64 values in 64-bit bitstring segments",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:15Z"
+  "updated_at": "2026-10-15T12:58:50Z"
 }
