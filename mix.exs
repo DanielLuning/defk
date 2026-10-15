@@ -11,6 +11,10 @@ defmodule Defk.MixProject do
       version: @version,
       elixir: "~> 1.20",
       elixirc_paths: elixirc_paths(Mix.env()),
+      # test/stability/<version>/ holds frozen data of each release (the
+      # promised API surface, kernels); the stability tests read it, mix
+      # test does not load it
+      test_ignore_filters: [&String.starts_with?(&1, "test/stability/")],
       deps: deps(),
       dialyzer: [plt_add_apps: [:ex_unit, :mix]],
       name: "defk",
