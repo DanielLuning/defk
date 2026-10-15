@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-15T08:11:51Z",
+  "description": "Found in defk-l2g (2026-10-15, provisional, load 4-7). With Myers bit-parallel Levenshtein, fuzzy_search's kernel spends ~4 ms per query over 234k words, a few ns per word. The fast-path report says of the word loop: 'loop: a safepoint every iteration: the body has a nested loop'. The inner Enum.reduce_while over the word's bytes runs in strips, charged on entry. bench/yield_cost.exs: yielding 4.9 ms vs yield: false 4.1-4.2 ms, +19%, at ~17 yields per query; with the DP kernel it was +3.5-4.5%. A huge slice (DEFK_SLICE_US=10000000) did not change the yields or the gap, so the cost is the per-word bookkeeping, not the yields. Under load defk serves ~21% fewer req/s than the blocking build (1790-1840 vs 2260-2370).\n\nScope: find what the per-iteration safepoint of an outer loop with a short inner loop costs (the check, the resume dispatch, registers kept live; compare defk-w8l), and try a cheaper shape, for example charging the outer loop in strips by the inner loop's trip count, or one safepoint per N outer iterations. Keep the worst-case scheduler gap within the slice. Record the result in docs/performance.md and re-run examples/fuzzy_search/bench/yield_cost.exs.\n\nDone when: the breakdown is recorded and either a fix lands with mix test green and the fuzzy_search yield cost re-measured, or the ticket records why no fix was worth it.",
+  "id": "defk-w8r.1",
+  "labels": [],
+  "parent": "defk-w8r",
+  "priority": 3,
+  "status": "open",
+  "title": "A word loop whose body holds a short inner loop pays a safepoint per word: fuzzy_search Myers yields +19% over yield: false",
+  "type": "task",
+  "updated_at": "2026-10-15T08:11:51Z"
+}
