@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-12T07:37:18Z",
@@ -10,8 +10,8 @@
   ],
   "parent": "defk-vcx",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Compile errors carry their code as data",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:17Z"
+  "updated_at": "2026-10-15T19:11:31Z"
 }
