@@ -45,7 +45,7 @@ machine, so measure your own job). ✅ defk helps;
 | ✅ | rolling sensor statistics, HyperLogLog updates, PCM mixing with clip prevention, a byte histogram | 8–11× |
 | ✅ | base64, hex and base58 codecs (4× the fast64 NIF); Snappy and LZ4 block decode on untrusted input | 5–7× |
 | ✅ | sorting packed keys, nearest of 500k locations, Monte Carlo slot simulation with `:rand` bit for bit, Gorilla encoding | 2.4–6× |
-| ✅ | a fuzzy-search web service: `/health` p99 stays at 10–12 ms where a blocking NIF pushes it to ~80 ms | 4.4× per query |
+| ✅ | a fuzzy-search web service, Myers bit-parallel on both sides: `/health` p99 stays at Elixir's 12–13 ms where a blocking NIF pushes it to 18–20 ms | 2.3–2.4× per query |
 | 🟡 | a dictionary-wide Levenshtein batch over all schedulers: Myers bit-parallel in Elixir is close | 1.7× |
 | 🟡 | small WebSocket frames, UTF-8 validation, substring search: the BIFs are native already | 1.0–1.1× |
 | ❌ | anything `:crypto` does (a SHA-256 chain) and memory-hard password hashing (Argon2: the C runs its lanes on threads) | 0.25–0.55× |

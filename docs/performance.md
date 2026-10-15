@@ -184,11 +184,17 @@ Elixir job can use every scheduler.
   0.86-0.99x (Elixir 3.9-4.2 ms, defk 4.3-4.6 ms at 234k words): poor.
   `fuzzy_search`: the early cut-off gained 1.9x in Elixir (112 -> 60 ms per
   query) but 1.5x in the kernel (20.4-20.8 -> 13.6-13.8 ms), so the gap went
-  from 5.4x to 4.4x (quiet re-measure, `defk-klw`; 4.2x under load). `geo_nearest`'s coarse-grid prefilter: Elixir 0.14 ms,
+  from 5.4x to 4.4x (quiet re-measure, `defk-klw`; 4.2x under load). Then
+  Myers bit-parallel with a length bound and a score bound on both sides
+  (`defk-l2g`): Elixir 60 -> 10.9-11.1 ms (5.5x), defk 13.7 -> 4.6-4.7 ms
+  (3.0x), so the gap went from 4.4x to 2.3-2.4x; still good, by a smaller
+  margin. Under load 2.4-2.6x the req/s of Elixir; the blocking build's
+  `/health` p99 fell from 75-82 to 18-20 ms, as each query blocks ~4 ms
+  instead of ~13. `geo_nearest`'s coarse-grid prefilter: Elixir 0.14 ms,
   defk 0.017 ms (8x), against 3.2-3.9x for the full scan.
-- **Conditions:** batched_levenshtein under load; fuzzy_search's "before" numbers under load (load average 5-90), its cut-off numbers on a quiet machine (2026-10-13).
-- **Source:** [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) (4b8d17d), `defk-8i4`, `defk-klw`; [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md) geo_nearest row.
-- **Status:** provisional (batched_levenshtein); measured (fuzzy_search cut-off, geo_nearest grid).
+- **Conditions:** batched_levenshtein under load; fuzzy_search's "before" numbers under load (load average 5-90), its cut-off numbers on a quiet machine (2026-10-13), its Myers numbers under load (load average 4-7, 2026-10-15).
+- **Source:** [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) (4b8d17d), `defk-8i4`, `defk-klw`, `defk-l2g`; [examples/README.md](https://github.com/DanielLuning/defk/blob/main/examples/README.md) geo_nearest row.
+- **Status:** provisional (batched_levenshtein, fuzzy_search Myers); measured (fuzzy_search DP cut-off, geo_nearest grid).
 
 ### 1.7 Load makes numbers provisional, and some differences are noise
 
@@ -365,7 +371,7 @@ See 3.6 for the one Elixir spelling that beats the 32-bit loop.
 
 ### 2.7 Choose the algorithm that fits small integers: Myers bit-parallel Levenshtein
 
-For one short query (up to ~58 bytes, so the bit vectors stay small
+For one short query (up to 62 bytes, so the bit vectors stay small
 integers) against many words, Myers/Hyyrö bit-parallel distance in plain
 Elixir is about 10x the row DP.
 
@@ -373,10 +379,15 @@ Elixir is about 10x the row DP.
   once 157-158 ms; Myers over binary words 28.1 ms; Myers over charlists 18.9
   ms; plus a branch-free score step 16.3 ms; candidates in one
   `:persistent_term` tuple 16.0 ms; in 12 chunks 3.6-4.2 ms. A binary
-  comprehension walk was 56.9 ms. In `fuzzy_search` Myers was 18-19 ms per
-  query against 60-62 ms for the shipped DP with cut-off.
-- **Conditions:** under load.
-- **Source:** [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), `defk-l2g`.
+  comprehension walk was 56.9 ms. In `fuzzy_search` (top-k with a cut-off)
+  Myers over charlists was 18.6-19.0 ms per query against 60-62 ms for the
+  DP with cut-off; adding the length pre-filter made it slower, 22.4-23.0
+  ms, because `length/1` walks the word; adding the score cut-off too, 12.7-13.6
+  ms; the same over binary words, 11.9-12.2 ms; plus the branch-free score
+  step, 11.5-11.6 ms (shipped). In the defk kernel the branch-free step and
+  `wrap64/1` on the checked addition measured the same as the plain form.
+- **Conditions:** under load (fuzzy_search: load average 4-14, 2026-10-15).
+- **Source:** [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs) (27b5a8c), `defk-9p6.11`; [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), `bench/elixir_variants.exs` variants 7 and 11-14, `defk-l2g`.
 - **Status:** provisional.
 
 <!-- defk-example skip: a fragment, the loop body is elided (...) -->
@@ -393,7 +404,10 @@ cond do (ph &&& hi) != 0 -> score + 1; (mh &&& hi) != 0 -> score - 1; true -> sc
 ```
 
 Charlists are cheaper to walk than `<<c, rest::binary>>` here (18.9 vs 28.1
-ms for Myers; no difference for the DP, 157 vs 158 ms).
+ms for Myers; no difference for the DP, 157 vs 158 ms). That holds for a full
+walk. When a cut-off stops most words early and a length bound needs each
+word's length first, binary words win: `byte_size/1` is free, where
+`length/1` walks the charlist (`fuzzy_search`: 11.9-12.2 vs 12.7-13.6 ms).
 
 ### 2.8 Row DP layouts: tail-recursive list rows win
 
@@ -1330,9 +1344,15 @@ for LLVM. Resuming through each loop's header fixed it.
   strip copy of the DP loop, which the cut-off's short rows no longer hide
   (see `defk-w8l`). Under load defk gives 0.94-0.98x the blocking build's
   req/s. The 27-28 vs ~21 ms seen at load average 30+ was load noise.
-- **Conditions:** `defk-nua`/`defk-j3h` load not recorded; `defk-klw` quiet (load average 3-6, no builds); Linux not measured.
-- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, `defk-klw`, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md).
-- **Status:** measured.
+- **With Myers (`defk-l2g`, 2026-10-15, provisional):** the kernel's word
+  loop holds a short inner loop over the word's bytes, so the report shows
+  "a safepoint every iteration" on the word loop. Each word is now a few ns
+  of work, and yielding costs +19% (4.91-4.99 vs 4.11-4.20 ms, ~17 yields
+  per query); `DEFK_SLICE_US=10000000` kept the gap. Under load defk gives
+  ~0.79x the blocking build's req/s. Open as `defk-w8r.1`.
+- **Conditions:** `defk-nua`/`defk-j3h` load not recorded; `defk-klw` quiet (load average 3-6, no builds); `defk-l2g` load average 4-7; Linux not measured.
+- **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, `defk-klw`, `defk-l2g`, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md).
+- **Status:** measured; the Myers figures provisional.
 
 ### 6.5 Float checks: flag the strip, replay on failure
 
