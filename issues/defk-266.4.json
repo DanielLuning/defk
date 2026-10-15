@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-266",
+  "comments": [
+    {
+      "text": "PR #9 opened: https://github.com/DanielLuning/defk/pull/9. test/stability/0.1.0/api.exs (frozen surface of 0.1.0 as data) + test/stability_api_test.exs (containment check: exported, documented, arity; generated functions and spec; use Defk options, yield: false, config :defk mode:, CC and ERTS_INCLUDE_DIR); mix.exs ignores test/stability/ in mix test's load filters. mix ci passes. Break check done locally (rotl/2 renamed, format/1 hidden: the test failed, reverted). Waiting for review.",
+      "timestamp": "2026-10-15T14:44:14Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Stability: public API snapshot of 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-15T14:30:54Z"
+  "updated_at": "2026-10-15T14:44:14Z"
 }
