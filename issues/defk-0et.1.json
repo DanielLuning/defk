@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-15T18:26:09Z",
   "created": "2026-10-15T17:52:26Z",
   "description": "1. A CI step on pull requests (ci/ script run by .github/workflows/ci.yml) fails when the PR modifies or deletes an existing file under test/stability/\u003cversion\u003e/ (a release adds a directory; a frozen file is never edited), and when test/stability/codes.txt loses a code (the ledger only grows). Needs the base branch in the checkout (fetch-depth or a fetch of main). 2. codes.txt marks a retired code on its line (code, then 'retired \u003cversion\u003e'); the ledger test asserts a marked code is kind :retired in the registry and every retired registry code is marked, so reactivating a retired code fails mix test and retiring one is a reviewed ledger edit. 3. docs/agents/stability.md states that the Markdown form Defk.LanguageDoc.extract/1 reads is a format contract: the extractor must keep reading every frozen file of every version. Done when mix ci passes and a PR that edits a frozen file fails the new step (try locally with the script).",
   "id": "defk-0et.1",
@@ -14,8 +15,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Stability: guard the frozen files in CI, mark retired codes in the ledger, write down the extractor's format contract",
   "type": "task",
-  "updated_at": "2026-10-15T17:59:52Z"
+  "updated_at": "2026-10-15T18:26:09Z"
 }
