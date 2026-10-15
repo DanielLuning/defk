@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-15T11:35:06Z",
@@ -7,8 +7,8 @@
   "id": "defk-1v7",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "CI: shorter, cheaper GitHub Actions runs; full matrix on release tags",
   "type": "task",
-  "updated_at": "2026-10-15T11:35:06Z"
+  "updated_at": "2026-10-15T11:35:15Z"
 }
