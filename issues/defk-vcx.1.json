@@ -11,6 +11,12 @@
     "ready-for-agent"
   ],
   "parent": "defk-vcx",
+  "comments": [
+    {
+      "text": "Part of map defk-xoh (2026-10-15).",
+      "timestamp": "2026-10-15T07:43:00Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Guide: call a kernel only above a size, with an Elixir clause below it",
