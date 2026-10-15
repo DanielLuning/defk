@@ -21,9 +21,15 @@
     "wayfinder:task"
   ],
   "parent": "defk-wfi",
+  "comments": [
+    {
+      "text": "Resolution: defk is ready to publish 0.1.0. Release commit 984f09c (main, pushed).\nEvidence:\n- Version 0.1.0 in mix.exs. The compile error footer links the installed version's HexDocs page (https://hexdocs.pm/defk/0.1.0/compile-errors.html#\u003ccode\u003e). README, getting-started, measuring, deploying and scope.md describe the Hex release ({:defk, \"~\u003e 0.1\"}).\n- CHANGELOG.md has the 0.1.0 entry and the renames table.\n- Zero open bug tickets (bw list --type bug --status open: none).\n- Full CI matrix green on the release commit, native GitHub runners: run 38689612139 on 984f09c, linux-x86_64-clang, linux-x86_64-gcc, linux-aarch64-clang, macos-arm64-clang all success.\n- The stability promise guide is merged (defk-wfi.4); the Linux run is recorded (docs/performance.md 6.31, defk-a1p); the triage's blockers are closed (defk-djy.19, defk-wfi.12).\n- mix hex.build passes in CI ('Building defk 0.1.0'). The package holds lib, priv/defk_runtime.h, mix.exs, README, LICENSE, CHANGELOG, CONTEXT and the user docs; a scratch project against the unpacked package compiled and ran a kernel (42), put its library in the app's ebin, and printed the HexDocs footer.\n- docs/verdict.md Limitations name what was and was not checked on Linux.\nAlso done while checking, at the maintainer's direction: the published pages link no development docs (performance.md, project.md, verdict.md, beam-nifs.md, fast-path-report.md, research, bench, ci) and no ticket ids; no ticket ids in code, tests or scripts (160 files; a test enforces it); the known-failure doc marker takes a reason. Fixed on the way: the podman fallback's x86-64 image build under Rosetta (ERL_FLAGS as a build arg); adaptive_slice_test asserts the extra yields (summed \u003e= 10 over five pairs) instead of a time model that shared runners broke. One Rosetta-only failure (magnitude(-0.0, 0) gave 0.0 once) did not reproduce and native runners pass; ci/README.md records it.\nNot part of this map: mix hex.publish, and the v0.1.0 git tag (docs source_ref is v0.1.0).",
+      "timestamp": "2026-10-15T06:03:26Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Release-readiness check for 0.1.0",
   "type": "task",
-  "updated_at": "2026-10-14T20:36:09Z"
+  "updated_at": "2026-10-15T06:03:26Z"
 }
