@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-266",
+  "comments": [
+    {
+      "text": "PR #8 opened: https://github.com/DanielLuning/defk/pull/8. Frozen kernel corpus of 0.1.0 (52 files: 44 doc examples with iex results, Examples.Kernels, 7 catalog kernel modules), mix defk.stability.freeze task, test/stability_kernels_test.exs with an empty @fixed exception list, docs/agents/stability.md. mix ci passes; a swapped min/max lowering made 4 frozen examples fail (reverted, not committed).",
+      "timestamp": "2026-10-15T14:43:39Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Stability: frozen kernel corpus of 0.1.0 (acceptance and results)",
   "type": "task",
-  "updated_at": "2026-10-15T14:29:36Z"
+  "updated_at": "2026-10-15T14:43:39Z"
 }
