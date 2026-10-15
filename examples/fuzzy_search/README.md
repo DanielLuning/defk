@@ -4,7 +4,7 @@ A search box that tolerates typos ("elixr" finds "elixir") is a classic point
 where Elixir teams reach for a Rust or C NIF. It has three properties that make
 it a good test for defk:
 
-- **Hot integer loops.** Levenshtein distance is a dynamic-programming loop over bytes.
+- **Hot integer loops.** Levenshtein distance is a tight loop over bytes, integer and bitwise operations.
 - **Not tensor-shaped.** The work is branchy and data-dependent, so Nx doesn't fit.
 - **Runs inside a web server.** A blocking NIF there hurts every other request.
 
@@ -14,7 +14,7 @@ backends:
 
 | Backend | What it is |
 |---|---|
-| `elixir` | Pure Elixir: charlist rows built by tail recursion, early cut-off, bounded top-k ([`elixir_backend.ex`](lib/fuzzy_search/elixir_backend.ex)) |
+| `elixir` | Pure Elixir: Myers bit-parallel distance by tail recursion over binary words, early cut-off, bounded top-k ([`elixir_backend.ex`](lib/fuzzy_search/elixir_backend.ex)) |
 | `defk` | The same algorithm as a defk kernel that yields like Elixir code ([`kernels.ex`](lib/fuzzy_search/kernels.ex)) |
 | `blocking` | The identical kernel compiled with `yield: false`. It behaves like a typical hand-written NIF and holds its scheduler until it finishes. |
 
@@ -22,18 +22,27 @@ All three return identical results; `bench/verify.exs` and `mix test` check this
 
 ### The algorithm
 
-Classic Levenshtein DP, one row per character of the candidate word, with a
-bounded top-k list and an **early cut-off**: a row's minimum never
-decreases from one row to the next, and the final distance is at least that
-minimum. So once the top k is full, a word stops as soon as its row minimum
-reaches the k-th best distance found so far. Words are scanned in index order
-and ties go to the lower index, so a word that can only tie the k-th best is
-cut too. Results are exactly those of a full scan: `test/fuzzy_search_test.exs`
-compares every backend with one.
+**Myers/Hyyrö bit-parallel Levenshtein** for queries of 1 to 62 bytes: the
+query becomes a table of bit masks (bit j of `peq[ch]` is set when byte j of
+the query is `ch`), and each byte of the candidate word is one step of about
+twenty bitwise operations on two bit vectors. Up to 62 bits, every value
+stays a small integer in Elixir and fits an `i64` in the kernel. An empty
+query and queries of 63 bytes or more take the classic DP, one row per byte
+of the word.
 
-Both sides use the same cut-off. The kernel writes it as `Enum.reduce_while`
-over the rows (`{:halt, true}` once the row minimum reaches the bound); the
-Elixir backend as a tail-recursive row loop that returns `:cut`.
+A bounded top-k list and an **early cut-off**: once the top k is full, a word
+stops as soon as a lower bound on its distance reaches the k-th best distance
+found so far. Two lower bounds: `|n - m|` (the length difference) before the
+word starts, and `score - (n - i)` after `i` of its `n` bytes, because each
+remaining byte lowers the distance by at most one. The DP path cuts on the row
+minimum. Words are scanned in index order and ties go to the lower index, so
+a word that can only tie the k-th best is cut too. Results are exactly those
+of a full scan: `test/fuzzy_search_test.exs` compares every backend with one.
+
+Both sides use the same algorithm, the same bounds and the same score step.
+The kernel writes the cut-off as `Enum.reduce_while` over the word's bytes
+(`{:halt, ...}` once the bound is reached); the Elixir backend as a
+tail-recursive walk over the binary word that returns `:cut`.
 
 ## Run it
 
@@ -55,56 +64,73 @@ the server-side compute time. `GET /health` is a liveness probe.
 
 ## Results
 
-### With the early cut-off
+Measured on 2026-10-15. M-series Mac, 12 cores, OTP 29, Elixir 1.20.
+**Provisional:** other sessions ran on the machine (load average 4–7 before
+the runs, up to 26 during the load test). Re-check on a quiet machine.
 
-Measured on 2026-10-13 on a quiet machine (no builds or other
-agents; load average 3–6 before each run). M-series Mac, 12 cores, OTP 29,
-Elixir 1.20.
+Single query, in-process (`bench/verify.exs`, 40 typo'd queries, k = 10,
+three runs):
 
-Single query, in-process (`bench/verify.exs`, 40 typo'd queries, k = 10, three runs):
-
-| Backend | before (no cut-off) | after (cut-off) | gain |
+| Backend | DP + cut-off (2026-10-13) | Myers + cut-off | gain |
 |---|---|---|---|
-| `elixir` | 112 ms | 59.9–61.4 ms | 1.9× |
-| `defk` | 20.4–20.8 ms | 13.6–13.8 ms | 1.5× |
-| `blocking` | 20.6 ms | 13.1–13.3 ms | 1.6× |
-| defk vs Elixir | 5.4× | **4.4×** | |
+| `elixir` | 59.9–61.4 ms | 10.9–11.1 ms | 5.5× |
+| `defk` | 13.6–13.8 ms | 4.6–4.7 ms | 3.0× |
+| `blocking` | 13.1–13.3 ms | 3.9 ms | 3.4× |
+| defk vs Elixir | 4.4× | **2.3–2.4×** | |
 
-The "before" column was measured under load (load average 5–90); the first
-measurement of the cut-off read 60 ms and 14.1–14.2 ms under the same load, so load
-moved those numbers by less than 5%.
+Myers helps Elixir more than defk: in Elixir it replaces a list of row cells
+per byte with a few operations on one small integer, where the kernel's DP
+row was already a tight loop over an array. The verdict stays **good**
+(at least 1.9×), but by a smaller margin than the DP comparison showed.
 
 **Yielding vs blocking.** `bench/yield_cost.exs` (20 queries × 5, interleaved,
-five runs): yielding 12.25–12.75 ms vs blocking 11.7–12.0 ms, **+3.5–4.5%**,
-54–56 yields/query. The gap is real and comes from the kernel's shape, not from
-the yields or from a compiler regression:
-
-- Built with `DEFK_SLICE_US=10000000` (0.2–0.4 yields/query), the gap stays
-  (+3.6–4.7%). The yields cost nothing measurable.
-- The kernel from before the cut-off (`d3bc3cd^`), on today's compiler, gives
-  yielding −1.6% to −3.4% against blocking, as it did when it was first measured. So no
-  compiler commit since then made yielding slower.
-- What the yielding build adds is per-row bookkeeping in the `Enum.reduce_while`
-  over rows: a safepoint every row (the row loop holds the DP loop, so it can't
-  run in strips), a resume check, and the strip copy of the DP loop. The
-  cut-off made rows short work, so this costs a larger share. This is a
-  known class of cost, tracked separately.
-
-The 27–28 ms vs ~21 ms that an earlier run saw at load average 30+ was load noise.
-
-The cut-off helps Elixir more than defk. A likely reason (not yet profiled):
-it removes the same DP cells on both sides, but the per-word cost it can't
-remove (row setup, the reduce over rows, the top-k check) is a larger share of
-the kernel's time.
+three runs): yielding 4.91–4.99 ms vs blocking 4.11–4.20 ms, **+19%**, at 17
+yields per query. With the DP it was +3.5–4.5%. A build with
+`DEFK_SLICE_US=10000000` keeps the same gap, so the yields themselves cost
+little. The fast-path report (`Defk.Report.print(FuzzySearch.Kernels)`) names
+the cause: the word loop holds the inner loop over the word's bytes, so it
+checks a safepoint on every word. Myers made each word a few nanoseconds of
+work, so this per-word bookkeeping is now a large share. This is a known cost
+in the compiler, tracked separately.
 
 ### Under load
 
-**Under load:** 24 concurrent clients saturating the server, while a prober hits
+24 concurrent clients saturating the server, while a prober hits
 `GET /health` every 5 ms (`elixir --erl "+S 2" bench/loadgen.exs 4047 8`).
+Two runs; a third run, during a load spike, gave defk 1376 req/s and a
+`/health` p99 of 29 ms and is not used.
 
-With the cut-off (quiet machine): three runs that agreed within
-~3%. Four earlier runs overlapped another session's test suite and scattered
-(defk 499–629 req/s, blocking 499–681); they are not used.
+| Backend | 1 client p50 | req/s | search p50 | search p99 | health p50 | health p99 |
+|---|---|---|---|---|---|---|
+| `elixir` | 10.7 ms | 698–741 | 31–33 ms | 75–76 ms | 0.3–0.4 ms | 12.4–13.5 ms |
+| `defk` | 4.7–4.8 ms | 1791–1839 | 12.0–12.4 ms | 31–33 ms | 0.8 ms | 12.3–13.2 ms |
+| `blocking` | 4.0–4.1 ms | 2264–2367 | 9.4–9.8 ms | 24–25 ms | **5.9–6.2 ms** | **17.7–19.9 ms** |
+
+### What the numbers say
+
+1. **defk gives 2.4–2.6× the throughput of pure Elixir and cuts p99 latency
+   by 2.3–2.5×**, with the same algorithm on both sides. With the DP on both
+   sides it was 5×: a better algorithm narrowed the gap, as it should when
+   the baseline improves.
+2. **The blocking NIF is faster, and it still slows every other request.**
+   `/health`, which does nothing, takes a median of ~6 ms and up to 18–20 ms
+   at p99, against 12–13 ms for defk and Elixir. A query now blocks its
+   scheduler for ~4 ms instead of ~13 ms, so the harm is smaller than with
+   the DP (75–82 ms p99), but processes queued on a scheduler that is busy in
+   a NIF still wait until the NIF finishes.
+3. **defk keeps `/health` in the same range as pure Elixir** (p99 12.3–13.2
+   ms against 12.4–13.5 ms) while serving 2.4–2.6× the traffic. This is the BEAM
+   promise the example exists to test.
+4. **defk gives ~21% less throughput than the blocking build under load**
+   (1791–1839 vs 2264–2367 req/s), the same share as its single-query yield
+   cost (+19%, above).
+
+### Earlier results: the DP on both sides
+
+Before Myers, both sides ran the row DP with the row-minimum cut-off. On a
+quiet machine (2026-10-13): single query Elixir 59.9–61.4 ms, defk 13.6–13.8
+ms, blocking 13.1–13.3 ms (4.4×); yielding +3.5–4.5% over blocking, from
+per-row bookkeeping in the `Enum.reduce_while` over rows. Under load:
 
 | Backend | 1 client p50 | req/s | search p50 | search p99 | health p50 | health p99 |
 |---|---|---|---|---|---|---|
@@ -112,69 +138,68 @@ With the cut-off (quiet machine): three runs that agreed within
 | `defk` | 11.6–11.9 ms | 652–663 | 32–33 ms | 99–105 ms | 1.0–1.1 ms | 9.8–11.7 ms |
 | `blocking` | 11.5–11.8 ms | 676–693 | 32 ms | 85–100 ms | **18–22 ms** | **75–82 ms** |
 
-Before the cut-off (two runs agreed within a few percent; load not recorded):
+Without any cut-off (load not recorded) the DP was 112 ms in Elixir and
+20.4–20.8 ms in defk (5.4×), and the blocking build's `/health` p99 was
+77–90 ms. An earlier version of defk was ~30% slower than the blocking
+build. That gap closed for several reasons: bounds checks are now elided, the
+short inner DP loops no longer check a safepoint per cell, and a resumed
+kernel re-enters its loops through their headers instead of jumping into the
+middle of them, which had made the loops irreducible for LLVM. Kernels now
+yield after 250 µs instead of 1 ms; that cost nothing measurable, and
+defk's `/health` median fell from 3 ms to 1.1 ms.
 
-| Backend | 1 client p50 | req/s | search p50 | search p99 | health p50 | health p99 |
-|---|---|---|---|---|---|---|
-| `elixir` | 124–126 ms | 68–69 | 345–348 ms | 615–633 ms | 0.3 ms | 6–9 ms |
-| `defk` | 21 ms | 426–429 | 54 ms | 115–117 ms | 1.1 ms | 8–10 ms |
-| `blocking` | 22 ms | 433–443 | 52–53 ms | 111–116 ms | **33 ms** | **77–90 ms** |
+## Elixir baseline: optimized
 
-### What the numbers say
-
-1. **defk gives 5.1–5.2× the throughput of pure Elixir and cuts p99 latency by 5.1–5.3×**, from the same code shape (6.2× and 5.4× before the cut-off). The speedup is smaller than the 10–15× seen on float arrays, because the BEAM JIT handles small-integer DP loops well.
-2. **The blocking NIF is a little faster, and it slows every other request.** `/health`, which does nothing, takes a median of 18–22 ms and up to 75–82 ms at p99 (33 ms and 90 ms before the cut-off). Processes queued on a scheduler that is busy in a NIF wait until the NIF finishes. In an earlier run with only 4 clients (8 of 12 cores idle), its `/health` p99 was 26 ms, against 2 ms for defk.
-3. **defk keeps `/health` in the same range as pure Elixir** (p99 9.8–11.7 ms against 9.6–12.1 ms) while serving 5.1–5.2× the traffic. This is the BEAM promise the example exists to test.
-4. **defk gives 2–6% less throughput than the blocking build under load** (652–663 vs 676–693 req/s), and is 3.5–4.5% slower one query at a time. Before the cut-off the two were within ~2%. The single-query gap comes from per-row bookkeeping in the cut-off's `Enum.reduce_while`, not from yielding (see above). An earlier version of defk was ~30% slower. That gap closed for several reasons: bounds checks are now elided, the short inner DP loops no longer check a safepoint per cell, and a resumed kernel re-enters its loops through their headers instead of jumping into the middle of them, which had made the loops irreducible for LLVM.
-5. **Yielding more often cost nothing measurable here.** Kernels now yield after 250 µs instead of 1 ms, ~78 yields per query instead of 18 before the cut-off (~55 with it). Throughput stayed within run-to-run noise, and defk's `/health` median fell from 3 ms to 1.1 ms. With the cut-off, a build that almost never yields is no faster than the one that yields every 250 µs. `bench/yield_cost.exs` compares `search/4` with its `yield: false` twin, query by query.
-
-## Elixir baseline: first pass
-
-The Elixir backend is careful (a precomputed charlist catalog in
-`:persistent_term`, tail-recursive rows, the early cut-off, bounded top-k),
-and its row layout has now been measured against the alternatives. It stays
-**first pass**, so the 4.4× is **provisional**, because a better algorithm
-exists that the kernel can't use yet (Myers, below).
-
-What was tried while adding the cut-off (`bench/elixir_variants.exs`: 20 queries × 3
-rounds, k = 10, each query in a fresh process, catalog in `:persistent_term`;
-median ms/query, noisy machine, the two runs agreed within ~10%):
+The Elixir side is measured against the alternatives
+(`bench/elixir_variants.exs`: 20 queries × 3 rounds, k = 10, each query in a
+fresh process, catalog in `:persistent_term`; median ms/query; two runs on
+2026-10-15, four runs at load average 4–14, provisional; the shipped row
+comes from the last two runs, at load 4–6):
 
 | Variant | ms/query |
 |---|---|
-| first pass, no cut-off | 124–128 |
-| list rows + cut-off, `Enum.reduce_while` over the word | 66–69 |
-| **list rows + cut-off, tail recursion (shipped)** | **60–62** |
-| = shipped, but words as binaries (`<<ch, rest::binary>>`) | 66–67 |
-| = shipped, tail-recursive catalog walk instead of `Enum.reduce` | 59–62 (same) |
-| = shipped, row minimum via `:lists.min/1` | 69–70 |
-| = shipped, rows as tuples (`elem`, `List.to_tuple`) | 79–82 |
-| = shipped, rows as `:array` | 287–288 |
-| = shipped, rows as `u16` binaries built by appending | 322–330 |
-| = shipped + length pre-filter (`abs(len(w) - len(q)) >= bound`)\* | 53–54 |
-| Myers/Hyyrö bit-parallel distance, no cut-off\* | **18–19** |
+| DP, first pass, no cut-off | 126–128 |
+| DP, list rows + cut-off, `Enum.reduce_while` over the word | 68 |
+| DP, list rows + cut-off, tail recursion | 61–63 |
+| = DP tail recursion, but words as binaries (`<<ch, rest::binary>>`) | 67 |
+| = DP tail recursion, tail-recursive catalog walk instead of `Enum.reduce` | 60–61 (same) |
+| = DP tail recursion, row minimum via `:lists.min/1` | 69–70 |
+| = DP tail recursion, rows as tuples (`elem`, `List.to_tuple`) | 79 |
+| = DP tail recursion, rows as `:array` | 277–281 |
+| = DP tail recursion, rows as `u16` binaries built by appending | 324–325 |
+| = DP tail recursion + length pre-filter | 54 |
+| Myers over charlists, no cut-off | 18.6–19.0 |
+| Myers over charlists + length pre-filter | 22.4–23.0 |
+| = Myers + length pre-filter + score cut-off | 12.7–13.6 |
+| = Myers + both bounds, binary words | 11.9–12.2 |
+| **= Myers + both bounds, binary words, branch-free score step (shipped)** | **11.5–11.6** |
 
-\* Not used as the baseline, because the kernel doesn't have the same trick:
+What this shows:
 
-- **Myers bit-parallel** replaces each row with a few bitwise operations on one
-  integer (queries up to 58 characters fit a small integer). In Elixir it is
-  **3.3× faster than the shipped DP and within ~1.3× of the defk DP kernel**,
-  which would make this example `marginal`. A defk kernel can't write it until
-  kernels have bitwise operators; then both sides should use it
-  and be re-measured. Until then the 4.4× is a DP-vs-DP comparison only.
-- **The length pre-filter** is cheap on both sides; adding it to both is a follow-up.
+- **Myers is 3–5× the best DP.** One small-integer step per byte replaces a
+  row of list cells.
+- **The length pre-filter alone slows Myers down over charlists** (22–23 vs
+  19 ms): `length/1` walks the whole word, while Myers without a cut-off has
+  to walk it anyway. With binary words `byte_size/1` costs nothing, so binary
+  words win once the cut-off makes most words stop early (12 vs 13 ms). Over
+  a full scan with no cut-off, charlists are the faster walk.
+- **The branch-free score step** (`score + (ph >>> top &&& 1) - (mh >>> top
+  &&& 1)` instead of a `cond`) gains ~4% in Elixir. The kernel gets the same
+  step; there it measured the same as the `cond`, which the C compiler
+  already turns into a select.
+- In the kernel, `wrap64/1` around the one checked addition (to drop its
+  overflow check) measured no faster, so the kernel keeps plain `+`.
 
-The Elixir backend now processes the catalog in parallel chunks across schedulers
-for a single request (parallel chunking per request). Under server load where
-all schedulers are busy, this doesn't add much; for a single-query latency test
-with spare cores it can help. The defk kernel remains single-threaded per call.
+`ElixirBackend.search/3` can also split the catalog into one chunk per
+scheduler (`parallel: true`). The service does not use it: under load every
+scheduler is busy, and the defk kernel is single-threaded per call too.
 
 ## Not modelled
 
 Real fuzzy search adds things none of the three backends do:
 
-- a length pre-filter, or a tighter cut-off bound that adds the remaining length difference to each cell,
 - prefix or n-gram indexes, so most words are never scored,
-- Unicode grapheme handling (this compares ASCII bytes).
+- multi-word Myers for queries longer than 62 bytes (they take the DP here),
+- Unicode grapheme handling (this compares bytes).
 
-Each of these speeds up all backends.
+Each of these speeds up, or changes, all backends alike.
