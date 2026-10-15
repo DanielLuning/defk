@@ -998,11 +998,15 @@ defmodule Defk.Errors do
   # :subset), one Markdown bullet per code linking its entry in
   # docs/compile-errors.md, with its summary, in registry order. Maintainer note:
   # docs/agents/generated-docs.md. The test suite checks the page contains
-  # this text verbatim.
-  @spec scope(:planned | :subset) :: String.t()
-  def scope(kind) when kind in [:planned, :subset] do
+  # this text verbatim. With `:hexdocs` the links are the error footer's
+  # URLs, for the usage rules, which are read inside another project.
+  @spec scope(:planned | :subset, :relative | :hexdocs) :: String.t()
+  def scope(kind, links \\ :relative)
+      when kind in [:planned, :subset] and links in [:relative, :hexdocs] do
+    base = if links == :hexdocs, do: @url_base, else: "compile-errors.md#"
+
     for %{kind: ^kind} = e <- @codes, into: "" do
-      "- [`#{e.code}`](compile-errors.md##{e.code}): #{e.summary}\n"
+      "- [`#{e.code}`](#{base}#{e.code}): #{e.summary}\n"
     end
   end
 

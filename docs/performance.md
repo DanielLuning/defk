@@ -722,6 +722,14 @@ compiled = :binary.compile_pattern(needle)   # once, e.g. in :persistent_term
   kernel and the `crc` NIF; 0.10-0.11 ms for 4 MB (~40 GB/s) in `hashes`.
   `:erlang.phash2/1` 2.4-2.6 GB/s (not portable across OTP versions). It is
   zlib's polynomial: it does not replace CRC32C or CRC-64.
+  `:erlang.adler32/1` is native too: 52-53 us per MB, 3-8x a kernel that
+  reduces mod 65521 once per 5552-byte block (266-400 us), at 64 B, 4 KB
+  and 1 MB; that kernel was 5-7x the same blocked loop in Elixir (1,824
+  us). Provisional: a cold-test agent's `:dev` runs, one or two each, load
+  unknown ([usage-rules cold test](cold-tests/usage-rules.md), `defk-djy.18`).
+  Offsets of every newline in 1 MB, in the same runs:
+  `:binary.matches(bin, "\n")` 407 us as a list; a kernel's bitstring of
+  offsets 281 us (1.2-1.45x, under the 2x bar), 470 us once decoded to a list.
 - **Conditions:** load not recorded.
 - **Source:** [`geohash_crc.exs`](https://github.com/DanielLuning/defk/blob/main/examples/geohash_crc.exs) (ad7b46b), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs) (0bc56d4), `defk-9p6.2`, `defk-52v.4`.
 - **Status:** measured.

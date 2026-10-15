@@ -442,6 +442,13 @@ defmodule Defk.LanguageDoc do
         do: path
   end
 
+  @doc """
+  The usage rules a dependent's agent reads (`mix usage_rules.sync` in their
+  project): the main file and the sub-rules. They are not extras; they are
+  inlined into another project's AGENTS.md, so their links are URLs.
+  """
+  def usage_rules, do: ["usage-rules.md" | Enum.sort(Path.wildcard("usage-rules/*.md"))]
+
   # ----------------------------------------------------------------- links --
 
   @doc """
