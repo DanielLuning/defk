@@ -11,6 +11,12 @@
     "ready-for-agent"
   ],
   "parent": "defk-djy",
+  "comments": [
+    {
+      "text": "Part of map defk-xoh (2026-10-15).",
+      "timestamp": "2026-10-15T07:42:59Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Ship a usage-rules.md for kernel authors (and their agents)",
