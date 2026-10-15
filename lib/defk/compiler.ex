@@ -1813,6 +1813,7 @@ defmodule Defk.Compiler do
 
     v.t == :u64 &&
       err!(node, "operand-type", "- takes i64 or f64, and #{Macro.to_string(a)} is u64",
+        why: "the negation of a u64 is negative, and an i64 does not hold every negated u64",
         hint:
           "a negated u64 is not a u64; to wrap, negate inside a mask: band(-x, 0xFFFFFFFFFFFFFFFF)"
       )
@@ -2669,6 +2670,7 @@ defmodule Defk.Compiler do
   # bnot of a u64 is negative: no u64, and no i64 for every u64
   defp bitwise_val(:bnot, [%{t: :u64}], [x], node, _env) do
     err!(node, "operand-type", "bnot/1 takes an i64, and #{Macro.to_string(x)} is u64",
+      why: "bnot of a u64 is negative, and an i64 does not hold it for every u64",
       hint: "bnot of a u64 is negative; to flip its 64 bits, write it inside a mask",
       rewrite: "band(#{Macro.to_string(node)}, 0xFFFFFFFFFFFFFFFF)"
     )
@@ -2738,7 +2740,7 @@ defmodule Defk.Compiler do
         at,
         "operand-type",
         "#{label} takes integers, and #{Macro.to_string(at)} is #{type_name(v)}",
-        convert_hint(v.t, :i64, at)
+        convert_hint(v.t, :i64, at) ++ operand_why(v.t, :integer)
       )
   end
 
@@ -5946,7 +5948,7 @@ defmodule Defk.Compiler do
         at,
         "operand-type",
         "#{op} takes numbers, and #{Macro.to_string(at)} is #{type_name(v)}",
-        convert_hint(v.t, :i64, at)
+        convert_hint(v.t, :i64, at) ++ operand_why(v.t, :number)
       )
   end
 
@@ -5958,9 +5960,22 @@ defmodule Defk.Compiler do
         at,
         "operand-type",
         "#{takes}, and #{Macro.to_string(at)} is #{type_name(v)}",
-        convert_hint(v.t, :bool, at)
+        convert_hint(v.t, :bool, at) ++ operand_why(v.t, :bool)
       )
   end
+
+  # The why of an operand-type error, for an operand of type `t` where the
+  # operator takes `takes`; other operands keep the registry's general why.
+  defp operand_why(:bool, takes) when takes in [:number, :integer],
+    do: [why: "booleans are not numbers in Elixir, and defk keeps that"]
+
+  defp operand_why(:f64, :integer),
+    do: [why: "defk never converts a float to an integer implicitly"]
+
+  defp operand_why(t, :bool) when t in [:i64, :u64, :f64],
+    do: [why: "a number is not a boolean in Elixir (0 is not false), and defk keeps that"]
+
+  defp operand_why(_t, _takes), do: []
 
   defp type_name(%{elems: _, t: t}), do: "a tuple #{fmt(t)}"
   defp type_name(%{t: t}), do: fmt(t)
@@ -6232,6 +6247,9 @@ defmodule Defk.Compiler do
           node,
           "operand-type",
           "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
+          why:
+            "defk compares numbers by value and booleans only for equality; " <>
+              "Elixir's term order between other values is not in the subset",
           hint: "compare two numbers or two booleans"
         )
       end
@@ -6268,6 +6286,9 @@ defmodule Defk.Compiler do
           node,
           "operand-type",
           "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
+          why:
+            "defk compares numbers by value and booleans only for equality; " <>
+              "Elixir's term order between other values is not in the subset",
           hint: "compare two numbers or two booleans"
         )
     end

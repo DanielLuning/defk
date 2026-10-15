@@ -52,7 +52,9 @@ defmodule Defk.CompileErrorsTest do
         {msg, rewrite} = Map.fetch!(results, @code)
         assert is_binary(msg), "the example for #{@code} compiled"
         assert codes(msg) == [@code], msg
-        [what] = whats(msg)
+        # the public reader agrees with the test's own
+        assert [%{code: @code, message: what}] = Defk.Errors.diagnostics(msg), msg
+        assert [what] == whats(msg)
         assert_kind(kind, what)
         refute msg =~ ~r/defk-[a-z0-9]{3}/, "a ticket ID in #{msg}"
         assert rewrite == :ok, "the rewrite for #{@code} does not compile:\n#{rewrite}"
@@ -497,6 +499,54 @@ defmodule Defk.CompileErrorsTest do
       msg = compile(__MODULE__, "defk f(d :: [u8]) :: String.t() do\n  d\nend")
       assert codes(msg) == ["unknown-type"]
       assert msg =~ "text is a [u8]"
+    end
+  end
+
+  describe "operand-type's why matches the operands" do
+    defp why(sig, ret, body) do
+      msg = reject(__MODULE__, kernel(sig, ret, body))
+      assert codes(msg) == ["operand-type"], msg
+      [why] = Regex.run(~r/^why: (.*)$/m, msg, capture: :all_but_first)
+      why
+    end
+
+    test "a boolean in arithmetic" do
+      assert why("x :: i64, b :: bool", "i64", "x + b") ==
+               "booleans are not numbers in Elixir, and defk keeps that"
+    end
+
+    test "a float in a bitwise operator" do
+      assert why("x :: i64, y :: f64", "i64", "band(x, y)") ==
+               "defk never converts a float to an integer implicitly"
+    end
+
+    test "a number in and/or/not" do
+      assert why("x :: i64, b :: bool", "bool", "b and x") =~ "a number is not a boolean"
+    end
+
+    test "a negated u64" do
+      assert why("x :: i64", "i64", "x + -0x8000000000000000") =~
+               "the negation of a u64 is negative"
+    end
+
+    test "bnot of a u64" do
+      assert why("x :: u64", "i64", "bnot(x)") =~ "bnot of a u64 is negative"
+    end
+
+    test "a comparison of a boolean with a number" do
+      assert why("x :: i64, b :: bool", "bool", "b == x") =~
+               "defk compares numbers by value and booleans only for equality"
+    end
+
+    test "no operand-type error says booleans are not numbers without a boolean" do
+      for {sig, ret, body} <- [
+            {"x :: i64", "i64", "x + -0x8000000000000000"},
+            {"x :: i64, y :: f64", "i64", "band(x, y)"},
+            {"x :: i64, b :: bool", "bool", "b and x"},
+            {"x :: i64, a :: [i64]", "i64", "x + a"}
+          ] do
+        refute why(sig, ret, body) =~ "booleans are not numbers", body
+      end
     end
   end
 end
