@@ -11,7 +11,9 @@ defmodule Defk.Errors do
   (`:planned`), or a mistake in a construct that is in it (`:error`), the
   default `why`/`hint`, and a failing `example` with its `rewrite` (both
   module bodies; the test suite checks the example is rejected with that code
-  and the rewrite compiles).
+  and the rewrite compiles). A code whose construct became valid is retired
+  (`:retired`, with the version and why): it stays in the list and in the
+  catalogue, and is never reused.
 
   The codes are the stable part: `entries/0` and `explain!/1` are public. The
   keys of an entry map may change in any version, and so may `fetch!/1`,
@@ -54,11 +56,11 @@ defmodule Defk.Errors do
   @forms "=, if, cond, case, for, Enum.reduce/3, Enum.reduce_while/3, Enum.find/3, Enum.all?/2 and Enum.any?/2"
 
   # ------------------------------------------------------------- registry --
-  # Retired codes, never reused: "bitwise" (the operators are supported),
-  # "module-attribute" (attributes are constants), "read-only-array" (an
-  # input array is copied before a write), "tuple-return-call" (a kernel
-  # returning a tuple is called from kernels), "array-accumulator" (an owned
-  # array is threaded through a reduce accumulator).
+  # Active codes first, in the catalogue's order, then the retired ones. A
+  # code whose construct became valid is retired (kind: :retired, with the
+  # version and why), never removed or reused: it stays in the catalogue and
+  # keeps its anchor, and the compiler can no longer raise it
+  # (validate_code!/1). test/stability/codes.txt lists every released code.
 
   @codes [
     # -- kernel definitions
@@ -888,30 +890,82 @@ defmodule Defk.Errors do
         "defk fill(out :: [i64], v :: i64) :: i64 do\n  out[0] = v\n  v\nend\n\ndefk f(n :: i64) :: [i64] do\n  out = alloc(i64, n)\n  _ = fill(out, 7)\n  out\nend",
       rewrite:
         "defk fill(out :: [i64], v :: i64) :: {[i64], i64} do\n  out[0] = v\n  {out, v}\nend\n\ndefk f(n :: i64) :: [i64] do\n  out = alloc(i64, n)\n  {out, _} = fill(out, 7)\n  out\nend"
+    },
+    # -- retired: the construct became valid. Each keeps the summary it had.
+    %{
+      code: "bitwise",
+      kind: :retired,
+      summary: "Bitwise operators (&&&, |||, ^^^, <<<, >>>, band, bor, ...) are planned.",
+      retired: %{version: "0.0.1", why: "the bitwise operators are supported"}
+    },
+    %{
+      code: "module-attribute",
+      kind: :retired,
+      summary: "Module attributes as constants are planned.",
+      retired: %{version: "0.0.1", why: "module attributes are constants in a kernel body"}
+    },
+    %{
+      code: "read-only-array",
+      kind: :retired,
+      summary:
+        "Only arrays created with alloc/2 are written; writing to an input array is planned.",
+      retired: %{
+        version: "0.0.1",
+        why: "arrays are values: an input array is copied before a write"
+      }
+    },
+    %{
+      code: "tuple-return-call",
+      kind: :retired,
+      summary: "A kernel that returns a tuple is called from Elixir only.",
+      retired: %{version: "0.0.1", why: "a kernel returning a tuple is called from kernels"}
+    },
+    %{
+      code: "array-accumulator",
+      kind: :retired,
+      summary:
+        "Arrays are not accumulators; allocate the array before the loop and write it in the body.",
+      retired: %{
+        version: "0.0.1",
+        why: "an owned array is threaded through a reduce accumulator"
+      }
     }
   ]
 
   @by_code Map.new(@codes, &{&1.code, &1})
+  @active for %{kind: kind} = e <- @codes, kind != :retired, do: e
+  @retired for %{kind: :retired} = e <- @codes, do: e
 
   @typedoc """
   A registry entry. The code is stable; the keys of the map are not, and may
   change in any version.
+
+  An active code (`kind` `:error`, `:subset` or `:planned`) has a `summary`,
+  `why`, `hint`, and a failing `example` with its `rewrite`. A retired code
+  (`kind` `:retired`) keeps its `summary` and carries `retired`, a map with
+  the `version` that retired it and `why`; it has no why, hint or example.
   """
   @type entry :: %{
           required(:code) => String.t(),
-          required(:kind) => :error | :subset | :planned,
+          required(:kind) => :error | :subset | :planned | :retired,
           optional(atom()) => term()
         }
 
   @doc """
   Every error code's entry, in documentation order: `code`, `kind`
   (`:error`, `:subset` or `:planned`), `summary`, `why`, `hint`, and a failing
-  `example` with its `rewrite`.
+  `example` with its `rewrite`. The retired codes come last, with `kind`
+  `:retired` and the version and reason in `retired` (see `t:entry/0`): a
+  code whose construct became valid stays in the catalogue and is never
+  reused.
 
   The codes are stable; the keys of the entries are not.
 
       iex> "unsupported-map" in Enum.map(Defk.Errors.entries(), & &1.code)
       true
+
+      iex> Defk.Errors.fetch!("bitwise").retired.version
+      "0.0.1"
   """
   @spec entries() :: [entry()]
   def entries, do: @codes
@@ -961,25 +1015,23 @@ defmodule Defk.Errors do
         :error -> raise ArgumentError, "unknown defk error code #{inspect(code)}"
       end
 
-    IO.puts(
-      Enum.join(
-        [
-          "defk #{entry.code}",
-          "",
-          entry.summary,
-          "",
-          "why: #{entry.why}",
-          "hint: #{entry.hint}",
-          "",
-          "example:",
-          indent_block(entry.example),
-          "",
-          "rewrite:",
-          indent_block(entry.rewrite)
-        ],
-        "\n"
-      )
-    )
+    IO.puts(Enum.join(["defk #{entry.code}", "", entry.summary, "" | explanation(entry)], "\n"))
+  end
+
+  defp explanation(%{kind: :retired, retired: r}),
+    do: ["retired in #{r.version}: #{r.why}"]
+
+  defp explanation(entry) do
+    [
+      "why: #{entry.why}",
+      "hint: #{entry.hint}",
+      "",
+      "example:",
+      indent_block(entry.example),
+      "",
+      "rewrite:",
+      indent_block(entry.rewrite)
+    ]
   end
 
   @doc false
@@ -991,10 +1043,19 @@ defmodule Defk.Errors do
   @doc false
   # The entries of the "Codes" section of docs/compile-errors.md, one
   # `### <code>` heading per code (the anchor the error footer links), in
-  # registry order. Maintainer note: docs/agents/generated-docs.md. The test
-  # suite checks the document contains this text verbatim.
+  # registry order, then the "Retired" section with one heading per retired
+  # code, so a retired code keeps its anchor. Maintainer note:
+  # docs/agents/generated-docs.md. The test suite checks the document
+  # contains this text verbatim.
   @spec reference() :: String.t()
-  def reference, do: Enum.map_join(@codes, "\n", &reference_entry/1)
+  def reference do
+    Enum.map_join(@active, "\n", &reference_entry/1) <>
+      "\n## Retired\n\n" <>
+      "A code is retired when the construct it rejected becomes valid. It stays " <>
+      "here with the summary it had, the version that retired it and why, and " <>
+      "is never reused for another rejection.\n\n" <>
+      Enum.map_join(@retired, "\n", &reference_entry/1)
+  end
 
   @doc false
   # The generated lists of docs/scope.md: every code of `kind` (:planned or
@@ -1018,6 +1079,10 @@ defmodule Defk.Errors do
     planned: "not supported yet (planned)",
     error: "a mistake to fix (in the kernel or the build)"
   }
+
+  defp reference_entry(%{kind: :retired, retired: r} = e) do
+    "### #{e.code}\n\n#{e.summary}\n\n- retired in #{r.version}: #{r.why}\n"
+  end
 
   defp reference_entry(e) do
     example =
@@ -1043,15 +1108,25 @@ defmodule Defk.Errors do
 
   @doc false
   # A literal code in the compiler's err!/attempt_err! is checked here when
-  # the compiler itself compiles: a typo fails mix compile.
-  def validate_code!(code) do
-    if is_binary(code) and not Map.has_key?(@by_code, code) do
-      raise ArgumentError,
-            "unknown defk error code #{inspect(code)}: not in Defk.Errors.entries/0"
-    end
+  # the compiler itself compiles: a typo, or a retired code, fails mix
+  # compile. A code built at run time (not a binary) passes through.
+  def validate_code!(code) when is_binary(code) do
+    case Map.fetch(@by_code, code) do
+      {:ok, %{kind: :retired, retired: r}} ->
+        raise ArgumentError,
+              "retired defk error code #{inspect(code)}: retired in #{r.version} " <>
+                "(#{r.why}); a retired code is never raised again"
 
-    :ok
+      {:ok, _} ->
+        :ok
+
+      :error ->
+        raise ArgumentError,
+              "unknown defk error code #{inspect(code)}: not in Defk.Errors.entries/0"
+    end
   end
+
+  def validate_code!(_), do: :ok
 
   @doc false
   def footer(code), do: "(defk #{code}: #{docs(code)})"

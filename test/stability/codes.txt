@@ -1,0 +1,92 @@
+# Every compile error code defk has released, one per line: the codes in
+# Defk.Errors.entries/0 at each release, active and retired, in registry
+# order. The file grows at release time, when the release's new codes are
+# appended, and is never pruned: a code keeps its name and is never reused,
+# and a code whose construct became valid is retired, not removed
+# (docs/guides/stability.md). A retired code's line ends in
+# `retired <version>`, the version that retired it; the mark is the only
+# change a line ever gets, and a code marked retired stays retired. The test
+# suite checks that every code here is in the registry, that the marks and
+# the registry agree, and that a retired code is never raised; a code added
+# since the last release is not here yet. ci/frozen.sh fails a pull request
+# that drops a code.
+#
+# 0.1.0
+kernel-head
+untyped-parameter
+unknown-type
+tuple-parameter
+unknown-option
+no-body
+duplicate-kernel
+builtin-name
+clause-head
+clause-types
+clause-pattern
+return-type
+empty-block
+write-as-value
+if-without-else
+cond-without-true
+branch-types
+branch-tuple
+undefined-variable
+tuple-binding
+tuple-size
+unsupported-pattern
+bitstring-match
+integer-literal
+type-mismatch
+operand-type
+u64-with-i64
+not-an-array
+nested-tuple
+undefined-function
+builtin-arguments
+alloc-form
+tuple-argument
+recursion
+unsupported-call
+enum-reduce
+enum-find
+fn-argument
+reduce-while-tail
+pipe
+for-collect
+for-option
+for-form
+generator-pattern
+generator-source
+range-step
+reduce-clauses
+accumulator-shape
+accumulator-pattern
+case-form
+case-subject
+case-pattern
+case-pattern-type
+case-guard
+unsupported-map
+unsupported-string
+unsupported-atom
+unsupported-list
+unsupported-fn
+unsupported-construct
+unsupported-expression
+no-c-compiler
+shift-overflow
+undefined-attribute
+attribute-value
+binary-literal
+bitstring-segment
+bitstring-use
+raise-value
+raise-message
+raise-module
+array-rebind-in-loop
+write-not-returned
+bitwise retired 0.0.1
+module-attribute retired 0.0.1
+read-only-array retired 0.0.1
+tuple-return-call retired 0.0.1
+array-accumulator retired 0.0.1
