@@ -137,6 +137,16 @@ defmodule Defk.Build do
   @spec sanitize() :: [String.t()]
   def sanitize, do: parse_sanitize(System.get_env("DEFK_SANITIZE", ""))
 
+  @doc """
+  The environment variables the build reads, each with its tier: `:public`
+  ones are promised (the stability guide, "The public API"), `:unstable` ones
+  may change in any release ("What it does not cover"). `mix
+  defk.stability.freeze` writes the public ones into a release's API
+  snapshot, and the docs checks hold the guide to the unstable ones.
+  """
+  @spec env_vars() :: [{String.t(), :public | :unstable}]
+  def env_vars, do: [{"CC", :public}, {"ERTS_INCLUDE_DIR", :public}, {"DEFK_SANITIZE", :unstable}]
+
   @doc false
   @spec parse_sanitize(String.t()) :: [String.t()]
   def parse_sanitize(value) do

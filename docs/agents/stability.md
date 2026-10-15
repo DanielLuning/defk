@@ -59,6 +59,36 @@ A frozen rejection that compiles with neither is a broken promise, as is one
 listed in `@newly_supported` that is still rejected. A compile error stops
 before the C build, so the corpus costs well under a second.
 
+### The API snapshot
+
+`test/stability/<version>/api.exs` holds the public API the release
+promised (`docs/guides/stability.md`, "The public API"), as data, written
+by the same task:
+
+- the public modules with their documented macros and functions, at every
+  arity each is callable at: `Code.fetch_docs/1` on the modules compiled
+  at the tag (the task checks the tag out into a temporary git worktree,
+  compiles it there in `:prod`, which compiles `lib/` alone, reads the docs
+  from its beams and removes the worktree), minus everything `@doc false`
+  and the unstable tier. The unstable tier is a list in code: the modules
+  and functions in the task, the `use Defk` options in `Defk.__options__/0`,
+  the environment variables in `Defk.Build.env_vars/0`, and the generated
+  functions as the `Defk` moduledoc's table marks them.
+  `test/docs_checks_test.exs` requires the guide's "What it does not cover"
+  to name every item of it;
+- the generated functions the same table marks public, the public `use
+  Defk` options (each with a value a kernel module accepts, the task's),
+  the kernel option, the configuration key and the public environment
+  variables.
+
+The modules and the generated functions are the tag's; the options, the
+environment variables, the kernel option and the configuration key are the
+code's the task runs in, so the task runs at the release commit (as it does
+for the page list and the catalog). `test/stability_api_test.exs` requires
+every listed item to exist, exported and documented, with its arity, and
+every option, key and variable to be honoured: containment, so an addition
+passes and a removal, a rename or an arity change fails.
+
 ## The rules
 
 - **A frozen file is never edited.** Not for a typo, not for a renamed
@@ -90,20 +120,18 @@ The release's own files are frozen from its tag, after the matrix has
 passed on the release commit, in a commit that follows the tag:
 
 1. `mix defk.stability.freeze <version>` writes
-   `test/stability/<version>/kernels/` and `rejections/` from the tag. The
-   task runs in the `:test` environment (it needs `Defk.LanguageDoc`).
-   Rerun for a version already frozen, it reproduces that version's files
-   byte for byte.
-2. `test/stability/<version>/api.exs`: copy the previous version's file,
-   set `version:`, and add what the release added to the promised surface
-   (`docs/guides/stability.md`, "The public API", at the tag: the
-   documented functions of the public modules by `Code.fetch_docs/1`, minus
-   the unstable tier and `@doc false`). Nothing is removed: a removal needs
-   a deprecation first, and the next major version is where it happens.
-3. `test/stability/codes.txt`: append a `# <version>` line and, under it,
+   `test/stability/<version>/kernels/`, `rejections/` and `api.exs` from
+   the tag. The task runs in the `:test` environment (it needs
+   `Defk.LanguageDoc`); for the API snapshot it checks the tag out into a
+   temporary git worktree, compiles it there and removes it. Rerun for a
+   version already frozen, it reproduces that version's files byte for
+   byte. Compare the new `api.exs` with the previous version's: nothing is
+   removed from one release to the next, as a removal needs a deprecation
+   first, and the next major version is where it happens.
+2. `test/stability/codes.txt`: append a `# <version>` line and, under it,
    the codes the release added, in registry order. Nothing is removed or
    reordered.
-4. Commit `test/stability/<version>/` and the ledger, and open the pull
+3. Commit `test/stability/<version>/` and the ledger, and open the pull
    request. `mix test` passes on it when the new files agree with the tag;
    the owner reviews every change under `test/stability/` (CODEOWNERS).
 
