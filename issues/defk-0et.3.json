@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-15T17:52:27Z",
+  "description": "The kernel corpus records one iex\u003e call per doc example, and Elixir mode is not an independent oracle (both backends share the builtin typing). Freeze under test/stability/\u003cversion\u003e/kernels/ a sample of the test suite's own kernels at the tag with recorded inputs and native outputs: pick kernels that cover each builtin and construct at its edges (overflow boundaries, index errors, non-finite floats, u64, bitstrings, early exit, multi-clause, raise), from test/*_test.exs at v0.1.0, and record for each a handful of calls with the results the tag's code gives (a value, or an exception module with its agreement reason). Reuse the frozen-file form (a module block followed by an iex\u003e block with the recorded results) so the existing freeze task, support module and test read them; extend the freeze task with a list of {test file, kernel module, calls} to freeze, or a generator that evaluates the calls at the tag, so a release freezes them by one command. Keep it fast: stable module names, build cache; report the cold and warm timing. Done when the sample is committed, mix ci passes, and a deliberate change to one builtin's edge behaviour (e.g. the overflow check) fails the new files (tried locally, not committed).",
+  "id": "defk-0et.3",
+  "labels": [],
+  "parent": "defk-0et",
+  "priority": 2,
+  "status": "open",
+  "title": "Stability: freeze a sample of the test suite's kernels with recorded inputs and outputs",
+  "type": "task",
+  "updated_at": "2026-10-15T17:52:27Z"
+}
