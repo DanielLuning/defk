@@ -13,7 +13,9 @@ error may say more about your code), and a failing example with the rewrite;
 the test suite checks that each example is rejected with its code and each
 rewrite compiles. The entries are generated from the registry in
 `lib/defk/errors.ex` and checked by the test suite (maintainers:
-`docs/agents/generated-docs.md`).
+`docs/agents/generated-docs.md`). A code whose construct became valid is
+retired, never removed or reused: the retired codes close the page, under
+[Retired](#retired).
 
 The headings are the codes themselves (lowercase letters and hyphens), so the
 anchor `#<code>` is the same on GitHub and on HexDocs.
@@ -1949,3 +1951,37 @@ defk f(n :: i64) :: [i64] do
   out
 end
 ```
+
+## Retired
+
+A code is retired when the construct it rejected becomes valid. It stays here with the summary it had, the version that retired it and why, and is never reused for another rejection.
+
+### bitwise
+
+Bitwise operators (&&&, |||, ^^^, <<<, >>>, band, bor, ...) are planned.
+
+- retired in 0.0.1: the bitwise operators are supported
+
+### module-attribute
+
+Module attributes as constants are planned.
+
+- retired in 0.0.1: module attributes are constants in a kernel body
+
+### read-only-array
+
+Only arrays created with alloc/2 are written; writing to an input array is planned.
+
+- retired in 0.0.1: arrays are values: an input array is copied before a write
+
+### tuple-return-call
+
+A kernel that returns a tuple is called from Elixir only.
+
+- retired in 0.0.1: a kernel returning a tuple is called from kernels
+
+### array-accumulator
+
+Arrays are not accumulators; allocate the array before the loop and write it in the body.
+
+- retired in 0.0.1: an owned array is threaded through a reduce accumulator
