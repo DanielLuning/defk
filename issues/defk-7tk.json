@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-10T12:10:45Z",
@@ -20,8 +20,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Re-measure matmul.exs with EXLA 0.13.1: it compiles here now",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:08Z"
+  "updated_at": "2026-10-15T20:34:58Z"
 }
