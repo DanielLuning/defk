@@ -72,7 +72,8 @@ atoms, `nil` or anonymous functions.
 
 - Forms: `=`, `if` (with an `else` when used as a value), `cond`, `case` on
   an `i64` or `bool`, `for`, `Enum.reduce_while/3`, `Enum.all?/2`,
-  `Enum.any?/2`, and `raise` with a literal message.
+  `Enum.any?/2`, and `raise` with a literal message (which may interpolate
+  integers: `"bad offset #{i}"`).
 - Write the step of a range: `0..(n - 1)//1`. Without it, `0..-1` counts down
   and runs twice.
 - A `for` without `reduce:` is a statement. For a value, use `reduce:`. For

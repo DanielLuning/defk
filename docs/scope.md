@@ -224,7 +224,7 @@ Every compile error the compiler marks as outside the kernel subset for good:
 - [`unsupported-expression`](compile-errors.md#unsupported-expression): Any other expression is not in the kernel subset.
 - [`attribute-value`](compile-errors.md#attribute-value): A module attribute read in a kernel holds an integer (in i64 or u64), a float, a boolean or a binary.
 - [`binary-literal`](compile-errors.md#binary-literal): A binary literal in a kernel is a string or <<...>> of integer bytes (0..255); anything else is built in Elixir.
-- [`raise-message`](compile-errors.md#raise-message): A kernel's `raise` message is a string literal: no interpolation or computed value.
+- [`raise-message`](compile-errors.md#raise-message): A kernel's `raise` message is a string literal, which may interpolate integers: no other computed value.
 - [`raise-module`](compile-errors.md#raise-module): A kernel raises ArgumentError, ArithmeticError or RuntimeError.
 
 ## Keeping this page true

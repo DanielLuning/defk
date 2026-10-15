@@ -965,15 +965,49 @@ defmodule Defk.Compiler do
   # raise Module, "literal" / raise Module / raise "literal": the exception
   # Elixir would raise, its message a C string literal (see "raise")
   defp lower_stmt({:raise, _, args} = node, env) when is_list(args) do
-    {mod, msg} = Defk.Raise.parse!(node, &reject!/4)
-    msg = Defk.Raise.message(mod, msg)
-    kind = Defk.Raise.kind(mod)
-    {"defk_user_raise(ctx, #{kind}, #{Defk.Raise.c_string(msg)}, #{byte_size(msg)});\n", env}
+    case Defk.Raise.parse!(node, &reject!/4) do
+      {mod, {:ints, strings, exprs}} -> {raise_ints(mod, strings, exprs, env), env}
+      {mod, msg} -> {raise_literal(mod, Defk.Raise.message(mod, msg)), env}
+    end
   end
 
   defp lower_stmt(e, env) do
     {s, v, env} = lower_expr_env(e, env)
     {[s, discard(v)], env}
+  end
+
+  defp raise_literal(mod, msg),
+    do:
+      "defk_user_raise(ctx, #{Defk.Raise.kind(mod)}, #{Defk.Raise.c_string(msg)}, #{byte_size(msg)});\n"
+
+  # raise Module, "text #{i} text": the integers evaluated left to right, each
+  # into a local (one may raise before the next runs, as in Elixir), then the
+  # message formatted at run time
+  defp raise_ints(mod, strings, exprs, env) do
+    {stmts, vals} =
+      exprs
+      |> Enum.map(fn e ->
+        {s, v} = lower_expr(e, env)
+        v.t in @ints || Defk.Raise.not_integer!(e, fmt(v.t), &reject!/4)
+        t = fresh("msg", v.t)
+        {[s, "#{t} = #{v.c};\n"], %{v | c: t}}
+      end)
+      |> Enum.unzip()
+
+    list = fn ty, xs -> "(const #{ty}[]){#{Enum.join(xs, ", ")}}" end
+
+    [
+      stmts,
+      "defk_user_raise_ints(ctx, #{Defk.Raise.kind(mod)}, #{length(exprs)}, ",
+      list.("char *const", Enum.map(strings, &Defk.Raise.c_string/1)),
+      ", ",
+      list.("size_t", Enum.map(strings, &byte_size/1)),
+      ", ",
+      list.("int64_t", Enum.map(vals, &"(int64_t)#{&1.c}")),
+      ", ",
+      list.("unsigned char", Enum.map(vals, &if(&1.t == :u64, do: "1", else: "0"))),
+      ");\n"
+    ]
   end
 
   defp discard(%{elems: elems}), do: Enum.map(elems, &discard/1)

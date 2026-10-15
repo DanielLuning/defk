@@ -115,6 +115,52 @@ defmodule Defk.RaiseTest.K do
     end
   end
 
+  # interpolated integers: the native message is formatted when it raises
+  defk interp(x :: i64) :: i64 do
+    if x != 0, do: raise(ArgumentError, "bad offset #{x} (twice: #{x * 2})")
+    x
+  end
+
+  defk interp_u64(x :: u64) :: u64 do
+    if x > 0x7FFFFFFFFFFFFFFF, do: raise(ArgumentError, message: "#{x} is above i64")
+    x
+  end
+
+  defk interp_only(x :: i64) :: i64 do
+    if x < 0, do: raise("#{x}")
+    x
+  end
+
+  defk interp_byte(a :: [u8], i :: i64) :: i64 do
+    if a[i] > 127, do: raise(ArithmeticError, "byte #{a[i]} at #{i} is not ASCII")
+    a[i]
+  end
+
+  # each value is evaluated in order: a[i] out of range raises before div/2
+  # divides by zero
+  defk interp_order(a :: [i64], i :: i64) :: i64 do
+    if i != 1, do: raise(ArgumentError, "#{a[i]} then #{div(1, i - 1)}")
+    i
+  end
+
+  # longer than ctx->msg (200 bytes), with bytes C would reinterpret
+  defk interp_long(x :: i64) :: i64 do
+    if x < 0 do
+      raise ArgumentError,
+            "%s \"#{x}\" ??= \\ é \0 #{-x} ........................................................................................................................................................................................................ end"
+    end
+
+    x
+  end
+
+  defk interp_in_loop(n :: i64, at :: i64) :: i64 do
+    for i <- 0..(n - 1)//1, reduce: 0 do
+      acc ->
+        if i == at, do: raise(RuntimeError, "reached #{i} with acc #{acc}")
+        rem(acc + i * i, 1_000_003)
+    end
+  end
+
   defk callee(x :: i64) :: i64 do
     if x == 7, do: raise(ArgumentError, "seven")
     x
@@ -196,6 +242,61 @@ defmodule Defk.RaiseTest do
     assert {:ok, 9} = agrees(:caller, [8])
   end
 
+  test "a message with interpolated integers, both modes" do
+    assert {:ok, 0} = agrees(:interp, [0])
+    assert {:raise, %ArgumentError{message: "bad offset 21 (twice: 42)"}} = agrees(:interp, [21])
+    assert {:raise, %ArgumentError{message: "bad offset -5 (twice: -10)"}} = agrees(:interp, [-5])
+
+    # the second value overflows: ArithmeticError, before any message
+    assert {:raise, %ArithmeticError{}} = agrees(:interp, [-0x8000000000000000])
+
+    assert {:raise, %ArgumentError{message: "18446744073709551615 is above i64"}} =
+             agrees(:interp_u64, [0xFFFFFFFFFFFFFFFF])
+
+    assert {:raise, %ArgumentError{message: "9223372036854775808 is above i64"}} =
+             agrees(:interp_u64, [0x8000000000000000])
+
+    assert {:raise, %RuntimeError{message: "-9223372036854775808"}} =
+             agrees(:interp_only, [-0x8000000000000000])
+
+    assert {:raise, %ArithmeticError{message: "byte 200 at 1 is not ASCII"}} =
+             agrees(:interp_byte, [<<65, 200>>, 1])
+
+    assert {:ok, 65} = agrees(:interp_byte, [<<65, 200>>, 0])
+  end
+
+  test "interpolated values are evaluated in order" do
+    a = <<7::signed-native-64, 8::signed-native-64>>
+    assert {:raise, %Enum.OutOfBoundsError{}} = agrees(:interp_order, [a, 5])
+    assert {:raise, %ArgumentError{message: "7 then -1"}} = agrees(:interp_order, [a, 0])
+    assert {:ok, 1} = agrees(:interp_order, [a, 1])
+  end
+
+  test "an interpolated message longer than the runtime's message buffer, byte for byte" do
+    expected = "%s \"-3\" ??= \\ é \0 3 " <> String.duplicate(".", 200) <> " end"
+    e = assert_raise ArgumentError, fn -> K.interp_long(-3) end
+    assert Exception.message(e) == expected
+    assert {:raise, ^e} = agrees(:interp_long, [-3])
+  end
+
+  for mode <- [:natural, :forced] do
+    test "an interpolated raise inside a yielding loop (#{mode} yields)" do
+      K.__defk_force_yields__(unquote(mode) == :forced)
+      n = if unquote(mode) == :forced, do: 3000, else: 3_000_000
+
+      try do
+        y0 = K.__defk_stats__().yields
+        assert {:raise, %RuntimeError{message: msg}} = agrees(:interp_in_loop, [n, n - 2])
+        assert msg =~ ~r/^reached #{n - 2} with acc \d+$/
+
+        if unquote(mode) == :forced,
+          do: assert(K.__defk_stats__().yields - y0 > 0, "never yielded before the raise")
+      after
+        K.__defk_force_yields__(false)
+      end
+    end
+  end
+
   for mode <- [:natural, :forced] do
     test "raise inside a yielding loop (#{mode} yields)" do
       K.__defk_force_yields__(unquote(mode) == :forced)
@@ -220,17 +321,25 @@ defmodule Defk.RaiseTest do
   describe "rejections" do
     defp compile_error(body), do: reject(__MODULE__, body)
 
-    test "an interpolated or computed message" do
-      msg =
-        compile_error(~S"""
-        defk f(n :: i64) :: i64 do
-          if n < 1, do: raise(ArgumentError, "bad #{n}")
-          n
-        end
-        """)
+    test "a computed message, or an interpolated value that is not an integer" do
+      for {param, value, type} <- [
+            {"x :: f64", "x", "f64"},
+            {"x :: i64", "x > 0", "bool"},
+            {"a :: [u8]", "a", "[u8]"}
+          ] do
+        msg =
+          compile_error("""
+          defk f(#{param}, n :: i64) :: i64 do
+            if n < 1, do: raise(ArgumentError, "bad \#{#{value}}")
+            n
+          end
+          """)
 
-      assert msg =~ "(defk raise-message"
-      assert msg =~ "put the value in Elixir, before or after the call"
+        assert msg =~ "(defk raise-message", msg
+        assert msg =~ "a #{type}, into a raise message", msg
+        assert msg =~ "only integers can be interpolated"
+        assert msg =~ "put any other value in Elixir, before or after the call"
+      end
 
       msg =
         compile_error(~S"""

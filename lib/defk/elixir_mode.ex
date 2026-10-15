@@ -284,8 +284,14 @@ defmodule Defk.ElixirMode do
   defp stmt({:raise, _, args} = node, env) when is_list(args) do
     q =
       case Defk.Raise.parse!(node, &raise_form!/4) do
-        {mod, nil} -> quote(do: Kernel.raise(unquote(mod)))
-        {mod, msg} -> quote(do: Kernel.raise(unquote(mod), unquote(msg)))
+        {mod, nil} ->
+          quote(do: Kernel.raise(unquote(mod)))
+
+        {mod, {:ints, strings, exprs}} ->
+          quote(do: Kernel.raise(unquote(mod), unquote(interpolate(strings, exprs, env))))
+
+        {mod, msg} ->
+          quote(do: Kernel.raise(unquote(mod), unquote(msg)))
       end
 
     {q, env}
@@ -294,6 +300,19 @@ defmodule Defk.ElixirMode do
   defp stmt(e, env) do
     {q, _t, env} = expr_env(e, env)
     {q, env}
+  end
+
+  # "text #{i} text" with each integer expression in its Elixir mode form;
+  # Elixir prints an integer as the native side formats it
+  defp interpolate(strings, exprs, env) do
+    values =
+      Enum.map(exprs, fn e ->
+        {q, _t} = expr(e, env)
+        quote(do: Integer.to_string(unquote(q)) :: binary)
+      end)
+
+    parts = Enum.zip_with(strings, values ++ [nil], &[&1, &2]) |> List.flatten()
+    {:<<>>, [], Enum.reject(parts, &(&1 in [nil, ""]))}
   end
 
   defp raise_form!(_node, code, what, _opts),

@@ -184,6 +184,6 @@ Every construct the compiler rejects for good, with the code of its error:
 - [`unsupported-expression`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#unsupported-expression): Any other expression is not in the kernel subset.
 - [`attribute-value`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#attribute-value): A module attribute read in a kernel holds an integer (in i64 or u64), a float, a boolean or a binary.
 - [`binary-literal`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#binary-literal): A binary literal in a kernel is a string or <<...>> of integer bytes (0..255); anything else is built in Elixir.
-- [`raise-message`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#raise-message): A kernel's `raise` message is a string literal: no interpolation or computed value.
+- [`raise-message`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#raise-message): A kernel's `raise` message is a string literal, which may interpolate integers: no other computed value.
 - [`raise-module`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#raise-module): A kernel raises ArgumentError, ArithmeticError or RuntimeError.
 <!-- end generated -->

@@ -1980,6 +1980,25 @@ iex> M.fft_size(12)
 ** (ArgumentError) n must be a power of two
 ```
 
+A message can say where the problem is:
+
+```elixir
+defk first_zero(bytes :: [u8], from :: i64) :: i64 do
+  if from < 0 or from > length(bytes), do: raise(ArgumentError, "start #{from} is outside 0..#{length(bytes)}")
+
+  Enum.reduce_while(from..(length(bytes) - 1)//1, -1, fn i, acc ->
+    if bytes[i] == 0, do: {:halt, i}, else: {:cont, acc}
+  end)
+end
+```
+
+```elixir
+iex> M.first_zero(<<1, 0, 2>>, 0)
+1
+iex> M.first_zero(<<1, 0, 2>>, 7)
+** (ArgumentError) start 7 is outside 0..3
+```
+
 - **A statement**, anywhere a statement goes: in a block before its value, in
   `if`/`case` statements, in a branch before the branch's value, in a loop
   body, and in an `Enum.reduce_while/3` `fn` before its tail. A `raise` as a
@@ -1989,10 +2008,16 @@ iex> M.fft_size(12)
   `if not ok, do: raise(...)`, then the value. A `cond` whose arms only
   raise needs a value in each; write the checks as `if` statements instead.
 - **The message is a string literal**, of any length and any bytes (also
-  `raise Module, message: "..."`). Interpolation and computed messages are
-  [`raise-message`](compile-errors.md#raise-message): the message is a C string in the
-  kernel's static storage. Put the value in Elixir, before or after the
-  call. Other modules are [`raise-module`](compile-errors.md#raise-module).
+  `raise Module, message: "..."`). It may interpolate integer values
+  (`i64`, `u64`, and elements of the narrow integer arrays), which print as
+  Elixir prints them: a `u64` above 2^63 - 1 as its unsigned value, a
+  negative `i64` with a minus sign. The values are evaluated left to right
+  before anything is raised, so one that raises (an index out of range, an
+  overflow) raises its own error first. Interpolating anything else (a
+  float, a `bool`, an array) and computed messages (`"a" <> b`) are
+  [`raise-message`](compile-errors.md#raise-message): put the value in
+  Elixir, before or after the call. Other modules are
+  [`raise-module`](compile-errors.md#raise-module).
 - Natively the exception is raised in the calling process like the
   kernel's own errors, after its buffers are freed, also from inside a
   yielding loop or an inlined call. In Elixir mode it is the `raise` itself,
