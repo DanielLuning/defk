@@ -6,6 +6,7 @@
   "blocks": [
     "defk-u1u"
   ],
+  "closed_at": "2026-10-15T14:03:32Z",
   "created": "2026-10-10T10:48:03Z",
   "description": "Found reviewing defk-upc + defk-n4r.10 together. With out = alloc(u8, 2 * len(a)) and for i \u003c- 0..(len(a) - 1)//1 do out[2 * i] = a[i] end, the write has no bounds check (defk-upc's scaled facts). Written as a reduce accumulator (for ..., reduce: out do o -\u003e o[2 * i] = a[i]; o end) the same write keeps defk_put_u8: reduce_accs/with_acc_facts carry only fin and the constant len_lo into the accumulator, not len_lb (relative/scaled length facts). Defk.Report.print shows 'bounds check kept; nothing proves 2 * i \u003c len(o)'. Matters for the table-building loops (1BRC defk-n4r.6, HLL defk-9p6.15, LZ4). Fix: carry len_lb into the accumulator like len_lo, and drop it via with_acc_facts' retry when a new value lacks it (lost_facts?/facts? must learn len_lb, compared soundly: the new value's facts must imply the assumed ones). Done when the reduce form compiles with no bounds check on o[2 * i], a test on the C, a property that a body returning a shorter array (e.g. alloc(u8, len(a))) keeps the check, and agreement passes.",
   "id": "defk-fun",
@@ -28,8 +29,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Array reduce accumulators drop alloc's length facts (len_lb): o[2 * i] keeps its bounds check",
   "type": "task",
-  "updated_at": "2026-10-15T13:32:31Z"
+  "updated_at": "2026-10-15T14:03:32Z"
 }
