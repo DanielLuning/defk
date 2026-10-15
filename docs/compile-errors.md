@@ -1825,27 +1825,27 @@ end
 
 ### raise-message
 
-A kernel's `raise` message is a string literal: no interpolation or computed value.
+A kernel's `raise` message is a string literal, which may interpolate integers: no other computed value.
 
 - kind: outside the kernel subset (permanent)
-- why: the message is a C string in the kernel's static storage, so it is known when the kernel compiles; formatting a value would need a BEAM binary
-- hint: a kernel raises with a literal message: put the value in Elixir, before or after the call
+- why: the message is a C string in the kernel's static storage with integers formatted into it when it raises; printing a float, an array or a tuple the way Elixir does would need Elixir's own formatting
+- hint: a kernel raises with a literal message that may interpolate integer values ("bad offset #{i}"): put any other value in Elixir, before or after the call
 
 Rejected:
 
 ```elixir
-defk f(n :: i64) :: i64 do
-  if n < 1, do: raise(ArgumentError, "bad length #{n}")
-  n
+defk f(x :: f64) :: f64 do
+  if x < 0.0, do: raise(ArgumentError, "bad value #{x}")
+  x
 end
 ```
 
 Write instead:
 
 ```elixir
-defk f(n :: i64) :: i64 do
-  if n < 1, do: raise(ArgumentError, "length must be positive")
-  n
+defk f(x :: f64) :: f64 do
+  if x < 0.0, do: raise(ArgumentError, "value must not be negative")
+  x
 end
 ```
 
