@@ -7,11 +7,13 @@
   "created": "2026-10-15T14:24:47Z",
   "description": "Add a retired: field (the version and why) to Defk.Errors registry entries, move the five codes retired before 0.1.0 (comment at lib/defk/errors.ex: bitwise, module-attribute, read-only-array, tuple-return-call, array-accumulator) into the registry as retired, and print retired codes in docs/compile-errors.md (a Retired section; the footer anchors stay). Commit test/stability/codes.txt: every code released so far. A test checks: every code in the file is in the registry (active or retired); a retired code is never raised (err! with a retired literal fails at compile, as unknown codes do now); a new code may be added (the file grows at release time). Regenerate the generated docs (docs/agents/generated-docs.md). Done when the test runs in mix ci and the catalogue shows the retired codes.",
   "id": "defk-266.2",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-266",
   "priority": 2,
   "status": "open",
   "title": "Stability: error code ledger with retired codes in the catalogue",
   "type": "task",
-  "updated_at": "2026-10-15T14:24:48Z"
+  "updated_at": "2026-10-15T14:24:50Z"
 }
