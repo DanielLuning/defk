@@ -9,6 +9,12 @@
     "needs-triage",
     "wayfinder:map"
   ],
+  "comments": [
+    {
+      "text": "Map complete (2026-10-15): the destination holds. defk is ready for a 0.1.0 Hex release at 984f09c; every ticket on the map is closed. Next, outside this map: mix hex.publish and the v0.1.0 tag.",
+      "timestamp": "2026-10-15T06:03:27Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Wayfinder: defk ready for a first Hex release",
