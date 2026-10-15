@@ -1,14 +1,25 @@
-# CI: `mix ci` on every push to main and every pull request, through
-# ci/run.sh (a branch push runs once, as its pull request). The same
-# script runs locally under act and in the podman fallback (ci/README.md),
-# so a release never waits for GitHub. The Linux jobs run in one pinned
-# multi-arch image; ci/local.sh reads the image tag and the labels below.
+# CI through ci/run.sh. The same script runs locally under act and in the
+# podman fallback (ci/README.md), so a release never waits for GitHub. The
+# Linux jobs run in one pinned multi-arch image; ci/local.sh reads the image
+# tag and the labels below.
+#
+# Two sizes of run. A pull request, and the weekly run on main, use one
+# machine, linux-x86_64-clang, with the whole `mix ci`: the owner runs
+# `mix ci` on an M-series Mac before each pull request, and the other
+# machines rarely disagree. A release tag (v*), and a run by hand, use every
+# machine: linux-x86_64-clang runs `mix ci`, the others `mix ci.test` (the
+# lint steps give the same answer everywhere). Nothing runs on a push to
+# main: the pull request already tested the merge.
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  push:
+    tags: ["v*"]
+  # Mondays: a check of main, and the kernel cache that pull requests
+  # restore (a pull request can only restore its own caches and main's)
+  schedule:
+    - cron: "0 3 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -18,17 +29,24 @@ concurrency:
 jobs:
   linux:
     name: ${{ matrix.label }}
-    runs-on: ${{ matrix.runner }}
+    # linux-<arch>-<cc>: the runner, the compiler and the task follow from
+    # the label (an `include:` list would come back after `exclude:`)
+    runs-on: ${{ contains(matrix.label, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 30
     container: docker.io/hexpm/elixir:1.20.2-erlang-29.0.3-debian-trixie-20260713
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { label: linux-x86_64-clang, runner: ubuntu-24.04, cc: clang }
-          - { label: linux-x86_64-gcc, runner: ubuntu-24.04, cc: gcc }
-          - { label: linux-aarch64-clang, runner: ubuntu-24.04-arm, cc: clang }
+        label:
+          - linux-x86_64-clang
+          - linux-x86_64-gcc
+          - linux-aarch64-clang
+        # the small run: linux-x86_64-clang only
+        exclude: ${{ fromJSON(contains(fromJSON('["pull_request", "schedule"]'), github.event_name) && '[{"label":"linux-x86_64-gcc"},{"label":"linux-aarch64-clang"}]' || '[]') }}
     env:
-      CC: ${{ matrix.cc }}
+      CC: ${{ endsWith(matrix.label, '-gcc') && 'gcc' || 'clang' }}
+      # the lint steps once, on linux-x86_64-clang
+      TASK: ${{ matrix.label == 'linux-x86_64-clang' && 'ci' || 'ci.test' }}
       CI_PATH: github-actions
       LANG: C.UTF-8
     steps:
@@ -46,8 +64,17 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ matrix.label }}-${{ hashFiles('mix.lock') }}
-      - run: ci/run.sh ${{ matrix.label }}
+          # saved after every run; restored from the newest run of this
+          # branch, else of main. Compiled kernels are cached by the hash of
+          # their C in _build/test/defk, so a warm cache skips most C builds.
+          key: ${{ matrix.label }}-${{ hashFiles('mix.lock') }}-${{ github.sha }}
+          restore-keys: ${{ matrix.label }}-${{ hashFiles('mix.lock') }}-
+      # the weekly run starts the kernel cache afresh, so libraries of
+      # kernels that no longer exist do not pile up (defk's own compiled
+      # modules go too: they expect their libraries in that cache)
+      - if: ${{ github.event_name == 'schedule' }}
+        run: rm -rf _build/test/defk _build/test/lib/defk
+      - run: ci/run.sh ${{ matrix.label }} "$TASK"
       - uses: actions/upload-artifact@v7
         if: ${{ always() && !env.ACT }}
         with:
@@ -55,9 +82,13 @@ jobs:
           path: tmp/ci-result/
           retention-days: 30
 
+  # macOS minutes cost ten times Linux minutes on a private repository:
+  # release tags and runs by hand only
   macos:
     name: macos-arm64-clang
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     runs-on: macos-15
+    timeout-minutes: 30
     env:
       CI_PATH: github-actions
     steps:
@@ -71,8 +102,9 @@ jobs:
           path: |
             deps
             _build
-          key: macos-arm64-clang-${{ hashFiles('mix.lock') }}
-      - run: ci/run.sh macos-arm64-clang
+          key: macos-arm64-clang-${{ hashFiles('mix.lock') }}-${{ github.sha }}
+          restore-keys: macos-arm64-clang-${{ hashFiles('mix.lock') }}-
+      - run: ci/run.sh macos-arm64-clang ci.test
       - uses: actions/upload-artifact@v7
         if: always()
         with:

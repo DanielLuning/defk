@@ -1,7 +1,8 @@
 # CI
 
 `mix ci` on four machines, through three paths that run the same script
-(`ci/run.sh`), so a release never waits for GitHub or for act.
+(`ci/run.sh`), so a release never waits for GitHub or for act. A pull
+request uses one machine; a release uses all four.
 
 | Label | Machine | Compiler |
 |---|---|---|
@@ -15,18 +16,47 @@ The Linux jobs run in one pinned multi-arch image,
 `ci/setup-debian.sh` (both compilers, git, Hex). The `container:` line in
 `.github/workflows/ci.yml` is the only place that names it.
 
-Each run writes `tmp/ci-result/<label>.txt`: the result, the commit,
-whether the checkout had uncommitted changes, the path, the toolchain.
+Each run writes `tmp/ci-result/<label>.txt`: the result, the task (`mix ci`
+or `mix ci.test`), the commit, whether the checkout had uncommitted changes,
+the path, the toolchain.
+
+`ci/run.sh <label> ci.test` runs `mix ci.test`: the compile and the tests,
+without the lint steps (format, docs, Credo, Dialyzer, ex_dna, reach, the
+usage rules check, the Hex build). The lint steps give the same answer on
+every machine, so one machine runs them.
 
 ## The three paths
 
-**GitHub Actions** (`.github/workflows/ci.yml`): every push to `main`,
-every pull request, and on demand (`workflow_dispatch`). A branch push runs
-once, as its pull request, not twice. A newer push to the same ref cancels
-the older run. The result files are artifacts for 30 days. On a public repo
-the standard runners cost nothing; on a private repo the minutes count
-against the plan's quota, and macOS minutes count ten times. The Free plan
-allows 20 concurrent jobs, 5 of them macOS.
+**GitHub Actions** (`.github/workflows/ci.yml`) runs two sizes of run:
+
+| Event | Machines |
+|---|---|
+| a pull request; Mondays 03:00 UTC on `main` | `linux-x86_64-clang`, `mix ci` |
+| a release tag (`v*`); a run by hand (`gh workflow run CI --ref <ref>`) | all four: `linux-x86_64-clang` runs `mix ci`, the others `mix ci.test` |
+
+Nothing runs on a push to `main`: the pull request already tested the
+merge (AGENTS.md has the branch merge `origin/main` when it is behind).
+Pull requests use one machine because the owner runs `mix ci` on an
+M-series Mac before each one, and the other machines rarely disagree; they
+come back at the release. A newer push to the same ref cancels the older
+run. Each job stops after 30 minutes. The result files are artifacts for 30
+days.
+
+The cache (`deps` and `_build`) is saved after every run and restored from
+the newest run of the same branch, else of `main`. It holds the compiled
+kernels (`_build/test/defk`, by the hash of their C), which most of the test
+time goes to: a warm cache cut a local `mix test` from 81 s to 23 s. A pull
+request can restore only its own caches and `main`'s, so the Monday run is
+what gives each new pull request a warm start. That run deletes the kernel
+cache first, so the libraries of kernels that no longer exist do not pile
+up. The cache key changes with `mix.lock`. The cached compiler remarks hold
+absolute paths, which is safe because a runner's workspace path is the same
+on every run; a `_build` copied from another checkout fails the report tests.
+
+On a public repo the standard runners cost nothing; on a private repo the
+minutes count against the plan's quota, and macOS minutes count ten times,
+which is why macOS runs only for a release. The Free plan allows 20
+concurrent jobs, 5 of them macOS.
 
 **act** (the workflow on this Mac): use it to run the Linux jobs locally and
 to test a change to the workflow before a push. act needs a Docker API;
@@ -86,7 +116,11 @@ use one for timing.
 
 A release commit needs one passing run of every label, from any path. The
 result files are the evidence: each must say `result: pass`, name the
-release commit, and say `uncommitted changes: no`. An x86-64 label run under
+release commit, and say `uncommitted changes: no`; at least one must say
+`task: mix ci` (the lint steps), and the others may say `mix ci.test`. On
+GitHub, run the workflow by hand on the release commit before you tag it
+(`gh workflow run CI --ref main`), or push the tag and use the tag's run;
+a tag whose run fails is not released. An x86-64 label run under
 Rosetta counts only when it passes; a failure there is checked on native
 x86-64 (the GitHub workflow) before it is called a bug.
 
