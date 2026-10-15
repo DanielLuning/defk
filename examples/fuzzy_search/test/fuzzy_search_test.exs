@@ -36,8 +36,10 @@ defmodule FuzzySearchTest do
     |> Enum.map(fn {d, i} -> {elem(words, i), d} end)
   end
 
-  # typo'd real words, one-letter and no-match queries, and a query longer than any word
-  @queries ~w(elixr mezzotinat photolqith a zz qqqqqqqqqqqqqqqqqqqqqqqqqqqqqq kitten)
+  # typo'd real words, one-letter and no-match queries, a query longer than
+  # any word, and the longest Myers query (62 bytes) and the shortest DP one (63)
+  @queries ~w(elixr mezzotinat photolqith a zz qqqqqqqqqqqqqqqqqqqqqqqqqqqqqq kitten) ++
+             [String.duplicate("ab", 31), String.duplicate("abc", 21)]
   @ks [1, 3, 10, 57]
 
   for query <- @queries do
@@ -48,6 +50,11 @@ defmodule FuzzySearchTest do
         assert FuzzySearch.search(unquote(query), backend, k) == Enum.take(all, k),
                "backend #{backend}, k = #{k}"
       end
+
+      # the Elixir backend's per-scheduler chunks, which the service does not use
+      words = Catalog.get().words
+      parallel = FuzzySearch.ElixirBackend.search(unquote(query), 10, parallel: true)
+      assert Enum.map(parallel, fn {i, d} -> {elem(words, i), d} end) == Enum.take(all, 10)
     end
   end
 end
