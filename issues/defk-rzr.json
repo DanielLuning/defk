@@ -6,9 +6,15 @@
   "description": "A worktree that receives a copy of the main checkout's _build fails test/report_test.exs on the first run: the cached .remarks files (clang remarks for the fast-path report) name the other checkout's absolute source paths. Seen three times on 2026-10-15 by agents preparing PRs #8, #9 and #10; deleting the .remarks files (or wiping _build/*/defk) fixes it, so it is not a defect of the change under test, but it costs a full rebuild and a confusing first failure. Fix: key the remarks cache on paths relative to the project root (or on the content hash the build already uses) so a _build stays valid across checkouts; or detect a foreign absolute path and treat the entry as a miss. Done when: a _build copied into a sibling worktree passes test/report_test.exs without manual cleanup, and a test covers the relative keying.",
   "id": "defk-rzr",
   "labels": [],
+  "comments": [
+    {
+      "text": "Does not reproduce on 53ee400: defk-fr7 (c5def13, 2026-10-11) keys remarks by .c basename, and report_test 'a cache built in another directory' covers it. Copied main's _build/test into a worktree, report_test 21/21 on 4 seeds. No code change; noted in PR #17, close after the merge.",
+      "timestamp": "2026-10-15T18:58:17Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "The fast-path report's .remarks cache holds absolute source paths, so a _build copied into another checkout fails report_test",
   "type": "bug",
-  "updated_at": "2026-10-15T18:52:09Z"
+  "updated_at": "2026-10-15T18:58:17Z"
 }
