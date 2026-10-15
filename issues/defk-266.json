@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-15T16:40:52Z",
   "created": "2026-10-15T14:24:46Z",
   "description": "docs/guides/stability.md (ADR-0010) promises, within a major version: a valid kernel keeps compiling and keeps its meaning; error codes keep their names, a rejection keeps its code, a code is never reused, a code whose construct becomes valid is retired and stays in the catalogue marked retired; the public API keeps names, arities and meaning; renames go through a deprecation. Today only meaning is checked (agreement with Elixir). Acceptance, codes over time, the API surface and deprecation have no test: the docs examples move with the code, and retired codes are a comment in lib/defk/errors.ex.\n\nApproach: freeze what each release shipped as committed files under test/stability/\u003cversion\u003e/, taken from the release tag, and check every later commit against them in mix ci. Frozen files are never edited; a release adds a directory.\n\nSteps:\n- frozen kernel corpus (acceptance + results)\n- code ledger with a retired: field, retired codes in the catalogue\n- frozen rejection corpus (needs the ledger)\n- public API snapshot\n- deprecation helper (before the first rename)\n- process: CODEOWNERS on test/stability/, PR template line, CHANGELOG rule (after the four checks)\n\n```mermaid\ngraph LR\n    corpus[kernel corpus] --\u003e proc[process]\n    ledger[code ledger] --\u003e rej[rejection corpus]\n    rej --\u003e proc\n    api[API snapshot] --\u003e proc\n    dep[deprecation helper]\n```\n\nDone when the four checks run in mix ci against test/stability/0.1.0/, the deprecation helper exists with a test, and the process step is in place.",
   "id": "defk-266",
@@ -17,7 +18,7 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "Stability promise: check it mechanically in mix ci",
   "type": "epic",
   "updated_at": "2026-10-15T16:40:52Z"
