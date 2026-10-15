@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-15T18:29:41Z",
   "created": "2026-10-15T17:52:26Z",
   "description": "Review of the stability epic (the four mechanical checks, the deprecation helper and the process) found the checks catch the loud failures and miss the quiet ones. Children: a mechanical guard that no existing frozen file changes in a PR, a marker in the ledger that a retired code stays retired, and the extractor's format contract written down (one ticket); the freeze task writes the API snapshot from the tag so the release step cannot omit an addition (one ticket); a frozen sample of the test suite's kernels with recorded inputs and outputs so meaning has an anchor beyond the doc examples (one ticket). Done when the three are merged.",
   "id": "defk-0et",
@@ -13,8 +14,8 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "[EPIC] Stability checks: close the gaps found in review",
   "type": "epic",
-  "updated_at": "2026-10-15T18:29:40Z"
+  "updated_at": "2026-10-15T18:29:41Z"
 }
