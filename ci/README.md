@@ -20,11 +20,13 @@ whether the checkout had uncommitted changes, the path, the toolchain.
 
 ## The three paths
 
-**GitHub Actions** (`.github/workflows/ci.yml`): every push and pull
-request, and on demand (`workflow_dispatch`). A newer push to the same ref
-cancels the older run. The result files are artifacts for 30 days. On a
-public repo the standard runners cost nothing; the Free plan allows 20
-concurrent jobs, 5 of them macOS.
+**GitHub Actions** (`.github/workflows/ci.yml`): every push to `main`,
+every pull request, and on demand (`workflow_dispatch`). A branch push runs
+once, as its pull request, not twice. A newer push to the same ref cancels
+the older run. The result files are artifacts for 30 days. On a public repo
+the standard runners cost nothing; on a private repo the minutes count
+against the plan's quota, and macOS minutes count ten times. The Free plan
+allows 20 concurrent jobs, 5 of them macOS.
 
 **act** (the workflow on this Mac): use it to run the Linux jobs locally and
 to test a change to the workflow before a push. act needs a Docker API;
