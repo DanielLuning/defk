@@ -58,7 +58,7 @@ this table is a copy of it.
 | ✅ | [`monte_carlo_rtp`](monte_carlo_rtp.exs) | 100M slot spins on all schedulers | **3.0×** | – | ≈1× at 1M spins: short kernel chunks stay on few schedulers |
 | ✅ | [`cdcl_sat_per_call`](cdcl_sat_per_call.exs) | one SAT solve per call, 26–28 vars | **2.8×** | 1.7× picosat | ≈1× on tiny formulas; batch the solves when one question makes several |
 | ✅ | [`gorilla_encode`](gorilla_encode.exs) | Gorilla encoding of 100-point blocks | **2.4×** | 3.9× gorilla_stream's NIF | close to the bar at this size; 3× at 1M points |
-| ✅ | [`fuzzy_search/`](fuzzy_search) | a search service over 234k words behind Bandit | 4.4× per query (its own measurement) | – | `/health` p99 stays at 10–12 ms; a blocking NIF pushes it to 75–82 ms |
+| ✅ | [`fuzzy_search/`](fuzzy_search) | a search service over 234k words behind Bandit | 2.3–2.4× per query (its own measurement, provisional) | – | Myers on both sides; `/health` p99 stays at 12–13 ms; a blocking NIF pushes it to 18–20 ms |
 | 🟡 | [`batched_levenshtein`](batched_levenshtein.exs) | one query against 234k words, 12 chunks each side | 1.7× | 13.6× ex_strsim per pair | Myers bit-parallel in plain Elixir is close; use it |
 | 🟡 | [`poor_substring_search`](poor_substring_search.exs) | a 64-byte needle in 16 MB | 1.1× | – | `:binary.match` is Boyer-Moore in C already |
 | 🟡 | [`utf8_valid`](utf8_valid.exs) | validate 16 MB of UTF-8 | 1.05× | – | `String.valid?` is C already |
@@ -197,12 +197,13 @@ marked so; the snapshot's are above.
   the bar; 3× at 1M points, where packing the list is half of defk's time.
   gorilla_stream's own Elixir is 5–8× slower than the optimised baseline.
 - [`fuzzy_search/`](fuzzy_search) (an app): Levenshtein over 234k words
-  behind Plug and Bandit, with the early cut-off on both sides. Under load
-  5× the requests per second and 5× lower p99; `/health` latency stays at
-  Elixir levels while a blocking NIF pushes it to 75–82 ms p99. Yielding
-  costs 3.5–4.5% against `yield: false`, from per-row bookkeeping. Its
-  Elixir baseline is still a first pass: with Myers bit-parallel it comes
-  within 1.3× of the DP kernel, as `batched_levenshtein` shows.
+  behind Plug and Bandit, with Myers bit-parallel distance and the same
+  early cut-off on both sides (an optimised baseline). Under load 2.4–2.6×
+  the requests per second and 2.3–2.5× lower p99; `/health` latency stays at
+  Elixir levels while a blocking NIF pushes it to 18–20 ms p99. Yielding
+  costs +19% against `yield: false`, from a safepoint per word. With the DP
+  on both sides it was 4.4×: Myers helps Elixir more than the kernel.
+  Provisional (measured under load).
 
 **Where Elixir is the right choice**
 
@@ -292,7 +293,7 @@ mix defk.examples --bench --fresh          # the same, but measure every report 
 
 **Check-only (the default).** Each example runs in its own `elixir` process with `DEFK_CHECK_ONLY=1`. In that mode `Defk.Bench.report/1` runs the example's `:check` (defk against Elixir) and returns: no timed runs, no Elixir baseline, no `:native`, `:sweep` or `:responsiveness`, no verdict. So the answer ("it compiles and agrees") does not depend on the machine's load, and the sanitizer build mode (`DEFK_SANITIZE`) is allowed, because nothing is timed. The `DEFK_RESULT` line then has `"check_only": true` and `"verdict": null` (the map `report/1` returns claims the expected verdict, so the scripts' own verdict assertions after it pass); every `DEFK_RESULT` line of a script counts, not just the first. An example passes when its process exits 0 and every check is `true` (or `skipped`, which the summary lists with its reason). `out_of_scope_word_count` passes when its expected compile error is raised (the script fails if the kernel compiles). The scripts need no change for this mode.
 
-**fuzzy_search.** `cd examples/fuzzy_search && mix deps.get && mix test` (7 tests, about 10 s). It needs `/usr/share/dict/words`; if the file is missing the run fails with that message rather than skipping silently.
+**fuzzy_search.** `cd examples/fuzzy_search && mix deps.get && mix test` (9 tests, about 20 s). It needs `/usr/share/dict/words`; if the file is missing the run fails with that message rather than skipping silently.
 
 **`--bench`** replaces the old `examples/run_all.exs`: examples run one at a time with their timings; an example fails if it is incorrect, crashes, or measures a verdict other than the one it claims. The scoreboard lists `good` claims whose baseline is still provisional and the skipped checks. Run it on a quiet machine, and never across all examples on a loaded one: timings under load are meaningless. `--snapshot` adds the markdown table above, sorted by verdict and speedup, for this page and `docs/verdict.md`.
 
