@@ -148,6 +148,9 @@ state in as a binary and return the new one.
   the kernel's cost.
 - `Defk.Report.print(Mod)` explains a slow kernel: bounds checks kept,
   copies, safepoints.
+- When the kernel wins only above a size, call it from a guard clause
+  (`when byte_size(bin) < 1024` goes to the Elixir version), and test that
+  the two sides agree around the threshold.
 
 [Measuring](https://hexdocs.pm/defk/0.1.0/measuring.html)
 

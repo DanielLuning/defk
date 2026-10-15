@@ -198,3 +198,109 @@ each kernel's source with notes on what the compiler did to the hot path:
 which bounds checks stayed and why, which branches became selects, where the
 safepoints and copies are, and (with `use Defk, report: :full`) which loops
 the C compiler vectorised. `Defk.Report` describes each note.
+
+## 6. Call the kernel only where it wins
+
+Many kernels win only above some input size. Below it, the call costs more
+than the work, and the best Elixir version is as fast or faster. You do not
+need to choose one side for all inputs: a guard clause on the size sends
+small inputs to Elixir and large ones to the kernel. defk does not switch for
+you; the clause is yours, so you see and test it.
+
+Here WebSocket masking XORs a payload with a 32-bit key, byte `i` with key
+byte `rem(i, 4)`. The Elixir loop works 32 bits at a time, which the JIT
+compiles well:
+
+```elixir
+defmodule Mask do
+  use Defk, elixir_mode: true
+  import Bitwise
+
+  # below 1 KiB the Elixir loop is about as fast as a kernel call
+  def mask(payload, key) when byte_size(payload) < 1024, do: mask_elixir(payload, key)
+  def mask(payload, key), do: mask_kernel(payload, key)
+
+  def mask_elixir(payload, key), do: mask_elixir(payload, key, <<>>)
+
+  defp mask_elixir(<<w::32, rest::binary>>, key, acc),
+    do: mask_elixir(rest, key, <<acc::binary, bxor(w, key)::32>>)
+
+  # the last 0 to 3 bytes take the leading bytes of the key
+  defp mask_elixir(tail, key, acc) do
+    n = bit_size(tail)
+    <<t::size(n)>> = tail
+    <<k::size(n), _::bitstring>> = <<key::32>>
+    <<acc::binary, bxor(t, k)::size(n)>>
+  end
+
+  defk mask_kernel(payload :: [u8], key :: i64) :: [u8] do
+    n = length(payload)
+    out = alloc(u8, n)
+
+    for j <- 0..(n - 1)//1 do
+      out[j] = bxor(payload[j], band(bsr(key, 24 - 8 * rem(j, 4)), 255))
+    end
+
+    out
+  end
+end
+```
+
+```elixir
+iex> Mask.mask(<<1, 2, 3, 4, 5>>, 0x01020304)
+<<0, 0, 0, 0, 4>>
+iex> Mask.mask(:binary.copy(<<1, 2, 3, 4>>, 512), 0x01020304) == :binary.copy(<<0>>, 2048)
+true
+```
+
+### Choosing the threshold
+
+- Time both sides over a range of sizes on the machine that runs the code.
+  The `:sweep` option of `Defk.Bench.report/1` does this. Its `crossover`
+  is the first size where the kernel is at least 2x faster, not the size
+  where the two sides break even.
+- Put the threshold where the kernel is clearly ahead, not at the break-even
+  size. Near the break-even size the two sides cost about the same, so an
+  error there costs little; an error far below it costs a slow call on
+  every small input.
+- Thresholds move with the machine, the OTP version and the load. Measure
+  again when one of them changes, and keep a wide margin.
+- The Elixir side below the threshold is your best Elixir version, often a
+  different algorithm or a BIF, not the kernel's Elixir mode.
+
+### Testing both sides
+
+The two clauses are now two implementations of one function, and each input
+size reaches only one of them. Test that they agree on every size, with the
+lengths around the threshold among the inputs. `Defk.Test.assert_agrees/3`
+checks the kernel against its own Elixir mode; compare your Elixir clause
+with the kernel yourself:
+
+<!-- defk-example exunit: Mask from docs/guides/measuring.md -->
+```elixir
+defmodule MaskTest do
+  use ExUnit.Case, async: true
+  use ExUnitProperties
+
+  import Defk.Test, only: [assert_agrees: 3]
+
+  @edges [0, 1, 3, 4, 5, 1023, 1024, 1025]
+
+  property "the Elixir clause and the kernel agree" do
+    check all(
+            n <- one_of([integer(0..100), member_of(@edges)]),
+            payload <- binary(length: n),
+            key <- integer(0..0xFFFFFFFF)
+          ) do
+      assert Mask.mask_elixir(payload, key) == Mask.mask_kernel(payload, key)
+      assert_agrees(Mask, :mask_kernel, [payload, key])
+    end
+  end
+end
+```
+
+The WebSocket masking example in the catalog,
+[`examples/ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs),
+is the measured case: at 125-byte frames the kernel is only 1.2x faster than
+the best Elixir version, at 1 KiB it is about 5x faster, and at 1 MiB about
+19x.
