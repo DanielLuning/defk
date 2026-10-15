@@ -7,9 +7,15 @@
   "id": "defk-vcx.3",
   "labels": [],
   "parent": "defk-vcx",
+  "comments": [
+    {
+      "text": "PR #6: https://github.com/DanielLuning/defk/pull/6 (sweep with defk-vcx.3, defk-oit, defk-fun).",
+      "timestamp": "2026-10-15T13:32:31Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "@doc before defk is lost: the kernel's function has no doc",
   "type": "bug",
-  "updated_at": "2026-10-15T12:58:50Z"
+  "updated_at": "2026-10-15T13:32:31Z"
 }
