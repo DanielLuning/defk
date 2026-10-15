@@ -42,6 +42,25 @@ example runs (`test/language_doc_examples_test.exs`).
 `reference/0` and `scope/1`/`scope/2` are `@doc false` (ADR-0006): they exist for this
 step and the tests, not for users.
 
+## The runtime's message defines
+
+`priv/defk_messages.h` is generated from the message templates in
+`Defk.Messages` (`lib/defk/messages.ex`): one `DEFK_MSG_<NAME>` define per
+template a runtime header site raises, each hole as its C conversion. The
+runtime header includes it and never carries a message literal; Elixir mode
+(`Defk.ElixirMode.Ops`, `Defk.Bits`) interpolates the same templates with
+`Defk.Messages.text/2`; `Defk.Test.agreement_reason/1` maps a message back
+to its template's reason.
+
+- After changing a template, run `mix defk.messages` and commit both files
+  (`--check` only reports). The task compiles `lib/defk/messages.ex` on its
+  own, so it works before the project compiles. `test/messages_test.exs`
+  fails while the header is out of date, when a runtime header site raises
+  with a literal, or when a define is unused.
+- A message's text is part of what the stability corpus pins
+  (`test/stability/`): a template change is a change to the runtime
+  contract.
+
 ## The catalog's result tables
 
 Two tables hold the measured catalog numbers: the scoreboard in
