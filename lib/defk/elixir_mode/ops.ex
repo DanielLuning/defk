@@ -7,6 +7,9 @@ defmodule Defk.ElixirMode.Ops do
   # Float arithmetic needs nothing here: Elixir already raises ArithmeticError
   # where a float operation would give inf or NaN.
 
+  # the messages, shared with the kernel's runtime (priv/defk_messages.h)
+  require Defk.Messages, as: Messages
+
   @min -0x8000000000000000
   @max 0x7FFFFFFFFFFFFFFF
   # alloc/2 over DEFK_ALLOC_MAX_BYTES raises "length too large", as native
@@ -30,15 +33,15 @@ defmodule Defk.ElixirMode.Ops do
   def abs(a) when a < 0, do: neg(a)
   def abs(a), do: a
 
-  def div(_a, 0), do: raise(ArithmeticError, "div/2 by zero")
-  def div(a, b), do: check(Kernel.div(a, b), "i64 overflow in div/2")
+  def div(_a, 0), do: raise(ArithmeticError, Messages.text(:div_by_zero))
+  def div(a, b), do: check(Kernel.div(a, b), Messages.text(:i64_overflow_div))
 
-  def rem(_a, 0), do: raise(ArithmeticError, "rem/2 by zero")
+  def rem(_a, 0), do: raise(ArithmeticError, Messages.text(:rem_by_zero))
   def rem(a, b), do: Kernel.rem(a, b)
 
   # float -> i64: the i64 range check also rejects what C can't convert
-  def trunc(f), do: check(Kernel.trunc(f), "trunc/1: #{inspect(f)} does not fit in i64")
-  def round(f), do: check(Kernel.round(f), "round/1: #{inspect(f)} does not fit in i64")
+  def trunc(f), do: check(Kernel.trunc(f), Messages.text(:trunc_fit, a: f))
+  def round(f), do: check(Kernel.round(f), Messages.text(:round_fit, a: f))
 
   # Bitwise.bsl/bsr with the i64 limit: the exact result, or ArithmeticError
   # where it leaves i64, as the kernel does (defk_bsl_i64). A shift past 63
@@ -67,7 +70,7 @@ defmodule Defk.ElixirMode.Ops do
   # the same by a count that is not a literal: a negative count raises, as
   # the kernel's does (defk_wbsl)
   def wbsl_var(_a, n) when n < 0,
-    do: raise(ArithmeticError, "bsl/2 by the negative count #{n} inside a mask")
+    do: raise(ArithmeticError, Messages.text(:wbsl_negative, n: n))
 
   def wbsl_var(a, n), do: wbsl(a, n)
 
@@ -76,9 +79,9 @@ defmodule Defk.ElixirMode.Ops do
   def sub_u64(a, b), do: fit_u64(a - b, a, "-", b)
   def mul_u64(a, b), do: fit_u64(a * b, a, "*", b)
 
-  def div_u64(_a, 0), do: raise(ArithmeticError, "div/2 by zero")
+  def div_u64(_a, 0), do: raise(ArithmeticError, Messages.text(:div_by_zero))
   def div_u64(a, b), do: Kernel.div(a, b)
-  def rem_u64(_a, 0), do: raise(ArithmeticError, "rem/2 by zero")
+  def rem_u64(_a, 0), do: raise(ArithmeticError, Messages.text(:rem_by_zero))
   def rem_u64(a, b), do: Kernel.rem(a, b)
 
   # bsl/bsr of a u64: exact (bsr of a u64 is logical); bsl raises past 2^64 - 1
@@ -94,32 +97,37 @@ defmodule Defk.ElixirMode.Ops do
   end
 
   defp shifted_u64(:overflow, f, a, n),
-    do: raise(ArithmeticError, "u64 overflow in #{f}(#{a}, #{n})")
+    do: raise(ArithmeticError, Messages.text(:u64_overflow_shift, f: f, a: a, n: n))
 
   defp shifted_u64(r, _f, _a, _n), do: r
 
   # a u64 where an i64 is expected and back: the same integer, or
   # ArithmeticError when the other type cannot hold it
   def u64_to_i64(a) when is_i64(a), do: a
-  def u64_to_i64(a), do: raise(ArithmeticError, "#{a} does not fit in i64")
+  def u64_to_i64(a), do: raise(ArithmeticError, Messages.text(:u64_to_i64, a: a))
   def i64_to_u64(a) when a >= 0, do: a
-  def i64_to_u64(a), do: raise(ArithmeticError, "#{a} does not fit in u64")
+  def i64_to_u64(a), do: raise(ArithmeticError, Messages.text(:i64_to_u64, a: a))
 
   defp fit_u64(r, _a, _op, _b) when is_u64(r), do: r
-  defp fit_u64(_r, a, op, b), do: raise(ArithmeticError, "u64 overflow in #{a} #{op} #{b}")
 
-  defp shifted(:overflow, f, a, n), do: raise(ArithmeticError, "i64 overflow in #{f}(#{a}, #{n})")
+  defp fit_u64(_r, a, op, b),
+    do: raise(ArithmeticError, Messages.text(:u64_overflow, a: a, op: op, b: b))
+
+  defp shifted(:overflow, f, a, n),
+    do: raise(ArithmeticError, Messages.text(:i64_overflow_shift, f: f, a: a, n: n))
+
   defp shifted(r, _f, _a, _n), do: r
 
   defp fit(r, _a, _op, _b) when is_i64(r), do: r
-  defp fit(_r, a, op, b), do: raise(ArithmeticError, "i64 overflow in #{a} #{op} #{b}")
+
+  defp fit(_r, a, op, b),
+    do: raise(ArithmeticError, Messages.text(:i64_overflow, a: a, op: op, b: b))
 
   @doc false
   # Whether an ArithmeticError is an i64 or u64 limit (the exact result leaves
   # the type) and not an error Elixir would raise: a case guard raises the
   # first and fails its clause on the second
-  def limit?(%ArithmeticError{message: m}),
-    do: String.contains?(m, ["overflow in", "does not fit in"])
+  def limit?(%ArithmeticError{} = e), do: Messages.reason(e) == :overflow
 
   defp check(r, _msg) when is_i64(r), do: r
   defp check(_r, msg), do: raise(ArithmeticError, msg)
@@ -128,13 +136,13 @@ defmodule Defk.ElixirMode.Ops do
   # [T] is a binary of native-endian T. Reads match it like the bitstring
   # match would; writes rebuild it (value semantics).
 
-  def alloc(n, _esz) when n < 0, do: raise(ArgumentError, "alloc/2: negative length #{n}")
+  def alloc(n, _esz) when n < 0, do: raise(ArgumentError, Messages.text(:alloc_negative, n: n))
 
   def alloc(n, esz) when n * esz > @max_alloc_bytes,
-    do: raise(ArgumentError, "alloc/2: length too large")
+    do: raise(ArgumentError, Messages.text(:alloc_too_large))
 
   def alloc(n, esz) when n * esz >= @no_alloc_bytes,
-    do: raise(ArgumentError, "out of memory (allocating #{n * esz} bytes)")
+    do: raise(ArgumentError, Messages.text(:out_of_memory_bytes, bytes: n * esz))
 
   def alloc(n, esz) do
     bytes = n * esz
@@ -171,8 +179,7 @@ defmodule Defk.ElixirMode.Ops do
   defp own!(bytes) do
     case Process.get(@owned) do
       {owned, max} when bytes > max - owned ->
-        raise ArgumentError,
-              "out of memory (allocating #{bytes} bytes would take this call's buffers past max_owned_bytes, #{max} bytes)"
+        raise ArgumentError, Messages.text(:over_budget, bytes: bytes, max: max)
 
       {owned, max} ->
         Process.put(@owned, {owned + bytes, max})
@@ -245,33 +252,33 @@ defmodule Defk.ElixirMode.Ops do
   # one): ArgumentError, reason :non_finite_input
   defp get_failed(a, i, esz) do
     in_bounds!(a, i, esz)
-    raise ArgumentError, "non-finite float (inf or NaN) read from an input array at index #{i}"
+    raise ArgumentError, Messages.text(:nonfinite_input, i: i)
   end
 
   # a value that doesn't fit its element type raises before the bounds check,
   # as in the kernel
   def put_f64(a, i, x) when is_float(x), do: put(a, i, 8, <<x::float-64-native>>)
   def put_i64(a, i, x) when is_i64(x), do: put(a, i, 8, <<x::signed-64-native>>)
-  def put_i64(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in i64")
+  def put_i64(_a, _i, x), do: raise(ArgumentError, Messages.text(:value_i64, v: x))
   def put_u8(a, i, x) when x in 0..255, do: put(a, i, 1, <<x>>)
-  def put_u8(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in u8")
+  def put_u8(_a, _i, x), do: raise(ArgumentError, Messages.text(:value_u8, v: x))
   def put_u64(a, i, x) when is_u64(x), do: put(a, i, 8, <<x::unsigned-64-native>>)
-  def put_u64(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in u64")
+  def put_u64(_a, _i, x), do: raise(ArgumentError, Messages.text(:value_u64, v: x))
 
   def put_i16(a, i, x) when x in -0x8000..0x7FFF, do: put(a, i, 2, <<x::signed-16-native>>)
-  def put_i16(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in i16")
+  def put_i16(_a, _i, x), do: raise(ArgumentError, Messages.text(:value_i16, v: x))
 
   def put_i32(a, i, x) when x in -0x80000000..0x7FFFFFFF,
     do: put(a, i, 4, <<x::signed-32-native>>)
 
-  def put_i32(_a, _i, x), do: raise(ArgumentError, "value #{x} does not fit in i32")
+  def put_i32(_a, _i, x), do: raise(ArgumentError, Messages.text(:value_i32, v: x))
 
   # rounded to nearest as the bitstring does; where that gives +-inf (which
   # Elixir stores, and no match reads back) the write raises, as the kernel's
   def put_f32(a, i, x) when is_float(x) do
     case <<x::float-32-native>> do
       <<_::float-32-native>> = bytes -> put(a, i, 4, bytes)
-      _ -> raise ArgumentError, "value #{inspect(x)} does not fit in f32"
+      _ -> raise ArgumentError, Messages.text(:value_f32, v: x)
     end
   end
 
@@ -287,7 +294,7 @@ defmodule Defk.ElixirMode.Ops do
   # out[at + j] = out[at + j - off] for j = 0..n-1 in order, so when off < n
   # the off elements before `at` repeat; the pattern copy below is that loop.
   def copy(a, at, s, from, n, esz) do
-    if n < 0, do: raise(ArgumentError, "copy/5: negative length #{n}")
+    if n < 0, do: raise(ArgumentError, Messages.text(:copy_negative, f: "copy/5", n: n))
     len = Kernel.div(byte_size(a), esz)
     slen = Kernel.div(byte_size(s), esz)
     if at < 0 or at > len - n, do: copy_oob("copy/5", n, "at", at, "array", len)
@@ -296,7 +303,7 @@ defmodule Defk.ElixirMode.Ops do
   end
 
   def copy_back(a, at, off, n, esz) do
-    if n < 0, do: raise(ArgumentError, "copy_back/4: negative length #{n}")
+    if n < 0, do: raise(ArgumentError, Messages.text(:copy_negative, f: "copy_back/4", n: n))
     len = Kernel.div(byte_size(a), esz)
     if at < 0 or at > len - n, do: copy_oob("copy_back/4", n, "at", at, "array", len)
     copy_back_offset!(at, off, n)
@@ -308,12 +315,12 @@ defmodule Defk.ElixirMode.Ops do
   defp copy_back_offset!(_at, _off, 0), do: :ok
 
   defp copy_back_offset!(_at, off, _n) when off < 1,
-    do: raise(ArgumentError, "copy_back/4: offset #{off} is not positive")
+    do: raise(ArgumentError, Messages.text(:copy_back_offset, off: off))
 
   defp copy_back_offset!(at, off, _n) do
     if at < off do
       raise %Enum.OutOfBoundsError{
-        message: "copy_back/4: offset #{off} from index #{at} is before the start of the array",
+        message: Messages.text(:copy_back_before_start, off: off, at: at),
         index: at - off
       }
     end
@@ -337,8 +344,7 @@ defmodule Defk.ElixirMode.Ops do
 
   defp copy_oob(f, n, where, i, what, len) do
     raise %Enum.OutOfBoundsError{
-      message:
-        "#{f}: #{n} elements #{where} index #{i} out of bounds for #{what} of length #{len}",
+      message: Messages.text(:copy_oob, f: f, n: n, where: where, i: i, what: what, len: len),
       index: i
     }
   end
@@ -360,17 +366,17 @@ defmodule Defk.ElixirMode.Ops do
   def bits(acc, segs) do
     Enum.reduce(segs, acc, fn
       {_v, n, _signed}, _acc when n not in 0..64 ->
-        raise ArgumentError, "bitstring segment size #{n} is outside 0..64"
+        raise ArgumentError, Messages.text(:segment_size, n: n)
 
       {v, n, false}, _acc when v < 0 or v > Bitwise.bsl(1, n) - 1 ->
-        raise ArgumentError, "bitstring segment value #{v} does not fit in #{n} bits"
+        raise ArgumentError, Messages.text(:segment_fit, v: v, n: n, signed: "")
 
       {v, n, false}, acc ->
         <<acc::bitstring, v::size(n)>>
 
       {v, n, true}, acc ->
         signed_fits?(v, n) ||
-          raise ArgumentError, "bitstring segment value #{v} does not fit in #{n} signed bits"
+          raise ArgumentError, Messages.text(:segment_fit, v: v, n: n, signed: " signed")
 
         <<acc::bitstring, v::signed-size(n)>>
     end)
@@ -389,7 +395,7 @@ defmodule Defk.ElixirMode.Ops do
   defp word(a, i, w) do
     if i < 0 or i > byte_size(a) - w do
       raise %Enum.OutOfBoundsError{
-        message: "#{w}-byte load at index #{i} out of bounds for array of length #{byte_size(a)}",
+        message: Messages.text(:oob_load, w: w, i: i, len: byte_size(a)),
         index: i
       }
     end
@@ -411,7 +417,7 @@ defmodule Defk.ElixirMode.Ops do
 
     if i < 0 or i >= len do
       raise %Enum.OutOfBoundsError{
-        message: "index #{i} out of bounds for array of length #{len}",
+        message: Messages.text(:oob, i: i, len: len),
         index: i
       }
     end
@@ -432,8 +438,7 @@ defmodule Defk.ElixirMode.Ops do
     last = a + (n - 1) * step
 
     if n > 0 and ((step > 0 and last > @max - step) or (step < 0 and last < @min - step)) do
-      raise ArithmeticError,
-            "range element #{last} is within one step of the i64 limit (stepping past it overflows)"
+      raise ArithmeticError, Messages.text(:range_limit, last: last)
     end
 
     r
@@ -453,29 +458,29 @@ defmodule Defk.ElixirMode.Ops do
   end
 
   defp array!(a, n, p, e) do
-    is_binary(a) || raise ArgumentError, "argument #{n} (#{p}) must be a binary of packed #{e}"
+    is_binary(a) || raise ArgumentError, Messages.text(:arg_binary, n: n, p: p, t: e)
     esz = esize(e)
 
     Kernel.rem(byte_size(a), esz) == 0 ||
       raise ArgumentError,
-            "argument #{n} (#{p}): byte size #{byte_size(a)} is not a multiple of #{esz} (#{e})"
+            Messages.text(:arg_size, n: n, p: p, size: byte_size(a), esz: esz, t: e)
   end
 
   defp scalar!(x, :i64, _n, _p) when is_i64(x), do: x
 
   defp scalar!(_x, :i64, n, p),
-    do: raise(ArgumentError, "argument #{n} (#{p}) must be an integer fitting in i64")
+    do: raise(ArgumentError, Messages.text(:arg_i64, n: n, p: p))
 
   defp scalar!(x, :f64, _n, _p) when is_float(x), do: x
   defp scalar!(x, :f64, _n, _p) when is_i64(x), do: :erlang.float(x)
-  defp scalar!(_x, :f64, n, p), do: raise(ArgumentError, "argument #{n} (#{p}) must be a number")
+  defp scalar!(_x, :f64, n, p), do: raise(ArgumentError, Messages.text(:arg_f64, n: n, p: p))
   defp scalar!(x, :u64, _n, _p) when is_u64(x), do: x
 
   defp scalar!(_x, :u64, n, p),
-    do: raise(ArgumentError, "argument #{n} (#{p}) must be an integer fitting in u64")
+    do: raise(ArgumentError, Messages.text(:arg_u64, n: n, p: p))
 
   defp scalar!(x, :bool, _n, _p) when is_boolean(x), do: x
 
   defp scalar!(_x, :bool, n, p),
-    do: raise(ArgumentError, "argument #{n} (#{p}) must be a boolean")
+    do: raise(ArgumentError, Messages.text(:arg_bool, n: n, p: p))
 end

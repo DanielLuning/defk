@@ -52,7 +52,8 @@ defmodule Defk.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url, "Changelog" => @source_url <> "/blob/main/CHANGELOG.md"},
-      files: ~w(lib priv/defk_runtime.h mix.exs README.md LICENSE CHANGELOG.md CONTEXT.md
+      files:
+        ~w(lib priv/defk_runtime.h priv/defk_messages.h mix.exs README.md LICENSE CHANGELOG.md CONTEXT.md
                 docs/guides docs/language.md docs/compile-errors.md docs/scope.md
                 usage-rules.md usage-rules)
     ]
