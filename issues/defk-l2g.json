@@ -22,6 +22,10 @@
     {
       "text": "Done in ea52871 (merge 346a0c3). Both backends: Myers for 1..62-byte queries, DP otherwise; cut-off on |n-m| and score-(n-i); branch-free score step on both sides. Provisional (load 4-7): Elixir 60 -\u003e 10.9-11.1 ms/query, defk 13.7 -\u003e 4.6-4.7, blocking 3.9; defk vs Elixir 4.4x -\u003e 2.3-2.4x (still good, not marginal: Myers in the kernel gained 3x too). Under load: Elixir 698-741 req/s, defk 1791-1839, blocking 2264-2367; blocking /health p99 75-82 -\u003e 18-20 ms. Yield cost +19% from a per-word safepoint -\u003e defk-w8r.1. Tried, no gain in the kernel: wrap64 on the checked add; branch-free score (kept for symmetry). Elixir variants 11-14 in bench/elixir_variants.exs. Docs: fuzzy_search README, examples/README row + paragraph, README row, performance.md 1.6, 2.7, 6.4. Quiet-machine re-measure still due.",
       "timestamp": "2026-10-15T08:16:56Z"
+    },
+    {
+      "text": "Reopened 2026-10-15: code moved from a local merge into PR #1 (https://github.com/DanielLuning/defk/pull/1) under the new PR workflow (defk-ecs). Close after the owner merges it.",
+      "timestamp": "2026-10-15T09:26:21Z"
     }
   ],
   "priority": 2,
