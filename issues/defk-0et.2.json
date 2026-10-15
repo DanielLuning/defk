@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-15T17:52:26Z",
+  "description": "mix defk.stability.freeze \u003cversion\u003e also writes test/stability/\u003cversion\u003e/api.exs: the public modules and their documented macros and functions with arities from Code.fetch_docs/1 on the modules compiled at the tag (the tag checked out in a temporary worktree, compiled with mix in :test, docs read from its beams), minus @doc false and the unstable tier, which becomes a list in code (lib or the task) that the stability guide's 'What it does not cover' is checked against; plus the generated functions, the use Defk options, the kernel option, the config key and the env vars, which the task takes from one place in code rather than a hand-written list. Rerun for 0.1.0 it must reproduce the committed api.exs byte for byte (adjust the committed file's formatting only if the task's output differs in comments, never in content; say so in the PR). Done when the release step in docs/agents/stability.md is one command for kernels, rejections and the API snapshot, and mix ci passes.",
+  "id": "defk-0et.2",
+  "labels": [],
+  "parent": "defk-0et",
+  "priority": 2,
+  "status": "open",
+  "title": "Stability: the freeze task writes the API snapshot from the tag",
+  "type": "task",
+  "updated_at": "2026-10-15T17:52:26Z"
+}
