@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-15T18:30:50Z",
@@ -7,8 +7,8 @@
   "id": "defk-0gk",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "mix compile in the dev environment fails on the stability freeze task and warns in Defk.Deprecations",
   "type": "bug",
-  "updated_at": "2026-10-15T18:44:16Z"
+  "updated_at": "2026-10-15T18:52:08Z"
 }
