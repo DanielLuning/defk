@@ -4,8 +4,7 @@
 > to native code that runs at C speed, with a cheap boundary, while keeping the
 > BEAM's promises (preemption, isolation, cleanup)?**
 
-For loops over numbers and bytes the answer was yes, and defk is now a library on
-Hex, from `0.1.0` with a [stability promise](docs/guides/stability.md). You
+For loops over numbers and bytes the answer was yes. You
 write a **kernel** with `defk` in an ordinary module. It reads like Elixir,
 takes typed numbers and packed binaries, and compiles to a checked native
 function (a NIF) when the module compiles.
