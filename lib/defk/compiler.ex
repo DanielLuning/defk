@@ -4298,6 +4298,11 @@ defmodule Defk.Compiler do
   # bounds proof bounds the result, so it cannot overflow
   @index_words ~w(INT64_C UINT64_C int64_t uint64_t len ctx defk_add_i64 defk_sub_i64 defk_mul_i64)
 
+  # the words a strip-assigned value may be computed from and stay exact in
+  # a flagged run: no checked helper (one that flags computes a wrapped value
+  # after a failure), so only the arithmetic the compiler proved cannot fail
+  @fixed_words ~w(INT64_C UINT64_C int64_t uint64_t len)
+
   defp sr_fixed_indices?(rows, var) do
     Enum.all?(rows, fn
       %{k: :access, access: :index, idx: idx} -> sr_fixed_index?(idx, rows, var)
@@ -4306,13 +4311,40 @@ defmodule Defk.Compiler do
     end)
   end
 
+  # An index is fixed when every value in it is one the flagged run computes
+  # exactly: the loop counter, a value not assigned in the strip, or one the
+  # strip assigns once, unconditionally and at the top level, from fixed
+  # values alone with no checked helper (sr_fixed_var?/4). A value read from
+  # memory, a division, a conversion or a float fails the word test.
   defp sr_fixed_index?(idx, rows, var) do
     Regex.scan(~r/[A-Za-z_]\w*/, idx)
     |> List.flatten()
     |> Enum.all?(fn w ->
       w in @index_words or w == var or
-        (Regex.match?(~r/^[vp]_\w+$/, w) and not sr_written?(rows, w))
+        (Regex.match?(~r/^[vp]_\w+$/, w) and sr_fixed_var?(w, rows, var, []))
     end)
+  end
+
+  # `seen`: the values whose assignments are being followed (a cycle)
+  defp sr_fixed_var?(w, rows, var, seen) do
+    case Enum.filter(rows, &(&1.k in [:assign, :addr] and &1.var == w)) do
+      [] ->
+        true
+
+      # one plain assignment from fixed words (a value assigned from itself,
+      # or through a cycle, is not fixed)
+      [%{k: :assign, rhs: rhs, path: [], cond: false}] ->
+        w not in seen and
+          Regex.scan(~r/[A-Za-z_]\w*/, rhs)
+          |> List.flatten()
+          |> Enum.all?(fn x ->
+            x in @fixed_words or x == var or
+              (Regex.match?(~r/^[vp]_\w+$/, x) and sr_fixed_var?(x, rows, var, [w | seen]))
+          end)
+
+      _ ->
+        false
+    end
   end
 
   defp sr_replayable?(text, rows, arrays) do
@@ -6530,7 +6562,7 @@ defmodule Defk.Compiler do
             "the body can also raise otherwise (a division, a no-match, a check that cannot set a flag)"
 
           not sr_fixed_indices?(rows, var) ->
-            "an unchecked element access uses an index assigned in the loop body, which a flagged strip could compute wrongly after a failed check"
+            "an unchecked element access uses an index assigned in the loop body from a value a flagged strip could compute wrongly after a failed check"
 
           true ->
             "the body's state cannot be restored from a snapshot to replay a strip"

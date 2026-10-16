@@ -207,9 +207,10 @@ defmodule Defk.NonFiniteTest.K do
     out
   end
 
-  # x[j] is proved in bounds from j's facts, but j is assigned in the strip:
-  # a strip that also flags an overflow (ix[i] * 2) stays checked, since a
-  # flagged run computes on after a failure
+  # x[j] is proved in bounds from j's facts, and j is assigned in the strip
+  # from the loop counter by an addition proved not to overflow: exact in a
+  # flagged run too, so the strip, which also flags an overflow (ix[i] * 2),
+  # runs flagged
   defk shifted_sum(x :: [f64], ix :: [i64]) :: f64 do
     n = min(length(x), length(ix))
 
@@ -218,6 +219,20 @@ defmodule Defk.NonFiniteTest.K do
         j = i + 1
         acc + x[j] + float(ix[i] * 2)
     end
+  end
+
+  # an index masked from an array read: out[j] is proved in bounds (0..7
+  # into 8 elements), but a flagged run computes j on after a failed check,
+  # so the strip stays checked
+  defk masked_scatter(a :: [f64], ix :: [i64]) :: [f64] do
+    out = alloc(f64, 8)
+
+    for i <- 0..(min(length(a), length(ix)) - 1)//1 do
+      j = band(ix[i], 7)
+      out[j] = a[i] * 2.0 + float(ix[i] * 2)
+    end
+
+    out
   end
 
   # sqrt of a value never below 0.0 needs no check; of one that
@@ -633,13 +648,38 @@ defmodule Defk.NonFiniteTest do
 
     assert nonfinite.({:gather, 3}) == [:flagged]
     assert nonfinite.({:scatter, 3}) == [:flagged]
-    assert nonfinite.({:shifted_sum, 2}) == [:checked]
+
+    # j = i + 1 is exact in a flagged run: flagged; j masked from ix[i] is
+    # not: checked, although both accesses through j are unchecked
+    assert nonfinite.({:shifted_sum, 2}) == [:flagged]
+    assert nonfinite.({:masked_scatter, 2}) == [:checked]
+
+    section = fn name ->
+      c
+      |> String.split("/* ---- #{name}/", parts: 2)
+      |> List.last()
+      |> String.split("/* ---- ")
+      |> hd()
+    end
+
+    assert section.("shifted_sum") =~ "(p_x).data[v_j_"
+    assert section.("masked_scatter") =~ ~r/\(v_out_\d+\)\.data\[v_j_/
+    refute section.("masked_scatter") =~ "defk_put_f64(ctx, v_out"
 
     n = 2 * @strip + 3
     x = with_bad(n, -1, nil, 0.5)
     assert {:ok, _} = agrees(:shifted_sum, [x, mixed_ix(n, [])])
     first_error(:shifted_sum, [with_bad(n, 9, :nan), mixed_ix(n, [{@strip, 2 ** 62}])], :nan)
     first_error(:shifted_sum, [with_bad(n, @strip, :nan), mixed_ix(n, [{9, 2 ** 62}])], :overflow)
+
+    assert {:ok, _} = agrees(:masked_scatter, [x, mixed_ix(n, [])])
+    first_error(:masked_scatter, [with_bad(n, 9, :nan), mixed_ix(n, [{@strip, 2 ** 62}])], :nan)
+
+    first_error(
+      :masked_scatter,
+      [with_bad(n, @strip, :nan), mixed_ix(n, [{9, 2 ** 62}])],
+      :overflow
+    )
   end
 
   test "flat float loops run flagged, with the accumulator checked once per strip" do
@@ -715,6 +755,9 @@ defmodule Defk.NonFiniteTest do
     root_abs: [],
     root_shifted: [],
     shifted_sum: [
+      args: fixed_list([one_of([G.array(:f64), G.array_non_finite()]), G.array(:i64)])
+    ],
+    masked_scatter: [
       args: fixed_list([one_of([G.array(:f64), G.array_non_finite()]), G.array(:i64)])
     ]
   )
