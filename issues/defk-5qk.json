@@ -4,6 +4,7 @@
   "blocks": [
     "defk-agp"
   ],
+  "closed_at": "2026-10-16T12:24:54Z",
   "created": "2026-10-10T11:24:32Z",
   "description": "Found in defk-hki. flag_strip/3 keeps a strip with joined checks (overflow, bounds) checked when an unchecked a.data[j] uses an index j assigned in the strip (fixed_indices?/3), because a flagged run computes on after a failed check and j could come from a wrong value. That is conservative: j = i + 1 computed only from the loop counter and loop-invariant values is exact in the flagged run too (test: shifted_sum in test/non_finite_test.exs stays :checked). Done when a strip-assigned index whose assignment uses only fixed values (recursively, no flagged helper with a non-fixed operand) is accepted, the memory-safety argument in priv/defk_runtime.h (flat strips) still holds and is updated, and shifted_sum runs flagged with its mixed-error tests passing.",
   "id": "defk-5qk",
@@ -22,8 +23,8 @@
     }
   ],
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Flagged strips: allow an unchecked access whose index is assigned exactly in the strip",
   "type": "task",
-  "updated_at": "2026-10-16T11:59:12Z"
+  "updated_at": "2026-10-16T12:24:54Z"
 }
