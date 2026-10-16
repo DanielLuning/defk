@@ -47,7 +47,7 @@ script's header.
 | ✅ | [`hashes`](hashes.exs) | xxHash64 of a 4 MB message | **209×** | SipHash level with its NIF; CRC32C 0.9× of crc32cer | Elixir is bignum-bound at 64-bit hashes; Murmur3 and SipHash are the same story |
 | ✅ | [`fft`](fft.exs) | FFT of 4096 points; a 64-tap FIR over 2 s of audio | **73×** | – | bit-exact with Elixir; Nx's binary backend is slower than plain Elixir here |
 | ✅ | [`blake`](blake.exs) | BLAKE2b-512 of 64 KB | **32×** | 1.02× blake2_elixir (reference C) | BLAKE3 10× Elixir and 0.6× the NEON NIF; against `:crypto`'s BLAKE2b only 1.2× |
-| ✅ | [`matmul`](matmul.exs) | 256×256 f64 | **19×** | 151× Nx binary backend | tensor work belongs in Nx with EXLA; defk fits a custom loop beside it |
+| ✅ | [`matmul`](matmul.exs) | 256×256 f64 | **25×** | 0.16× Nx + EXLA (CPU, from binaries) | Nx with EXLA is 6× faster at 256×256 and 108× at 1024×1024; defk wins only at 64×64, where EXLA's dispatch and copies cost more than the product |
 | ✅ | [`image_ops`](image_ops.exs) | bilinear resize 1080p → 480×270 | **14×** | – | YUV420 and Floyd-Steinberg dither 14–26× (under load); libvips not compared |
 | ✅ | [`cdcl_sat`](cdcl_sat.exs) | Crux's whole scenario enumeration, 109 vars | **13×** | 4.2× Crux on picosat | picosat's search is stronger on hard random 3-SAT, and blocks a scheduler 1.3 s there |
 | ✅ | [`cosine_topk`](cosine_topk.exs) | top-10 of 100k × 384 f32 embeddings | **13×** | 3.1× vettore | Nx + EXLA is 6–8× faster than defk: use it for a plain dot-product top-k |
@@ -108,9 +108,13 @@ has them in full.
   little faster than `:crypto`, which is the Elixir answer for BLAKE2b;
   BLAKE3 is level with its portable C and slower than the NEON build. On a 64 MB message
   both NIFs block 34–49 ms, the kernels 2–3 ms.
-- [`matmul.exs`](matmul.exs): 256×256 f64, 64 to 1024 swept. Nx's binary
-  backend is itself Elixir and 8× slower than plain lists; EXLA's BLAS is
-  expected to win. For tensor work use Nx; defk fits a custom loop beside it.
+- [`matmul.exs`](matmul.exs): 256×256 f64, 64 to 1024 swept. Nx with EXLA
+  (XLA's multithreaded SIMD GEMM) is 6× faster than defk at 256×256 from the
+  same packed binaries, 50× with resident tensors, and 108× at 1024×1024;
+  defk wins only at 64×64, where EXLA's dispatch and buffer copies cost more
+  than the product. Nx's binary backend is itself Elixir and 8× slower than
+  plain lists. For tensor work use Nx with EXLA; defk fits a custom loop
+  beside it.
 - [`image_ops.exs`](image_ops.exs) and [`image_blur.exs`](image_blur.exs):
   resize, YUV420, dither and a separable box blur on raw 1080p frames,
   bit-exact. The blur baseline went from a 9-reads-per-pixel first pass

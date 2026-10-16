@@ -113,8 +113,9 @@
     },
     "matmul" => %{
       job: "256×256 f64",
-      native: "{native} Nx binary backend",
-      line: "tensor work belongs in Nx with EXLA; defk fits a custom loop beside it"
+      native: "{native} Nx + EXLA (CPU, from binaries)",
+      line:
+        "Nx with EXLA is 6× faster at 256×256 and 108× at 1024×1024; defk wins only at 64×64, where EXLA's dispatch and copies cost more than the product"
     },
     "monte_carlo_rtp" => %{
       job: "100M slot spins on all schedulers",
