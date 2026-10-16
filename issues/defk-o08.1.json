@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-16T08:44:49Z",
   "created": "2026-10-15T13:20:20Z",
   "description": "Found in defk-fun (2026-10-15). An if/cond/case that gives one of several arrays keeps only the smallest len_lo of the arms (compiler.ex, the branch merge near 'lens = for v \u003c- vals, do: Facts.len_lo(v)'), never len_lb. So with o carrying len(o) \u003e= 2 * len(a), 'if c, do: alloc(u8, 2 * n + 1), else: o' has no relative fact, and in a reduce body that value makes the accumulator lose the fact (the retry) and o[2 * i] keeps its bounds check. Fix: the merged value keeps a len_lb key that every arm has, with the smallest offset. Test: test/scaled_facts_test.exs regrow kernels written with an if (see the comment there), plus a soundness property.",
   "id": "defk-o08.1",
@@ -18,8 +19,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Branch merges drop arrays' relative length facts (len_lb)",
   "type": "task",
-  "updated_at": "2026-10-16T08:20:17Z"
+  "updated_at": "2026-10-16T08:44:49Z"
 }
