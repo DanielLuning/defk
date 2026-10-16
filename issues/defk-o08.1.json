@@ -7,9 +7,15 @@
   "id": "defk-o08.1",
   "labels": [],
   "parent": "defk-o08",
+  "comments": [
+    {
+      "text": "PR #21 opened (https://github.com/DanielLuning/defk/pull/21): Facts.join_len/2 joins the arms' length facts (smallest len_lo, common len_lb keys with the smallest offset); branch_val uses it. mix ci green; dump_c gate byte-identical for every pre-existing kernel (100 modules). Ticket stays in progress until the owner merges.",
+      "timestamp": "2026-10-16T08:01:32Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Branch merges drop arrays' relative length facts (len_lb)",
   "type": "task",
-  "updated_at": "2026-10-16T07:43:58Z"
+  "updated_at": "2026-10-16T08:01:32Z"
 }
