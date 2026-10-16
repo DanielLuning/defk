@@ -17,11 +17,15 @@
     {
       "text": "Measured (tick-gap, one scheduler, load 4-11, floor 2.0-2.4 ms): value-semantics copy 64 MB 1.2-9.7 ms, 256 MB 3.9-94 ms (cold pages); misaligned [i64] input 256 MB 4.0-4.1 ms; bitstring accumulator to 256 MB and returned 80-89 ms, not returned 38-71 ms. Changes: copies (copied/2 and the loop accumulator copies) and the misaligned-input copy run in 1 MiB strips with a safepoint after each in yielding kernels (defk_copy_raw_T + defk_copy_strip, defk_bind once=0 + defk_bind_strip, compiler copy_stmts/assign_copy/bind_strips); a bitstring result over 1 MiB is handed over (shrink realloc + sub-binary) instead of copied out; the grown accumulator region is no longer memset (appends overwrite from their position). After: copy 256 MB 2.3-4.4 ms, misaligned 1.9-2.2 ms, bits 256 MB 47-72 ms. What remains for bits is enif_realloc_binary doubling (64 MB: 11-17 ms); bounding it needs a chunked accumulator, not done here (no workload builds that).",
       "timestamp": "2026-10-16T20:39:21Z"
+    },
+    {
+      "text": "PR #25 opened: https://github.com/DanielLuning/defk/pull/25. Final design: strips for copies (compiler-emitted loops) and for misaligned inputs in kernels that have a loop; bitstring results over 1 MiB handed over; accumulator zeroed a strip at a time via a mark in its 16-byte header. Not kept: masking append (~1 ns per append), strip prologue in loop-free kernels (+27 ns per call). Ticket stays in progress until the owner merges.",
+      "timestamp": "2026-10-16T20:52:14Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Big memcpy/memset at once in the runtime: array copies, misaligned inputs, bitstring growth",
   "type": "task",
-  "updated_at": "2026-10-16T20:39:21Z"
+  "updated_at": "2026-10-16T20:52:14Z"
 }
