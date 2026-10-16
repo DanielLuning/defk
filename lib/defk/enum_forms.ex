@@ -30,6 +30,10 @@ defmodule Defk.EnumForms do
   @doc false
   def desugar(%{body: body} = kernel), do: %{kernel | body: Macro.prewalk(body, &form/1)}
 
+  # the same on a bare expression (the compiler checks the inside of a
+  # rejected pipe this way, since a pipe hides the arity before unpiping)
+  def desugar(ast), do: Macro.prewalk(ast, &form/1)
+
   defp form({{:., _, [{:__aliases__, _, [:Enum]}, :reduce]}, m, [src, init, f]} = node) do
     case f do
       {:fn, _, [{:->, am, [[x, acc], body]}]} ->

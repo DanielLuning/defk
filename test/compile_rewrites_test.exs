@@ -12,7 +12,6 @@ defmodule Defk.CompileRewritesTest do
   @cases [
     # |>, in, **, unless, byte_size/1
     {"a[0] |> abs() |> sqrt()", "a :: [f64]", "f64", "@@", :rewrite},
-    {"a |> Enum.sum()", "a :: [f64]", "f64", "@@", :none},
     {"x in [1, 2, 3]", "x :: i64", "bool", "@@", :rewrite},
     {"x ** 3", "x :: i64", "i64", "@@", :rewrite},
     {"x ** 0", "x :: i64", "i64", "@@", :rewrite},
@@ -108,6 +107,24 @@ defmodule Defk.CompileRewritesTest do
     assert is_binary(msg)
     assert [_] = Regex.scan(~r/^\(defk [a-z0-9-]+[:;] /m, msg), msg
     assert rw == nil, "unexpected rewrite:\n#{rw}"
+  end
+
+  describe "a pipe around a call outside the subset" do
+    # the pipe's rewrite is the nested call, which does not compile, so the
+    # pipe has only its hint; the call inside is checked as written nested
+    # and reports with its own rewrite, which compiles where the pipe was
+    test "the pipe has no rewrite, the call inside has its own" do
+      msg = compile_f(:pipe_sum, "a :: [f64]", "f64", "a |> Enum.sum()")
+      assert Defk.TestKit.codes(msg) == ~w(pipe unsupported-call)
+
+      [pipe, sum] = String.split(msg, "\n\nerror: ", parts: 2)
+      refute pipe =~ "\n    "
+      assert sum =~ "Enum.sum/1 is not in the kernel subset"
+
+      rw = rewrite("error: " <> sum)
+      assert rw =~ "reduce: 0.0"
+      assert compile_f(:pipe_sum_rewrite, "a :: [f64]", "f64", rw) == :ok
+    end
   end
 
   describe "internal compiler crashes" do

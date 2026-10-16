@@ -266,10 +266,18 @@ defmodule Defk.CompileErrorsTest do
       msg = compile(__MODULE__, body)
 
       # n is poisoned by the byte_size rejection, so the for's range is
-      # abandoned and its body is still lowered; the inner reduce's init is
-      # rejected and the pipe is one error, nothing in them is looked into
-      assert codes(msg) == ~w(undefined-function for-collect unsupported-map pipe)
-      assert msg =~ ": 4 kernel compile errors\n"
+      # abandoned and its body is still lowered. The inner reduce's init is
+      # rejected and its body is still checked: @window is not defined in
+      # this module (the slice drops it), and Map.update is rejected before
+      # its arguments. The pipe is one error, and the calls in it are
+      # checked as written nested: Map.values is rejected; Enum.reduce's
+      # body reads a poisoned element, so it is silent.
+      assert codes(msg) ==
+               ~w(undefined-function for-collect unsupported-map undefined-attribute unsupported-call pipe unsupported-call)
+
+      assert msg =~ "Map.update/4 is not in the kernel subset"
+      assert msg =~ "Map.values/1 is not in the kernel subset"
+      assert msg =~ ": 7 kernel compile errors\n"
     end
 
     test "errors in a rejected for's body are reported once, next to for-collect" do
@@ -300,6 +308,76 @@ defmodule Defk.CompileErrorsTest do
         )
 
       assert codes(msg) == ~w(unsupported-map for-collect)
+    end
+
+    test "the body of a reduce whose init is rejected is checked too, with the accumulator poisoned" do
+      msg =
+        compile(
+          __MODULE__,
+          "defk f(a :: [f64], n :: i64) :: f64 do\n  for i <- 0..(n - 1)//1, reduce: %{} do\n    acc ->\n      m = :a\n      acc + a[i] * 2.0\n  end\nend"
+        )
+
+      # acc + a[i] reads the poisoned accumulator: silent
+      assert codes(msg) == ~w(unsupported-map unsupported-atom)
+    end
+
+    test "a reduce whose init is rejected and whose body is valid reports only the init" do
+      msg =
+        compile(
+          __MODULE__,
+          "defk f(a :: [f64], n :: i64) :: f64 do\n  for i <- 0..(n - 1)//1, reduce: %{} do\n    acc -> acc + a[i] * 2.0\n  end\nend"
+        )
+
+      assert codes(msg) == ["unsupported-map"]
+    end
+
+    test "the body of a reduce whose generator is rejected is checked too" do
+      msg =
+        compile(
+          __MODULE__,
+          "defk f(n :: i64) :: i64 do\n  for x <- Map.values(n), reduce: 0 do\n    acc ->\n      y = :a\n      acc + x\n  end\nend"
+        )
+
+      # x is poisoned, acc is not: acc + x is silent
+      assert codes(msg) == ~w(unsupported-call unsupported-atom)
+      assert msg =~ "Map.values/1 is not in the kernel subset"
+    end
+
+    test "a reduce whose init reads a poisoned variable still checks its body" do
+      msg =
+        compile(
+          __MODULE__,
+          "defk f(n :: i64) :: i64 do\n  m = %{a: n}\n  for i <- 0..(n - 1)//1, reduce: m do\n    acc ->\n      y = :b\n      acc\n  end\nend"
+        )
+
+      assert codes(msg) == ~w(unsupported-map unsupported-atom)
+    end
+
+    test "the calls in a rejected pipe are checked as written nested" do
+      msg = compile(__MODULE__, "defk f(x :: f64) :: f64 do\n  x |> Map.values() |> abs()\nend")
+      # in the order of their positions: the pipe starts the line
+      assert codes(msg) == ~w(pipe unsupported-call)
+      assert msg =~ "Map.values/1 is not in the kernel subset"
+
+      # the nested call is the pipe's rewrite; it is not offered when it does
+      # not compile
+      refute msg =~ "rewrite:"
+    end
+
+    test "a pipe whose calls are all in the subset reports only the pipe, with its rewrite" do
+      msg = compile(__MODULE__, "defk f(x :: f64) :: f64 do\n  x |> abs() |> sqrt()\nend")
+      assert codes(msg) == ["pipe"]
+      assert msg =~ "sqrt(abs(x))"
+    end
+
+    test "Enum.reduce/3 inside a rejected pipe takes its loop form, and its body is checked" do
+      msg =
+        compile(
+          __MODULE__,
+          "defk f(a :: [f64]) :: f64 do\n  a |> Enum.reduce(0.0, fn x, acc ->\n    m = :a\n    acc + x\n  end)\nend"
+        )
+
+      assert codes(msg) == ~w(pipe unsupported-atom)
     end
 
     test "at most 10 are shown" do

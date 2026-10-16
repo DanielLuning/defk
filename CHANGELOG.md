@@ -29,6 +29,11 @@
   and kernel. A tool that compiles kernels (an editor, an agent's retry
   loop, `Code.compile_string/2` at run time) no longer parses the message.
   Compile errors stay `CompileError`.
+- Fixed: a rejected pipe and a `for ..., reduce:` whose init or generator
+  is rejected now report the errors inside them in the same compile. The
+  calls in a pipe are checked as written nested; a reduce body is checked
+  with its accumulator poisoned, so nothing that only follows from the
+  rejection is reported. The codes are the same.
 - Fixed: an `operand-type` error's why matches its operands. Every such
   error said "booleans are not numbers", also for a negated `u64`, a float
   in a bitwise operator or a number in `and`. The code is the same.

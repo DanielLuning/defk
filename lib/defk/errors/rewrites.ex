@@ -262,7 +262,10 @@ defmodule Defk.Errors.Rewrites do
   defp string(what),
     do: {"unsupported-string", "#{what} is not in the kernel subset", []}
 
-  defp unpipe({:|>, _, [l, r]}) do
+  @doc false
+  # the nested call a pipe stands for, `x |> f(a) |> g()` as `g(f(x, a))`;
+  # the pipe's rewrite, and what the compiler checks inside a rejected pipe
+  def unpipe({:|>, _, [l, r]}) do
     l = unpipe(l)
 
     case r do
@@ -273,7 +276,7 @@ defmodule Defk.Errors.Rewrites do
     end
   end
 
-  defp unpipe(other), do: other
+  def unpipe(other), do: other
 
   defp module_name({:__aliases__, _, parts}), do: Enum.join(parts, ".")
   defp module_name(a) when is_atom(a), do: inspect(a)

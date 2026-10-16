@@ -1886,6 +1886,13 @@ defmodule Defk.Compiler do
   defp lower_node({{:., _, [:math, fun]}, m, args}, env) when fun in [:pow | @math1],
     do: lower_call(fun, args, m, env)
 
+  # a pipe is one rejection (code pipe, the nested call as its rewrite); the
+  # calls in it are checked first, as if written nested (recover_pipe/2)
+  defp lower_node({:|>, _, [_, _]} = node, env) do
+    recover_pipe(node, env)
+    unsupported!(node, Defk.Errors.Rewrites.unsupported(node, &type_in(&1, env)), env)
+  end
+
   defp lower_node({name, m, args}, env) when is_atom(name) and is_list(args),
     do: lower_call(name, args, m, env)
 
@@ -4597,22 +4604,38 @@ defmodule Defk.Compiler do
       )
 
     lenv = loop_env(env, node)
+    entered = make_ref()
 
-    u64_accs(fn u64s ->
-      {si, accs} = reduce_accs(pat, init_ast, "the reduce: value", env, node, loop_reads, u64s)
+    try do
+      u64_accs(fn u64s ->
+        {si, accs} = reduce_accs(pat, init_ast, "the reduce: value", env, node, loop_reads, u64s)
 
-      loops =
-        with_acc_facts(accs, fn accs, fix ->
-          inner = fn genv ->
-            {sb, res} = lower_block(body, acc_env(accs, genv))
-            [sb, assign_accs(accs, res, last_expr(body), "the reduce body", genv.live, fix)]
-          end
+        loops =
+          with_acc_facts(accs, fn accs, fix ->
+            inner = fn genv ->
+              Process.put(entered, true)
+              {sb, res} = lower_block(body, acc_env(accs, genv))
+              [sb, assign_accs(accs, res, last_expr(body), "the reduce body", genv.live, fix)]
+            end
 
-          lower_quals(quals, lenv, inner)
-        end)
+            lower_quals(quals, lenv, inner)
+          end)
 
-      {[si, loops], acc_result(accs)}
-    end)
+        {[si, loops], acc_result(accs)}
+      end)
+    catch
+      # the init or a generator was rejected (or reads a poisoned variable)
+      # before the body ran: the body is still checked (recover_reduce/5)
+      {:defk_reject, _} = rejection ->
+        recover_reduce(entered, quals, pat, body, lenv)
+        throw(rejection)
+
+      :defk_poison ->
+        recover_reduce(entered, quals, pat, body, lenv)
+        throw(:defk_poison)
+    after
+      Process.delete(entered)
+    end
   end
 
   # An accumulator whose initial value is a non-negative integer literal is
@@ -6158,29 +6181,64 @@ defmodule Defk.Compiler do
     end
 
     # a generator or filter that was rejected (or reads a poisoned variable)
-    # never reached the body: lower it with the generator's variables bound
-    # to what is certain (a range's i64), else poisoned
-    unless Process.delete(entered) do
-      poisoned =
-        Enum.reduce(quals, loop_env(env, node), fn
-          # a range generator's variable is an i64 whatever its bounds
-          {:<-, _, [{n, _, ctx}, {op, _, _}]}, env
-          when is_atom(n) and is_atom(ctx) and op in [:.., :..//] ->
-            put_var(env, n, val(fresh(n, :i64), :i64))
+    # never reached the body: lower it anyway (recover_body/3)
+    unless Process.delete(entered), do: recover_body(quals, body, loop_env(env, node))
 
-          {:<-, _, [pat, _]}, env ->
-            poison({:=, [], [pat, nil]}, env)
+    :ok
+  end
 
-          _filter, env ->
-            env
-        end)
+  # Recovery inside a `for ..., reduce:` whose init or a generator was
+  # rejected (or reads a poisoned variable) before the body ran, so the body
+  # was never lowered: it is lowered for effect with the accumulator
+  # poisoned (its init gave it no value), so its own rejections are recorded
+  # in the same compile. A body that did run has reported its own already.
+  defp recover_reduce(entered, quals, pat, body, lenv) do
+    unless Process.get(entered),
+      do: recover_body(quals, body, poison({:=, [], [pat, nil]}, lenv))
 
-      try do
-        lower_stmts(body, poisoned)
-      catch
-        {:defk_reject, d} -> record(d)
-        :defk_poison -> :ok
-      end
+    :ok
+  end
+
+  # Recovery inside a rejected pipe: the nested call it stands for is lowered
+  # as an expression, so the rejections of the calls in it are recorded in
+  # the same compile (the first one along the way, as in any expression).
+  # Unpiping is exact, so none of them follows from the pipe's rejection.
+  # Enum.reduce/3 and Enum.find/3 in it take the forms the compiler knows
+  # (Defk.EnumForms), as they do outside a pipe.
+  defp recover_pipe(node, env) do
+    try do
+      node |> Defk.Errors.Rewrites.unpipe() |> Defk.EnumForms.desugar() |> lower_expr(env)
+    catch
+      {:defk_reject, d} -> record(d)
+      :defk_poison -> :ok
+    end
+
+    :ok
+  end
+
+  # a loop body lowered for effect, with the generators' variables bound to
+  # what is certain (a range's i64), else poisoned; its rejections are
+  # recorded, and an abandoned statement stays silent
+  defp recover_body(quals, body, env) do
+    poisoned =
+      Enum.reduce(quals, env, fn
+        # a range generator's variable is an i64 whatever its bounds
+        {:<-, _, [{n, _, ctx}, {op, _, _}]}, env
+        when is_atom(n) and is_atom(ctx) and op in [:.., :..//] ->
+          put_var(env, n, val(fresh(n, :i64), :i64))
+
+        {:<-, _, [pat, _]}, env ->
+          poison({:=, [], [pat, nil]}, env)
+
+        _filter, env ->
+          env
+      end)
+
+    try do
+      lower_stmts(body, poisoned)
+    catch
+      {:defk_reject, d} -> record(d)
+      :defk_poison -> :ok
     end
 
     :ok
