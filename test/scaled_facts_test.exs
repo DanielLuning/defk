@@ -108,8 +108,7 @@ defmodule Defk.ScaledFactsTest.K do
 
   # a new array every iteration, whose fact has the same key: an offset below
   # the assumed one (2 * n - 1 < 2 * n) is lost, one above it (2 * n + 1) is
-  # kept. (An `if` that gives either array keeps no relative length fact, so
-  # these do not branch.)
+  # kept
   defk regrow_short(a :: [u8]) :: [u8] do
     n = length(a)
 
@@ -127,6 +126,46 @@ defmodule Defk.ScaledFactsTest.K do
       o ->
         o[2 * i] = a[i]
         alloc(u8, 2 * n + 1)
+    end
+  end
+
+  # the same through an `if` that gives either the accumulator or a new
+  # array: the value keeps the relative fact both arms have, with the smaller
+  # offset, so the accumulator keeps it when that offset is as large
+  defk regrow_if_long(a :: [u8], k :: i64) :: [u8] do
+    n = length(a)
+
+    for i <- 0..(n - 1)//1, reduce: alloc(u8, 2 * n) do
+      o ->
+        o[2 * i] = a[i]
+        if i == k, do: alloc(u8, 2 * n + 1), else: o
+    end
+  end
+
+  defk regrow_if_short(a :: [u8], k :: i64) :: [u8] do
+    n = length(a)
+
+    for i <- 0..(n - 1)//1, reduce: alloc(u8, 2 * n) do
+      o ->
+        o[2 * i] = a[i]
+        if i == k, do: alloc(u8, 2 * n - 1), else: o
+    end
+  end
+
+  # arms whose facts have different keys (2 * n and 3 * n) share none, so
+  # the value has no relative fact and the check stays
+  defk regrow_cond_mixed(a :: [u8], k :: i64) :: [u8] do
+    n = length(a)
+
+    for i <- 0..(n - 1)//1, reduce: alloc(u8, 2 * n) do
+      o ->
+        o[2 * i] = a[i]
+
+        cond do
+          i == k -> alloc(u8, 3 * n)
+          i == k + 1 -> alloc(u8, 2 * n + 2)
+          true -> o
+        end
     end
   end
 
@@ -272,6 +311,32 @@ defmodule Defk.ScaledFactsTest do
         Defk.Test.assert_agrees(K, fun, [a])
       end
     end
+
+    test "an if giving the accumulator or a new array keeps the fact both arms have" do
+      # len(o) >= 2 * len(a) in one arm, >= 2 * len(a) + 1 in the other: the
+      # value has it with offset 0, as large as assumed
+      refute kernel_c("regrow_if_long") =~ "defk_put_"
+      # an offset below the assumed one in one arm loses it
+      assert kernel_c("regrow_if_short") =~ "defk_put_u8"
+      # arms with different keys share no fact
+      assert kernel_c("regrow_cond_mixed") =~ "defk_put_u8"
+
+      a = "abcdef"
+      spread = for <<b <- a>>, into: <<>>, do: <<b, 0>>
+
+      # k = -2: no arm with a new array is taken (the cond's second arm
+      # tests i == k + 1)
+      for fun <- [:regrow_if_long, :regrow_if_short, :regrow_cond_mixed] do
+        assert apply(K, fun, [a, -2]) == spread
+
+        for k <- [0, 1, 5] do
+          assert {:ok, _} = Defk.Test.assert_agrees(K, fun, [a, k])
+        end
+      end
+
+      # from i == 1 on the accumulator is the longer array
+      assert {:ok, <<_::binary-size(13)>>} = Defk.Test.assert_agrees(K, :regrow_if_long, [a, 1])
+    end
   end
 
   agreement(K, [
@@ -282,6 +347,9 @@ defmodule Defk.ScaledFactsTest do
     :spread2_pair,
     :regrow_short,
     :regrow_long,
+    regrow_if_long: [args: Defk.ScaledFactsTest.bytes_and_index()],
+    regrow_if_short: [args: Defk.ScaledFactsTest.bytes_and_index()],
+    regrow_cond_mixed: [args: Defk.ScaledFactsTest.bytes_and_index()],
     shrink_acc: [args: Defk.ScaledFactsTest.bytes_and_index()],
     decode16: [
       args:
@@ -410,6 +478,52 @@ defmodule Defk.ScaledFactsTest do
 
   property "a dropped overflow check is never wrong" do
     check(all(case <- probe(), max_runs: @runs, do: overflow_sound(case)))
+  end
+
+  # the array is one of two allocs: the compiler cannot know the arm taken,
+  # so a dropped check must hold for either array
+  property "a dropped bounds check on a branch's array is never wrong" do
+    check(all(case <- branch_probe(), max_runs: @runs, do: branch_bounds_sound(case)))
+  end
+
+  defp branch_kernel(size1, size2, last, idx) do
+    body =
+      quote do
+        out = if c == 0, do: alloc(u8, unquote(size1)), else: alloc(u8, unquote(size2))
+
+        for i <- 0..unquote(last)//1 do
+          out[unquote(idx)] = 1
+        end
+
+        out
+      end
+
+    %{head: quote(do: f(a :: [u8], c :: i64) :: [u8]), opts: [], body: body, line: 1}
+  end
+
+  # {size1, size2, last, idx}: the sizes and last are expressions of
+  # length(a) (length(out) is not known before the branch)
+  defp branch_probe do
+    StreamData.tuple({
+      shape(quote(do: length(a)), -3..7),
+      shape(quote(do: length(a)), -3..7),
+      shape(quote(do: length(a)), -7..2),
+      shape(quote(do: i), -3..4)
+    })
+  end
+
+  defp branch_bounds_sound({{s1, s1_v}, {s2, s2_v}, {last, last_v}, {idx, idx_v}}) do
+    if not (c_of(branch_kernel(s1, s2, last, idx)) =~ "defk_put_u8") do
+      for {size, size_v} <- [{s1, s1_v}, {s2, s2_v}],
+          {l, n, k, ops} <- reached(size_v, last_v, idx_v, :a),
+          fits?(ops) do
+        assert List.last(ops) in 0..(n - 1)//1,
+               "out[#{Macro.to_string(idx)}] is unchecked, but for length(a) = #{l}, " <>
+                 "i = #{k} it is #{List.last(ops)}, outside 0..#{n - 1} of the arm " <>
+                 "#{shown(size, last)} (the other arm: alloc(u8, " <>
+                 "#{Macro.to_string(if size == s1, do: s2, else: s1)}))"
+      end
+    end
   end
 
   @tag deep: true, timeout: 600_000

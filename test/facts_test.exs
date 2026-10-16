@@ -288,6 +288,44 @@ defmodule Defk.FactsTest do
     end
   end
 
+  # ------------------------------------------------------ the branch join ----
+
+  property "join_len holds of every arm's length, and keeps what every arm has" do
+    check all(
+            lens <- lens_gen(),
+            name <- member_of(Map.keys(lens)),
+            {a, la} <- arr_gen(lens, "a"),
+            {b, lb} <- arr_gen(lens, "b"),
+            {c, lc} <- arr_gen(lens, name)
+          ) do
+      arms = [a, b, c]
+      j = Facts.join_len(%{c: "v_if_1"}, arms)
+
+      # sound: true of whichever arm is taken
+      for len <- [la, lb, lc], do: assert(len_holds?(j, len, lens))
+
+      # complete: the smallest constant bound when every arm has one, and
+      # every key all arms have, with the smallest offset
+      los = Enum.map(arms, &Facts.len_lo/1)
+      if Enum.all?(los, &is_integer/1), do: assert(Facts.len_lo(j) == Enum.min(los))
+
+      common =
+        arms
+        |> Enum.map(&MapSet.new(Map.keys(Facts.len_lb(&1))))
+        |> Enum.reduce(&MapSet.intersection/2)
+
+      assert MapSet.new(Map.keys(Facts.len_lb(j))) == common
+
+      for key <- common do
+        assert Facts.len_lb(j)[key] == Enum.min(Enum.map(arms, &Facts.len_lb(&1)[key]))
+      end
+
+      # one arm: the arm's own length facts; no arm: none
+      assert Facts.facts(Facts.join_len(%{}, [a])) == Facts.facts(a)
+      assert Facts.join_len(%{c: "x"}, []) == %{c: "x"}
+    end
+  end
+
   # the generators themselves state true facts (the spec's own floor)
   property "generated carriers satisfy their own facts" do
     check all(

@@ -2356,8 +2356,6 @@ defmodule Defk.Compiler do
         Enum.all?(bufs, &Copies.carries?(copies(), &1, b)),
         do: carried(buf, b)
 
-    lens = for v <- vals, do: Facts.len_lo(v)
-
     # every arm `<<>>`: still a bitstring accumulator's start (bits_init/2)
     bits0 = if Enum.all?(vals, &(&1[:bits0] == true)), do: %{bits0: true}, else: %{}
 
@@ -2365,7 +2363,7 @@ defmodule Defk.Compiler do
       buf: buf,
       fin: Enum.all?(vals, &(&1[:fin] == true))
     })
-    |> Facts.assert(len_lo: if(Enum.all?(lens, &is_integer/1), do: Enum.min(lens)))
+    |> Facts.join_len(vals)
     |> Map.merge(bits0)
   end
 
