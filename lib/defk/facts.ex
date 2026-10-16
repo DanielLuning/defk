@@ -181,6 +181,33 @@ defmodule Defk.Facts do
   # the next weaken/1 drops the last length fact
   def weakest?(carrier), do: len_lb(carrier) == %{}
 
+  # ------------------------------------------------------ the branch join --
+  # The value of an if, cond or case that gives one of several arrays
+  # (`arms`) has the length facts every arm's array has: the smallest
+  # constant lower bound, and each relative bound whose key every arm has,
+  # with the smallest offset (each is true of whichever arm is taken). A key
+  # every arm has names an array bound before the branch, since an array
+  # bound inside one arm is unknown to the others, so it is in scope after
+  # the branch; an accumulator keeps such a fact across iterations
+  # (covers?/2) when the branch's value has it with an offset as large.
+  def join_len(carrier, []), do: carrier
+
+  def join_len(carrier, [first | rest]) do
+    lo =
+      Enum.reduce(rest, len_lo(first), fn v, acc ->
+        if is_integer(acc) and is_integer(len_lo(v)), do: min(acc, len_lo(v))
+      end)
+
+    lb =
+      Enum.reduce(
+        rest,
+        len_lb(first),
+        &Map.intersect(&2, len_lb(&1), fn _, x, y -> min(x, y) end)
+      )
+
+    assert(carrier, len_lo: lo, len_lb: lb)
+  end
+
   # --------------------------------------------------------- derivations --
 
   def add_facts(a, b) do
