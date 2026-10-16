@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-10T12:39:36Z",
@@ -16,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "A kernel that returns a bitstring costs ~0.1 us more per call than a scalar kernel",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:07Z"
+  "updated_at": "2026-10-16T20:12:43Z"
 }
