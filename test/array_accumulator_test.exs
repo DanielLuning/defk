@@ -282,7 +282,8 @@ defmodule Defk.ArrayAccumulatorTest do
 
   defp agree(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
 
-  defp copies(c), do: length(String.split(c, "defk_copy_")) - 1
+  # at-once and strip (defk_copy_raw_) copies alike; not defk_copy_strip calls
+  defp copies(c), do: length(Regex.split(~r/defk_copy_(raw_)?\w+\(ctx, /, c)) - 1
 
   @names ~w(Oslo Lima Pune Kyiv Baku Riga Bern Doha Rome Nuuk)
 

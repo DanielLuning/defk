@@ -1156,7 +1156,7 @@ per call.
   element is provably written: `scale` of 1M f64 170 -> 131 us (-23%),
   `encode16` 1 MB 338 -> 297 us (-12%), base64 unchanged.
 - **Conditions:** under load (load average 4-5).
-- **Source:** `defk-ktw` comment 2026-10-10, `defk-i5r` (open), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs). Other whole-buffer copies still have no safepoint (`defk-oed`, open).
+- **Source:** `defk-ktw` comment 2026-10-10, `defk-i5r` (open), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs). The other whole-buffer copies run in strips since `defk-oed` (5.10).
 - **Status:** provisional; the `codecs` 4.6-4.8 ms numbers are superseded by `defk-ktw`.
 
 <!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
@@ -1284,6 +1284,33 @@ question makes several solves, batch it.
 - **Conditions:** load 3-7, three runs on an Apple M4 Pro; Crux 0.1.4, picosat_elixir 0.2.3; formulas are Ash-shaped, P = 1 to 20 policies (5 to 166 variables), best of 3-5 interleaved rounds.
 - **Source:** [`cdcl_sat_per_call.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat_per_call.exs) (tables 1-3 in its output), [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs), `defk-9p6.25`.
 - **Status:** provisional.
+
+### 5.10 Whole-buffer copies outside loops held the scheduler; they now run in strips, and a big bitstring result is handed over
+
+- **Numbers:** worst 1 ms-ticker gap on one scheduler (`bench/tick_gap.exs`
+  style; the floor on this loaded machine was 2.0-2.4 ms, see 1.8). A
+  value-semantics copy of the input before a write: 64 MB 1.2-9.7 ms, 256 MB
+  3.9-94 ms (the 94 ms run was the first, cold pages) -> 1.4-2.5 ms and
+  2.3-4.4 ms with 5 and 14 yields. A misaligned `[i64]` input of 256 MB,
+  copied at entry: 4.0-4.1 ms -> 1.9-2.2 ms. A bitstring accumulator built
+  to 256 MB and returned: 80-89 ms -> 47-72 ms; not returned (`bit_size`
+  only): 38-71 ms, so the copy-out at return was up to ~50 ms and is gone
+  (the buffer is handed over, shrunk to its bytes, above 1 MiB), and what
+  remains is `enif_realloc_binary` doubling the buffer, 64 MB -> 128 MB ->
+  256 MB, each a copy at once: 64 MB 11-17 ms, 8 MB 2.3-2.5 ms. The memset
+  of the grown region is now a strip (1 MiB) at a time, as the appends
+  reach a zeroed mark kept in the buffer's header (the mark's load in the
+  append costs nothing measurable: 450 appends 920-1,000 ns either way);
+  dropping the memset altogether, with an append that masks the word it
+  writes, cost ~1 ns per append (450 appends to 1,330 ns), since appends
+  are a dependent chain through the same word, so it was not kept. Bounding the realloc needs a
+  chunked accumulator; no workload in the catalog builds a bitstring that
+  large in one call. A kernel without a loop copies a misaligned input at
+  once: the prologue's safepoint would make every array-taking kernel pay
+  the yielding machinery (`length(p)`: 15 -> 42 ns per call).
+- **Conditions:** load 4-11 on 12 cores, 3 runs each; provisional.
+- **Source:** `defk-oed`, [`bench/tick_gap.exs`](https://github.com/DanielLuning/defk/blob/main/bench/tick_gap.exs), `test/strip_copies_test.exs`.
+- **Status:** measured, provisional (loaded machine).
 
 ---
 

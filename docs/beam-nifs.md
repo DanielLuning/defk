@@ -116,7 +116,10 @@ that for each array argument (`bind_params/2` in lib/defk/compiler.ex), and
 reads the moved binary rather than the address the previous step held.
 A misaligned input (a sub-binary at an odd offset) is copied once into an
 owned binary and that copy slot is remembered across resumes
-(around `defk_bind` in priv/defk_runtime.h, `F->copy`).
+(around `defk_bind` in priv/defk_runtime.h, `F->copy`); a yielding kernel
+fills that buffer in strips with a safepoint after each (`defk_bind_strip`,
+emitted by the compiler's `bind_strips/1`), re-inspecting the argument each
+strip because a resume may have come between.
 
 The kernel body builds no terms: it computes on off-heap memory in
 `ctx->owned`, and terms are made at the boundary from the current environment
