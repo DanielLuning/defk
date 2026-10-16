@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-10T11:22:24Z",
@@ -16,8 +16,8 @@
     }
   ],
   "priority": 4,
-  "status": "open",
+  "status": "in_progress",
   "title": "Unzeroed alloc: prove full writes for reduce loops, loops plus a tail, and 2-D indices",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:06Z"
+  "updated_at": "2026-10-16T22:20:13Z"
 }
