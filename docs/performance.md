@@ -1414,7 +1414,28 @@ with raising checks if it is set.
 - **In-place accumulate.** `out[r] = out[r] + x[i] * c` keeps per-operation
   float checks, because a strip that writes memory cannot be replayed: a
   dimension-major cosine scan ran ~26 ms against 20 ms for the row-major dot
-  with eight partial sums. (`defk-agp`, open; measured.)
+  with eight partial sums. A strip that saves the slice it writes (the
+  elements from the write's index at its first trip to its last, 16 KB per
+  2048-element strip on the C stack) and puts it back before the replay was
+  built and measured (`defk-agp`): the loops then run flagged and clang
+  vectorises them (width 4, interleave 4), but the copy is 8 bytes per
+  element of extra traffic, so only a compute-bound body wins. Best of 15
+  on main against the slice build, load 5-6: `axpy` (f32 in, f64 out, two
+  float ops) 4096 elements x976 1.99 -> 2.47 ms, 65536 x61 2.80 -> 2.99,
+  1M x4 1.44 -> 1.58, 4M 1.49 -> 1.63; `out[i] = out[i] * s + a[i]` (f64)
+  2.72 -> 3.24, 3.37 -> 3.63, 1.60 -> 1.85, 1.74 -> 1.93; in-place passes
+  `out[i] = out[i] * s + 1.0` 4096 x976 1.04 -> 0.95 (-9%), 65536 1.07 ->
+  1.25, 1M 1.19 -> 1.38; `out[i] = out[i] + b[i] * b[i]` 2.25 -> 3.13
+  (+39%: still not vectorised, "cannot identify array bounds" with two
+  f64 arrays); a cubic update `x * s + x * x * (1.0 - x) * 0.25 + 0.125`
+  (six ops) 2.53 -> 1.61 (-36%), 2.43 -> 1.91 (-21%), 2.63 -> 1.97 (-25%).
+  Not adopted: no unconditional win. `matmul`'s i-k-j loop and the
+  dimension-major cosine scan could not use it anyway: `out[i * p + j]`
+  and `m[base + r]` keep their bounds checks (`defk-pvt`), so the writes
+  are checked puts, not proven stores. A follow-up could adopt the slice
+  only for bodies with four or more flagged float operations per element,
+  or on an explicit per-loop opt-in. (`defk-agp` comment 2026-10-17;
+  measured, provisional.)
 - **Exact mixed comparisons.** `defk_cmp_i64_f64(x, t)` (an exact i64-vs-f64
   compare) is scalar in a loop where `(double)x < t` would vectorise; no
   catalog kernel needs it. (`defk-t11.2` comment 2026-10-08, 6f8a075; measured.)
