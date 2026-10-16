@@ -2363,11 +2363,12 @@ defmodule Defk.Compiler do
       buf: buf,
       fin: Enum.all?(vals, &(&1[:fin] == true))
     })
-    |> Facts.join_len(vals)
+    |> Facts.join(vals)
     |> Map.merge(bits0)
   end
 
-  defp branch_val(tmp, t, _vals), do: val(tmp, t, tmp)
+  # a number keeps the range facts every arm's has (Facts.join/2)
+  defp branch_val(tmp, t, vals), do: Facts.join(val(tmp, t, tmp), vals)
 
   # the code that assigns each of `tmps` (of types `ts`) its element of the
   # value of the arm taken; `node` is the if, cond or case
