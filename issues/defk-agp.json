@@ -19,11 +19,15 @@
     {
       "text": "Built the slice snapshot (sr_slice: every write of the array a proven store at the loop counter or counter + strip-invariant value; the strip saves [idx at first trip, idx at last trip] in a DEFK_STRIP-element stack buffer before it runs and restores it before the replay). axpy and friends then run flagged and clang vectorises them (width 4, interleave 4). Measured best of 15, load 5-6, main vs branch: axpy f32-\u003ef64 4096 x976 1.99 -\u003e 2.47 ms, 65536 2.80 -\u003e 2.99, 1M 1.44 -\u003e 1.58, 4M 1.49 -\u003e 1.63 (+5..24%); axpy2 (f64, 2 passes) 2.72 -\u003e 3.24, 3.37 -\u003e 3.63, 1.60 -\u003e 1.85, 1.74 -\u003e 1.93; in-place passes out[i] = out[i]*s + 1: 4096 1.04 -\u003e 0.95 (-9%), 65536 1.07 -\u003e 1.25, 1M 1.19 -\u003e 1.38; accum out[i] += b[i]*b[i]: 2.25 -\u003e 3.13 (+39%, and clang still does not vectorise it: 'cannot identify array bounds', two double* arrays); cubic out[i] = x*s + x*x*(1-x)*0.25 + 0.125: 4096 2.53 -\u003e 1.61 (-36%), 65536 2.43 -\u003e 1.91 (-21%), 1M 2.63 -\u003e 1.97 (-25%). The 16 KB memcpy per strip is 8 B per element of extra traffic: memory-bound bodies (2 float ops) lose, compute-bound ones (6 ops) win. matmul's i-k-j loop and the dimension-major cosine scan cannot use it anyway: their write/read indices (i*p+j, base+r) keep bounds checks (defk-pvt), so the writes are checked puts, not proven stores. Not adopted: no unconditional win. Code reverted; numbers go to docs/performance.md. Option for a follow-up decision: adopt the slice only when the body has \u003e= 4 flagged float ops per element (cubic yes, axpy/accum no), or an explicit per-loop opt-in.",
       "timestamp": "2026-10-16T22:49:41Z"
+    },
+    {
+      "text": "PR #27 opened (docs record only): https://github.com/DanielLuning/defk/pull/27. The slice snapshot is not adopted; a heuristic (\u003e= 4 float ops per element) or a per-loop opt-in is the owner's call. Ticket stays in progress until the merge.",
+      "timestamp": "2026-10-16T22:52:56Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "In-place accumulate out[r] = out[r] + x[i] * c keeps per-operation float checks, so an axpy loop does not vectorise",
   "type": "task",
-  "updated_at": "2026-10-16T22:49:41Z"
+  "updated_at": "2026-10-16T22:52:56Z"
 }
