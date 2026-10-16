@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-agp"
@@ -18,8 +18,8 @@
     }
   ],
   "priority": 4,
-  "status": "open",
+  "status": "in_progress",
   "title": "Flagged strips: allow an unchecked access whose index is assigned exactly in the strip",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:06Z"
+  "updated_at": "2026-10-16T11:40:30Z"
 }
