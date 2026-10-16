@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-10T11:22:24Z",
@@ -16,8 +16,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Big memcpy/memset at once in the runtime: array copies, misaligned inputs, bitstring growth",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:08Z"
+  "updated_at": "2026-10-16T20:23:12Z"
 }
