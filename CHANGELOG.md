@@ -50,6 +50,13 @@
   `module-attribute`, `read-only-array`, `tuple-return-call`,
   `array-accumulator`, all retired in 0.0.1) under "Retired", each with the
   version and why. `Defk.Errors.entries/0` returns them, marked retired.
+- Faster: an `alloc/2` skips its zeroing in two more shapes where the next
+  loop provably writes every element first: a `for ..., reduce:` whose
+  clause body holds the writes (also as the right side of a match), and
+  nested range loops writing a row-major index `(y * w + x) * ch + c` into
+  an array of `h * w * ch` elements. The fast-path report notes them as
+  before. Results are unchanged: the array was all zeros only where it was
+  not written, and it is written everywhere.
 
 ## 0.1.0
 
