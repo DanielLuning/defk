@@ -288,6 +288,60 @@ defmodule Defk.FactsTest do
     end
   end
 
+  # ------------------------------------------------------ the branch join ----
+
+  property "join holds of every arm's value, and keeps what every arm has" do
+    check all(
+            lens <- lens_gen(),
+            name <- member_of(Map.keys(lens)),
+            {a, la} <- arr_gen(lens, "a"),
+            {b, lb} <- arr_gen(lens, "b"),
+            {c, lc} <- arr_gen(lens, name),
+            {x, xv} <- int_gen(lens),
+            {y, yv} <- int_gen(lens),
+            {z, zv} <- int_gen(lens)
+          ) do
+      # arrays: sound for whichever arm is taken, and complete
+      arrs = [a, b, c]
+      ja = Facts.join(%{c: "v_if_1"}, arrs)
+      for len <- [la, lb, lc], do: assert(len_holds?(ja, len, lens))
+      assert Facts.len_lo(ja) == loosest(arrs, &Facts.len_lo/1, &min/2)
+      assert Facts.len_lb(ja) == common(arrs, &Facts.len_lb/1, &min/2)
+
+      # numbers: the same for lo/hi and lb/ub
+      ints = [x, y, z]
+      ji = Facts.join(%{c: "v_if_2"}, ints)
+      for v <- [xv, yv, zv], do: assert(holds?(ji, v, lens))
+      assert Facts.lo(ji) == loosest(ints, &Facts.lo/1, &min/2)
+      assert Facts.hi(ji) == loosest(ints, &Facts.hi/1, &max/2)
+      assert Facts.lb(ji) == common(ints, &Facts.lb/1, &min/2)
+      assert Facts.ub(ji) == common(ints, &Facts.ub/1, &max/2)
+
+      # one arm: its own facts; no arm: none
+      assert Facts.facts(Facts.join(%{}, [x])) == Facts.facts(x)
+      assert Facts.facts(Facts.join(%{}, [a])) == Facts.facts(a)
+      assert Facts.join(%{c: "x"}, []) == %{c: "x"}
+    end
+  end
+
+  # the spec's own join: the loosest constant bound when every arm has one
+  defp loosest(arms, get, pick) do
+    bounds = Enum.map(arms, get)
+    if Enum.all?(bounds, &is_integer/1), do: Enum.reduce(bounds, pick)
+  end
+
+  # ... and each key every arm has, at its loosest offset
+  defp common(arms, get, pick) do
+    keys =
+      arms
+      |> Enum.map(&MapSet.new(Map.keys(get.(&1))))
+      |> Enum.reduce(&MapSet.intersection/2)
+
+    for key <- keys, into: %{} do
+      {key, arms |> Enum.map(&get.(&1)[key]) |> Enum.reduce(pick)}
+    end
+  end
+
   # the generators themselves state true facts (the spec's own floor)
   property "generated carriers satisfy their own facts" do
     check all(

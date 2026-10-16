@@ -2356,8 +2356,6 @@ defmodule Defk.Compiler do
         Enum.all?(bufs, &Copies.carries?(copies(), &1, b)),
         do: carried(buf, b)
 
-    lens = for v <- vals, do: Facts.len_lo(v)
-
     # every arm `<<>>`: still a bitstring accumulator's start (bits_init/2)
     bits0 = if Enum.all?(vals, &(&1[:bits0] == true)), do: %{bits0: true}, else: %{}
 
@@ -2365,11 +2363,12 @@ defmodule Defk.Compiler do
       buf: buf,
       fin: Enum.all?(vals, &(&1[:fin] == true))
     })
-    |> Facts.assert(len_lo: if(Enum.all?(lens, &is_integer/1), do: Enum.min(lens)))
+    |> Facts.join(vals)
     |> Map.merge(bits0)
   end
 
-  defp branch_val(tmp, t, _vals), do: val(tmp, t, tmp)
+  # a number keeps the range facts every arm's has (Facts.join/2)
+  defp branch_val(tmp, t, vals), do: Facts.join(val(tmp, t, tmp), vals)
 
   # the code that assigns each of `tmps` (of types `ts`) its element of the
   # value of the arm taken; `node` is the if, cond or case
