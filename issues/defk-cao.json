@@ -17,11 +17,15 @@
     {
       "text": "Profiled with bench/bits_call_cost.exs (per call, best of 15 over 100k calls, load 4-5): scalar 15 ns, empty bitstring 27 ns, one-byte bitstring 125 ns, alloc(u8,1) returned 105 ns. The cost is the owned-buffer machinery, not the bitstring: ~50 ns is the enif_realloc + enif_free of the ctx-\u003eowned table. Fix: the first 4 slots live in the frame (DEFK_OWNED_INLINE), the heap table starts at the fifth buffer, defk_promote re-points the table when the frame moves. After: one-byte bitstring 60-70 ns, alloc(u8,1) 58-62 ns; gorilla_encode 2.206 -\u003e 2.06 ms (provisional). Not adopted: a 256-byte initial accumulator (mixed, within noise). Test added in test/owned_budget_test.exs (table growth with and without a yield). Full suite green; mix ci running.",
       "timestamp": "2026-10-16T20:21:44Z"
+    },
+    {
+      "text": "PR #24 opened: https://github.com/DanielLuning/defk/pull/24. Ticket stays in progress until the owner merges.",
+      "timestamp": "2026-10-16T20:22:50Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "A kernel that returns a bitstring costs ~0.1 us more per call than a scalar kernel",
   "type": "task",
-  "updated_at": "2026-10-16T20:21:44Z"
+  "updated_at": "2026-10-16T20:22:50Z"
 }
