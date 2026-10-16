@@ -169,6 +169,55 @@ defmodule Defk.ScaledFactsTest.K do
     end
   end
 
+  # The value of an if, cond or case that gives a number keeps the range
+  # facts every arm's value has: an index that is one of two in-range
+  # expressions needs no bounds check, a constant from a case no overflow
+  # check on its product, also inside a tuple.
+  defk pick_next(a :: [u8]) :: i64 do
+    n = length(a)
+
+    for i <- 0..(n - 2)//1, reduce: 0 do
+      s ->
+        j = if a[i] > 3, do: i, else: i + 1
+        bor(s, a[j])
+    end
+  end
+
+  defk small_case(a :: [u8]) :: i64 do
+    for i <- 0..(length(a) - 1)//1, reduce: 0 do
+      s ->
+        k =
+          case a[i] do
+            0 -> 1
+            1 -> 2
+            _ -> 3
+          end
+
+        bor(s, k * 1000)
+    end
+  end
+
+  defk pick_pair(a :: [u8]) :: i64 do
+    n = length(a)
+
+    for i <- 0..(n - 2)//1, reduce: 0 do
+      s ->
+        {j, k} = if a[i] > 3, do: {i, 1}, else: {i + 1, 2}
+        bor(s, a[j] * k)
+    end
+  end
+
+  # an arm that may be past the end brings the check back
+  defk pick_past(a :: [u8]) :: i64 do
+    n = length(a)
+
+    for i <- 0..(n - 2)//1, reduce: 0 do
+      s ->
+        j = if a[i] > 3, do: i, else: i + 2
+        bor(s, a[j])
+    end
+  end
+
   # every other element, from a quotient of the length
   defk evens(a :: [i64]) :: [i64] do
     h = div(length(a) + 1, 2)
@@ -339,8 +388,40 @@ defmodule Defk.ScaledFactsTest do
     end
   end
 
+  describe "the value of a branch" do
+    test "an index from either of two in-range expressions keeps no bounds check" do
+      refute kernel_c("pick_next") =~ "defk_get_"
+      refute kernel_c("pick_pair") =~ "defk_get_"
+      refute kernel_c("pick_pair") =~ "defk_mul_i64"
+      # i + 2 may be length(a): the check stays and raises
+      assert kernel_c("pick_past") =~ "defk_get_u8"
+
+      for a <- [<<>>, <<9>>, <<9, 1>>, <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9>>] do
+        assert {:ok, _} = Defk.Test.assert_agrees(K, :pick_next, [a])
+        assert {:ok, _} = Defk.Test.assert_agrees(K, :pick_pair, [a])
+      end
+
+      assert {:raise, %Enum.OutOfBoundsError{}} =
+               Defk.Test.assert_agrees(K, :pick_past, [<<0, 0>>])
+
+      assert {:ok, _} = Defk.Test.assert_agrees(K, :pick_past, [<<9, 9, 0>>])
+    end
+
+    test "a constant from a case keeps no overflow check on its product" do
+      refute kernel_c("small_case") =~ "defk_mul_i64"
+
+      for a <- [<<>>, <<0, 1, 2, 7>>] do
+        assert {:ok, _} = Defk.Test.assert_agrees(K, :small_case, [a])
+      end
+    end
+  end
+
   agreement(K, [
     :encode16,
+    :pick_next,
+    :pick_pair,
+    :pick_past,
+    :small_case,
     :spread3,
     :evens,
     :spread2_acc,
@@ -484,6 +565,53 @@ defmodule Defk.ScaledFactsTest do
   # so a dropped check must hold for either array
   property "a dropped bounds check on a branch's array is never wrong" do
     check(all(case <- branch_probe(), max_runs: @runs, do: branch_bounds_sound(case)))
+  end
+
+  # the index is one of two expressions of i (a select): a dropped check
+  # must hold for either
+  property "a dropped bounds check on a branch's index is never wrong" do
+    check(all(case <- index_branch_probe(), max_runs: @runs, do: index_branch_sound(case)))
+  end
+
+  defp index_branch_kernel(size, last, idx1, idx2) do
+    body =
+      quote do
+        out = alloc(u8, unquote(size))
+
+        for i <- 0..unquote(last)//1 do
+          j = if c == 0, do: unquote(idx1), else: unquote(idx2)
+          out[j] = 1
+        end
+
+        out
+      end
+
+    %{head: quote(do: f(a :: [u8], c :: i64) :: [u8]), opts: [], body: body, line: 1}
+  end
+
+  defp index_branch_probe do
+    StreamData.tuple({
+      shape(quote(do: length(a)), -3..7),
+      shape(quote(do: length(a)), -7..2),
+      shape(quote(do: i), -3..4),
+      shape(quote(do: i), -3..4)
+    })
+  end
+
+  defp index_branch_sound({{size, size_v}, {last, last_v}, {i1, i1_v}, {i2, i2_v}}) do
+    if not (c_of(index_branch_kernel(size, last, i1, i2)) =~ "defk_put_u8") do
+      # an arm whose arithmetic overflows raises when taken (the select
+      # replays it with the checks), so only the fitting ones index
+      for {idx, idx_v} <- [{i1, i1_v}, {i2, i2_v}],
+          {l, n, k, ops} <- reached(size_v, last_v, idx_v, :a),
+          fits?(ops) do
+        assert List.last(ops) in 0..(n - 1)//1,
+               "out[j] with j = if c == 0, do: #{Macro.to_string(i1)}, else: " <>
+                 "#{Macro.to_string(i2)} is unchecked, but for length(a) = #{l}, i = #{k} " <>
+                 "the arm #{Macro.to_string(idx)} is #{List.last(ops)}, outside 0..#{n - 1} " <>
+                 "(#{shown(size, last)})"
+      end
+    end
   end
 
   defp branch_kernel(size1, size2, last, idx) do

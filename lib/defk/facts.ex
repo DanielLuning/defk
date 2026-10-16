@@ -182,30 +182,42 @@ defmodule Defk.Facts do
   def weakest?(carrier), do: len_lb(carrier) == %{}
 
   # ------------------------------------------------------ the branch join --
-  # The value of an if, cond or case that gives one of several arrays
-  # (`arms`) has the length facts every arm's array has: the smallest
-  # constant lower bound, and each relative bound whose key every arm has,
-  # with the smallest offset (each is true of whichever arm is taken). A key
-  # every arm has names an array bound before the branch, since an array
-  # bound inside one arm is unknown to the others, so it is in scope after
-  # the branch; an accumulator keeps such a fact across iterations
-  # (covers?/2) when the branch's value has it with an offset as large.
-  def join_len(carrier, []), do: carrier
+  # The value of an if, cond or case whose arms give `arms` has the facts
+  # every arm's value has, each true of whichever arm is taken: the loosest
+  # constant bounds (the smallest lo and len_lo, the largest hi) when every
+  # arm has one, and each relative bound whose key every arm has, at its
+  # loosest offset (the smallest for lb and len_lb, the largest for ub). A
+  # key every arm has names an array bound before the branch, since an
+  # array bound inside one arm is unknown to the others, so it is in scope
+  # after the branch; an accumulator keeps such a length fact across
+  # iterations (covers?/2) when the branch's value has it with an offset as
+  # large.
+  def join(carrier, []), do: carrier
 
-  def join_len(carrier, [first | rest]) do
-    lo =
-      Enum.reduce(rest, len_lo(first), fn v, acc ->
-        if is_integer(acc) and is_integer(len_lo(v)), do: min(acc, len_lo(v))
-      end)
+  def join(carrier, arms) do
+    fs = Enum.map(arms, &facts/1)
 
-    lb =
-      Enum.reduce(
-        rest,
-        len_lb(first),
-        &Map.intersect(&2, len_lb(&1), fn _, x, y -> min(x, y) end)
-      )
+    put(carrier, %__MODULE__{
+      lo: joined(fs, & &1.lo, &min/2),
+      hi: joined(fs, & &1.hi, &max/2),
+      lb: common(fs, & &1.lb, &min/2),
+      ub: common(fs, & &1.ub, &max/2),
+      len_lo: joined(fs, & &1.len_lo, &min/2),
+      len_lb: common(fs, & &1.len_lb, &min/2)
+    })
+  end
 
-    assert(carrier, len_lo: lo, len_lb: lb)
+  # the constant bound every arm has, at its loosest; nil when one lacks it
+  defp joined(fs, get, loosest) do
+    bounds = Enum.map(fs, get)
+    if Enum.all?(bounds, &is_integer/1), do: Enum.reduce(bounds, loosest)
+  end
+
+  # the relative bounds whose key every arm has, each at its loosest offset
+  defp common(fs, get, loosest) do
+    fs
+    |> Enum.map(get)
+    |> Enum.reduce(&Map.intersect(&2, &1, fn _, x, y -> loosest.(x, y) end))
   end
 
   # --------------------------------------------------------- derivations --
