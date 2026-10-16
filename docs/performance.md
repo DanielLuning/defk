@@ -821,9 +821,22 @@ defp key(k, n), do: key(<<k::binary, k::binary>>, n)
   lists 333 ms; defk 13.4 ms). `Nx.fft` on `BinaryBackend` 9719 ms at 2^20
   (best Elixir 2032-2326 ms). Cosine top-k at 100k: `BinaryBackend` 14.3-15 s;
   Nx + EXLA 0.13.1 1.0-1.22 ms, 6-8x faster than defk's 7.2-9.6 ms.
-- **Conditions:** matmul and fft load not recorded; cosine under load.
-- **Source:** [`matmul.exs`](https://github.com/DanielLuning/defk/blob/main/examples/matmul.exs), [`fft.exs`](https://github.com/DanielLuning/defk/blob/main/examples/fft.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), `defk-9p6.3`, `defk-9p6.13`, [`nx-boundary.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nx-boundary.md).
-- **Status:** measured (matmul, fft); provisional (cosine). EXLA matmul not measured yet (`defk-7tk`).
+  Matmul with Nx + EXLA 0.13.1 (CPU client), `Nx.dot` jitted, end to end
+  from packed f64 binaries (copies into XLA buffers and the result copy
+  inside the timing): 64x64 0.77 ms (defk 0.21 ms, defk 3.7x faster),
+  256x256 2.1-2.2 ms (defk 13.1-15.5 ms, EXLA 6x), 512 2.9 ms (defk 106 ms,
+  37x), 1024 7.7 ms (defk 833 ms, 108x; ~280 GFLOP/s against defk's ~2.6).
+  With both operands resident on `EXLA.Backend`: 0.09 ms at 64 and 0.28 ms
+  at 256 (50x defk). XLA's per-shape compile on the first call: 26-40 ms at
+  64x64 including the client start, ~5 ms at 256x256; not in any timed run.
+  Lesson: EXLA's dispatch and buffer copies are ~0.7 ms, so a product under
+  ~100x100 from binaries is the one size where defk's loop is faster; above
+  it the multithreaded GEMM wins by the size.
+- **Conditions:** matmul (Elixir, defk) and fft load not recorded; matmul
+  EXLA rows 2026-10-15 under load (load average ~3.3 on 12 cores, one
+  unrelated BEAM at 100% of a core); cosine under load.
+- **Source:** [`matmul.exs`](https://github.com/DanielLuning/defk/blob/main/examples/matmul.exs), [`fft.exs`](https://github.com/DanielLuning/defk/blob/main/examples/fft.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), `defk-9p6.3`, `defk-9p6.13`, `defk-7tk`, [`nx-boundary.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nx-boundary.md).
+- **Status:** measured (matmul Elixir and defk, fft); provisional (matmul EXLA rows, cosine).
 
 ### 3.9 `:crypto` has BLAKE2b; a from-scratch kernel only ties it
 
@@ -2441,8 +2454,7 @@ output array would).
   per spin than one process on 12 (185 vs 109 ns, `monte_carlo_rtp`); why
   Gorilla's middle block sizes gain most; parallel Elixir sorting
   (`sort_u64_keys`); 64-bit hashes in 16-bit limbs in Elixir (`hashes`);
-  EXLA for matmul
-  (`defk-7tk`); libvips for the image jobs; x86-64 timings at the target
+  libvips for the image jobs; x86-64 timings at the target
   levels (`defk-ulk.1`, remarks only so far); Linux on a quiet machine with
   more than 2 cores (every number here is macOS on arm64, except 6.31: one
   run on a 2-vCPU Linux x86-64 runner).
