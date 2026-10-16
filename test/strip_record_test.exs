@@ -170,9 +170,88 @@ defmodule Defk.StripRecordTest do
       assert %{joined: true} = classify(joined_text(), joined_rows("v_i_0"))
     end
 
-    test "an index naming a value the strip assigns is not" do
+    test "an index naming a value the strip assigns through a checked helper is not" do
       with_types(joined_types())
       assert classify(joined_text(), joined_rows("v_j_9")) == nil
+    end
+
+    # a value the strip assigns once, unconditionally, from fixed values
+    # with no checked helper is exact in a flagged run too
+    defp fixed_rows(assigns, idx) do
+      base_rows() ++
+        rows(
+          Enum.map(assigns, fn {v, rhs} -> %{k: :assign, var: v, rhs: rhs} end) ++
+            [%{k: :access, access: :index, arr: "p_a", idx: idx, support: ["p_a"]}]
+        )
+    end
+
+    test "an index assigned in the strip from the loop counter by proven arithmetic is fixed" do
+      with_types(joined_types())
+      rs = fixed_rows([{"v_j_9", "(v_i_0 + INT64_C(1))"}], "v_j_9")
+      assert %{joined: true} = classify(joined_text(), rs)
+    end
+
+    test "through another fixed value too" do
+      with_types(joined_types() ++ [{"v_k_10", "int64_t"}])
+
+      rs =
+        fixed_rows(
+          [{"v_j_9", "(v_i_0 * INT64_C(2))"}, {"v_k_10", "(v_j_9 - INT64_C(1))"}],
+          "v_k_10"
+        )
+
+      assert %{joined: true} = classify(joined_text(), rs)
+    end
+
+    test "an index assigned from an array read is not" do
+      with_types(joined_types())
+      rs = fixed_rows([{"v_j_9", "(p_a).data[v_i_0]"}], "v_j_9")
+      assert classify(joined_text(), rs) == nil
+    end
+
+    test "an index assigned from a value that can overflow under the flag is not" do
+      with_types(joined_types() ++ [{"v_k_10", "int64_t"}])
+
+      rs =
+        fixed_rows(
+          [
+            {"v_k_10", "defk_mul_i64(ctx, v_i_0, INT64_C(3))"},
+            {"v_j_9", "(v_k_10 & INT64_C(7))"}
+          ],
+          "v_j_9"
+        )
+
+      assert classify(joined_text(), rs) == nil
+    end
+
+    test "an index assigned from a non-fixed helper, conditionally, twice or from itself is not" do
+      with_types(joined_types())
+
+      for assigns <- [
+            [{"v_j_9", "defk_div_i64(ctx, v_i_0, INT64_C(2))"}],
+            [{"v_j_9", "(v_j_9 + INT64_C(1))"}],
+            [{"v_j_9", "(v_i_0 + INT64_C(1))"}, {"v_j_9", "(v_i_0 + INT64_C(2))"}]
+          ] do
+        assert classify(joined_text(), fixed_rows(assigns, "v_j_9")) == nil
+      end
+
+      conditional =
+        base_rows() ++
+          rows([
+            %{k: :assign, var: "v_j_9", rhs: "(v_i_0 + INT64_C(1))", cond: true},
+            %{k: :access, access: :index, arr: "p_a", idx: "v_j_9", support: ["p_a"]}
+          ])
+
+      assert classify(joined_text(), conditional) == nil
+
+      in_arm =
+        base_rows() ++
+          rows([
+            %{k: :assign, var: "v_j_9", rhs: "(v_i_0 + INT64_C(1))", path: [{make_ref(), 0}]},
+            %{k: :access, access: :index, arr: "p_a", idx: "v_j_9", support: ["p_a"]}
+          ])
+
+      assert classify(joined_text(), in_arm) == nil
     end
 
     test "a word load's pointer form is never fixed" do

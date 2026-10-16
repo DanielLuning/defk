@@ -1488,9 +1488,13 @@ static inline double defk_nf_r(int *nf, double r) {
  * index) or (zero/sink, 0), never formed from an index out of bounds, and
  * there is no branch. Every other access in such a strip is an unchecked
  * a.data[i] whose index the compiler proved in range from values the flagged
- * run computes exactly (flag_strip/3 in the compiler: only the loop counter
- * and values not assigned in the strip), so a wrong value from a failed
- * operation never reaches an address. Writes to in-range elements after the
+ * run computes exactly (flag_strip/3 in the compiler): the loop counter,
+ * values not assigned in the strip, and values the strip assigns once,
+ * unconditionally, from those alone through arithmetic the compiler proved
+ * cannot fail (no checked helper, so no flagged form is involved and the
+ * value is the same whether or not an earlier check failed). So a wrong
+ * value from a failed operation never reaches an address. Writes to in-range
+ * elements after the
  * failure are redone by the replay up to the raise, and the array is never
  * returned once the kernel raises.
  */
