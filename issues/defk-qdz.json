@@ -19,11 +19,15 @@
     {
       "text": "Started stacked on defk-u1u's branch (PR #28 open). Worktree ../defk-qdz, branch defk-qdz/linear-facts. PR #28 merges first.",
       "timestamp": "2026-10-17T13:43:42Z"
+    },
+    {
+      "text": "PR #29 (stacked on #28; merge #28 first). pic and siy loop 1 check-free, base + i unchecked; soundness properties in test/linear_facts_test.exs; ASan suite 0 reports; compiler time +4.6% (provisional, docs/performance.md 6.33). Close defk-pic after the merge.",
+      "timestamp": "2026-10-17T15:30:29Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Symbolic bounds: linear facts from arithmetic, min/max, ranges and alloc lengths",
   "type": "task",
-  "updated_at": "2026-10-17T13:43:42Z"
+  "updated_at": "2026-10-17T15:30:29Z"
 }
