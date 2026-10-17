@@ -104,20 +104,16 @@ defmodule Defk.LinearFactsTest do
   use ExUnit.Case, async: true
   use Defk.Properties
 
-  import Defk.TestKit, only: [kernel_c: 2]
+  import Defk.TestKit, only: [kernel_c: 2, bounds_check_free?: 2]
 
   alias Defk.LinearFactsTest.K
-
-  # an element access with its bounds check (not defk_get_i64_arg, the
-  # argument read)
-  @access_check ~r/defk_(put|get)_[a-z0-9]+\(ctx/
 
   # lengths are below 2^61 (DEFK_ALLOC_MAX_BYTES, and the largest binary)
   @len_max 2 ** 61 - 1
   @i64_min -0x8000000000000000
   @i64_max 0x7FFFFFFFFFFFFFFF
 
-  defp check_free?(name), do: not (kernel_c(K, name) =~ @access_check)
+  defp check_free?(name), do: bounds_check_free?(K, name)
 
   defp agrees(fun, args),
     do: Defk.Test.assert_agrees(K, fun, args, forced_yields: true)

@@ -29,12 +29,16 @@
 # Alphabets and 256-byte decode tables are module attributes;
 # @b64[band(x, 63)] indexes a 64-byte attribute without a bounds check.
 #
-# Bad input raises ArgumentError, as Base.decode64! does: a kernel has no
-# `raise`, so each decoder ORs every table value it reads (255 for a byte
-# outside the alphabet) into an accumulator and, after the loop, takes
-# alloc(u8, -1) when it is out of range ("alloc/2: negative length -1"); a
-# length that is not a multiple of 4 (base64) or 2 (hex) takes the same
-# negative alloc before the loop. base58 checks once per string.
+# Bad input raises ArgumentError, as Base.decode64! does: each decoder ORs
+# every table value it reads (255 for a byte outside the alphabet) into an
+# accumulator and tests it after the loop; a length that is not a multiple
+# of 4 (base64) or 2 (hex) fails before the loop. decode16 raises with a
+# raising guard (`if c, do: raise ...`, the way docs/language.md
+# recommends); decode64 and base58 were written before kernels had `raise`
+# and still take alloc(u8, -1) ("alloc/2: negative length -1"). base58
+# checks once per string. Rewriting decode16 changed no check: the report
+# shows the same 5 bounds checks dropped and none kept before and after
+# (the guards leave no fact its loop needs), and its two dummy allocs went.
 #
 # Elixir baselines (optimised; every variant is timed in the run, and the
 # fastest per direction is the baseline):
@@ -227,10 +231,10 @@ defmodule Codecs.Source do
       end
 
       # Mixed case in, as :binary.decode_hex. An odd length raises at once, a
-      # byte outside the alphabet after the loop (both a negative alloc).
+      # byte outside the alphabet after the loop (both raising guards).
       defk decode16(s :: [u8]) :: [u8] do
         n = length(s)
-        _ = alloc(u8, if(rem(n, 2) == 0, do: 0, else: -1))
+        if rem(n, 2) != 0, do: raise(ArgumentError, "odd-length string")
         m = div(n, 2)
         out = alloc(u8, m)
 
@@ -243,7 +247,7 @@ defmodule Codecs.Source do
               bor(bad, bor(hi, lo))
           end
 
-        _ = alloc(u8, if(bad < 16, do: 0, else: -1))
+        if bad >= 16, do: raise(ArgumentError, "non-alphabet character")
         out
       end
 
