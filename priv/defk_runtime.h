@@ -89,6 +89,9 @@ typedef struct { float *data; int64_t len; } defk_arr_f32;
 #endif
 #define DEFK_LAYOUT_TAG ((uint64_t)(DEFK_HEADER_HASH) ^ ((uint64_t)sizeof(defk_ctx) * 0x9E3779B97F4A7C15ULL))
 
+/* owned-binary slots held in the frame itself (see defk_ctx.owned_inline) */
+#define DEFK_OWNED_INLINE 4
+
 typedef struct {
   uint64_t layout_tag; /* DEFK_LAYOUT_TAG, set when the frame becomes a resource; keep first */
   uint64_t frame_size; /* sizeof the kernel's frame struct, likewise; keep second */
@@ -107,6 +110,10 @@ typedef struct {
      time have run (0: no limit), then DEFK_SLICE_US; see defk_slice_init */
   int64_t slice_us;
   int64_t short_left;
+  /* the first slots of `owned`, so a call with a few buffers (one output, a
+     bitstring accumulator, an aligned copy) allocates no table: the table's
+     enif_realloc and enif_free were ~40% of a one-buffer call's cost */
+  ErlNifBinary owned_inline[DEFK_OWNED_INLINE];
 } defk_ctx;
 
 static ErlNifResourceType *defk_frame_rt;
@@ -211,7 +218,7 @@ defk_no_fun_clause(defk_ctx *ctx, const char *mod_fun, size_t mod_len, int64_t a
 static void defk_release_owned(defk_ctx *ctx) {
   for (int i = 0; i < ctx->nowned; i++)
     if (ctx->owned[i].data) enif_release_binary(&ctx->owned[i]);
-  if (ctx->owned) enif_free(ctx->owned);
+  if (ctx->owned && ctx->owned != ctx->owned_inline) enif_free(ctx->owned);
   ctx->owned = NULL;
   ctx->nowned = ctx->cap = 0;
 }
@@ -329,14 +336,27 @@ static void defk_poison_slack(const ErlNifBinary *b) {
 static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
   defk_owned_check(ctx, bytes);
   if (ctx->nowned == ctx->cap) {
-    /* one slot per alloc/2 call, so a loop can grow the table without bound:
-       a failed grow raises and keeps the old table, whose binaries are freed */
-    if (ctx->cap > INT_MAX / 2) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
-    int ncap = ctx->cap ? ctx->cap * 2 : 4;
-    ErlNifBinary *grown = enif_realloc(ctx->owned, sizeof(ErlNifBinary) * (size_t)ncap);
-    if (!grown) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
-    ctx->owned = grown;
-    ctx->cap = ncap;
+    if (!ctx->owned) {
+      /* the first buffers go in the frame's own slots */
+      ctx->owned = ctx->owned_inline;
+      ctx->cap = DEFK_OWNED_INLINE;
+    } else {
+      /* one slot per alloc/2 call, so a loop can grow the table without bound:
+         a failed grow raises and keeps the old table, whose binaries are freed */
+      if (ctx->cap > INT_MAX / 2) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
+      int ncap = ctx->cap * 2;
+      size_t nbytes = sizeof(ErlNifBinary) * (size_t)ncap;
+      ErlNifBinary *grown;
+      if (ctx->owned == ctx->owned_inline) {
+        grown = enif_alloc(nbytes);
+        if (grown) memcpy(grown, ctx->owned_inline, sizeof ctx->owned_inline);
+      } else {
+        grown = enif_realloc(ctx->owned, nbytes);
+      }
+      if (!grown) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
+      ctx->owned = grown;
+      ctx->cap = ncap;
+    }
   }
   ErlNifBinary *b = &ctx->owned[ctx->nowned];
   if (!enif_alloc_binary(bytes, b))
@@ -2408,6 +2428,9 @@ static void defk_unload(ErlNifEnv *env, void *priv) {
 static void *defk_promote(ErlNifEnv *env, void *stack_frame, size_t size, ERL_NIF_TERM *term) {
   void *res = enif_alloc_resource(defk_frame_rt, size);
   memcpy(res, stack_frame, size);
+  /* the owned table, when it is the frame's own slots, moved with the frame */
+  if (((defk_ctx *)res)->owned == ((defk_ctx *)stack_frame)->owned_inline)
+    ((defk_ctx *)res)->owned = ((defk_ctx *)res)->owned_inline;
   ((defk_ctx *)res)->is_resource = 1;
   ((defk_ctx *)res)->layout_tag = DEFK_LAYOUT_TAG ^ (uint64_t)atomic_load(&defk_corrupt_tags);
   ((defk_ctx *)res)->frame_size = size;

@@ -60,6 +60,11 @@
   `yield: false` copies at once, as before, and so does a kernel without a
   loop. Growing an accumulator past tens of MB still reallocates it at once
   (64 MB: 10-17 ms); a chunked accumulator would need a design.
+- Faster: a call that allocates (an `alloc/2` result, a bitstring
+  accumulator, a copy) no longer allocates and frees a table for its owned
+  buffers; the first four slots live in the call's frame. A one-buffer call
+  costs about half of what it did (a one-byte bitstring result 125 ns to
+  60-70 ns, under load). Results and the runtime contract are unchanged.
 
 ## 0.1.0
 

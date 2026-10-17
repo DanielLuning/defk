@@ -73,6 +73,23 @@ defmodule Defk.OwnedBudgetTest.Default do
         acc + a[0]
     end
   end
+
+  # five buffers in straight-line code: one more than the frame's own
+  # owned slots (DEFK_OWNED_INLINE), so the table moves to the heap with
+  # no safepoint in between
+  defk five_allocs(k :: i64) :: i64 do
+    a = alloc(i64, k)
+    b = alloc(i64, k)
+    c = alloc(i64, k)
+    d = alloc(i64, k)
+    e = alloc(i64, k)
+    a[0] = 1
+    b[0] = 2
+    c[0] = 3
+    d[0] = 4
+    e[0] = 5
+    a[0] + b[0] + c[0] + d[0] + e[0]
+  end
 end
 
 defmodule Defk.OwnedBudgetTest do
@@ -188,6 +205,32 @@ defmodule Defk.OwnedBudgetTest do
     end)
 
     assert_frames_live(K)
+  end
+
+  # the owned table starts in the frame (four slots) and moves to the heap
+  # at the fifth buffer: in straight-line code, and after the frame became a
+  # resource on a yield, where the table pointer must follow the frame
+  test "the owned table outgrows the frame's own slots, with and without a yield" do
+    assert Default.five_allocs(16) == 15
+
+    forced(Default, fn ->
+      # 1.6 MB buffers: each one's zeroing in strips yields, so the frame is
+      # a resource before the second buffer, and the fifth buffer moves the
+      # table while the frame is one
+      for n <- [1, 4, 5, 9] do
+        {res, count} = yields(Default, fn -> Default.alloc_loop(n, 200_000) end)
+        assert res == Enum.sum(0..(n - 1)), "alloc_loop(#{n})"
+        assert count >= n, "alloc_loop(#{n}) yielded #{count} times"
+      end
+
+      # small buffers: the loop's own safepoints yield
+      {res, count} = yields(Default, fn -> Default.alloc_loop(100, 128) end)
+      assert res == Enum.sum(0..99)
+      assert count > 0
+      assert Default.five_allocs(16) == 15
+    end)
+
+    assert_frames_live(Default)
   end
 
   test "concurrent calls each have their own count" do

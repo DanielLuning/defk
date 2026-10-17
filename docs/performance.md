@@ -1064,14 +1064,30 @@ Clamp.Kernels.clamp_all(packed)
 Enum.map(readings, &Clamp.Kernels.clamp(&1, -10.0, 90.0))
 ```
 
-### 5.2 A kernel that returns a bitstring costs ~0.1 us more per call than a scalar one
+### 5.2 A call that allocates paid ~50 ns for its owned-buffer table; the first slots now live in the frame
 
-- **Numbers:** returning `length(p)` as an `i64` 0.015-0.04 us per call; the
-  same as a one-byte bitstring 0.12-0.17 us. ~5% of a 2.1 us Gorilla block
-  encode. Suspect (not profiled): the owned buffer doubling from 64 bytes.
-- **Conditions:** best of 15 over 10k calls, under load.
-- **Source:** `defk-cao` (open), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs).
-- **Status:** provisional.
+- **Numbers:** per call, best of 15 over 100k calls. Returning `length(p)`
+  as an `i64`: 15 ns. The same as a one-byte bitstring: 125 ns before, 60-70
+  ns after. `alloc(u8, 1)` returned as `[u8]`: 105 ns before, 58-62 ns
+  after. So the extra cost was not the bitstring but the owned-buffer
+  machinery every allocating call pays, and ~50 ns of it was the
+  `enif_realloc` and `enif_free` of the table that lists a call's owned
+  binaries. The table's first four slots are now in the kernel's frame, and
+  the heap table is allocated only by a call's fifth buffer. What remains of
+  a one-buffer call (~45 ns over a scalar call): the `enif_alloc_binary` and
+  its release or transfer, plus 12 ns for a bitstring result's tuple and
+  the wrapper's sub-binary match (an empty bitstring result: 27 ns).
+  Appends are cheap: 57 one-byte appends 190-210 ns per call, 450 appends
+  650-710 ns (~1.4 ns each, growth included).
+  Not adopted: starting the accumulator at 256 bytes instead of 64. 57
+  appends 174-182 ns (-10%), but 450 appends 708-745 ns (no gain) and the
+  one-byte result +3-5 ns; within noise either way.
+  `gorilla_encode` (1,000 calls of 100-point blocks): defk 2.206 ms to
+  2.06 ms (2.05x to 2.23x), the 100-point sweep row 19.2 ms to 16.5 ms.
+- **Conditions:** load 4-5 on 12 cores, before/after runs interleaved by
+  rebuilding; provisional.
+- **Source:** `defk-cao`, [`bench/bits_call_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/bits_call_cost.exs), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs).
+- **Status:** measured, provisional (loaded machine).
 
 ### 5.3 Packing a list often costs more than the kernel
 
