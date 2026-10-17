@@ -17,11 +17,15 @@
     {
       "text": "PR #28 opened. Gate byte-identical over 101 files; compiler time +2.4%; prover max 5/64 steps over 41,016 queries, max 4 bounds per value. env.facts and the C support marker deferred to defk-qdz (no scalar atoms yet). Ticket stays in progress until the merge.",
       "timestamp": "2026-10-17T11:51:07Z"
+    },
+    {
+      "text": "Pushed 5fd0fa21 to PR #28: covers?/2 fix for a seed-dependent FactsTest completeness failure (seed 20261017). C byte-identical; mix ci passes.",
+      "timestamp": "2026-10-17T14:22:03Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Symbolic bounds core: move range facts onto ADR-0007's representation, no behaviour change",
   "type": "task",
-  "updated_at": "2026-10-17T11:51:07Z"
+  "updated_at": "2026-10-17T14:22:03Z"
 }
