@@ -15,9 +15,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-o08",
+  "comments": [
+    {
+      "text": "Owner 2026-10-17: the symbolic-bounds chain may cost at most about +15% compiler time in total, against the time before step 1 (clang not included). Steps 1-2 used about 7% (u1u +2.4%, qdz +4.6%; provisional). Record the ceiling in ADR-0007 (Consequences: Cost) in this ticket's PR, and report this step's cost and the total against it.",
+      "timestamp": "2026-10-17T15:45:25Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Symbolic bounds: facts from conditions and raising guards, and the report's missing-fact hint",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:04Z"
+  "updated_at": "2026-10-17T15:45:25Z"
 }
