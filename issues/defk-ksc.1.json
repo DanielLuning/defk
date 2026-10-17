@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-17T20:12:14Z",
+  "description": "Defk.ContractKit seam (append-only, the only non-public module contract tests may call; a test enforces it); live exceptions overlay test/stability/exceptions.exs (@fixed, @newly_supported); freeze task copies test/contracts at the tag into test/stability/\u003cv\u003e/contracts with versioned module names; mix defk.contracts \u003cversion\u003e|--all runs a frozen contract against the working tree. Components defk.public_api, defk.kernel_subset, defk.runtime_contract (error_codes exists). Move/replace duplicated tests; line coverage diff vs 83c2e712; covenant.mutate on the small promise modules. One PR.",
+  "id": "defk-ksc.1",
+  "labels": [],
+  "parent": "defk-ksc",
+  "priority": 2,
+  "status": "open",
+  "title": "Contracts for the public API, kernel subset and runtime contract; versioned contracts; remove duplicates; coverage diff",
+  "type": "task",
+  "updated_at": "2026-10-17T20:12:14Z"
+}
