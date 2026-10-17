@@ -9,9 +9,15 @@
   "id": "defk-ksc.1",
   "labels": [],
   "parent": "defk-ksc",
+  "comments": [
+    {
+      "text": "PR #32. 24 obligations over the four surfaces; frozen contracts per release (mix defk.contracts); duplicates removed; line coverage vs 83c2e712: no line lost (5955 -\u003e 6010); mutation found Bits/Test meaning untested, fixed with I8-I10.",
+      "timestamp": "2026-10-17T20:58:33Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Contracts for the public API, kernel subset and runtime contract; versioned contracts; remove duplicates; coverage diff",
   "type": "task",
-  "updated_at": "2026-10-17T20:12:24Z"
+  "updated_at": "2026-10-17T20:58:33Z"
 }
