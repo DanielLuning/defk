@@ -297,6 +297,9 @@ defmodule Defk.Facts do
   # least as large, or any bounds the prover can combine into it; what it
   # cannot show counts as lost (sound, if weak: the loop is lowered again
   # without it). The constant bound asks for r's own len_lo, as before.
+  # len(r) is also replaced first, by each of its lower bounds: the prover
+  # replaces the newest monomial first, and r's variable may rank below the
+  # atoms of a bound (a value bound before them).
   def covers?(a, r) do
     al = len_lo(a)
     lookup = %{{:len, r.c} => facts(r)}
@@ -304,7 +307,11 @@ defmodule Defk.Facts do
     (not is_integer(al) or (is_integer(len_lo(r)) and len_lo(r) >= al)) and
       Enum.all?(len_lbs(a), fn {q, p} ->
         # q * len(r) >= p: p - q * len(r) <= 0
-        match?({true, _, _}, le?(form_sub(p, form_scale(form_len(r.c), q)), lookup, @budget, []))
+        [
+          form_sub(p, form_scale(form_len(r.c), q))
+          | Enum.map(len_lbs(r), &replace_lower(-q, &1, p))
+        ]
+        |> Enum.any?(&match?({true, _, _}, le?(&1, lookup, @budget, [])))
       end)
   end
 
