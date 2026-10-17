@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-u1u"
   ],
@@ -16,8 +16,8 @@
   ],
   "parent": "defk-o08",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Symbolic bounds: linear facts from arithmetic, min/max, ranges and alloc lengths",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:04Z"
+  "updated_at": "2026-10-17T13:43:41Z"
 }
