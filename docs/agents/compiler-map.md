@@ -36,7 +36,7 @@ One module, ordered by section dividers you can grep for
 | calls | kernel-to-kernel inlining, builtins | (inline size: `Defk.InlineSize.check/3`) |
 | loops | `for`, reduce accumulators, safepoints; recovery inside a rejected `for`, reduce or pipe | `lower_quals`, `with_acc_facts/2`, `for_collect!/6`, `recover_for/4`, `recover_reduce/5`, `recover_pipe/2` |
 | case | clause dispatch (multi-clause kernels) | |
-| range facts | `Defk.Facts` holds ADR-0007's representation: forms over length atoms, bounds `{q, form}`, one prover with a step budget; this file states facts through the module's sources (`len_value`, `len_from`, `len_like`, `between`, the derivations) and asks the proofs | `Facts.prove_in_bounds`, `range_limit` |
+| range facts | `Defk.Facts` holds ADR-0007's representation: forms over atoms (array lengths and i64 bindings), values' exact forms (`eq`), bounds `{q, form}`, one prover with a step budget; this file states facts through the module's sources (`len_value`, `len_from`, `len_like`, `between`, `bound`, the derivations), keeps i64 bindings' facts by C variable in `env.atoms` (`put_var/3`), and asks the proofs with the env as scope | `Facts.check`, `Facts.fits_i64?`, `range_limit` |
 | element types | narrow loads/stores | |
 | emitting | C text: entries, init, frames, resume | `emit_entry`, `resume_block/3`, `view_term/3` |
 | report | fast-path notes; one of `compile/4`'s results | `note/4`, `note_bounds/4` |
@@ -68,8 +68,10 @@ lowering declares as it emits; defk-ch4), not from the C text.
   mode's raise texts (`text/2`) and the agreement reasons (`reason/1`);
   see `docs/agents/generated-docs.md`.
 - `lib/defk/facts.ex`: the range-facts lattice (one opaque value under
-  `v.facts`; assert/derive in, `prove_in_bounds`/`prove_i64` with support
-  out). ADR-0007's representation migration happens here.
+  `v.facts`; assert/derive in, `check`/`prove_i64`/`fits_i64?` with
+  support out). ADR-0007's representation lives here; its soundness nets
+  are `test/facts_test.exs`, `test/scaled_facts_test.exs` and
+  `test/linear_facts_test.exs`.
 - `lib/defk/copies.ex`: the copy analysis — what counts as a read after a
   write, and the pure tracking state (writes log, buffer carrying, alias
   classes) the compiler keeps at `ctx.lowering.copies`.

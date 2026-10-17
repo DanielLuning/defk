@@ -908,19 +908,21 @@ defmodule Defk.Compiler do
     {sc, a, env} = before_write(arr, a, env)
     a[:id] && copies_put(Copies.record_write(copies(), a.id, a[:buf], target))
 
+    proven = Facts.check(a, i, 1, env)
+
     store =
-      case Facts.prove_in_bounds(a, i) do
-        {:proven, _} = proven ->
+      case proven do
+        {:proven, _} ->
           srec_proven(:index, a, i, proven)
           srec(%{k: :elem_write, arr: a.c, checked: false})
           "(#{a.c}).data[#{i.c}] = #{vc};\n"
 
-        :unproven ->
+        {:unproven, _} ->
           srec(%{k: :elem_write, arr: a.c, checked: true})
           "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
       end
 
-    note_bounds(target, a, i)
+    note_bounds(target, 1, proven)
     {[sa, si, sv, sc, store], env}
   end
 
@@ -1052,7 +1054,7 @@ defmodule Defk.Compiler do
 
       true ->
         c = fresh(name, v.t)
-        b = %{c: c, t: v.t, owned: v[:owned] || false, var: c, facts: Facts.facts(v)}
+        b = %{c: c, t: v.t, owned: v[:owned] || false, var: c, facts: Facts.bound(v)}
         srec_assign(c, v.c)
         {"#{c} = #{v.c};\n", put_var(env, name, b)}
     end
@@ -1178,7 +1180,16 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp put_var(env, name, v), do: %{env | vars: Map.put(env.vars, name, Map.put(v, :var, v.c))}
+  # an i64 binding's facts are also kept by its C variable (env.atoms), where
+  # the prover finds an atom's (Defk.Facts); it outlives a shadowing
+  # binding, as the variable is assigned once where it is in scope
+  defp put_var(env, name, v) do
+    env = %{env | vars: Map.put(env.vars, name, Map.put(v, :var, v.c))}
+
+    if v.t == :i64,
+      do: Map.put(env, :atoms, Map.put(env[:atoms] || %{}, v.c, Facts.facts(v))),
+      else: env
+  end
 
   defp tuple_items({a, b}), do: [a, b]
   defp tuple_items({:{}, _, items}), do: items
@@ -1733,14 +1744,14 @@ defmodule Defk.Compiler do
     i = coerce!(i, :i64, idx, "array index")
     {:arr, e} = a.t
     raw = widen("(#{a.c}).data[#{i.c}]", e)
-    proven = Facts.prove_in_bounds(a, i)
+    proven = Facts.check(a, i, 1, env)
 
     get =
       cond do
         # an f64 or f32 from an input array may hold inf or NaN bits: the read
         # raises; an alloc/2 array holds only what the kernel wrote
         # (fin), a copy of an input array still holds the input's bits
-        e in [:f64, :f32] and not a[:fin] and proven != :unproven ->
+        e in [:f64, :f32] and not a[:fin] and match?({:proven, _}, proven) ->
           srec_proven(:index, a, i, proven)
           "defk_in_f64(ctx, #{raw}, #{i.c})"
 
@@ -1750,7 +1761,7 @@ defmodule Defk.Compiler do
         e == :f32 and not a[:fin] ->
           "defk_in_f64(ctx, (double)defk_get_f32(ctx, #{a.c}, #{i.c}), #{i.c})"
 
-        proven != :unproven ->
+        match?({:proven, _}, proven) ->
           srec_proven(:index, a, i, proven)
           raw
 
@@ -1762,8 +1773,8 @@ defmodule Defk.Compiler do
 
     # an in-range read cannot fail but by its inf/NaN check, which a float
     # expression may defer to its own check (float_tree)
-    v = if Facts.in_bounds?(a, i), do: Map.put(v, :pure_read, raw), else: v
-    note_bounds(node, a, i)
+    v = if match?({:proven, _}, proven), do: Map.put(v, :pure_read, raw), else: v
+    note_bounds(node, 1, proven)
     {[sa, si], v}
   end
 
@@ -1899,7 +1910,7 @@ defmodule Defk.Compiler do
 
       v.t == :i64 ->
         c = "defk_neg_i64#{checked(env)}, #{v.c})"
-        {s, Facts.assert(val(c, :i64), lo: Facts.neg(Facts.hi(v)), hi: Facts.neg(Facts.lo(v)))}
+        {s, guarded(Facts.put(val(c, :i64), Facts.neg_facts(v)), env)}
 
       true ->
         {s, val("(-#{v.c})", v.t)}
@@ -2007,7 +2018,10 @@ defmodule Defk.Compiler do
   end
 
   # i64 + - * checked for overflow, with range facts; no check when the
-  # operands' facts keep every result inside i64
+  # operands' facts keep every result inside i64 (their constant bounds, or
+  # the prover on the result's relative bounds and exact form). A case
+  # guard's check flags and computes on (checked/1), so its result is not
+  # exact.
   defp i64_arith(op, va, vb, env) do
     {fun, facts, {lo, hi}} =
       case op do
@@ -2025,13 +2039,17 @@ defmodule Defk.Compiler do
           {"mul", Facts.mul_facts(va, vb), Facts.mul_range(va, vb)}
       end
 
-    c =
-      if Facts.prove_i64(lo, hi),
-        do: "(#{va.c} #{op} #{vb.c})",
-        else: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"
+    v = Facts.put(val(nil, :i64), facts)
 
-    Facts.put(val(c, :i64), facts)
+    if Facts.prove_i64(lo, hi) or Facts.fits_i64?(v, env),
+      do: %{v | c: "(#{va.c} #{op} #{vb.c})"},
+      else: guarded(%{v | c: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"}, env)
   end
+
+  # a value from a check that a case guard flags and computes past has no
+  # exact form
+  defp guarded(v, %{ovf: _}), do: Facts.inexact(v)
+  defp guarded(v, _env), do: v
 
   # div or rem of two integers, checked for a zero divisor (and i64 div for
   # overflow)
@@ -2902,17 +2920,18 @@ defmodule Defk.Compiler do
   # u64_le(bytes, i) and the other word loads (Defk.Builtins.loads/0): an
   # unaligned load of w bytes at byte offset i, bounds-checked unless
   # i + w <= length(bytes) is proven. u64 gives the i64 bit pattern.
-  defp emit_builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], node, _) when f in @loads do
+  defp emit_builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], node, env) when f in @loads do
     w = Defk.Builtins.load_width(f)
-    note_bounds(node, a, i, w)
+    proven = Facts.check(a, i, w, env)
+    note_bounds(node, w, proven)
 
     c =
-      case Facts.prove_in_bounds(a, i, w) do
-        {:proven, _} = proven ->
+      case proven do
+        {:proven, _} ->
           srec_proven(:load, a, i, proven)
           "defk_#{f}_at((#{a.c}).data + #{i.c})"
 
-        :unproven ->
+        {:unproven, _} ->
           "defk_#{f}(ctx, #{a.c}, #{i.c})"
       end
 
@@ -3239,7 +3258,7 @@ defmodule Defk.Compiler do
           c = fresh(p, t)
 
           srec_assign(c, v.c)
-          {"#{c} = #{v.c};\n", {p, %{c: c, t: t, owned: false, var: c, facts: Facts.facts(v)}}}
+          {"#{c} = #{v.c};\n", {p, %{c: c, t: t, owned: false, var: c, facts: Facts.bound(v)}}}
         end
       end)
       |> Enum.unzip()
@@ -3249,9 +3268,14 @@ defmodule Defk.Compiler do
 
     # scope/1 takes the empty set at both call sites (dialyzer treats a
     # MapSet built by union as opaque and the literal as structural); the
-    # caller's live sets are merged in afterwards
+    # caller's live sets are merged in afterwards. The parameters' facts may
+    # name the caller's atoms, which stay in scope in the inlined body
+    # (env.atoms, see put_var/3).
+    atoms =
+      for {_, %{t: :i64, c: c} = b} <- vars, into: env[:atoms] || %{}, do: {c, Facts.facts(b)}
+
     cenv =
-      %{vars: Map.new(vars), sigs: env.sigs, inlining: [key | env.inlining]}
+      %{vars: Map.new(vars), atoms: atoms, sigs: env.sigs, inlining: [key | env.inlining]}
       |> Map.merge(scope(MapSet.new()))
       |> Map.merge(%{out: outer, nest: outer, live: outer})
 
@@ -4073,14 +4097,16 @@ defmodule Defk.Compiler do
           {[setup, range_limit(i, e, k, vb)], "#{i} > #{e}", "#{i} += #{k};\n", iv, strip}
 
         k when is_integer(k) and k < 0 ->
+          # counting down from a to b: in the body b <= i <= a
+          iv = Facts.between(val(i, :i64), vb, va, Facts.lo(vb), Facts.hi(va))
+
           strip = %{
             done_at: &"#{i} < #{&1}",
             remaining: "((uint64_t)#{i} - (uint64_t)#{e}) / #{-k}",
             step: k
           }
 
-          {[setup, range_limit(i, e, k, vb)], "#{i} < #{e}", "#{i} -= #{-k};\n", val(i, :i64),
-           strip}
+          {[setup, range_limit(i, e, k, vb)], "#{i} < #{e}", "#{i} -= #{-k};\n", iv, strip}
 
         0 ->
           err!(range, "range-step", "the range #{Macro.to_string(range)} has step 0",
@@ -4544,11 +4570,21 @@ defmodule Defk.Compiler do
   # after a failure), so only the arithmetic the compiler proved cannot fail
   @fixed_words ~w(INT64_C UINT64_C int64_t uint64_t len)
 
+  # The proof that dropped an index's check may reason about atoms its text
+  # does not name (a bound of the counter, an exact form of a binding):
+  # its support has to be fixed too, or a value the run computed wrongly
+  # could stand behind it (ADR-0007).
   defp sr_fixed_indices?(rows, var) do
     Enum.all?(rows, fn
-      %{k: :access, access: :index, idx: idx} -> sr_fixed_index?(idx, rows, var)
-      %{k: :access} -> false
-      _ -> true
+      %{k: :access, access: :index, idx: idx, support: support} ->
+        sr_fixed_index?(idx, rows, var) and
+          Enum.all?(support, &(&1 == var or sr_fixed_var?(&1, rows, var, [])))
+
+      %{k: :access} ->
+        false
+
+      _ ->
+        true
     end)
   end
 
@@ -5351,7 +5387,7 @@ defmodule Defk.Compiler do
     name = :"defk case #{c}"
 
     env =
-      put_var(env, name, %{c: c, t: sv.t, owned: false, var: c, facts: Facts.facts(sv)})
+      put_var(env, name, %{c: c, t: sv.t, owned: false, var: c, facts: Facts.bound(sv)})
 
     subj = {name, [], nil}
 
@@ -6708,33 +6744,36 @@ defmodule Defk.Compiler do
     end
   end
 
-  # a[i], or the word load u64_le(bytes, i): its bounds check dropped, or
-  # kept with the facts that would drop it. in_bounds?/3 is asked again with
-  # each missing half supplied, so what is named is what it would accept.
-  defp note_bounds(node, a, i, w \\ 1) do
+  # a[i], or the word load u64_le(bytes, i), of width w: its bounds check
+  # dropped, or kept with the facts that would drop it. `proof` is the
+  # access's own (Facts.check/4), which names the half that fails, so what
+  # is named is what the proof would accept.
+  defp note_bounds(node, w, proof) do
     {text, arr, idx} =
       case node do
         {{:., _, [Access, :get]}, _, [arr, idx]} -> {src_text(node), arr, idx}
         {_, _, [arr, idx]} -> {Macro.to_string(node), arr, idx}
       end
 
-    if Facts.in_bounds?(a, i, w) do
-      note(:bounds, node, :dropped, text)
-    else
-      {arr, idx} = {src_text(arr), src_text(idx)}
-      low = "0 <= #{idx}"
+    case proof do
+      {:proven, _} ->
+        note(:bounds, node, :dropped, text)
 
-      high =
-        if w == 1, do: "#{idx} < length(#{arr})", else: "#{idx} + #{w} <= length(#{arr})"
+      {:unproven, half} ->
+        {arr, idx} = {src_text(arr), src_text(idx)}
+        low = "0 <= #{idx}"
 
-      missing =
-        case Facts.missing(a, i, w) do
-          :low -> low
-          :high -> high
-          :both -> "#{low} and #{high}"
-        end
+        high =
+          if w == 1, do: "#{idx} < length(#{arr})", else: "#{idx} + #{w} <= length(#{arr})"
 
-      note(:bounds, node, :kept, "#{text}: bounds check kept; nothing proves #{missing}")
+        missing =
+          case half do
+            :low -> low
+            :high -> high
+            :both -> "#{low} and #{high}"
+          end
+
+        note(:bounds, node, :kept, "#{text}: bounds check kept; nothing proves #{missing}")
     end
   end
 
