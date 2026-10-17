@@ -638,7 +638,15 @@ what it adds.
    kernel and example is byte-identical before and after (a dump-all-C
    switch for the comparison), and the compile time of the suite within 5%.
    This is the risky ticket; it is also the one that keeps the later ones
-   small.
+   small. *Landed as `defk-u1u` (2026-10-17): the representation and the
+   prover live in `Defk.Facts`; today's only atoms are array lengths, whose
+   facts sit on the array bindings, so `env.facts` and the support marker
+   wait for the first scalar source (step 2); the strip record already
+   carries each proof's support. The compiler states facts through
+   `len_value`, `len_from`, `len_like`, `len_facts_of` and `between`.
+   `with_acc_facts/2` keeps `covers?/2`, which compares bounds of the same
+   shape; the prover takes it over when bounds of other shapes can imply
+   one (step 2). Gate: byte-identical over 101 files.*
 2. **Linear sources (defk-pic, defk-siy loop 1).** Exact `eq` forms
    through `+`, `-`, `*` by atoms and literals; `min`/`max` bounds from
    `eq`; range counters bounded by the start and end forms (both step

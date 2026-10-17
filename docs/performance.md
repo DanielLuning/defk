@@ -2264,6 +2264,23 @@ the verdict they claim. Two gave a better one than on macOS:
   (run 38608036908; its log is an artifact for 90 days), `ci/measure.sh`.
 - **Status:** provisional (a shared VM with 2 cores, one run).
 
+### 6.32 The symbolic-bounds prover costs ~2% of the compiler's time; its budgets have wide room
+
+- **Numbers:** `Defk.Compiler.compile` over every test kernel and example
+  (109 modules, clang not included), three rounds interleaved with main:
+  main 2,157 / 2,193 / 2,216 ms, the prover 2,226 / 2,256 / 2,243 ms
+  (+2.4% on the means). The prover answered 41,016 queries: 26,959 in no
+  step, the rest in 1-5 steps, none past 5 of its budget of 64. The most
+  relative bounds on one value was 4 (3 values), 289 values had 2. So the
+  step budget stays at 64 and needs no bounds cap yet; both are there for
+  the sources the later steps add.
+- **Conditions:** load 2.7 on 12 cores; provisional. A probe that wrote a
+  line per query made the compile look 2.3x slower: measure with the
+  probe off.
+- **Source:** `defk-u1u`; the generated C of all 101 files is
+  byte-identical to main's.
+- **Status:** measured, provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer

@@ -1347,7 +1347,7 @@ defmodule Defk.Compiler do
         |> Map.drop([:pure_read])
         |> Map.merge(%{c: c, var: c, owned: true, buf: buf})
 
-      b = if a[:var], do: Facts.assert(b, len_lb: Map.put(Facts.len_lb(a), a.c, 0)), else: b
+      b = if a[:var], do: Facts.len_like(b, a), else: b
 
       {copy_stmts(c, a.c, e), b}
     end
@@ -1475,7 +1475,7 @@ defmodule Defk.Compiler do
           %{c: c, t: v.t, owned: v.owned, var: c, facts: Facts.facts(v)}
           |> Map.merge(ids)
 
-        b = if v[:var], do: Facts.assert(b, len_lb: Map.put(Facts.len_lb(v), v.c, 0)), else: b
+        b = if v[:var], do: Facts.len_like(b, v), else: b
 
         srec_assign(c, v.c)
         {"#{c} = #{v.c};\n", b}
@@ -2830,7 +2830,7 @@ defmodule Defk.Compiler do
     v = coerce!(v, :i64, n, "alloc/2 length")
     {sz, c} = alloc_zeroed(e, v, {:alloc, m, args}, env)
     arr = %{c: c, t: {:arr, e}, owned: true, var: nil, fin: true}
-    {[s, sz], Facts.assert(arr, len_lo: Facts.lo(v), len_lb: Facts.lb(v))}
+    {[s, sz], Facts.len_from(arr, v)}
   end
 
   # a kernel named alloc at another arity is an ordinary call
@@ -2894,14 +2894,9 @@ defmodule Defk.Compiler do
     do: Facts.assert(val("(#{a.c}).nbits", :i64), lo: 0)
 
   defp emit_builtin(:length, [%{t: {:arr, _}} = a], _node, _) do
-    # a view that is not a variable (e.g. a kernel call) is a new array each time it is evaluated
-    own = if a.var, do: %{a.c => 0}, else: %{}
-
-    Facts.assert(val("(#{a.c}).len", :i64),
-      lo: max(Facts.len_lo(a) || 0, 0),
-      lb: Map.merge(Facts.len_lb(a), own),
-      ub: own
-    )
+    # a view that is not a variable (e.g. a kernel call) is a new array each
+    # time it is evaluated: only a binding's length is len(a) exactly
+    Facts.len_value(val("(#{a.c}).len", :i64), a, a.var != nil)
   end
 
   # u64_le(bytes, i) and the other word loads (Defk.Builtins.loads/0): an
@@ -4067,13 +4062,7 @@ defmodule Defk.Compiler do
       case literal_int(step) do
         k when is_integer(k) and k > 0 ->
           # counting up from a to b: in the body a <= i <= b
-          iv =
-            Facts.assert(val(i, :i64),
-              lo: Facts.lo(va),
-              hi: Facts.hi(vb),
-              lb: Facts.lb(va),
-              ub: Facts.ub(vb)
-            )
+          iv = Facts.between(val(i, :i64), va, vb, Facts.lo(va), Facts.hi(vb))
 
           strip = %{
             done_at: &"#{i} > #{&1}",
@@ -5056,15 +5045,14 @@ defmodule Defk.Compiler do
             )
 
             acc =
-              Facts.assert(
+              Facts.len_facts_of(
                 %{
                   t: v.t,
                   owned: true,
                   fin: v[:fin] || false,
                   buf: carried(make_ref(), v[:buf])
                 },
-                len_lo: Facts.len_lo(v),
-                len_lb: Facts.len_lb(v)
+                v
               )
 
             {{{name, c, acc}, ic}, seen}
