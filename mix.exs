@@ -99,6 +99,7 @@ defmodule Defk.MixProject do
       {:ex_doc, "~> 0.34", only: [:dev, :test], runtime: false},
       {:usage_rules, "~> 1.2", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.1", only: :test},
+      {:covenant, "~> 0.2", only: [:dev, :test], runtime: false},
       {:igniter, "~> 0.6", optional: true}
     ]
   end
@@ -258,6 +259,9 @@ defmodule Defk.MixProject do
         "compile --warnings-as-errors",
         "format --check-formatted",
         "test",
+        # every active obligation under test/contracts/ has a passing test,
+        # read from the results the test run just recorded
+        "covenant.check --no-run",
         "docs --warnings-as-errors",
         "credo --strict",
         "dialyzer",

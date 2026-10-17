@@ -13,7 +13,7 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
   (`v<version>`). From then on every `mix test` compiles each frozen kernel
   and checks its results (test/stability_kernels_test.exs), compiles each
   frozen rejection and checks it still fails with its code
-  (test/stability_rejections_test.exs), and checks that each promised
+  (test/contracts/defk/error_codes_contract_test.exs), and checks that each promised
   macro, function and option is still there (test/stability_api_test.exs):
   the stability promise, checked mechanically. The files are never edited;
   docs/agents/stability.md has the rules.

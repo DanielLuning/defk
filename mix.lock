@@ -1,5 +1,6 @@
 %{
   "bunt": {:hex, :bunt, "1.0.0", "081c2c665f086849e6d57900292b3a161727ab40431219529f13c4ddcf3e7a44", [:mix], [], "hexpm", "dc5f86aa08a5f6fa6b8096f0735c4e76d54ae5c9fa2c143e5a1fc7c1cd9bb6b5"},
+  "covenant": {:hex, :covenant, "0.2.0", "da83f6090f00cf1adc0858e52a093a589141094e26536797b1007405bead14ba", [:mix], [{:yaml_elixir, "~> 2.12", [hex: :yaml_elixir, repo: "hexpm", optional: false]}], "hexpm", "4bd6af112e0c0dd9a840bc33ab44290c5ab4e5c4818439ba7ce727f06988de73"},
   "credo": {:hex, :credo, "1.7.19", "cc52129665fc7c15143d47838fda0f9cd6dac9ceced7bf4da6f85fcbfe64b12a", [:mix], [{:bunt, "~> 0.2.1 or ~> 1.0", [hex: :bunt, repo: "hexpm", optional: false]}, {:file_system, "~> 0.2 or ~> 1.0", [hex: :file_system, repo: "hexpm", optional: false]}, {:jason, "~> 1.0", [hex: :jason, repo: "hexpm", optional: false]}], "hexpm", "2d8bc95d5a7bb99dd2613621d4f08c6a3575c3fd4b62e6a2b48a100352a557b8"},
   "dialyxir": {:hex, :dialyxir, "1.4.8", "7ef671a8aff9948b091d8c30f09467fbb16e77305cda451bce48109a0f5e021c", [:mix], [{:erlex, ">= 0.2.8", [hex: :erlex, repo: "hexpm", optional: false]}], "hexpm", "cbd5a851571e5dfeb32aaf2e840bfa98b7864cb3071bf2ef5d95d1276b12e072"},
   "earmark_parser": {:hex, :earmark_parser, "1.4.46", "67607a0532e810c6f630a515c548d0b24949643f168cc556303bee4cf96105c7", [:mix], [], "hexpm", "9c44636e8a1c68c62f526b2dcd85d941dbbcee7ab82cf64ba06ce28bef8e89f5"},
@@ -34,4 +35,6 @@
   "text_diff": {:hex, :text_diff, "0.1.0", "1caf3175e11a53a9a139bc9339bd607c47b9e376b073d4571c031913317fecaa", [:mix], [], "hexpm", "d1ffaaecab338e49357b6daa82e435f877e0649041ace7755583a0ea3362dbd7"},
   "usage_rules": {:hex, :usage_rules, "1.2.8", "ace34d6e7a2a300a03446387ffd6a2219418fb6dbe7ee5d02131535fc9b3d8db", [:mix], [{:igniter, ">= 0.6.6 and < 1.0.0-0", [hex: :igniter, repo: "hexpm", optional: false]}, {:jason, "~> 1.0", [hex: :jason, repo: "hexpm", optional: false]}, {:req, "~> 0.5", [hex: :req, repo: "hexpm", optional: false]}], "hexpm", "f49a69c7219a5b97bfb7e97d4470d790a94ac2cf049d2b1ceda6bd2b243e9cc1"},
   "vibe_kit": {:hex, :vibe_kit, "0.1.7", "02466d8e734b264971c7eb0754144c80d8b4eca1968726811f4097ab802b9bf2", [:mix], [{:igniter, "~> 0.7", [hex: :igniter, repo: "hexpm", optional: true]}], "hexpm", "68a93e1a9e7aa7dce78490be72da750f3650a51e1da3c6e430584a3d6051dedc"},
+  "yamerl": {:hex, :yamerl, "0.10.0", "4ff81fee2f1f6a46f1700c0d880b24d193ddb74bd14ef42cb0bcf46e81ef2f8e", [:rebar3], [], "hexpm", "346adb2963f1051dc837a2364e4acf6eb7d80097c0f53cbdc3046ec8ec4b4e6e"},
+  "yaml_elixir": {:hex, :yaml_elixir, "2.12.2", "9dd1330fb4cd9a36a7b0f502e5b12486eff632792ee4a5f0eba52a4d4ec32c9c", [:mix], [{:yamerl, "~> 0.10", [hex: :yamerl, repo: "hexpm", optional: false]}], "hexpm", "e7c1b10122f973e6558462d51c39026ba0e14afbc6745318e990ea82cfe9e159"},
 }
