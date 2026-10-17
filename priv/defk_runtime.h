@@ -89,6 +89,9 @@ typedef struct { float *data; int64_t len; } defk_arr_f32;
 #endif
 #define DEFK_LAYOUT_TAG ((uint64_t)(DEFK_HEADER_HASH) ^ ((uint64_t)sizeof(defk_ctx) * 0x9E3779B97F4A7C15ULL))
 
+/* owned-binary slots held in the frame itself (see defk_ctx.owned_inline) */
+#define DEFK_OWNED_INLINE 4
+
 typedef struct {
   uint64_t layout_tag; /* DEFK_LAYOUT_TAG, set when the frame becomes a resource; keep first */
   uint64_t frame_size; /* sizeof the kernel's frame struct, likewise; keep second */
@@ -107,6 +110,10 @@ typedef struct {
      time have run (0: no limit), then DEFK_SLICE_US; see defk_slice_init */
   int64_t slice_us;
   int64_t short_left;
+  /* the first slots of `owned`, so a call with a few buffers (one output, a
+     bitstring accumulator, an aligned copy) allocates no table: the table's
+     enif_realloc and enif_free were ~40% of a one-buffer call's cost */
+  ErlNifBinary owned_inline[DEFK_OWNED_INLINE];
 } defk_ctx;
 
 static ErlNifResourceType *defk_frame_rt;
@@ -211,7 +218,7 @@ defk_no_fun_clause(defk_ctx *ctx, const char *mod_fun, size_t mod_len, int64_t a
 static void defk_release_owned(defk_ctx *ctx) {
   for (int i = 0; i < ctx->nowned; i++)
     if (ctx->owned[i].data) enif_release_binary(&ctx->owned[i]);
-  if (ctx->owned) enif_free(ctx->owned);
+  if (ctx->owned && ctx->owned != ctx->owned_inline) enif_free(ctx->owned);
   ctx->owned = NULL;
   ctx->nowned = ctx->cap = 0;
 }
@@ -329,14 +336,27 @@ static void defk_poison_slack(const ErlNifBinary *b) {
 static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
   defk_owned_check(ctx, bytes);
   if (ctx->nowned == ctx->cap) {
-    /* one slot per alloc/2 call, so a loop can grow the table without bound:
-       a failed grow raises and keeps the old table, whose binaries are freed */
-    if (ctx->cap > INT_MAX / 2) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
-    int ncap = ctx->cap ? ctx->cap * 2 : 4;
-    ErlNifBinary *grown = enif_realloc(ctx->owned, sizeof(ErlNifBinary) * (size_t)ncap);
-    if (!grown) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
-    ctx->owned = grown;
-    ctx->cap = ncap;
+    if (!ctx->owned) {
+      /* the first buffers go in the frame's own slots */
+      ctx->owned = ctx->owned_inline;
+      ctx->cap = DEFK_OWNED_INLINE;
+    } else {
+      /* one slot per alloc/2 call, so a loop can grow the table without bound:
+         a failed grow raises and keeps the old table, whose binaries are freed */
+      if (ctx->cap > INT_MAX / 2) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
+      int ncap = ctx->cap * 2;
+      size_t nbytes = sizeof(ErlNifBinary) * (size_t)ncap;
+      ErlNifBinary *grown;
+      if (ctx->owned == ctx->owned_inline) {
+        grown = enif_alloc(nbytes);
+        if (grown) memcpy(grown, ctx->owned_inline, sizeof ctx->owned_inline);
+      } else {
+        grown = enif_realloc(ctx->owned, nbytes);
+      }
+      if (!grown) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
+      ctx->owned = grown;
+      ctx->cap = ncap;
+    }
   }
   ErlNifBinary *b = &ctx->owned[ctx->nowned];
   if (!enif_alloc_binary(bytes, b))
@@ -435,7 +455,24 @@ static inline __attribute__((unused)) uint64_t defk_zero_strip(void *data, uint6
     if (bytes) memcpy(ctx->owned[slot].data, src.data, bytes);                    \
     defk_arr_##T a = {(CT *)ctx->owned[slot].data, src.len};                      \
     return a;                                                                     \
+  }                                                                               \
+  /* the buffer for a copy of src, not yet copied: a yielding kernel copies   \
+     into it in strips (defk_copy_strip) with a safepoint after each, like     \
+     alloc/2's zeroing, so a large copy does not hold the scheduler */         \
+  static inline __attribute__((unused)) defk_arr_##T defk_copy_raw_##T(          \
+      defk_ctx *ctx, defk_arr_##T src) {                                          \
+    size_t bytes = (size_t)src.len * sizeof(CT);                                  \
+    int slot = defk_own_raw(ctx, bytes);                                          \
+    defk_arr_##T a = {(CT *)ctx->owned[slot].data, src.len};                      \
+    return a;                                                                     \
   }
+/* bytes `done` .. done + strip of src into dst; returns the new `done` */
+static inline __attribute__((unused)) uint64_t defk_copy_strip(void *dst, const void *src,
+                                                               uint64_t bytes, uint64_t done) {
+  uint64_t n = bytes - done < DEFK_ZERO_STRIP ? bytes - done : DEFK_ZERO_STRIP;
+  memcpy((char *)dst + done, (const char *)src + done, (size_t)n);
+  return done + n;
+}
 DEFK_COPY_FN(f64, double)
 DEFK_COPY_FN(i64, int64_t)
 DEFK_COPY_FN(u8, uint8_t)
@@ -651,11 +688,14 @@ __attribute__((unused)) static ERL_NIF_TERM defk_make_arr_view(ErlNifEnv *env, d
  * Bind a binary argument as a packed array. Called on EVERY entry (first call
  * and each resume) because heap binaries can move during GC between yields.
  * Misaligned data (e.g. a sub-binary at an odd offset) is copied once into an
- * owned binary; *copy_slot remembers that copy across resumes.
+ * owned binary; *copy_slot remembers that copy across resumes. With `once`
+ * the copy is made here; else only the buffer is, and the kernel's prologue
+ * fills it in strips (defk_bind_strip) with a safepoint after each, so a
+ * large misaligned input does not hold the scheduler (64 MB: 1.2 ms at once).
  */
 static void defk_bind(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t, size_t esz,
                       void **data, int64_t *len, int *copy_slot, int argn,
-                      const char *pname, const char *tname) {
+                      const char *pname, const char *tname, int once) {
   if (*copy_slot > 0) {
     ErlNifBinary *b = &ctx->owned[*copy_slot - 1];
     *data = b->data;
@@ -672,13 +712,23 @@ static void defk_bind(ErlNifEnv *env, defk_ctx *ctx, ERL_NIF_TERM t, size_t esz,
               bin.size, esz, tname);
   if (((uintptr_t)bin.data) % esz) {
     int slot = defk_own_raw(ctx, bin.size);
-    memcpy(ctx->owned[slot].data, bin.data, bin.size);
+    if (once) memcpy(ctx->owned[slot].data, bin.data, bin.size);
     *copy_slot = slot + 1;
     *data = ctx->owned[slot].data;
   } else {
     *data = bin.data;
   }
   *len = (int64_t)(bin.size / esz);
+}
+
+/* the next strip of argument t (bound misaligned into copy slot1) from byte
+   `done`; the binary is inspected again each strip, as a resume may follow */
+static __attribute__((unused)) uint64_t defk_bind_strip(ErlNifEnv *env, defk_ctx *ctx,
+                                                        ERL_NIF_TERM t, int slot1,
+                                                        uint64_t done) {
+  ErlNifBinary bin;
+  if (!enif_inspect_binary(env, t, &bin)) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY);
+  return defk_copy_strip(ctx->owned[slot1 - 1].data, bin.data, bin.size, done);
 }
 
 /* ---- scalar decoding ----------------------------------------------------- */
@@ -1587,9 +1637,15 @@ static inline float defk_to_f32(defk_ctx *ctx, double v) {
  * A value is {nbits, slot + 1} (0: the empty bitstring, no buffer, which is
  * what a zeroed local holds). Its buffer is an owned binary, so it stays put
  * across yields, and is freed on an exception or process death like an array.
- * The buffer's first 8 bytes hold its end, the number of bits written to it;
- * the bits follow MSB-first (Elixir's big-endian default), and everything past
- * the end is zero, so an append ORs its bits in.
+ * The buffer's first 8 bytes hold its end, the number of bits written to it,
+ * and the next 8 the number of bytes zeroed from the buffer's start; the bits
+ * follow MSB-first (Elixir's big-endian default). Everything between the end
+ * and the zeroed mark is zero, so an append ORs its bits in (an append that
+ * masked the word instead cost ~1 ns more on the chain of appends). The
+ * buffer is zeroed at most DEFK_ZERO_STRIP bytes at a time, when an append
+ * reaches the mark, so a grown buffer's memset does not hold the scheduler
+ * (64 MB at once for a 128 MB accumulator); the appends between two memsets
+ * run in a loop with safepoints.
  *
  * A value is a prefix of its buffer, so a value is never changed by a later
  * append, as in Elixir. An append to a value that ends at its buffer's end
@@ -1600,7 +1656,7 @@ static inline float defk_to_f32(defk_ctx *ctx, double v) {
  */
 typedef struct { int64_t nbits; int slot1; } defk_bits;
 
-#define DEFK_BITS_HDR 8
+#define DEFK_BITS_HDR 16
 
 /* the end of b's buffer (b has one) */
 static inline uint64_t defk_bits_end(defk_ctx *ctx, defk_bits b) {
@@ -1609,31 +1665,57 @@ static inline uint64_t defk_bits_end(defk_ctx *ctx, defk_bits b) {
   return end;
 }
 
-/* b with a buffer of its own that ends at b and has room for `more` bits,
+/* the bytes of b's buffer zeroed so far, from its start */
+static inline uint64_t defk_bits_zeroed(defk_ctx *ctx, defk_bits b) {
+  uint64_t z;
+  __builtin_memcpy(&z, ctx->owned[b.slot1 - 1].data + 8, sizeof z);
+  return z;
+}
+
+/* zero the buffer in `slot` from its mark up to `need` bytes at least and a
+   strip at most, and move the mark */
+static void defk_bits_zero_strip(defk_ctx *ctx, int slot, uint64_t need) {
+  ErlNifBinary *bin = &ctx->owned[slot];
+  uint64_t z;
+  __builtin_memcpy(&z, bin->data + 8, sizeof z);
+  uint64_t to = z + DEFK_ZERO_STRIP;
+  if (to < need) to = need;
+  if (to > bin->size) to = bin->size;
+  memset(bin->data + z, 0, (size_t)(to - z));
+  __builtin_memcpy(bin->data + 8, &to, sizeof to);
+}
+
+/* b with a buffer of its own that ends at b, zeroed to hold `more` bits,
    plus the 8 bytes of slack an append's word store needs */
 __attribute__((noinline, unused)) static defk_bits defk_bits_reserve(defk_ctx *ctx, defk_bits b,
                                                              int64_t more) {
   uint64_t need = ((uint64_t)b.nbits + (uint64_t)more + 7) / 8 + 8 + DEFK_BITS_HDR;
   if (need > DEFK_ALLOC_MAX_BYTES) defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_BITSTRING_TOO_LARGE);
   if (b.slot1 && defk_bits_end(ctx, b) == (uint64_t)b.nbits) {
-    /* ours, at its end: grow in place, doubling */
+    /* ours, at its end: grow in place, doubling, when the buffer is full;
+       else the appends only reached the zeroed mark */
     ErlNifBinary *bin = &ctx->owned[b.slot1 - 1];
-    size_t old = bin->size, cap = old * 2;
-    if (cap < need) cap = (size_t)need;
-    defk_owned_check(ctx, cap - old);
-    if (!enif_realloc_binary(bin, cap))
-      defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY_BYTES, cap);
-    DEFK_POISON_SLACK(bin);
-    ctx->owned_bytes += cap - old;
-    memset(bin->data + old, 0, cap - old);
+    if (need > bin->size) {
+      size_t old = bin->size, cap = old * 2;
+      if (cap < need) cap = (size_t)need;
+      defk_owned_check(ctx, cap - old);
+      if (!enif_realloc_binary(bin, cap))
+        defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY_BYTES, cap);
+      DEFK_POISON_SLACK(bin);
+      ctx->owned_bytes += cap - old;
+    }
+    defk_bits_zero_strip(ctx, b.slot1 - 1, need);
     return b;
   }
   /* empty, or an older value of a buffer appended past it: a new buffer
      holding b's bits, the bits after them in its last byte cleared */
   size_t cap = need < 64 ? 64 : (size_t)need;
-  int slot = defk_own(ctx, cap);
-  size_t bytes = (size_t)(b.nbits + 7) / 8;
+  int slot = defk_own_raw(ctx, cap);
   uint8_t *data = ctx->owned[slot].data;
+  uint64_t zero = 0;
+  __builtin_memcpy(data + 8, &zero, sizeof zero);
+  defk_bits_zero_strip(ctx, slot, need);
+  size_t bytes = (size_t)(b.nbits + 7) / 8;
   if (bytes) {
     memcpy(data + DEFK_BITS_HDR, ctx->owned[b.slot1 - 1].data + DEFK_BITS_HDR, bytes);
     if (b.nbits & 7) data[DEFK_BITS_HDR + bytes - 1] &= (uint8_t)(0xFF00u >> (b.nbits & 7));
@@ -1706,7 +1788,7 @@ static inline defk_bits defk_bits_append(defk_ctx *ctx, defk_bits b, uint64_t v,
   if (n == 0) return b;
   if (DEFK_UNLIKELY(!b.slot1 || defk_bits_end(ctx, b) != (uint64_t)b.nbits ||
                     ((uint64_t)b.nbits + (uint64_t)n + 7) / 8 + 8 + DEFK_BITS_HDR >
-                        ctx->owned[b.slot1 - 1].size))
+                        defk_bits_zeroed(ctx, b)))
     b = defk_bits_reserve(ctx, b, n);
   uint8_t *p = ctx->owned[b.slot1 - 1].data;
   uint64_t pos = (uint64_t)b.nbits;
@@ -1724,12 +1806,28 @@ static inline defk_bits defk_bits_append(defk_ctx *ctx, defk_bits b, uint64_t v,
 
 /* A bitstring result: {Bytes, BitLength}. The generated Elixir wrapper takes
    the first BitLength bits of Bytes (<<b::bitstring-size(len), _::bitstring>>).
-   The bytes are copied out, so the buffer's slack is not returned. */
+   Up to a strip's worth of bytes is copied out (a heap binary for the small
+   ones, and the buffer's slack is not returned); a larger result is the
+   buffer itself, shrunk to its bytes and handed over like an array, so no
+   copy of it holds the scheduler at return (a 256 MB copy-out was a 50 ms
+   gap). */
+#define DEFK_BITS_COPY_OUT DEFK_ZERO_STRIP
 __attribute__((unused)) static ERL_NIF_TERM defk_make_bits(ErlNifEnv *env, defk_ctx *ctx, defk_bits b) {
   size_t bytes = (size_t)(b.nbits + 7) / 8;
   ERL_NIF_TERM bin;
-  uint8_t *d = enif_make_new_binary(env, bytes, &bin);
-  if (bytes) memcpy(d, ctx->owned[b.slot1 - 1].data + DEFK_BITS_HDR, bytes);
+  if (bytes > DEFK_BITS_COPY_OUT) {
+    ErlNifBinary *own = &ctx->owned[b.slot1 - 1];
+    size_t old = own->size;
+    /* a shrink stays in place; if the allocator refuses, the slack goes along */
+    if (old > bytes + DEFK_BITS_HDR) (void)enif_realloc_binary(own, bytes + DEFK_BITS_HDR);
+    ctx->owned_bytes -= old;
+    bin = enif_make_binary(env, own);
+    own->data = NULL; /* no longer ours to release */
+    bin = enif_make_sub_binary(env, bin, DEFK_BITS_HDR, bytes);
+  } else {
+    uint8_t *d = enif_make_new_binary(env, bytes, &bin);
+    if (bytes) memcpy(d, ctx->owned[b.slot1 - 1].data + DEFK_BITS_HDR, bytes);
+  }
   return enif_make_tuple2(env, bin, enif_make_int64(env, b.nbits));
 }
 
@@ -2330,6 +2428,9 @@ static void defk_unload(ErlNifEnv *env, void *priv) {
 static void *defk_promote(ErlNifEnv *env, void *stack_frame, size_t size, ERL_NIF_TERM *term) {
   void *res = enif_alloc_resource(defk_frame_rt, size);
   memcpy(res, stack_frame, size);
+  /* the owned table, when it is the frame's own slots, moved with the frame */
+  if (((defk_ctx *)res)->owned == ((defk_ctx *)stack_frame)->owned_inline)
+    ((defk_ctx *)res)->owned = ((defk_ctx *)res)->owned_inline;
   ((defk_ctx *)res)->is_resource = 1;
   ((defk_ctx *)res)->layout_tag = DEFK_LAYOUT_TAG ^ (uint64_t)atomic_load(&defk_corrupt_tags);
   ((defk_ctx *)res)->frame_size = size;

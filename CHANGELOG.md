@@ -50,6 +50,28 @@
   `module-attribute`, `read-only-array`, `tuple-return-call`,
   `array-accumulator`, all retired in 0.0.1) under "Retired", each with the
   version and why. `Defk.Errors.entries/0` returns them, marked retired.
+- Faster: an `alloc/2` skips its zeroing in two more shapes where the next
+  loop provably writes every element first: a `for ..., reduce:` whose
+  clause body holds the writes (also as the right side of a match), and
+  nested range loops writing a row-major index `(y * w + x) * ch + c` into
+  an array of `h * w * ch` elements. The fast-path report notes them as
+  before. Results are unchanged: the array was all zeros only where it was
+  not written, and it is written everywhere.
+- Runtime contract: the whole-buffer work a call does outside its loops no
+  longer holds the scheduler. In a yielding kernel a value-semantics copy
+  and the aligned copy of a misaligned input run in 1 MiB strips with a
+  safepoint after each, like `alloc/2`'s zeroing (a 256 MB copy was a
+  4-94 ms gap, now the ticker's floor). A bitstring result over 1 MiB is
+  handed over instead of copied out, and a grown accumulator is zeroed a
+  strip at a time, as the appends reach it, not all at once. A kernel with
+  `yield: false` copies at once, as before, and so does a kernel without a
+  loop. Growing an accumulator past tens of MB still reallocates it at once
+  (64 MB: 10-17 ms); a chunked accumulator would need a design.
+- Faster: a call that allocates (an `alloc/2` result, a bitstring
+  accumulator, a copy) no longer allocates and frees a table for its owned
+  buffers; the first four slots live in the call's frame. A one-buffer call
+  costs about half of what it did (a one-byte bitstring result 125 ns to
+  60-70 ns, under load). Results and the runtime contract are unchanged.
 
 ## 0.1.0
 

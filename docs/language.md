@@ -977,9 +977,10 @@ iex> M.pack(<<1::64-native, 2::64-native, 3::64-native>>, 3)
   segment `signed`.
 - **Runtime.** The buffer belongs to the call: it is kept across yields, and
   freed when the kernel raises or its process dies, like an array the kernel
-  allocated. The NIF copies the bits into a binary and returns it with the
-  bit length; the kernel's generated Elixir function takes the bitstring
-  from it as a sub-binary
+  allocated. The NIF returns the bytes with the bit length: copied into a
+  binary up to 1 MiB, the buffer itself (shrunk to its bytes) above that, so
+  a large result is not copied at return; the kernel's generated Elixir
+  function takes the bitstring from it as a sub-binary
   (`<<b::bitstring-size(len), _::bitstring>> = bin`). So a kernel returning
   a bitstring has its NIF registered as `__defk_native_<name>__`, as in
   Elixir mode.
@@ -1340,8 +1341,17 @@ malformed call is [`alloc-form`](compile-errors.md#alloc-form).
   `c` in `0..k-1` (not in a branch) and mentions `x` nowhere else, and
   nothing in between rebinds a variable of `n`, every element is written
   before anything can read it, and the buffer is not zeroed at all (the
-  fast-path report notes which allocs are). This is an optimisation:
-  the array is all zeros wherever it is not written, either way.
+  fast-path report notes which allocs are). The loop may be a
+  `for ..., reduce:` whose clause body holds the writes (its initial value
+  and pattern not mentioning `x`), also as the right side of a match
+  (`{h, t} = for ..., reduce: {h, t}`); and nested range loops
+  `for y <- 0..(h - 1)//1`, `for x <- 0..(w - 1)//1, c <- 0..(ch - 1)//1`
+  whose innermost body writes `x[(y * w + x) * ch + c]` once, with the
+  `alloc` length the product of the extents in any order, count too. A
+  loop plus a tail that writes the rest (`encode64`'s shape) does not:
+  showing that the tail writes exactly the rest needs `div`/`rem`
+  arithmetic the proof does not do. This is an optimisation: the array is
+  all zeros wherever it is not written, either way.
 
 ### Writing
 
@@ -1476,6 +1486,10 @@ where it cannot prove that:
   walks the array as it was when the loop started: the written variable is
   copied before the loop. Walking an input array while writing it copies it
   twice.
+- **A copy yields like a loop.** In a yielding kernel the bytes are copied
+  in 1 MiB strips with a safepoint after each, like `alloc/2`'s zeroing, so
+  a 256 MB copy does not hold the scheduler; a `yield: false` kernel copies
+  at once.
 - **A called kernel writes its array parameter** while the caller still reads
   the array it passed (after the call, or in a later iteration): the callee
   copies. When the caller rebinds the result instead
@@ -1620,9 +1634,10 @@ the loop (see [Array accumulators](#array-accumulators)).
 
 An array argument is read in place, without a copy. A binary whose data is not
 aligned to the element size (for example a sub-binary at an odd byte offset)
-is copied once, into an aligned buffer, when the kernel starts. Either way the
-caller's binary is never changed: a write copies it first (see
-[Copies](#copies)).
+is copied once, into an aligned buffer, when the kernel starts (in a yielding
+kernel in 1 MiB strips with a safepoint after each, so a large one does not
+hold the scheduler). Either way the caller's binary is never changed: a write
+copies it first (see [Copies](#copies)).
 
 A binary whose byte size is not a multiple of the element size raises
 `ArgumentError` at the call, before the kernel runs: "argument 1 (a): byte

@@ -792,7 +792,8 @@ defmodule Defk.ValueSemanticsTest do
 
   defp agree(fun, args), do: Defk.Test.assert_agrees(K, fun, args)
 
-  defp copies(c), do: length(String.split(c, "defk_copy_")) - 1
+  # at-once and strip (defk_copy_raw_) copies alike; not defk_copy_strip calls
+  defp copies(c), do: length(Regex.split(~r/defk_copy_(raw_)?\w+\(ctx, /, c)) - 1
 
   describe "snapshots" do
     test "b = a; a[0] = 7; b[0] gives the value before the write" do
@@ -900,8 +901,12 @@ defmodule Defk.ValueSemanticsTest do
         assert copies(kernel_c(K, k)) == 1, "#{k}"
       end
 
-      [before_loop, _] = String.split(kernel_c(K, :hll_update), "while (", parts: 2)
-      assert before_loop =~ "defk_copy_u8"
+      # the kernel's own loop: not the strip loops of the copy (v_copied_N)
+      # or of a misaligned input's entry copy (v_bound_N)
+      [before_loop, _] =
+        String.split(kernel_c(K, :hll_update), ~r/while \((?!v_(copied|bound)_)/, parts: 2)
+
+      assert before_loop =~ "defk_copy_raw_u8"
     end
 
     test "the catalog's kernels have none, except one deliberate copy" do
