@@ -908,19 +908,21 @@ defmodule Defk.Compiler do
     {sc, a, env} = before_write(arr, a, env)
     a[:id] && copies_put(Copies.record_write(copies(), a.id, a[:buf], target))
 
+    proven = Facts.check(a, i, 1, env)
+
     store =
-      case Facts.prove_in_bounds(a, i, 1, env.vars) do
-        {:proven, _} = proven ->
+      case proven do
+        {:proven, _} ->
           srec_proven(:index, a, i, proven)
           srec(%{k: :elem_write, arr: a.c, checked: false})
           "(#{a.c}).data[#{i.c}] = #{vc};\n"
 
-        :unproven ->
+        {:unproven, _} ->
           srec(%{k: :elem_write, arr: a.c, checked: true})
           "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
       end
 
-    note_bounds(target, a, i, 1, env)
+    note_bounds(target, 1, proven)
     {[sa, si, sv, sc, store], env}
   end
 
@@ -1178,7 +1180,16 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp put_var(env, name, v), do: %{env | vars: Map.put(env.vars, name, Map.put(v, :var, v.c))}
+  # an i64 binding's facts are also kept by its C variable (env.atoms), where
+  # the prover finds an atom's (Defk.Facts); it outlives a shadowing
+  # binding, as the variable is assigned once where it is in scope
+  defp put_var(env, name, v) do
+    env = %{env | vars: Map.put(env.vars, name, Map.put(v, :var, v.c))}
+
+    if v.t == :i64,
+      do: Map.put(env, :atoms, Map.put(env[:atoms] || %{}, v.c, Facts.facts(v))),
+      else: env
+  end
 
   defp tuple_items({a, b}), do: [a, b]
   defp tuple_items({:{}, _, items}), do: items
@@ -1733,14 +1744,14 @@ defmodule Defk.Compiler do
     i = coerce!(i, :i64, idx, "array index")
     {:arr, e} = a.t
     raw = widen("(#{a.c}).data[#{i.c}]", e)
-    proven = Facts.prove_in_bounds(a, i, 1, env.vars)
+    proven = Facts.check(a, i, 1, env)
 
     get =
       cond do
         # an f64 or f32 from an input array may hold inf or NaN bits: the read
         # raises; an alloc/2 array holds only what the kernel wrote
         # (fin), a copy of an input array still holds the input's bits
-        e in [:f64, :f32] and not a[:fin] and proven != :unproven ->
+        e in [:f64, :f32] and not a[:fin] and match?({:proven, _}, proven) ->
           srec_proven(:index, a, i, proven)
           "defk_in_f64(ctx, #{raw}, #{i.c})"
 
@@ -1750,7 +1761,7 @@ defmodule Defk.Compiler do
         e == :f32 and not a[:fin] ->
           "defk_in_f64(ctx, (double)defk_get_f32(ctx, #{a.c}, #{i.c}), #{i.c})"
 
-        proven != :unproven ->
+        match?({:proven, _}, proven) ->
           srec_proven(:index, a, i, proven)
           raw
 
@@ -1762,8 +1773,8 @@ defmodule Defk.Compiler do
 
     # an in-range read cannot fail but by its inf/NaN check, which a float
     # expression may defer to its own check (float_tree)
-    v = if proven != :unproven, do: Map.put(v, :pure_read, raw), else: v
-    note_bounds(node, a, i, 1, env)
+    v = if match?({:proven, _}, proven), do: Map.put(v, :pure_read, raw), else: v
+    note_bounds(node, 1, proven)
     {[sa, si], v}
   end
 
@@ -2030,7 +2041,7 @@ defmodule Defk.Compiler do
 
     v = Facts.put(val(nil, :i64), facts)
 
-    if Facts.prove_i64(lo, hi) or Facts.fits_i64?(v, env.vars),
+    if Facts.prove_i64(lo, hi) or Facts.fits_i64?(v, env),
       do: %{v | c: "(#{va.c} #{op} #{vb.c})"},
       else: guarded(%{v | c: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"}, env)
   end
@@ -2911,15 +2922,16 @@ defmodule Defk.Compiler do
   # i + w <= length(bytes) is proven. u64 gives the i64 bit pattern.
   defp emit_builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], node, env) when f in @loads do
     w = Defk.Builtins.load_width(f)
-    note_bounds(node, a, i, w, env)
+    proven = Facts.check(a, i, w, env)
+    note_bounds(node, w, proven)
 
     c =
-      case Facts.prove_in_bounds(a, i, w, env.vars) do
-        {:proven, _} = proven ->
+      case proven do
+        {:proven, _} ->
           srec_proven(:load, a, i, proven)
           "defk_#{f}_at((#{a.c}).data + #{i.c})"
 
-        :unproven ->
+        {:unproven, _} ->
           "defk_#{f}(ctx, #{a.c}, #{i.c})"
       end
 
@@ -3256,9 +3268,14 @@ defmodule Defk.Compiler do
 
     # scope/1 takes the empty set at both call sites (dialyzer treats a
     # MapSet built by union as opaque and the literal as structural); the
-    # caller's live sets are merged in afterwards
+    # caller's live sets are merged in afterwards. The parameters' facts may
+    # name the caller's atoms, which stay in scope in the inlined body
+    # (env.atoms, see put_var/3).
+    atoms =
+      for {_, %{t: :i64, c: c} = b} <- vars, into: env[:atoms] || %{}, do: {c, Facts.facts(b)}
+
     cenv =
-      %{vars: Map.new(vars), sigs: env.sigs, inlining: [key | env.inlining]}
+      %{vars: Map.new(vars), atoms: atoms, sigs: env.sigs, inlining: [key | env.inlining]}
       |> Map.merge(scope(MapSet.new()))
       |> Map.merge(%{out: outer, nest: outer, live: outer})
 
@@ -6727,33 +6744,36 @@ defmodule Defk.Compiler do
     end
   end
 
-  # a[i], or the word load u64_le(bytes, i): its bounds check dropped, or
-  # kept with the facts that would drop it. in_bounds?/3 is asked again with
-  # each missing half supplied, so what is named is what it would accept.
-  defp note_bounds(node, a, i, w, env) do
+  # a[i], or the word load u64_le(bytes, i), of width w: its bounds check
+  # dropped, or kept with the facts that would drop it. `proof` is the
+  # access's own (Facts.check/4), which names the half that fails, so what
+  # is named is what the proof would accept.
+  defp note_bounds(node, w, proof) do
     {text, arr, idx} =
       case node do
         {{:., _, [Access, :get]}, _, [arr, idx]} -> {src_text(node), arr, idx}
         {_, _, [arr, idx]} -> {Macro.to_string(node), arr, idx}
       end
 
-    if Facts.in_bounds?(a, i, w, env.vars) do
-      note(:bounds, node, :dropped, text)
-    else
-      {arr, idx} = {src_text(arr), src_text(idx)}
-      low = "0 <= #{idx}"
+    case proof do
+      {:proven, _} ->
+        note(:bounds, node, :dropped, text)
 
-      high =
-        if w == 1, do: "#{idx} < length(#{arr})", else: "#{idx} + #{w} <= length(#{arr})"
+      {:unproven, half} ->
+        {arr, idx} = {src_text(arr), src_text(idx)}
+        low = "0 <= #{idx}"
 
-      missing =
-        case Facts.missing(a, i, w, env.vars) do
-          :low -> low
-          :high -> high
-          :both -> "#{low} and #{high}"
-        end
+        high =
+          if w == 1, do: "#{idx} < length(#{arr})", else: "#{idx} + #{w} <= length(#{arr})"
 
-      note(:bounds, node, :kept, "#{text}: bounds check kept; nothing proves #{missing}")
+        missing =
+          case half do
+            :low -> low
+            :high -> high
+            :both -> "#{low} and #{high}"
+          end
+
+        note(:bounds, node, :kept, "#{text}: bounds check kept; nothing proves #{missing}")
     end
   end
 

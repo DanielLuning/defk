@@ -104,25 +104,20 @@ defmodule Defk.LinearFactsTest do
   use ExUnit.Case, async: true
   use Defk.Properties
 
+  import Defk.TestKit, only: [kernel_c: 2]
+
   alias Defk.LinearFactsTest.K
-
-  @len_max 2 ** 61 - 1
-  @i64_min -0x8000000000000000
-  @i64_max 0x7FFFFFFFFFFFFFFF
-
-  defp kernel_c(name) do
-    [_, c] = String.split(K.__defk_c_source__(), "/* ---- #{name}/", parts: 2)
-    c |> String.split("/* ---- ", parts: 2) |> hd()
-  end
 
   # an element access with its bounds check (not defk_get_i64_arg, the
   # argument read)
   @access_check ~r/defk_(put|get)_[a-z0-9]+\(ctx/
 
-  defp check_free?(name) do
-    c = kernel_c(name)
-    not (c =~ @access_check)
-  end
+  # lengths are below 2^61 (DEFK_ALLOC_MAX_BYTES, and the largest binary)
+  @len_max 2 ** 61 - 1
+  @i64_min -0x8000000000000000
+  @i64_max 0x7FFFFFFFFFFFFFFF
+
+  defp check_free?(name), do: not (kernel_c(K, name) =~ @access_check)
 
   defp agrees(fun, args),
     do: Defk.Test.assert_agrees(K, fun, args, forced_yields: true)
@@ -141,8 +136,8 @@ defmodule Defk.LinearFactsTest do
   describe "a block at a variable offset" do
     test "bufs[base + i] and sums[i] keep no bounds check, and base + i no overflow check" do
       assert check_free?("add_blocks")
-      refute kernel_c("add_blocks") =~ ~r/defk_add_i64\([^;]*v_base_\d+ *,/
-      assert kernel_c("add_blocks") =~ ~r/\(v_base_\d+ \+ v_i_\d+\)/
+      refute kernel_c(K, "add_blocks") =~ ~r/defk_add_i64\([^;]*v_base_\d+ *,/
+      assert kernel_c(K, "add_blocks") =~ ~r/\(v_base_\d+ \+ v_i_\d+\)/
     end
 
     test "sums the blocks as Elixir does, raising alike for n <= 0" do
@@ -192,7 +187,7 @@ defmodule Defk.LinearFactsTest do
   describe "a copy" do
     test "has its original's length both ways" do
       # c[0] = 1 keeps its check (a is maybe empty); the reads drop theirs
-      refute kernel_c("bump_first") =~ ~r/defk_get_[a-z0-9]+\(ctx/
+      refute kernel_c(K, "bump_first") =~ ~r/defk_get_[a-z0-9]+\(ctx/
       assert {:raise, _} = agrees(:bump_first, [<<>>])
 
       for a <- [[5], [1, 2, 3]] do
@@ -204,7 +199,7 @@ defmodule Defk.LinearFactsTest do
   describe "an offset argument" do
     test "a[x + i] keeps no bounds check, and x + i no overflow check" do
       assert check_free?("window")
-      refute kernel_c("window") =~ "defk_add_i64(ctx, v_x"
+      refute kernel_c(K, "window") =~ "defk_add_i64(ctx, v_x"
 
       for x <- [@i64_min, -1, 0, 1, 3, 7, 8, @i64_max] do
         assert {:ok, _} = agrees(:window, [<<1, 2, 3, 4, 5, 6, 7>>, x])
@@ -343,20 +338,23 @@ defmodule Defk.LinearFactsTest do
 
     off = StreamData.frequency([{4, StreamData.constant(0)}, {1, StreamData.integer(-2..2)}])
 
-    StreamData.bind(StreamData.member_of(shapes), fn shape ->
-      StreamData.bind(StreamData.list_of(off, length: 7), fn offs ->
-        StreamData.bind(StreamData.member_of([1, 2]), fn step ->
-          shape
-          |> Enum.zip(offs)
-          |> Enum.with_index()
-          |> Enum.map(fn
-            {{k, _}, 5} -> k * step
-            {{t, 0}, _} -> t
-            {{t, c}, _} -> {:+, [], [t, c]}
-          end)
-          |> StreamData.constant()
-        end)
-      end)
+    StreamData.tuple({
+      StreamData.member_of(shapes),
+      StreamData.list_of(off, length: 7),
+      StreamData.member_of([1, 2])
+    })
+    |> StreamData.map(fn {shape, offs, step} -> offset(shape, offs, step) end)
+  end
+
+  # each part with its offset, and the step (part 5) scaled
+  defp offset(shape, offs, step) do
+    shape
+    |> Enum.zip(offs)
+    |> Enum.with_index()
+    |> Enum.map(fn
+      {{k, _}, 5} -> k * step
+      {{t, 0}, _} -> t
+      {{t, c}, _} -> {:+, [], [t, c]}
     end)
   end
 
@@ -454,48 +452,43 @@ defmodule Defk.LinearFactsTest do
     @i64_max
   ]
 
-  # Every input where the kernel reaches its loop, with what it computed:
-  # {:pre, ops} for the arithmetic before the loop (all of it, the input
-  # raising or not), {:loop, env, first, last} for a loop that runs.
-  defp runs([n, size, base, s, e, k, _idx]) do
-    for la <- @lens, lb <- @lens, x <- @xs do
-      env = %{{:len, :a} => la, {:len, :b} => lb, x: x}
-      {nv, on} = ev(n, env)
-      env = Map.put(env, :n, nv)
-      {sv, os} = ev(size, env)
+  # What the kernel computes for every input: {pre, loop}, the arithmetic
+  # before the loop (all of it, the input raising or not) and, for a loop
+  # that runs, {env, first, last}, else nil.
+  defp runs(shape) do
+    for la <- @lens,
+        lb <- @lens,
+        x <- @xs,
+        do: run(shape, %{{:len, :a} => la, {:len, :b} => lb, x: x})
+  end
 
-      cond do
-        not fits?(on ++ os) or sv < 0 or sv > @len_max ->
-          {:pre, on ++ os, nil}
+  defp run([n, size, base, s, e, k, _idx], env) do
+    {nv, on} = ev(n, env)
+    env = Map.put(env, :n, nv)
+    {sv, os} = ev(size, env)
 
-        true ->
-          env = Map.put(env, {:len, :out}, sv)
-          {bv, ob} = ev(base, env)
-          env = Map.put(env, :base, bv)
-          {first, o1} = ev(s, env)
-          {stop, o2} = ev(e, env)
-          pre = on ++ os ++ ob ++ o1 ++ o2
+    if fits?(on ++ os) and sv in 0..@len_max//1 do
+      env = Map.put(env, {:len, :out}, sv)
+      {bv, ob} = ev(base, env)
+      env = Map.put(env, :base, bv)
+      {first, o1} = ev(s, env)
+      {stop, o2} = ev(e, env)
+      pre = on ++ os ++ ob ++ o1 ++ o2
+      {pre, if(fits?(pre), do: loop(env, first, stop, k))}
+    else
+      {on ++ os, nil}
+    end
+  end
 
-          cond do
-            not fits?(pre) ->
-              {:pre, pre, nil}
-
-            k > 0 and stop > @i64_max - k ->
-              {:pre, pre, nil}
-
-            k < 0 and stop < @i64_min - k ->
-              {:pre, pre, nil}
-
-            k > 0 and first <= stop ->
-              {:pre, pre, {env, first, first + k * div(stop - first, k)}}
-
-            k < 0 and first >= stop ->
-              {:pre, pre, {env, first, first + k * div(first - stop, -k)}}
-
-            true ->
-              {:pre, pre, nil}
-          end
-      end
+  # the counter's first and last values, or nil when the loop does not run
+  # (empty, or raising at the range limit: a stop within one step of i64's)
+  defp loop(env, first, stop, k) do
+    cond do
+      k > 0 and stop > @i64_max - k -> nil
+      k < 0 and stop < @i64_min - k -> nil
+      k > 0 and first <= stop -> {env, first, first + k * div(stop - first, k)}
+      k < 0 and first >= stop -> {env, first, first + k * div(first - stop, -k)}
+      true -> nil
     end
   end
 
@@ -518,7 +511,7 @@ defmodule Defk.LinearFactsTest do
     [n, size, base, s, e, k, idx] = shape
 
     if not (c_of(kernel(n, size, base, s, e, k, idx)) =~ "defk_put_u8") do
-      for {:pre, _, loop} <- runs(shape),
+      for {_pre, loop} <- runs(shape),
           loop != nil,
           {env, i, iv, ops} <- ends(loop, idx),
           fits?(ops) do
@@ -546,14 +539,14 @@ defmodule Defk.LinearFactsTest do
 
     # nothing checked: no arithmetic the kernel reaches overflows
     if not (c =~ @checked) do
-      for {:pre, pre, _} <- runs(shape) do
+      for {pre, _loop} <- runs(shape) do
         assert fits?(pre), "#{shown(shape)} has no overflow check, but overflows before its loop"
       end
     end
 
     # the index's arithmetic unchecked: it never overflows where it runs
     if not (store =~ @checked) do
-      for {:pre, _, loop} <- runs(shape), loop != nil, {env, i, _iv, ops} <- ends(loop, idx) do
+      for {_pre, loop} <- runs(shape), loop != nil, {env, i, _iv, ops} <- ends(loop, idx) do
         assert fits?(ops),
                "#{Macro.to_string(idx)} has no overflow check, but overflows for length(a) = " <>
                  "#{env[{:len, :a}]}, length(b) = #{env[{:len, :b}]}, x = #{env.x}, i = #{i} " <>

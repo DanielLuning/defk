@@ -1364,10 +1364,15 @@ names each kept bounds check and the fact that would drop it. See
   (`defk-upc`): 1 MB hex encode 0.601 -> 0.333 ms, decode 0.644 -> 0.503 ms.
   `pcm_mix`: a variable block offset keeps two bounds checks in the sum loop,
   which then runs scalar and takes ~70% of the kernel (0.2-0.29 of 0.3-0.37
-  ms); the check-free clamp loop beside it vectorises at width 8.
+  ms); the check-free clamp loop beside it vectorises at width 8. Since
+  linear facts (`defk-qdz`, 6.33), `all[hl + i]` in that loop is proven
+  (`len(all) == hl + m`); `bufs[j * m + i]` stays, as `j * m` is a product
+  of two variables (a later step), but the same loop written with
+  `base = max(j * m, 0)` and `i <- 0..(min(m, length(bufs) - base) - 1)//1`
+  is check-free (not measured yet).
 - **Conditions:** under load.
-- **Source:** [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), `defk-n7k`; `defk-upc` comment 2026-10-10; [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs), `defk-siy`.
-- **Status:** provisional. Still open: `defk-siy`, `defk-n7k`, `defk-pic`, `defk-fun`, `defk-9za`.
+- **Source:** [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), `defk-n7k`; `defk-upc` comment 2026-10-10; [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs), `defk-siy`; `defk-qdz` (`test/linear_facts_test.exs`).
+- **Status:** provisional. Still open: `defk-siy` (its second loop, `acc[i - m]`, needs `m >= 0` from a guard), `defk-n7k`, `defk-9za`.
 
 <!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
@@ -1376,11 +1381,16 @@ n = min(length(a), length(b))
 for i <- 0..(n - 1)//1, reduce: 0.0, do: (acc -> acc + a[i] * b[i])
 table[band(h, 255)]                 # into a 256-element alloc or attribute
 @dim 384                            # literal stride: m[r * @dim + j]
-out = alloc(i16, length(a))         # alloc with length(a), loop to min(length(a), length(b)) - 1
+out = alloc(i16, n)                 # len(out) == n: out[i] for i <- 0..(n - 1)//1
+base = max(j * m, 0)                # a block offset: bufs[base + i], and base + i
+for i <- 0..(min(length(sums), length(bufs) - base) - 1)//1  # with no overflow check
+for i <- (n - 1)..0//-1             # counting down: out[n - 1 - i], a[i]
+x = max(x, 0)                       # an offset argument: a[x + i]
+for i <- 0..(length(a) - x - 1)//1
 # kept
 a[i + 1]                            # nothing proves i + 1 < length(a)
-bufs[j * m + i]                     # m = div(length(bufs), n): variable block offset (defk-siy)
-for ..., reduce: out do o -> o[2 * i] = a[i]; o end   # reduce accumulator drops alloc facts (defk-fun)
+bufs[j * m + i]                     # j * m: a product of two variables
+acc[i - m]                          # i <- m..: nothing proves m >= 0 (a guard, later)
 ```
 
 ### 6.3 Flat loops run in strips with one safepoint each
@@ -2279,6 +2289,34 @@ the verdict they claim. Two gave a better one than on macOS:
   probe off.
 - **Source:** `defk-u1u`; the generated C of all 101 files is
   byte-identical to main's.
+- **Status:** measured, provisional.
+
+### 6.33 Linear facts drop 16% of the catalog's bounds checks for ~5% more compiler time
+
+- **Numbers:** over the 101 test and example files of 6.32, the bounds
+  checks in the generated C went from 4,072 to 3,414 call sites (-16%;
+  -37% without `SatEx.Kernels`, whose 2,300 checks index one state array
+  through values read from it), the overflow checks from 6,419 to 6,250,
+  the range-limit tests from 729 to 722; 34 files changed, none gained a
+  check. Examples: `AllocUnzeroedTest` 563 -> 198, `HashChain` 59 -> 19,
+  `Geo` 92 -> 52, `FuzzySearch` 66 -> 30, `Cosine` 39 -> 19. Compiler time
+  (`Defk.Compiler.compile` over 109 modules, clang not included), three
+  rounds interleaved with `defk-u1u`: 2,251 / 2,290 / 2,378 ms against
+  2,332 / 2,512 / 2,392 ms (+4.6% on the means); without `SatEx.Kernels`
+  +1.6%, `SatEx.Kernels` alone about +18%. The prover answered 29,777
+  queries: the 7,701 proven ones in at most 5 steps (5,273 in none), the
+  failed ones in at most 39, none at the budget of 64; a value keeps at
+  most 4 relative bounds of each kind (the cap is now in force).
+- **What it took:** the first version cost +25%. Most of it went to
+  repeated work, not to the search: a kept check proven again for the
+  report (one proof now names the missing half), a regex per rank and per
+  exact form, `form_add/2` rebuilding maps for a constant, an atom looked
+  up by scanning the env (now an index by C variable, `env.atoms`), and
+  every checked operation asking the prover even with constant bounds only.
+- **Conditions:** load 3.4-9.9 on 12 cores (other agents); provisional.
+- **Source:** `defk-qdz`; soundness: `test/linear_facts_test.exs`
+  (generated linear shapes, every dropped check against the arithmetic),
+  and the whole suite under AddressSanitizer with no report.
 - **Status:** measured, provisional.
 
 ---

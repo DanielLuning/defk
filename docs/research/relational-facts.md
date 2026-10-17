@@ -653,6 +653,17 @@ what it adds.
    signs); `alloc` and copy length equality; joins of `if`/`cond`/`case`
    values. Done when pic and siy loop 1 compile without checks (both
    modes), with soundness properties over random linear shapes.
+   *Landed as `defk-qdz` (2026-10-17). An i64 binding is the atom
+   `{:var, c}`; a value records `eq`, and an i64 value whose C is a C
+   variable is that atom. Instead of `env.facts` keyed by monomial, the env
+   keeps `atoms` (an i64 binding's facts by its C variable, set in
+   `put_var/3` and for inlined parameters); array lengths are still found
+   on the array bindings. `len_ubs` is new (`len(out) == n`). A case
+   guard's checked arithmetic gives no `eq` (it flags and computes on).
+   The strip classifier requires each proof's support to be fixed
+   (`sr_fixed_indices?/2`). Not in it: `*` of two atoms (step 4), and
+   `pcm_mix`'s sum loop keeps `bufs[j * m + i]` for that reason. Cost and
+   counts: `docs/performance.md` 6.33.*
 3. **Conditions and raising guards (defk-9za, defk-siy loop 2).** Narrowing
    in `if`/`cond` arms (statement and value), `for` filters and `and`;
    raising guards; non-empty ranges; the select rule; the exact-operand

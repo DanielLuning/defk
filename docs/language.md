@@ -408,7 +408,8 @@ iex> M.mul(4611686018427387904, 2)
 Unary minus and `abs/1` of -2^63 overflow the same way.
 
 The check is left out where the compiler proves the result fits, as for
-`2 * i + 1` with `i <- 0..(length(a) - 1)//1` (array lengths are below 2^61).
+`2 * i + 1` with `i <- 0..(length(a) - 1)//1` (array lengths are below 2^61),
+or `x + i` with `i <- 0..(length(a) - x - 1)//1` (it is below `length(a)`).
 That changes speed, never results.
 
 `div/2` and `rem/2` take two `i64` values
@@ -1193,6 +1194,25 @@ example `i <- 0..(n - 1)//1` with `n = min(length(a), length(b))`, a
 `out[2 * i + 1]` with `out = alloc(u8, 2 * length(a))` and
 `i <- 0..(length(a) - 1)//1` (a literal multiple or `div` by a literal of a
 length). That changes speed, never results.
+
+The proof relates the kernel's integers to each other and to array
+lengths, through:
+
+- `+`, `-` and `*` by a literal: `base + i` is known exactly, so
+  `bufs[base + i]` with `base = max(j * m, 0)` and
+  `i <- 0..(length(bufs) - base - 1)//1` is in range, and the add itself
+  needs no overflow check;
+- `min` and `max`: `min(x, y)` is at most `x` and at most `y`;
+- range bounds, counting up or down: in `i <- (n - 1)..0//-1`, `i` is
+  between `0` and `n - 1`;
+- lengths: `out = alloc(e, n)` has length `n`, and a copy has its
+  original's length, so `out[i]` for `i <- 0..(n - 1)//1` is in range
+  whatever `n` is;
+- branches: `last = if c, do: n - 1, else: n - 2` is at most `n - 1`.
+
+It does not use conditions (`if i >= w`) or products of two variables
+(`j * m`) yet: such an index keeps its check, and the fast-path report
+says which half (`0 <= i` or `i < length(a)`) nothing proves.
 
 ### Word loads
 

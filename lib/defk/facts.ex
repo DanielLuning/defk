@@ -27,11 +27,11 @@ defmodule Defk.Facts do
   # wraps); a case guard's checked arithmetic flags and computes on, so the
   # compiler drops its exact form (inexact/1). An i64 value whose C is a C
   # variable is that atom (eq/1). An atom's facts are its binding's, found
-  # in the scope the compiler passes (its env.vars): a binding is assigned
-  # in one place, or is a loop counter or an accumulator, whose facts hold
-  # wherever the binding is in scope, and an array never changes length. A
-  # fact whose atom is out of scope finds no binding and proves nothing
-  # (sound, if weak).
+  # in the scope the compiler passes (its env: atoms for i64 bindings by C
+  # variable, vars for arrays): a binding is assigned in one place, or is a
+  # loop counter or an accumulator, whose facts hold wherever the binding is
+  # in scope, and an array never changes length. A fact whose atom is out of
+  # scope finds no binding and proves nothing (sound, if weak).
   #
   # The prover (le?/4) decides `form <= 0` by replacing the newest monomial
   # by one of its bounds until a constant is left, within a step budget; an
@@ -115,8 +115,19 @@ defmodule Defk.Facts do
     end
   end
 
-  defp c_var?(%{t: :i64, c: c}) when is_binary(c), do: Regex.match?(~r/^[pv]_\w+$/, c)
+  # a C variable's name: p_ or v_ and one or more word characters
+  defp c_var?(%{t: :i64, c: <<p, ?_, rest::binary>>}) when p in [?p, ?v] and rest != "",
+    do: word?(rest)
+
   defp c_var?(_), do: false
+
+  defp word?(<<>>), do: true
+
+  defp word?(<<ch, rest::binary>>)
+       when ch in ?a..?z or ch in ?A..?Z or ch in ?0..?9 or ch == ?_,
+       do: word?(rest)
+
+  defp word?(_), do: false
 
   def nonneg?(carrier) do
     f = facts(carrier)
@@ -202,17 +213,20 @@ defmodule Defk.Facts do
   # The only functions whose answers may drop a check. A proof carries its
   # support: the C variables of the atoms it reasoned about, which the
   # flagged-strip classifier must see (ADR-0007). `scope` is the compiler's
-  # env.vars: the bindings whose facts an atom's are.
+  # env: where an atom's facts are (atom_facts/2).
 
   # a value within lo..hi needs no i64 overflow check
   def prove_i64(lo, hi),
     do: is_integer(lo) and is_integer(hi) and lo >= @i64_min and hi <= @i64_max
 
-  # an i64 value v whose facts keep it inside i64, by the prover
+  # An i64 value v whose facts keep it inside i64, by the prover. A value
+  # with constant bounds only was decided by prove_i64/2 already.
   def fits_i64?(v, scope) do
+    f = facts(v)
     lookup = lookup(scope, nil)
 
-    match?({:ok, _}, value_le(1, v, form_const(-@i64_max), lookup)) and
+    (f.ubs != [] or f.lbs != [] or rel_eq(v) != nil) and
+      match?({:ok, _}, value_le(1, v, form_const(-@i64_max), lookup)) and
       match?({:ok, _}, value_le(-1, v, form_const(@i64_min), lookup))
   end
 
@@ -221,28 +235,44 @@ defmodule Defk.Facts do
   def in_bounds?(a, i, w \\ 1, scope \\ %{}), do: prove_in_bounds(a, i, w, scope) != :unproven
 
   def prove_in_bounds(a, i, w \\ 1, scope \\ %{}) do
-    lookup = lookup(scope, a)
-
-    with {:ok, s1} <- value_le(-1, i, form_const(0), lookup),
-         {:ok, s2} <- value_le(1, i, form_sub(form_const(w), form_len(a.c)), lookup) do
-      {:proven, Enum.uniq([a.c | s1 ++ s2])}
-    else
-      _ -> :unproven
+    case check(a, i, w, scope) do
+      {:proven, _} = proven -> proven
+      {:unproven, _} -> :unproven
     end
   end
 
-  # the fact that would drop the check `0 <= i` / `i + w <= length(a)` when
-  # nothing does: the report names it (the perturbations stay in here, where
-  # the representation is)
-  def missing(a, i, w \\ 1, scope \\ %{}) do
-    low = assert(i, lo: max(lo(i) || 0, 0))
-    high = put(i, %{facts(i) | ubs: [{1, form_sub(form_len(a.c), form_const(w))} | ubs(i)]})
+  # An access's proof, or the half of it that fails, for the report:
+  # {:proven, support} or {:unproven, :low | :high | :both}. Each half is
+  # proven once.
+  def check(a, i, w, scope) do
+    lookup = lookup(scope, a)
 
-    cond do
-      in_bounds?(a, i, w, scope) -> :none
-      in_bounds?(a, low, w, scope) -> :low
-      in_bounds?(a, high, w, scope) -> :high
-      true -> :both
+    case {low_half(i, lookup), fn -> high_half(a, i, w, lookup) end} do
+      {{:ok, s1}, high} ->
+        case high.() do
+          {:ok, s2} -> {:proven, Enum.uniq([a.c | s1 ++ s2])}
+          :no -> {:unproven, :high}
+        end
+
+      {:no, high} ->
+        {:unproven, if(match?({:ok, _}, high.()), do: :low, else: :both)}
+    end
+  end
+
+  # the two halves of the check: 0 <= i, and i + w <= length(a)
+  defp low_half(i, lookup), do: value_le(-1, i, form_const(0), lookup)
+
+  defp high_half(a, i, w, lookup),
+    do: value_le(1, i, form_sub(form_const(w), form_len(a.c)), lookup)
+
+  # The fact that would drop the check `0 <= i` / `i + w <= length(a)` when
+  # nothing does: the report names it. Each half is proven on its own, so a
+  # half that fails is the fact missing (supplying `lo >= 0`, or the bound
+  # `i <= length(a) - w`, proves that half and leaves the other as it is).
+  def missing(a, i, w \\ 1, scope \\ %{}) do
+    case check(a, i, w, scope) do
+      {:proven, _} -> :none
+      {:unproven, half} -> half
     end
   end
 
@@ -256,16 +286,16 @@ defmodule Defk.Facts do
     end
   end
 
-  defp atom_facts(scope, {kind, c}) do
-    Enum.find_value(scope, %__MODULE__{}, fn
-      {_, %{c: ^c, t: t} = b} -> if atom_kind(t) == kind, do: facts(b)
+  # scope: the compiler's env, whose atoms map an i64 binding's C variable
+  # to its facts, and whose vars hold the array bindings
+  defp atom_facts(scope, {:var, c}), do: (scope[:atoms] || %{})[c] || %__MODULE__{}
+
+  defp atom_facts(scope, {:len, c}) do
+    Enum.find_value(scope[:vars] || %{}, %__MODULE__{}, fn
+      {_, %{c: ^c, t: {:arr, _}} = b} -> facts(b)
       _ -> nil
     end)
   end
-
-  defp atom_kind(:i64), do: :var
-  defp atom_kind({:arr, _}), do: :len
-  defp atom_kind(_), do: nil
 
   # Prove c * v + rest <= 0 for a value v (c = 1 or -1): v is replaced by
   # each of its bounds in c's direction, then by its constant bound, then by
@@ -273,7 +303,9 @@ defmodule Defk.Facts do
   # {:ok, support} or :no.
   defp value_le(c, v, rest, lookup) do
     f = facts(v)
-    exact = for e <- [eq(v)], e != nil, map_size(e.t) > 0, do: {1, e}
+    # a value that reads its own C variable has that binding's facts: its
+    # atom would only repeat them
+    exact = for e <- [f.eq && rel_eq(v)], e, do: {1, e}
 
     candidates =
       if c > 0,
@@ -372,13 +404,19 @@ defmodule Defk.Facts do
   # the newest monomial is replaced first: parameters are the oldest, then
   # the bindings in fresh/2's order (their C names carry its counter)
   defp rank({_, "p_" <> _ = c}), do: {0, c}
+  defp rank({_, c}), do: counter(c, byte_size(c), 0, 1)
 
-  defp rank({_, c}) do
-    case Regex.run(~r/_(\d+)$/, c) do
-      [_, n] -> {1, String.to_integer(n)}
+  # the number after the last "_" of c, read from the end: {1, n}, or
+  # {0, c} for a name without one
+  defp counter(c, i, n, m) when i > 0 do
+    case :binary.at(c, i - 1) do
+      d when d in ?0..?9 -> counter(c, i - 1, n + (d - ?0) * m, m * 10)
+      ?_ when m > 1 -> {1, n}
       _ -> {0, c}
     end
   end
+
+  defp counter(c, _i, _n, _m), do: {0, c}
 
   # ------------------------------------------------- the accumulator carry --
   # A loop body may assume an array accumulator's facts (with_acc_facts in
@@ -446,12 +484,13 @@ defmodule Defk.Facts do
   def join(carrier, arms) do
     fs = Enum.map(arms, &facts/1)
     rel = Enum.map(arms, &%{facts(&1) | lbs: lbs_of(&1), ubs: ubs_of(&1)})
-    eqs = Enum.map(arms, &eq/1)
+    # a constant every arm is stays in lo and hi
+    eqs = Enum.map(arms, &rel_eq/1)
 
     put(carrier, %__MODULE__{
       lo: joined(fs, & &1.lo, &min/2),
       hi: joined(fs, & &1.hi, &max/2),
-      eq: if(hd(eqs) != nil and Enum.all?(eqs, &(&1 == hd(eqs))), do: hd(eqs)),
+      eq: if(Enum.all?(eqs, &(&1 == hd(eqs))), do: hd(eqs)),
       lbs: common(rel, & &1.lbs, &min/2),
       ubs: common(rel, & &1.ubs, &max/2),
       len_lo: joined(fs, & &1.len_lo, &min/2),
@@ -480,18 +519,26 @@ defmodule Defk.Facts do
 
   def add_facts(a, b) do
     {fa, fb} = {facts(a), facts(b)}
+    {ea, eb} = {eq(a), eq(b)}
+    {ra, rb} = {atoms_of(ea), atoms_of(eb)}
 
     %__MODULE__{
       lo: add(fa.lo, fb.lo),
       hi: add(fa.hi, fb.hi),
-      eq: both(eq(a), eq(b), &form_add/2),
+      eq: both(ea, eb, &form_add/2),
       lbs:
         merge(shift(fa.lbs, fb.lo), shift(fb.lbs, fa.lo), &max/2)
-        |> merge(shift_by(lbs_of(a), rel_eq(b)) ++ shift_by(lbs_of(b), rel_eq(a)), &max/2)
+        |> merge(
+          shift_by(plus_exact(fa.lbs, ra), rb) ++ shift_by(plus_exact(fb.lbs, rb), ra),
+          &max/2
+        )
         |> cap(),
       ubs:
         merge(shift(fa.ubs, fb.hi), shift(fb.ubs, fa.hi), &min/2)
-        |> merge(shift_by(ubs_of(a), rel_eq(b)) ++ shift_by(ubs_of(b), rel_eq(a)), &min/2)
+        |> merge(
+          shift_by(plus_exact(fa.ubs, ra), rb) ++ shift_by(plus_exact(fb.ubs, rb), ra),
+          &min/2
+        )
         |> cap()
     }
   end
@@ -500,36 +547,39 @@ defmodule Defk.Facts do
   # a (q * b >= p gives q * (a - b) <= q * a - p)
   def sub_facts(a, b) do
     {fa, fb} = {facts(a), facts(b)}
-    neg_b = negated(b)
+    {ea, eb} = {eq(a), eq(b)}
+    ra = atoms_of(ea)
+    nb = negated(fb, eb)
+    rn = atoms_of(nb.eq)
 
     %__MODULE__{
       lo: add(fa.lo, neg(fb.hi)),
       hi: add(fa.hi, neg(fb.lo)),
-      eq: both(eq(a), eq(b), &form_sub/2),
+      eq: both(ea, eb, &form_sub/2),
       lbs:
         shift(fa.lbs, neg(fb.hi))
-        |> merge(shift_by(lbs_of(a), rel_eq(neg_b)) ++ shift_by(neg_b.lbs, rel_eq(a)), &max/2)
+        |> merge(shift_by(plus_exact(fa.lbs, ra), rn) ++ shift_by(nb.lbs, ra), &max/2)
         |> cap(),
       ubs:
         shift(fa.ubs, neg(fb.lo))
-        |> merge(shift_by(ubs_of(a), rel_eq(neg_b)) ++ shift_by(neg_b.ubs, rel_eq(a)), &min/2)
+        |> merge(shift_by(plus_exact(fa.ubs, ra), rn) ++ shift_by(nb.ubs, ra), &min/2)
         |> cap()
     }
   end
 
   # -a: the bounds swapped and negated, the exact form negated
-  def neg_facts(a), do: negated(a)
+  def neg_facts(a), do: negated(facts(a), eq(a))
 
-  defp negated(a) do
-    fa = facts(a)
+  defp negated(fa, ea) do
     flip = fn {q, p} -> {q, form_scale(p, -1)} end
+    r = atoms_of(ea)
 
     %__MODULE__{
       lo: neg(fa.hi),
       hi: neg(fa.lo),
-      eq: (e = eq(a)) && form_scale(e, -1),
-      lbs: Enum.map(ubs_of(a), flip),
-      ubs: Enum.map(lbs_of(a), flip)
+      eq: ea && form_scale(ea, -1),
+      lbs: Enum.map(plus_exact(fa.ubs, r), flip),
+      ubs: Enum.map(plus_exact(fa.lbs, r), flip)
     }
   end
 
@@ -681,19 +731,21 @@ defmodule Defk.Facts do
 
   # a value's exact form as a bound, when it has atoms (a constant one is
   # its lo and hi)
-  defp exact_bound(v), do: for(e <- [rel_eq(v)], e != nil, do: {1, e})
+  defp exact_bound(v), do: plus_exact([], rel_eq(v))
 
   # the exact form, when it has atoms
-  defp rel_eq(%__MODULE__{eq: e}), do: if(e != nil and map_size(e.t) > 0, do: e)
+  defp rel_eq(v), do: atoms_of(eq(v))
 
-  defp rel_eq(v) do
-    e = eq(v)
-    if e != nil and map_size(e.t) > 0, do: e
-  end
+  defp atoms_of(%{t: t} = e) when map_size(t) > 0, do: e
+  defp atoms_of(_), do: nil
+
+  # bounds with an exact form (with atoms, or nil) among them
+  defp plus_exact(bounds, nil), do: bounds
+  defp plus_exact(bounds, e), do: bounds ++ [{1, e}]
 
   # the relative bounds with the exact form among them
-  defp lbs_of(v), do: facts(v).lbs ++ exact_bound(v)
-  defp ubs_of(v), do: facts(v).ubs ++ exact_bound(v)
+  defp lbs_of(v), do: plus_exact(facts(v).lbs, rel_eq(v))
+  defp ubs_of(v), do: plus_exact(facts(v).ubs, rel_eq(v))
 
   # --------------------------------------------------------------- forms --
 
@@ -701,15 +753,28 @@ defmodule Defk.Facts do
   def form_len(c), do: %{k: 0, t: %{{:len, c} => 1}}
   def form_var(c), do: %{k: 0, t: %{{:var, c} => 1}}
 
-  def form_add(a, b),
-    do: %{k: a.k + b.k, t: Map.merge(a.t, b.t, fn _, x, y -> x + y end) |> drop_zeros()}
+  # a coefficient that sums to 0 drops its monomial (only a shared one can)
+  def form_add(a, %{t: tb} = b) when map_size(tb) == 0, do: %{a | k: a.k + b.k}
+  def form_add(%{t: ta} = a, b) when map_size(ta) == 0, do: %{b | k: a.k + b.k}
+
+  def form_add(a, b) do
+    t =
+      Enum.reduce(b.t, a.t, fn {m, y}, t ->
+        case t do
+          %{^m => x} when x + y == 0 -> Map.delete(t, m)
+          %{^m => x} -> %{t | m => x + y}
+          _ -> Map.put(t, m, y)
+        end
+      end)
+
+    %{k: a.k + b.k, t: t}
+  end
 
   def form_sub(a, b), do: form_add(a, form_scale(b, -1))
 
-  def form_scale(%{k: k, t: t}, c),
-    do: %{k: k * c, t: t |> Map.new(fn {m, x} -> {m, x * c} end) |> drop_zeros()}
-
-  defp drop_zeros(t), do: Map.reject(t, fn {_, x} -> x == 0 end)
+  def form_scale(form, 1), do: form
+  def form_scale(_form, 0), do: form_const(0)
+  def form_scale(%{k: k, t: t}, c), do: %{k: k * c, t: Map.new(t, fn {m, x} -> {m, x * c} end)}
 
   # the least and greatest values a form takes over its monomials' ranges
   defp form_min(%{k: k, t: t}) do
