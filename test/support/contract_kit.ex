@@ -96,8 +96,27 @@ defmodule Defk.ContractKit do
   def frozen_kernel?(%{check: {:compiles, _}, known_failure: nil}), do: true
   def frozen_kernel?(_), do: false
 
-  @doc "Compiles every frozen example concurrently: `%{file => :ok | message}`."
-  def compile_frozen(examples, kind), do: Corpus.compile_all(examples, kind)
+  @doc """
+  Compiles every frozen example concurrently: `%{file => :ok | message}`.
+  Once per test run for the same examples: the live contract and every
+  frozen copy of it compile the same corpus, and the modules are named after
+  the files, so a second caller waits for the first and shares its result.
+  """
+  def compile_frozen(examples, kind) do
+    key = {__MODULE__, :frozen, kind, :erlang.phash2(examples)}
+
+    :global.trans({key, self()}, fn ->
+      case :persistent_term.get(key, nil) do
+        nil ->
+          compiled = Corpus.compile_all(examples, kind)
+          :persistent_term.put(key, compiled)
+          compiled
+
+        compiled ->
+          compiled
+      end
+    end)
+  end
 
   @doc "A test name for a frozen file's examples."
   def label(examples), do: Corpus.label(examples)
