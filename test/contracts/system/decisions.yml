@@ -1,0 +1,29 @@
+- id: contracts-frozen-per-release
+  date: "2026-10-17"
+  decision: A release freezes its contract (the obligations, records and contract tests under test/contracts/) into test/stability/<version>/contracts/, with the test modules renamed for the version; every later commit runs every frozen contract against its code, in mix test, and `mix defk.contracts <version>` runs one through Covenant.
+  driver: Owner, 2026-10-17 - run a contract from one version against another, to replace the bookkeeping defk invented with Covenant's; the frozen copy is the release's checker as well as its data, so weakening a live test cannot weaken an old release's check.
+  alternatives:
+    - option: Read an old contract from its git tag when it is run
+      rejected: Owner chose frozen copies; they fit the never-edited rule and ci/frozen.sh, and need no git history at test time.
+    - option: Freeze only the data and keep one live checker
+      rejected: That was defk's own scheme; the checker itself could drift.
+  approved_by: owner (2026-10-17, defk-ksc)
+  conditions:
+    - text: The freeze task exists
+      check: { kind: file, path: dev/mix/tasks/defk.stability.freeze.ex }
+    - text: The frozen-file gate exists
+      check: { kind: file, path: ci/frozen.sh }
+
+- id: contract-kit-seam
+  date: "2026-10-17"
+  decision: A contract test calls only defk's promised API (as the API snapshots list it), ExUnit, StreamData, Covenant and Defk.ContractKit; the kit's functions keep their meaning forever (a new need is a new function), while their implementation follows defk's internals. test/contract_kit_test.exs enforces the rule on every contract test, frozen ones included.
+  driver: A frozen contract test is code; one that called an internal helper or an unstable function would break, or change meaning, when that internal changed, though no promise did.
+  alternatives:
+    - option: Let contract tests call any test helper
+      rejected: Old releases' checks would follow every refactor of the helpers.
+  approved_by: owner (2026-10-17, defk-ksc)
+  conditions:
+    - text: The kit exists
+      check: { kind: file, path: test/support/contract_kit.ex }
+    - text: The rule is checked
+      check: { kind: file, path: test/contract_kit_test.exs }

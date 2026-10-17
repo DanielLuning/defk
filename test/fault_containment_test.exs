@@ -7,6 +7,11 @@
 # kills the node as before. __defk_inject_fault__/1 (a test-only hook,
 # MIX_ENV=test) makes the next clock read fault on purpose.
 #
+# The promise itself (a fault is a RuntimeError in the caller, the node and
+# other kernels keep running, the frame is freed) is the runtime contract's,
+# in test/contracts/defk/fault_contract_test.exs; here, how the handler is
+# built and chained, and the message's text.
+#
 # The cases that must kill the node run in a child VM (`mix run` under
 # MIX_ENV=test, so the hook is compiled in); so do the chain cases after a
 # hot upgrade or an unload, where a wrong answer is a node crash, not a
@@ -40,8 +45,6 @@ end
 
 defmodule Defk.FaultContainmentTest do
   use ExUnit.Case, async: false
-  import Defk.Test.Frames
-  import Defk.TestKit
 
   alias Defk.FaultContainmentTest.{K, K2}
 
@@ -66,25 +69,10 @@ defmodule Defk.FaultContainmentTest do
              "ERL_NIF_INIT(Elixir.Defk.FaultContainmentTest.K, defk_funcs, defk_load, NULL, defk_upgrade, defk_unload)"
   end
 
-  test "a segmentation fault inside a kernel raises RuntimeError in the caller; the node keeps running" do
-    live0 = K.__defk_stats__().frames_live
-    assert K.spin(@n) == @sum
-
+  # the contract promises the "defk bug" prefix; the rest of the text is here
+  test "the message names the signal, its code, the address and the pc" do
     K.__defk_inject_fault__(1)
     assert_raise RuntimeError, @segv, fn -> K.spin(@n) end
-
-    # the hook is consumed by the fault, the library works again, nothing leaked
-    assert K.spin(@n) == @sum
-    assert_frames_live(K, live0)
-  end
-
-  test "an illegal instruction is contained the same way" do
-    K.__defk_inject_fault__(2)
-
-    assert_raise RuntimeError, ~r/defk bug: illegal instruction inside kernel native code/, fn ->
-      K.spin(@n)
-    end
-
     assert K.spin(@n) == @sum
   end
 
@@ -98,62 +86,6 @@ defmodule Defk.FaultContainmentTest do
 
       assert K.spin(@n) == @sum
     end
-  end
-
-  test "a fault after the kernel yielded (a promoted frame, the step function) is contained and the frame freed" do
-    live0 = K.__defk_stats__().frames_live
-
-    forced(K, fn ->
-      # let three clock reads pass: under forced yields each one yields
-      K.__defk_inject_fault__(1 + 256 * 3)
-      assert_raise RuntimeError, @segv, fn -> K.spin(@n) end
-      assert K.spin(1000) == Enum.sum(0..999)
-    end)
-
-    assert_frames_live(K, live0)
-    assert K.__defk_stats__().promotions > 0
-  end
-
-  test "a fault in the older library is contained through the newer library's handler; other kernels are unaffected" do
-    # K2 loaded after K: its handler is in front and chains to K's
-    other =
-      Task.async(fn ->
-        for _ <- 1..20, do: K2.spin2(@n)
-      end)
-
-    for _ <- 1..5 do
-      K.__defk_inject_fault__(1)
-      assert_raise RuntimeError, @segv, fn -> K.spin(@n) end
-    end
-
-    expected = Enum.sum(for i <- 0..(@n - 1), do: rem(i, 3))
-    assert Task.await(other, 30_000) == List.duplicate(expected, 20)
-
-    # and a fault in the newer library, at the head of the chain
-    K2.__defk_inject_fault__(1)
-    assert_raise RuntimeError, @segv, fn -> K2.spin2(@n) end
-    assert K2.spin2(@n) == expected
-  end
-
-  test "the fault is reported on the calling process only; a sibling process is not touched" do
-    parent = self()
-
-    pid =
-      spawn(fn ->
-        K.__defk_inject_fault__(1)
-
-        try do
-          K.spin(@n)
-          send(parent, :no_raise)
-        rescue
-          e in RuntimeError -> send(parent, {:raised, Exception.message(e)})
-        end
-      end)
-
-    assert_receive {:raised, msg}, 10_000
-    assert msg =~ "segmentation fault"
-    refute Process.alive?(pid) and false
-    assert K.spin(100) == Enum.sum(0..99)
   end
 
   # ---- child VM: faults that must still kill the node, and the chain after upgrades/unloads ----

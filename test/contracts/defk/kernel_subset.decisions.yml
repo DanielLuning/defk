@@ -1,0 +1,13 @@
+- id: frozen-kernels-are-data
+  date: "2026-10-17"
+  decision: The valid kernels a release shipped are frozen as Markdown data under test/stability/<version>/kernels/, each with the results the release's own compiler gave; a contract test reads them through Defk.ContractKit, and the bug fixes that change a frozen result are listed in the live test/stability/exceptions.exs, never in a frozen file.
+  driver: A frozen file is never edited (docs/agents/stability.md); results recorded from the tag's compiler are evidence about that release, which a hand-written expectation is not.
+  alternatives:
+    - option: Pin the expected results in the contract test's source
+      rejected: The results would be what the author wrote, not what the release did.
+  approved_by: owner (docs/agents/stability.md)
+  conditions:
+    - text: The 0.1.0 kernels are frozen
+      check: { kind: file, path: test/stability/0.1.0/kernels }
+    - text: The live exception list exists
+      check: { kind: file, path: test/stability/exceptions.exs }

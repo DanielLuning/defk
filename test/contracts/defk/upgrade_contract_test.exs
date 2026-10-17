@@ -1,20 +1,19 @@
-# Hot code upgrade with suspended kernel frames.
-#
-# A kernel is started and suspended in the middle of a run, its module is
-# recompiled with a different body and frame layout, and the suspended kernel
-# must finish in the library it started in, each library must destroy only its
-# own frames, and new calls must run the new code. `old_stats` is a fun
-# created by the old module instance, so it reads the old library's counters
-# after the upgrade.
-#
-# Suspending is racy::erlang.suspend_process/1 only takes effect
-# once the kernel next hands control back to the VM, so under load it can land
-# only after the whole run has already completed. start_suspended therefore
-# retries until it actually catches the kernel between two yields.
+defmodule Defk.Contract.UpgradeContractTest do
+  # Hot code upgrade with suspended kernel frames (runtime_contract.obligations.md,
+  # I6). A kernel is started and suspended in the middle of a run, its module
+  # is recompiled with a different body and frame layout, and the suspended
+  # kernel must finish in the library it started in, each library must
+  # destroy only its own frames, and new calls must run the new code.
+  # `old_stats` is a fun created by the old module instance, so it reads the
+  # old library's counters after the upgrade.
+  #
+  # Suspending is racy: :erlang.suspend_process/1 only takes effect once the
+  # kernel next hands control back to the VM, so under load it can land only
+  # after the whole run has already completed. start_suspended therefore
+  # retries until it actually catches the kernel between two yields.
+  use Covenant.Case, component: "defk.runtime_contract", async: false
 
-defmodule Defk.UpgradeTest do
-  use ExUnit.Case, async: false
-  import Defk.TestKit
+  alias Defk.ContractKit, as: Kit
 
   # long enough (~0.5 s) that a kernel almost always completes the run only
   # after start_suspended has suspended it, with an easy closed form for the
@@ -37,7 +36,7 @@ defmodule Defk.UpgradeTest do
           acc -> acc + rem(i, 7)
         end
       end
-      def stats_fun, do: fn -> __defk_stats__() end
+      #{Kit.stats_fun_source()}
     end
     """
   end
@@ -55,30 +54,22 @@ defmodule Defk.UpgradeTest do
           end
         s * 1000 + t
       end
-      def stats_fun, do: fn -> __defk_stats__() end
+      #{Kit.stats_fun_source()}
     end
     """
   end
 
   defp load(mod, version) do
     [{^mod, _}] = Code.compile_string(source(mod, version))
-    mod.__defk_lib__()
+    Kit.lib(mod)
   end
 
   defp spin_a(n), do: div(n, 7) * 21 + Enum.sum(0..(rem(n, 7) - 1)//1)
 
-  # Start mod.spin(@n) in a process and suspend it in the middle of a run.
-  #
-  # :erlang.suspend_process/2 only takes effect once the kernel next hands
-  # control back to the VM, and where that happens is a race: usually a few
-  # yields into the ~0.5 s run (one frame live), but under load sometimes only
-  # after the whole run has already completed (frames_live == 0, the process
-  # caught in its tail). The second landing exercises nothing an upgrade cares
-  # about, so start_suspended retries until it catches the kernel mid-run,
-  # resuming the slipped process afterwards so it finishes and exits. `base`
+  # Start mod.spin(@n) in a process and suspend it in the middle of a run,
+  # retrying when the suspension lands only after the run completed. `base`
   # keeps the "has it yielded yet" wait honest across retries: the yields
-  # counter is module-global, and a previous attempt that ran to completion
-  # already set it > 0.
+  # counter is per library, and a previous attempt already set it > 0.
   defp start_suspended(mod, retries \\ 8)
 
   defp start_suspended(_mod, 0), do: flunk("could not suspend the kernel mid-run")
@@ -88,7 +79,7 @@ defmodule Defk.UpgradeTest do
     base = stats.().yields
     parent = self()
     pid = spawn(fn -> send(parent, {:spin, self(), mod.spin(@n)}) end)
-    wait_until(fn -> stats.().yields > base end)
+    Kit.wait_until(fn -> stats.().yields > base end)
 
     suspended =
       try do
@@ -108,13 +99,8 @@ defmodule Defk.UpgradeTest do
     %{frames_live: frames_live} = stats.()
 
     if suspended and frames_live == 1 and not received and Process.alive?(pid) do
-      assert %{frames_live: 1} = stats.()
       {pid, stats}
     else
-      # The kernel finished before (or while) the suspension took effect, and
-      # may already have exited: the latch caught nothing worth testing. Resume
-      # it if it is still parked so it sends its result and exits, drain that
-      # result, and try a fresh spawn.
       if Process.alive?(pid), do: :erlang.resume_process(pid)
 
       unless received do
@@ -129,6 +115,7 @@ defmodule Defk.UpgradeTest do
     end
   end
 
+  @tag obligation: "defk.runtime_contract.I6"
   test "reloading with no live frames runs the new code" do
     mod = Module.concat(__MODULE__, "Idle")
     lib_a = load(mod, :a)
@@ -136,9 +123,10 @@ defmodule Defk.UpgradeTest do
     lib_b = load(mod, :b)
     assert lib_a != lib_b
     assert mod.spin(10) == 20_769
-    assert %{frames_live: 0} = mod.__defk_stats__()
+    assert %{frames_live: 0} = Kit.stats(mod)
   end
 
+  @tag obligation: "defk.runtime_contract.I6"
   test "a kernel suspended across an upgrade finishes in the old library" do
     mod = Module.concat(__MODULE__, "Upgrade")
     lib_a = load(mod, :a)
@@ -154,13 +142,14 @@ defmodule Defk.UpgradeTest do
     assert result == spin_a(@n)
 
     # each library destroyed only its own frames
-    wait_until(fn -> old_stats.().frames_live == 0 end)
-    assert %{frames_live: 0, promotions: 0} = mod.__defk_stats__()
+    Kit.wait_until(fn -> old_stats.().frames_live == 0 end)
+    assert %{frames_live: 0, promotions: 0} = Kit.stats(mod)
     assert :code.soft_purge(mod)
     assert mod.spin(10) == 20_769
   end
 
-  test "stats count per library: a new library starts at zero, an old call stays in the old one" do
+  @tag obligation: "defk.runtime_contract.I6"
+  test "counters are per library: a new library starts at zero, an old call stays in the old one" do
     mod = Module.concat(__MODULE__, "Stats")
     load(mod, :a)
     {pid, old_stats} = start_suspended(mod)
@@ -168,35 +157,35 @@ defmodule Defk.UpgradeTest do
     assert old_yields > 0
 
     load(mod, :b)
-    assert %{frames_live: 0, promotions: 0, yields: 0} = mod.__defk_stats__()
+    assert %{frames_live: 0, promotions: 0, yields: 0} = Kit.stats(mod)
     assert %{frames_live: 1} = old_stats.()
 
     :erlang.resume_process(pid)
     assert_receive {:spin, ^pid, result}, @timeout
     assert result == spin_a(@n)
-    wait_until(fn -> old_stats.().frames_live == 0 end)
+    Kit.wait_until(fn -> old_stats.().frames_live == 0 end)
 
     # the old call's yields after the reload went to the old library
     assert old_stats.().yields > old_yields
-    assert %{frames_live: 0, promotions: 0, yields: 0} = mod.__defk_stats__()
+    assert %{frames_live: 0, promotions: 0, yields: 0} = Kit.stats(mod)
     assert :code.soft_purge(mod)
   end
 
-  test "reloading the same library while a kernel is suspended" do
+  @tag obligation: "defk.runtime_contract.I6"
+  test "reloading the same source while a kernel is suspended keeps the library" do
     mod = Module.concat(__MODULE__, "Same")
     lib = load(mod, :a)
     {pid, stats} = start_suspended(mod)
 
-    # same source, same .so: the new instance shares the old one's statics
     assert load(mod, :a) == lib
     :erlang.resume_process(pid)
     assert_receive {:spin, ^pid, result}, @timeout
     assert result == spin_a(@n)
-    wait_until(fn -> stats.().frames_live == 0 end)
-    # (promotions may be > 1 if start_suspended retried)
-    assert %{frames_live: 0} = mod.__defk_stats__()
+    Kit.wait_until(fn -> stats.().frames_live == 0 end)
+    assert %{frames_live: 0} = Kit.stats(mod)
   end
 
+  @tag obligation: "defk.runtime_contract.I6"
   test "killing a kernel suspended across an upgrade frees its frame in the old library" do
     mod = Module.concat(__MODULE__, "Kill")
     load(mod, :a)
@@ -206,10 +195,11 @@ defmodule Defk.UpgradeTest do
     ref = Process.monitor(pid)
     Process.exit(pid, :kill)
     assert_receive {:DOWN, ^ref, _, _, :killed}, @timeout
-    wait_until(fn -> old_stats.().frames_live == 0 end)
-    assert %{frames_live: 0} = mod.__defk_stats__()
+    Kit.wait_until(fn -> old_stats.().frames_live == 0 end)
+    assert %{frames_live: 0} = Kit.stats(mod)
   end
 
+  @tag obligation: "defk.runtime_contract.I6"
   test "purging the old code kills the suspended kernel, like any process in old code" do
     mod = Module.concat(__MODULE__, "Purge")
     load(mod, :a)
@@ -220,7 +210,7 @@ defmodule Defk.UpgradeTest do
     assert :code.purge(mod)
     assert_receive {:DOWN, ^ref, _, _, :killed}, @timeout
     refute_received {:spin, ^pid, _}
-    assert %{frames_live: 0} = mod.__defk_stats__()
+    assert %{frames_live: 0} = Kit.stats(mod)
     assert mod.spin(10) == 20_769
   end
 end
