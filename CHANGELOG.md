@@ -67,6 +67,16 @@
   `yield: false` copies at once, as before, and so does a kernel without a
   loop. Growing an accumulator past tens of MB still reallocates it at once
   (64 MB: 10-17 ms); a chunked accumulator would need a design.
+- Faster: a bounds or overflow check is left out where a condition proves
+  it: inside an `if` or `cond` arm (a later `cond` arm also sees the earlier
+  conditions false), after a `for` filter, on the right side of `and`, in
+  the body of a range that runs, and after a raising guard,
+  `if w < 1, do: raise(ArgumentError, "...")`. docs/language.md now
+  recommends raising guards for what a kernel needs of its arguments. When
+  a check stays, the fast-path report names a small fact that would drop
+  it: `nothing proves i - w < length(x) (it would follow from w >= 0)`. An
+  `if` value whose arm relies on its condition to drop a check is a branch,
+  not a select. Results are unchanged.
 - Faster: a call that allocates (an `alloc/2` result, a bitstring
   accumulator, a copy) no longer allocates and frees a table for its owned
   buffers; the first four slots live in the call's frame. A one-buffer call
