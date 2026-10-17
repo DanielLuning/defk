@@ -7,7 +7,7 @@
       rejected: Owner chose frozen copies; they fit the never-edited rule and ci/frozen.sh, and need no git history at test time.
     - option: Freeze only the data and keep one live checker
       rejected: That was defk's own scheme; the checker itself could drift.
-  approved_by: owner (2026-10-17, defk-ksc)
+  approved_by: owner (2026-10-17)
   conditions:
     - text: The freeze task exists
       check: { kind: file, path: dev/mix/tasks/defk.stability.freeze.ex }
@@ -21,7 +21,7 @@
   alternatives:
     - option: Let contract tests call any test helper
       rejected: Old releases' checks would follow every refactor of the helpers.
-  approved_by: owner (2026-10-17, defk-ksc)
+  approved_by: owner (2026-10-17)
   conditions:
     - text: The kit exists
       check: { kind: file, path: test/support/contract_kit.ex }
