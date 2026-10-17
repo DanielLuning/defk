@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-17T20:12:23Z",
+  "description": "covenant.mutate on Defk.Compiler (~6,500 lines; a C build behind each kernel): hours on 4-5 cores, past the 1-hour default. Mains power only; ask the owner before starting. Report kills per obligation, survivors by kind, and whether the contract tests alone guard the compiler.",
+  "id": "defk-ksc.3",
+  "labels": [],
+  "parent": "defk-ksc",
+  "priority": 3,
+  "status": "open",
+  "title": "Mutation testing of lib/defk/compiler.ex against the contracts",
+  "type": "task",
+  "updated_at": "2026-10-17T20:12:23Z"
+}
