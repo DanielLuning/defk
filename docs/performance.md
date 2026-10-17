@@ -1064,14 +1064,30 @@ Clamp.Kernels.clamp_all(packed)
 Enum.map(readings, &Clamp.Kernels.clamp(&1, -10.0, 90.0))
 ```
 
-### 5.2 A kernel that returns a bitstring costs ~0.1 us more per call than a scalar one
+### 5.2 A call that allocates paid ~50 ns for its owned-buffer table; the first slots now live in the frame
 
-- **Numbers:** returning `length(p)` as an `i64` 0.015-0.04 us per call; the
-  same as a one-byte bitstring 0.12-0.17 us. ~5% of a 2.1 us Gorilla block
-  encode. Suspect (not profiled): the owned buffer doubling from 64 bytes.
-- **Conditions:** best of 15 over 10k calls, under load.
-- **Source:** `defk-cao` (open), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs).
-- **Status:** provisional.
+- **Numbers:** per call, best of 15 over 100k calls. Returning `length(p)`
+  as an `i64`: 15 ns. The same as a one-byte bitstring: 125 ns before, 60-70
+  ns after. `alloc(u8, 1)` returned as `[u8]`: 105 ns before, 58-62 ns
+  after. So the extra cost was not the bitstring but the owned-buffer
+  machinery every allocating call pays, and ~50 ns of it was the
+  `enif_realloc` and `enif_free` of the table that lists a call's owned
+  binaries. The table's first four slots are now in the kernel's frame, and
+  the heap table is allocated only by a call's fifth buffer. What remains of
+  a one-buffer call (~45 ns over a scalar call): the `enif_alloc_binary` and
+  its release or transfer, plus 12 ns for a bitstring result's tuple and
+  the wrapper's sub-binary match (an empty bitstring result: 27 ns).
+  Appends are cheap: 57 one-byte appends 190-210 ns per call, 450 appends
+  650-710 ns (~1.4 ns each, growth included).
+  Not adopted: starting the accumulator at 256 bytes instead of 64. 57
+  appends 174-182 ns (-10%), but 450 appends 708-745 ns (no gain) and the
+  one-byte result +3-5 ns; within noise either way.
+  `gorilla_encode` (1,000 calls of 100-point blocks): defk 2.206 ms to
+  2.06 ms (2.05x to 2.23x), the 100-point sweep row 19.2 ms to 16.5 ms.
+- **Conditions:** load 4-5 on 12 cores, before/after runs interleaved by
+  rebuilding; provisional.
+- **Source:** `defk-cao`, [`bench/bits_call_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/bits_call_cost.exs), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs).
+- **Status:** measured, provisional (loaded machine).
 
 ### 5.3 Packing a list often costs more than the kernel
 
@@ -1167,7 +1183,7 @@ per call.
   shape stays zeroed: proving the tail writes exactly the rest needs
   `div`/`rem` arithmetic.
 - **Conditions:** under load (load average 4-5; the `defk-i5r` runs at 8-12).
-- **Source:** `defk-ktw` comment 2026-10-10, `defk-i5r`, [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs), [`image_ops.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_ops.exs), [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs). Other whole-buffer copies still have no safepoint (`defk-oed`, open).
+- **Source:** `defk-ktw` comment 2026-10-10, `defk-i5r`, [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs), [`image_ops.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_ops.exs), [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs). The other whole-buffer copies run in strips since `defk-oed` (5.10).
 - **Status:** provisional; the `codecs` 4.6-4.8 ms numbers are superseded by `defk-ktw`.
 
 <!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
@@ -1295,6 +1311,33 @@ question makes several solves, batch it.
 - **Conditions:** load 3-7, three runs on an Apple M4 Pro; Crux 0.1.4, picosat_elixir 0.2.3; formulas are Ash-shaped, P = 1 to 20 policies (5 to 166 variables), best of 3-5 interleaved rounds.
 - **Source:** [`cdcl_sat_per_call.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat_per_call.exs) (tables 1-3 in its output), [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs), `defk-9p6.25`.
 - **Status:** provisional.
+
+### 5.10 Whole-buffer copies outside loops held the scheduler; they now run in strips, and a big bitstring result is handed over
+
+- **Numbers:** worst 1 ms-ticker gap on one scheduler (`bench/tick_gap.exs`
+  style; the floor on this loaded machine was 2.0-2.4 ms, see 1.8). A
+  value-semantics copy of the input before a write: 64 MB 1.2-9.7 ms, 256 MB
+  3.9-94 ms (the 94 ms run was the first, cold pages) -> 1.4-2.5 ms and
+  2.3-4.4 ms with 5 and 14 yields. A misaligned `[i64]` input of 256 MB,
+  copied at entry: 4.0-4.1 ms -> 1.9-2.2 ms. A bitstring accumulator built
+  to 256 MB and returned: 80-89 ms -> 47-72 ms; not returned (`bit_size`
+  only): 38-71 ms, so the copy-out at return was up to ~50 ms and is gone
+  (the buffer is handed over, shrunk to its bytes, above 1 MiB), and what
+  remains is `enif_realloc_binary` doubling the buffer, 64 MB -> 128 MB ->
+  256 MB, each a copy at once: 64 MB 11-17 ms, 8 MB 2.3-2.5 ms. The memset
+  of the grown region is now a strip (1 MiB) at a time, as the appends
+  reach a zeroed mark kept in the buffer's header (the mark's load in the
+  append costs nothing measurable: 450 appends 920-1,000 ns either way);
+  dropping the memset altogether, with an append that masks the word it
+  writes, cost ~1 ns per append (450 appends to 1,330 ns), since appends
+  are a dependent chain through the same word, so it was not kept. Bounding the realloc needs a
+  chunked accumulator; no workload in the catalog builds a bitstring that
+  large in one call. A kernel without a loop copies a misaligned input at
+  once: the prologue's safepoint would make every array-taking kernel pay
+  the yielding machinery (`length(p)`: 15 -> 42 ns per call).
+- **Conditions:** load 4-11 on 12 cores, 3 runs each; provisional.
+- **Source:** `defk-oed`, [`bench/tick_gap.exs`](https://github.com/DanielLuning/defk/blob/main/bench/tick_gap.exs), `test/strip_copies_test.exs`.
+- **Status:** measured, provisional (loaded machine).
 
 ---
 

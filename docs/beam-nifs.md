@@ -116,7 +116,10 @@ that for each array argument (`bind_params/2` in lib/defk/compiler.ex), and
 reads the moved binary rather than the address the previous step held.
 A misaligned input (a sub-binary at an odd offset) is copied once into an
 owned binary and that copy slot is remembered across resumes
-(around `defk_bind` in priv/defk_runtime.h, `F->copy`).
+(around `defk_bind` in priv/defk_runtime.h, `F->copy`); a yielding kernel
+fills that buffer in strips with a safepoint after each (`defk_bind_strip`,
+emitted by the compiler's `bind_strips/1`), re-inspecting the argument each
+strip because a resume may have come between.
 
 The kernel body builds no terms: it computes on off-heap memory in
 `ctx->owned`, and terms are made at the boundary from the current environment
@@ -143,7 +146,7 @@ after making the term, so only the term keeps the frame alive
 
 | Construct | Ownership | Good for | Bad for | defk's stance |
 |---|---|---|---|---|
-| `enif_alloc` / `enif_free` | Caller owns the raw block; nothing frees it if you forget | Scratch memory with one obvious owner and one free site | Anything that must be cleaned up when a process dies or a raise happens | Used only for the `ctx->owned` table itself (`enif_realloc` in `defk_own`, `enif_free` in `defk_release_owned`); never for kernel data |
+| `enif_alloc` / `enif_free` | Caller owns the raw block; nothing frees it if you forget | Scratch memory with one obvious owner and one free site | Anything that must be cleaned up when a process dies or a raise happens | Used only for the `ctx->owned` table itself, and only once a call holds more than `DEFK_OWNED_INLINE` buffers: the first slots live in the frame (`enif_alloc`/`enif_realloc` in `defk_own_raw`, `enif_free` in `defk_release_owned`); never for kernel data |
 | `enif_alloc_binary` + `enif_make_binary` | Owned until `enif_make_binary` transfers it to a term (or `enif_release_binary`) | Output buffers whose size is known before the term exists; can be kept between NIF calls | Small one-shot outputs (heap allocation is cheaper); leaks if neither release nor transfer happens | The output path for every array: `defk_own` allocates and `defk_make_arr` transfers (both in priv/defk_runtime.h). docs/project.md design decision 1 |
 | `enif_make_new_binary` | Creates the owning term in one step; the data is mutable only until the NIF returns | Small outputs and error messages, when you do not need to reallocate or outlive the call | Cannot be kept between NIF calls, cannot be reallocated — so no growable buffers | The message binary in `defk_raise` and the empty-array edge case in `defk_make_arr` |
 | `enif_alloc_resource` | Refcounted object with a destructor; a term handle via `enif_make_resource` | Long-lived native state that must be cleaned up by the GC on any exit path | Per-call values: refcounting, destructor rules, and hot-upgrade complexity | Used only for the suspended frame (around `defk_promote` in priv/defk_runtime.h), with a resource type per loaded library (§6). Not for kernel state — see ADR-0001 |
