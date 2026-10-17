@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-b38"
+  ],
   "blocks": [],
   "created": "2026-10-17T18:16:39Z",
   "description": "defk-b38 (PR #30) rewrote decode16 in examples/codecs.exs with raising guards (if c, do: raise(ArgumentError, ...)) in place of the _ = alloc(u8, if(c, do: 0, else: -1)) trick: same checks (5 dropped, none kept), two dummy allocs gone, agreement unchanged. decode64 (two guards: length not a multiple of 4, bad \u003c 64 after the loop) and the base58 decoder (one check per string, inside its loop) still use the trick.\n\nTest, for each: rewrite with raising guards; compare the fast-path report's check counts before and after; check that the error outcome still matches Base.decode64! and the base58 packages (ArgumentError) and agrees with Elixir mode; measure the 1 MB decode and the base58 batch (best of 15, interleaved, mark loaded runs provisional). The base58 check sits in a loop, so a raise there may change how the strip is lowered (a user raise uses ctx, so the strip cannot run flagged): look at the report's loop notes too.\n\nDone when: each decoder is rewritten if it keeps its checks and its time (or the reason not to is recorded in the codecs header comment), the header comment no longer says they use the trick unless one still does, and docs/performance.md has an entry if a time changed. Blocked until PR #30 is merged.",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "codecs: test whether decode64 and decode58 should use raising guards instead of alloc(u8, -1)",
   "type": "task",
-  "updated_at": "2026-10-17T18:16:39Z"
+  "updated_at": "2026-10-17T18:16:42Z"
 }
