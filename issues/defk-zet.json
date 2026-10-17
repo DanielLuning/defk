@@ -6,9 +6,15 @@
   "description": "Owner 2026-10-17: try tools4imps/covenant (0.2, MIT, externally maintained) as the mechanism for stability over time and to replace some unit tests. Area: the compile error codes surface of docs/guides/stability.md. Write a Covenant contract (obligations, tagged contract tests, decision records), run covenant.check and covenant.mutate, freeze-able per version (covenant.check --contracts/--test-path runs an old contract against new code). Compare with test/stability/ rejections + codes.txt + stability_*_test.exs and compile_errors_test.exs. Favour Covenant where it is equivalent (externally maintained vs our own invention). Deliver: contract + tests + a written comparison.",
   "id": "defk-zet",
   "labels": [],
+  "comments": [
+    {
+      "text": "PR #31 (defk-zet/covenant-error-codes). Contract in test/contracts/, comparison in docs/agents/covenant-trial.md. Mutation: 950/1197 killed after the snapshot fix, then 72/72 rewrite survivors killed; 84 left are unpromised text. Recommendation: adopt Covenant for promise surfaces, keep freeze/ledger/frozen.sh.",
+      "timestamp": "2026-10-17T19:29:03Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Trial Covenant contracts for the compile error codes promise",
   "type": "task",
-  "updated_at": "2026-10-17T18:30:40Z"
+  "updated_at": "2026-10-17T19:29:03Z"
 }
