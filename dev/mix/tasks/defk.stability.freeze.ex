@@ -11,10 +11,10 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
   example per file, and the public API the release promised into
   `test/stability/<version>/api.exs`, all read from the release's git tag
   (`v<version>`). From then on every `mix test` compiles each frozen kernel
-  and checks its results (test/stability_kernels_test.exs), compiles each
+  and checks its results (test/contracts/defk/kernel_subset_contract_test.exs), compiles each
   frozen rejection and checks it still fails with its code
   (test/contracts/defk/error_codes_contract_test.exs), and checks that each promised
-  macro, function and option is still there (test/stability_api_test.exs):
+  macro, function and option is still there (test/contracts/defk/public_api_contract_test.exs):
   the stability promise, checked mechanically. The files are never edited;
   docs/agents/stability.md has the rules.
 
@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
 
   The API snapshot (`api.exs`) is the surface docs/guides/stability.md
   ("The public API") promised at the tag, as the data
-  test/stability_api_test.exs reads:
+  test/contracts/defk/public_api_contract_test.exs reads:
 
     * the public modules with their documented macros and functions and
       every arity each is callable at: `Code.fetch_docs/1` on the modules
@@ -571,7 +571,7 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
     # configuration key and the environment variables.
     #
     # Frozen: this file is never edited. A later release adds a directory with
-    # its own file. test/stability_api_test.exs reads it and fails when an item
+    # its own file. test/contracts/defk/public_api_contract_test.exs reads it and fails when an item
     # listed here is missing, no longer exported, hidden, or has another arity.
     # Additions are not listed here, so they pass.
     %{

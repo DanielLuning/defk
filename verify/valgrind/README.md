@@ -87,7 +87,7 @@ Tests tagged `:erlang_memory` are excluded (`--exclude erlang_memory` in
 `run-suite.sh`): they assert on `:erlang.memory(:binary)`, which raises
 `notsup` under the valgrind emulator because its allocators are off. They run
 normally everywhere else (`mix test --only erlang_memory` runs just them):
-`raise_cleanup_test.exs` "a raise after alloc frees every owned buffer" and
+`test/contracts/defk/runtime_contract_test.exs` "a raise after alloc frees every owned buffer" and
 `bitstring_test.exs` "a process killed mid-build frees the buffer". The leak
 class they check is covered here by Valgrind itself, which reports the leak
 directly.

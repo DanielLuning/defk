@@ -1,33 +1,51 @@
 # Contracts
 
-The Contract of a defk component, in the layout [Covenant](https://hex.pm/packages/covenant)
-reads: what the component promises, as numbered obligations, each proved by
-a tagged contract test beside it. Covenant's own convention
+The Contract of defk's stability promise, in the layout [Covenant](https://hex.pm/packages/covenant)
+reads: what each surface promises, as numbered obligations, each proved by
+tagged contract tests beside it. Covenant's own convention
 ([docs/contract-convention.md](https://github.com/tools4imps/covenant/blob/main/docs/contract-convention.md))
 is the rule book; this page says only what is defk's.
 
-This is a trial (`docs/agents/covenant-trial.md`): one component,
-`defk.error_codes`, the compile error codes surface of the stability promise
-(`docs/guides/stability.md`).
+The four components are the four surfaces of `docs/guides/stability.md`:
 
 ```
 test/contracts/
   defk/
-    error_codes.obligations.md       # light form: Purpose and obligations I1-I6
-    error_codes.decisions.yml        # the records the obligations cite
-    error_codes_contract_test.exs    # the tagged contract tests
-  coverage.json                      # written by mix covenant.check, committed
+    error_codes.*        # the compile error codes (I1-I6)
+    kernel_subset.*      # frozen kernels keep their results; the one rule (I1-I2)
+    public_api.*         # the promised modules, options, config and env (I1-I7)
+    runtime_contract.*   # preemption, isolation, faults, cleanup, upgrade (I1-I6)
+    *_contract_test.exs  # the tagged contract tests
+  system/decisions.yml   # records that hold for every component
+  coverage.json          # written by mix covenant.check, committed
 ```
 
-- `mix test` runs the contract tests with the rest of the suite.
-- `mix covenant.check` runs them alone and fails when an active obligation
-  has no passing test; a test without an obligation tag does not compile.
+- `mix test` runs the contract tests with the rest of the suite, and every
+  release's frozen copy of them (`test/stability/<version>/contracts/`).
+- `mix ci` runs `covenant.check --no-run`: every active obligation has a
+  passing test, read from the test run's results.
+- `mix defk.contracts <version>` runs a released version's frozen contract
+  against the working tree (`docs/agents/stability.md`, "Frozen contracts").
 - `mix covenant.conditions` re-checks the premises of the records.
-- `MIX_ENV=test mix covenant.mutate defk.error_codes --fail-fast` mutates
-  `Defk.Errors` and shows which obligation's tests notice; it takes about
-  20 minutes, so it is a manual run, not part of `mix ci`.
+- `MIX_ENV=test mix covenant.mutate <component>` mutates a component's
+  modules and shows which obligation's tests notice. It takes tens of
+  minutes on several cores, so it is a manual run, not part of `mix ci`.
+
+Rules for a contract test:
+
+- It calls only defk's promised API (as the API snapshots list it), ExUnit,
+  StreamData, Covenant and `Defk.ContractKit`. A release freezes it, so a
+  call into anything else would tie an old release's check to code that may
+  change; `test/contract_kit_test.exs` enforces this.
+- Its module is `Defk.Contract.<Name>` and its kernel modules are nested in
+  it, so the frozen copy renames one name per file.
+- It reads the code under test when it runs, never into a module attribute
+  when it compiles: mutation testing swaps modules in memory without
+  compiling the tests again.
+- It belongs here only when a reimplementation of defk would have to keep
+  it: the text of a message is not promised, so a test on it stays in
+  `test/`.
 
 An obligation's id is never reused; a retired one keeps its number with
-`status: retired`. A contract test belongs here only when a reimplementation
-of defk would have to keep it: the text of a message is not promised, so a
-test on it stays in `test/`.
+`status: retired`. A promise proven by a test that cannot be frozen is an
+obligation of `kind: exception` naming that test as its `target`.
