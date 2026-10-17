@@ -633,6 +633,10 @@ defmodule Defk.Compiler do
 
     {stmts, val} = lower_block(k.body, env)
     {ret_stmts, ret_vals} = coerce_return(val, k)
+    # only a kernel that yields anyway (its body has a safepoint) copies a
+    # misaligned input in strips: the prologue's safepoint would otherwise
+    # make a loop-free kernel pay the yielding machinery on every call
+    prologue = if k.yield and low(:sp) > 0, do: bind_strips(k), else: []
 
     # a returned array the kernel may not own (an input, a binary literal or
     # attribute, or a branch giving one of them) is resolved when it returns
@@ -643,7 +647,7 @@ defmodule Defk.Compiler do
       end)
 
     Map.merge(k, %{
-      stmts: [stmts, ret_stmts],
+      stmts: [prologue, stmts, ret_stmts],
       ret_vals: ret_vals,
       ret_views: views,
       decls: Enum.reverse(low(:decls)),
@@ -1334,8 +1338,7 @@ defmodule Defk.Compiler do
     buf = carried(make_ref(), a[:buf])
 
     if a.owned and a[:var] != nil do
-      srec_assign(a.c, "defk_copy_#{e}(ctx, #{a.c})")
-      {"#{a.c} = defk_copy_#{e}(ctx, #{a.c});\n", Map.put(a, :buf, buf)}
+      {copy_stmts(a.c, a.c, e), Map.put(a, :buf, buf)}
     else
       c = fresh(base, a.t)
 
@@ -1346,8 +1349,78 @@ defmodule Defk.Compiler do
 
       b = if a[:var], do: Facts.assert(b, len_lb: Map.put(Facts.len_lb(a), a.c, 0)), else: b
 
-      srec_assign(c, "defk_copy_#{e}(ctx, #{a.c})")
-      {"#{c} = defk_copy_#{e}(ctx, #{a.c});\n", b}
+      {copy_stmts(c, a.c, e), b}
+    end
+  end
+
+  # `dst = a copy of src` (element type `e`): at once in a yield: false
+  # kernel; otherwise the buffer first, then its bytes in strips of
+  # DEFK_ZERO_STRIP with a safepoint after each, like alloc/2's zeroing, so a
+  # large copy does not hold the scheduler (256 MB at once: a 4-94 ms gap).
+  # The strip record sees the copy as one assignment either way.
+  defp copy_stmts(dst, src, e) do
+    {{_, _}, yield?} = low(:report_kernel)
+    srec_assign(dst, "defk_copy_#{e}(ctx, #{src})")
+
+    if yield? do
+      tmp = fresh("copy", {:arr, e})
+      z = fresh("copied", {:c, "uint64_t"})
+      bytes = "(uint64_t)#{tmp}.len * sizeof(*#{tmp}.data)"
+
+      [
+        "#{tmp} = defk_copy_raw_#{e}(ctx, #{src});\n#{z} = 0;\n",
+        in_loop(fn id ->
+          [
+            "defk_l#{id}:;\nwhile (#{z} < #{bytes}) {\n",
+            "uint64_t defk_z0 = #{z};\n",
+            "#{z} = defk_copy_strip(#{tmp}.data, #{src}.data, #{bytes}, #{z});\n",
+            safepoint("DEFK_ZERO_TICKS(#{z} - defk_z0)"),
+            "}\n"
+          ]
+        end),
+        "#{dst} = #{tmp};\n"
+      ]
+    else
+      "#{dst} = defk_copy_#{e}(ctx, #{src});\n"
+    end
+  end
+
+  # `dst = expr`, where expr may be a value-semantics copy (loop_owned/2
+  # builds the C): a copy is emitted as copy_stmts/3 does
+  defp assign_copy(dst, expr) do
+    case Regex.run(~r/^defk_copy_(\w+)\(ctx, (.+)\)$/, expr) do
+      [_, e, src] ->
+        copy_stmts(dst, src, Enum.find(@elems, &(Atom.to_string(&1) == e)))
+
+      nil ->
+        srec_assign(dst, expr)
+        "#{dst} = #{expr};\n"
+    end
+  end
+
+  # A yielding kernel's prologue: each array input that defk_bind found
+  # misaligned (F->copy[i] set) gets its buffer filled in strips with a
+  # safepoint after each, so a large misaligned input does not hold the
+  # scheduler at entry. A resume re-enters the loop where it left off.
+  defp bind_strips(k) do
+    for {{p, {:arr, _}}, i} <- Enum.with_index(k.params) do
+      sp = "p_#{sanitize(p)}"
+      z = fresh("bound", {:c, "uint64_t"})
+      bytes = "(uint64_t)#{sp}.len * sizeof(*#{sp}.data)"
+
+      [
+        "if (F->copy[#{i}]) {\n",
+        in_loop(fn id ->
+          [
+            "defk_l#{id}:;\nwhile (#{z} < #{bytes}) {\n",
+            "uint64_t defk_z0 = #{z};\n",
+            "#{z} = defk_bind_strip(env, ctx, argv[#{i}], F->copy[#{i}], #{z});\n",
+            safepoint("DEFK_ZERO_TICKS(#{z} - defk_z0)"),
+            "}\n"
+          ]
+        end),
+        "}\n"
+      ]
     end
   end
 
@@ -4831,10 +4904,7 @@ defmodule Defk.Compiler do
 
     {[
        si,
-       Enum.map(accs, fn {{_, c, _}, ic} ->
-         srec_assign(c, ic)
-         "#{c} = #{ic};\n"
-       end)
+       Enum.map(accs, fn {{_, c, _}, ic} -> assign_copy(c, ic) end)
      ], Enum.map(accs, &elem(&1, 0))}
   end
 
@@ -4991,18 +5061,14 @@ defmodule Defk.Compiler do
 
     case accs do
       [{_, c, _}] ->
-        srec_assign(c, hd(outs).c)
-        "#{c} = #{hd(outs).c};\n"
+        assign_copy(c, hd(outs).c)
 
       _ ->
         # compute all new values before assigning (they may read each other)
         tmps = Enum.map(accs, fn {name, _, a} -> fresh("#{name}_next", a.t) end)
 
         [
-          Enum.zip_with(tmps, outs, fn t, o ->
-            srec_assign(t, o.c)
-            "#{t} = #{o.c};\n"
-          end),
+          Enum.zip_with(tmps, outs, fn t, o -> assign_copy(t, o.c) end),
           Enum.zip_with(accs, tmps, fn {_, c, _}, t ->
             srec_assign(c, t)
             "#{c} = #{t};\n"
@@ -5730,13 +5796,17 @@ defmodule Defk.Compiler do
     do: Enum.map(k.params, fn {p, t} -> "#{ctype(t)} p_#{sanitize(p)} = {0};\n" end)
 
   defp bind_params(k, arrays) do
+    # a misaligned input is copied at once unless the kernel yields: then
+    # the prologue's strip loops (bind_strips/1) fill the buffer
+    once = if yields?(k), do: 0, else: 1
+
     Enum.map(arrays, fn {p, i} ->
       {:arr, e} = Keyword.fetch!(k.params, p)
       sp = "p_#{sanitize(p)}"
 
       # bind through temporaries: if the view's address escaped, clang would
       # reload data/len on every iteration (the yield call might change them)
-      "{ void *d; int64_t l; defk_bind(env, ctx, argv[#{i}], sizeof(*#{sp}.data), &d, &l, &F->copy[#{i}], #{i + 1}, \"#{p}\", \"#{e}\"); #{sp}.data = d; #{sp}.len = l; }\n"
+      "{ void *d; int64_t l; defk_bind(env, ctx, argv[#{i}], sizeof(*#{sp}.data), &d, &l, &F->copy[#{i}], #{i + 1}, \"#{p}\", \"#{e}\", #{once}); #{sp}.data = d; #{sp}.len = l; }\n"
     end)
   end
 
