@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-17T08:34:03Z",
   "created": "2026-10-10T12:39:36Z",
   "description": "Found in defk-9p6.16 (examples/gorilla_encode.exs). Measured under load, best of 15 over 10k calls on a 1-point input: a kernel returning len(p) as an i64 costs 0.015-0.04 us per call; the same kernel returning \u003c\u003clen(p)::8\u003e\u003e as a bitstring costs 0.12-0.17 us; Gorilla.Kernels.streams on 1 and 2 points 0.15-0.17 us, on 100 points 0.68 us. At gorilla_stream's realistic size (100-point blocks) one defk encode is ~2.1 us, so this fixed cost is ~5% of defk's time on a verdict that sits at 1.96-2.38x. Suspects, not profiled: defk_bits_reserve starting a 64-byte owned binary and doubling with enif_realloc_binary + memset (64 -\u003e 128 -\u003e 256 -\u003e 512 for a ~450-byte output), the copy of the bits into the result binary, and the generated wrapper's \u003c\u003cb::bitstring-size(len), _::bitstring\u003e\u003e match. Minimal repro: defk bits1(p :: [i64]) :: bitstring do acc = \u003c\u003c\u003e\u003e; \u003c\u003cacc::bitstring, len(p)::8\u003e\u003e end against defk one(p :: [i64]) :: i64 do len(p) end, timed over 10k calls each.",
   "id": "defk-cao",
@@ -24,8 +25,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "A kernel that returns a bitstring costs ~0.1 us more per call than a scalar kernel",
   "type": "task",
-  "updated_at": "2026-10-16T20:22:50Z"
+  "updated_at": "2026-10-17T08:34:03Z"
 }
