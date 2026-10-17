@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-fun"
   ],
@@ -14,8 +14,8 @@
   ],
   "parent": "defk-o08",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Symbolic bounds core: move range facts onto ADR-0007's representation, no behaviour change",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:03Z"
+  "updated_at": "2026-10-17T09:02:56Z"
 }
