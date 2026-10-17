@@ -1,0 +1,154 @@
+# Covenant trial: contracts for the compile error codes
+
+The owner asked (2026-10-17) whether [Covenant](https://hex.pm/packages/covenant)
+(0.2.0, MIT, an external Mix library) can carry the stability promise over
+time and replace some unit tests, and to favour it where it is as good,
+because someone else maintains it. This page records the trial on one
+surface: the compile error codes (`docs/guides/stability.md`, "The compile
+error codes"). Ticket defk-zet.
+
+## What was built
+
+- `test/contracts/defk/error_codes.obligations.md`: six obligations, I1 to
+  I6, taken from the guide's promise (a code rejects its example, a released
+  code stays, a code is never reused, a retired code stays in the catalogue,
+  a frozen rejection keeps its code, `explain!/1` refuses an unknown code).
+- `test/contracts/defk/error_codes.decisions.yml`: two records
+  (`retire-never-remove`, `frozen-rejections-are-data`) with four
+  machine-checked premises (`mix covenant.conditions`: all hold).
+- `test/contracts/defk/error_codes_contract_test.exs`: one `Covenant.Case`
+  module, every test tagged with its obligation. It replaces
+  `test/stability_codes_test.exs`, `test/stability_rejections_test.exs` and
+  the registry half of `test/compile_errors_test.exs` (194 + ~90 lines in
+  three files became one file of ~300 lines; the checks are the same, plus
+  the two fixes below).
+- `mix ci` runs `covenant.check --no-run` after `test`:
+  `Covenant.Formatter` (in `test/test_helper.exs`) records the results, so
+  the coverage gate costs no second run.
+
+Contract tests sit beside their obligations under `test/contracts/`
+(owner's choice), set by `config :covenant` in `config/config.exs`.
+
+## Results
+
+### Coverage and tags
+
+`mix covenant.check`: 6/6 obligations, 155 tests. An untagged test, or a tag
+naming an unknown obligation, is a compile error; an obligation with no
+passing test fails the check. defk had nothing that tied a promise in the
+guide to the tests that prove it.
+
+`--static` cannot credit tests generated in a `for` (a known limit of 0.2),
+so it reports I1 uncovered; I1's tests are one per registry code. Use the
+compiled check.
+
+### An old contract against new code
+
+It works. A release can freeze its contract and contract tests; a later
+commit runs them with `mix covenant.check --contracts <dir> --test-path
+<dir>`, and the frozen test module names its own contract with `use
+Covenant.Case, contracts: "<dir>"`. Demonstrated in a scratch copy: the
+contract frozen as a fake `9.9.9`, then the code `pipe` renamed to
+`pipe-form` throughout `lib/`. The frozen contract failed I2 (the ledger) and
+I5 (the frozen `pipe` rejection); the live contract passed, as the registry's
+own example now agrees with the new name.
+
+What the demonstration also showed:
+
+- The catch came from frozen **data** (`test/stability/codes.txt`, the
+  frozen rejection files), which the live tests read too. Freezing the test
+  code adds one thing: the checker of a release is frozen with it, so
+  weakening the live test cannot weaken an old release's check.
+- A frozen test is code, and it calls live helpers (`Defk.TestKit.codes/1`,
+  `Defk.StabilityCorpus`, `Defk.LanguageDoc`). A change to them changes an
+  old release's check. Freezing tests needs a narrow, promised seam for
+  them to call.
+- `covenant.check` writes `coverage.json` into the contracts directory it
+  checks, so a frozen directory gets a written file on every run (identical
+  bytes while nothing changes; `ci/frozen.sh` would fail on a changed one).
+- The exception lists (`@newly_supported`, `@fixed`) live in the test. A
+  frozen copy cannot grow them, so they would move to a live file the
+  frozen test reads.
+- `mix test` would run every release's frozen copy (155 more tests per
+  release here; the rejections stop before the C build, so seconds).
+
+Covenant has no counterpart for the rest of the stability machinery:
+`mix defk.stability.freeze` (kernels with results from the tag's own
+compiler, rejections, the API snapshot), `ci/frozen.sh`, and the code ledger.
+Those stay.
+
+### Mutation testing
+
+`MIX_ENV=test mix covenant.mutate defk.error_codes`, `Defk.Errors` only,
+`--jobs 1`, on a laptop with other work running (provisional timings):
+
+| Run | Tests | Mutants | Killed | Survived | Invalid | Time |
+|---|---|---|---|---|---|---|
+| 2, `--fail-fast` | as moved | 1197 | 414 | 692 | 91 | ~20 min |
+| 3, full credit | registry read at run time | 1197 | 950 | 156 | 91 | ~25 min |
+| `--only` the 72 rewrite survivors | rewrite must define a kernel | 72 | 72 | 0 | 0 | ~2 min |
+
+(Run 1 stopped at mutant 550: moving the contracts directory mid-run broke
+the next worker.) A full run takes 4 to 5 cores for its whole length.
+
+Two real gaps in the moved tests, found by mutation and fixed:
+
+1. **The tests checked a snapshot of the registry.** They read
+   `Defk.Errors.entries/0` into module attributes when the test module
+   compiled. Covenant swaps the mutated module in memory and does not
+   compile the tests again, so most registry mutants were invisible (72
+   removed examples survived: the loop never saw them). The same blindness
+   applies to any change made without recompiling the tests. Now the tests
+   read the registry when they run; only the test names come from the
+   compile-time list.
+2. **An empty rewrite passed.** I1 required the rewrite to compile, and an
+   empty module body compiles. Now the rewrite must define a kernel; all 72
+   such mutants are killed.
+
+The 84 survivors left change text the contract does not promise: the
+lines `explain!/1` prints, the doc generators `reference/0` and `scope/2`
+(checked against the pages by `test/compile_errors_doc_test.exs` and
+`test/scope_doc_test.exs`, outside the contract), `diagnostics/1`, and the
+catalogue link. They are not sorted into a `survivors.yml`: an entry names
+its mutant by `file:line:column`, and every edit to the 900-line registry
+shifts the entries after it, so the file would need rewriting on most
+registry changes.
+
+Mutation-blind tests: the I2 test, two I3 tests and every I5 test catch no
+mutant that another test does not. That is expected for `Defk.Errors`:
+I5's frozen rejections guard the compiler (which code a construct gets),
+and the compiler was not mutated. Mutating `lib/defk/compiler.ex` (~6,500
+lines, C builds behind every kernel) was not tried; at this rate it would
+not fit Covenant's one-hour default.
+
+## Comparison
+
+| Concern | Before | With Covenant |
+|---|---|---|
+| Which test proves which promise | comments | obligation ids, checked at compile time |
+| A promise without a test | not detected | `covenant.check` fails |
+| A test that proves nothing | not detected | does not compile (untagged) |
+| Premises of decisions | ADR prose | records with machine-checked conditions |
+| Do the tests catch a break | not measured | `covenant.mutate`, found two gaps |
+| Frozen evidence per release | `test/stability/<version>/`, freeze task | none: keep ours |
+| Frozen files never change | `ci/frozen.sh` | none: keep ours |
+| Old checks against new code | frozen data, live harness | frozen contract and tests also possible |
+| Maintained by | us | Covenant, plus our contracts |
+
+## Recommendation
+
+- Adopt Covenant for the promise surfaces: obligations, tagged contract
+  tests and the coverage gate in `mix ci`. It is cheap (no second run), it is
+  someone else's code, and it ties `docs/guides/stability.md` to its proof.
+  Next surfaces: the public API (`test/stability_api_test.exs`), the kernel
+  subset (`test/stability_kernels_test.exs`), the runtime contract.
+- Keep the stability machinery: the freeze task, the frozen data, the
+  ledger and `ci/frozen.sh`. Covenant does not replace them.
+- Run `covenant.mutate` by hand on a component when its tests change, on
+  mains power; not in `mix ci`, and without a committed survivors file for
+  data-heavy modules.
+- Freezing contract tests per release is possible but not yet worth it: it
+  needs a promised helper seam, a live exception list and a coverage file
+  kept outside the frozen directory. Decide at the 0.2.0 release.
+- Contract tests read the code under test at run time, never into module
+  attributes, or mutation (and any hot swap) cannot reach them.

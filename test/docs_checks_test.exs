@@ -211,7 +211,7 @@ defmodule Defk.DocsChecksTest do
     @no_example ["no-c-compiler"]
 
     # a retired code is not raised, so it has no example
-    test "every active error code has a failing example and a rewrite (compile_errors_test runs them)" do
+    test "every active error code has a failing example and a rewrite (the error codes contract test runs them)" do
       for %{kind: kind, code: code} = e <- Defk.Errors.entries(), kind != :retired do
         %{example: example, rewrite: rewrite} = e
 

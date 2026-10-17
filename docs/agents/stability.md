@@ -72,7 +72,7 @@ kernel block):
   kernel) stays out, and the task says so;
 - the `error:` examples of the same doc pages.
 
-`test/stability_rejections_test.exs` compiles each and requires one of:
+`test/contracts/defk/error_codes_contract_test.exs` (obligation `defk.error_codes.I5`) compiles each and requires one of:
 
 - it is still rejected, and the recorded code is among the error codes
   raised (which error comes first is not promised; a rejection with other
