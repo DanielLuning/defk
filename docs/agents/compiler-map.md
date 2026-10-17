@@ -36,7 +36,7 @@ One module, ordered by section dividers you can grep for
 | calls | kernel-to-kernel inlining, builtins | (inline size: `Defk.InlineSize.check/3`) |
 | loops | `for`, reduce accumulators, safepoints; recovery inside a rejected `for`, reduce or pipe | `lower_quals`, `with_acc_facts/2`, `for_collect!/6`, `recover_for/4`, `recover_reduce/5`, `recover_pipe/2` |
 | case | clause dispatch (multi-clause kernels) | |
-| range facts | the lattice lives in `Defk.Facts` (ADR-0007's migration happens inside it); this file creates facts and asks the proofs | `Facts.prove_in_bounds`, `range_limit` |
+| range facts | `Defk.Facts` holds ADR-0007's representation: forms over length atoms, bounds `{q, form}`, one prover with a step budget; this file states facts through the module's sources (`len_value`, `len_from`, `len_like`, `between`, the derivations) and asks the proofs | `Facts.prove_in_bounds`, `range_limit` |
 | element types | narrow loads/stores | |
 | emitting | C text: entries, init, frames, resume | `emit_entry`, `resume_block/3`, `view_term/3` |
 | report | fast-path notes; one of `compile/4`'s results | `note/4`, `note_bounds/4` |
