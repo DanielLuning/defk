@@ -1171,8 +1171,19 @@ per call.
   us); 1 MiB strips showed no difference. Skipping the zeroing when every
   element is provably written: `scale` of 1M f64 170 -> 131 us (-23%),
   `encode16` 1 MB 338 -> 297 us (-12%), base64 unchanged.
-- **Conditions:** under load (load average 4-5).
-- **Source:** `defk-ktw` comment 2026-10-10, `defk-i5r` (open), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs). The other whole-buffer copies run in strips since `defk-oed` (5.10).
+  Two more shapes skip it since `defk-i5r`: a `for ..., reduce:` writing a
+  captured array (`monte_carlo_rtp`'s draws and uniforms: the whole example
+  373 -> 361 ms, medians 395 -> 376, within the spread) and nested range
+  loops writing a row-major index (`image_resize`'s 3 allocs: 1.39 -> 1.40
+  ms, no change: its output is 300 KB and the resampling dominates). Not
+  kept: rewriting `encode64` from a loop over the full quads plus a tail
+  into one loop over every quad with the last one's values conditional,
+  so the proof accepts it: it skipped the memset but ran 0.253 -> 0.39 ms
+  (+54%), the per-quad branches cost far more than the zeroing. A tail
+  shape stays zeroed: proving the tail writes exactly the rest needs
+  `div`/`rem` arithmetic.
+- **Conditions:** under load (load average 4-5; the `defk-i5r` runs at 8-12).
+- **Source:** `defk-ktw` comment 2026-10-10, `defk-i5r`, [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs), [`image_ops.exs`](https://github.com/DanielLuning/defk/blob/main/examples/image_ops.exs), [`monte_carlo_rtp.exs`](https://github.com/DanielLuning/defk/blob/main/examples/monte_carlo_rtp.exs). The other whole-buffer copies run in strips since `defk-oed` (5.12).
 - **Status:** provisional; the `codecs` 4.6-4.8 ms numbers are superseded by `defk-ktw`.
 
 <!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
@@ -1204,7 +1215,7 @@ Elixir's `:binary.copy/1` of that size, plus ~0.1 us.
     10k. Copying 16 MiB evicts the state from the caches, so the writes
     after it run 4x slower than the same probes on a warm buffer (70-79 us).
   - **Streaming window, 128 MiB, one byte touched:** 100%, and the copy has
-    no safepoint (`defk-oed`).
+    no safepoint; it runs in strips since `defk-oed` (5.12).
   - **An Elixir `:atomics` Bloom filter** is updated in place. One insert
     takes 0.08 us, against 15 us (1 MiB) and 260-280 us (16 MiB) for the
     kernel. 100 inserts take 8-9 us, against the kernel's 15 us and
@@ -1301,7 +1312,7 @@ question makes several solves, batch it.
 - **Source:** [`cdcl_sat_per_call.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat_per_call.exs) (tables 1-3 in its output), [`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs), `defk-9p6.25`.
 - **Status:** provisional.
 
-### 5.10 Whole-buffer copies outside loops held the scheduler; they now run in strips, and a big bitstring result is handed over
+### 5.12 Whole-buffer copies outside loops held the scheduler; they now run in strips, and a big bitstring result is handed over
 
 - **Numbers:** worst 1 ms-ticker gap on one scheduler (`bench/tick_gap.exs`
   style; the floor on this loaded machine was 2.0-2.4 ms, see 1.8). A

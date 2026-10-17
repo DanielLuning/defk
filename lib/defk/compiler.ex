@@ -2828,7 +2828,7 @@ defmodule Defk.Compiler do
   defp lower_call(:alloc, [{e, _, ctx}, n] = args, m, env) when e in @elems and is_atom(ctx) do
     {s, v} = lower_expr(n, env)
     v = coerce!(v, :i64, n, "alloc/2 length")
-    {sz, c} = alloc_zeroed(e, v, {:alloc, m, args})
+    {sz, c} = alloc_zeroed(e, v, {:alloc, m, args}, env)
     arr = %{c: c, t: {:arr, e}, owned: true, var: nil, fin: true}
     {[s, sz], Facts.assert(arr, len_lo: Facts.lo(v), len_lb: Facts.lb(v))}
   end
@@ -3354,20 +3354,13 @@ defmodule Defk.Compiler do
   @zero_at_once 4096
   @elem_bytes %{f64: 8, i64: 8, u64: 8, u8: 1, i16: 2, i32: 4, f32: 4}
 
-  defp alloc_zeroed(e, v, {:alloc, m, _} = node) do
+  defp alloc_zeroed(e, v, {:alloc, m, _} = node, env) do
     {{_, _}, yield?} = low(:report_kernel)
     hi = Facts.hi(v)
 
     cond do
-      line = m[:defk_unzeroed] ->
-        note(
-          :alloc,
-          node,
-          :unzeroed,
-          "not zeroed: the loop on line #{line} writes every element first"
-        )
-
-        {[], "defk_alloc_raw_#{e}(ctx, #{v.c})"}
+      unzeroed = m[:defk_unzeroed] ->
+        unzeroed_alloc(e, v, node, unzeroed, yield?, env)
 
       is_integer(hi) and hi * @elem_bytes[e] <= @zero_at_once ->
         note(:alloc, node, :zeroed, "zeroed at once (at most #{@zero_at_once} bytes)")
@@ -3403,6 +3396,55 @@ defmodule Defk.Compiler do
 
         {zero, a}
     end
+  end
+
+  # An alloc the next loop writes in full (unzeroed_allocs/1). The strided
+  # form (extents []) needs nothing more: a negative length raises. The
+  # nested form's extents may be negative with a positive product (two of
+  # them): no trip writes then, so the buffer is zeroed when any extent is
+  # negative, a test that is false for every array the loop writes.
+  defp unzeroed_alloc(e, v, node, {line, []}, _yield?, _env) do
+    note(
+      :alloc,
+      node,
+      :unzeroed,
+      "not zeroed: the loop on line #{line} writes every element first"
+    )
+
+    {[], "defk_alloc_raw_#{e}(ctx, #{v.c})"}
+  end
+
+  defp unzeroed_alloc(e, v, node, {line, extents}, yield?, env) do
+    note(
+      :alloc,
+      node,
+      :unzeroed,
+      "not zeroed: the loops on line #{line} write every element first (zeroed only if an extent is negative)"
+    )
+
+    {ss, vs} = extents |> Enum.map(&lower_expr(&1, env)) |> Enum.unzip()
+    negative = Enum.map_join(vs, " || ", &"(#{&1.c}) < 0")
+    a = fresh("alloc", {:arr, e})
+    bytes = "(uint64_t)#{a}.len * sizeof(*#{a}.data)"
+
+    zero =
+      if yield? do
+        z = fresh("zeroed", {:c, "uint64_t"})
+
+        in_loop(fn id ->
+          [
+            "#{z} = 0;\ndefk_l#{id}:;\nwhile (#{z} < #{bytes}) {\n",
+            "uint64_t defk_z0 = #{z};\n",
+            "#{z} = defk_zero_strip(#{a}.data, #{bytes}, #{z});\n",
+            safepoint("DEFK_ZERO_TICKS(#{z} - defk_z0)"),
+            "}\n"
+          ]
+        end)
+      else
+        "memset(#{a}.data, 0, (size_t)(#{bytes}));\n"
+      end
+
+    {[ss, "#{a} = defk_alloc_raw_#{e}(ctx, #{v.c});\nif (#{negative}) {\n", zero, "}\n"], a}
   end
 
   # ---------------------------------------------------------- range copies --
@@ -3551,8 +3593,8 @@ defmodule Defk.Compiler do
     |> Enum.with_index(1)
     |> Enum.map(fn {e, j} ->
       case {e, unzeroed_by(e, Enum.drop(es, j))} do
-        {{:=, m, [x, {:alloc, am, args}]}, line} when is_integer(line) ->
-          {:=, m, [x, {:alloc, [{:defk_unzeroed, line} | am], args}]}
+        {{:=, m, [x, {:alloc, am, args}]}, {_, _} = unzeroed} ->
+          {:=, m, [x, {:alloc, [{:defk_unzeroed, unzeroed} | am], args}]}
 
         _ ->
           e
@@ -3560,8 +3602,9 @@ defmodule Defk.Compiler do
     end)
   end
 
-  # the line of the loop in `rest` (the statements after the alloc `e`) that
-  # writes every element of e's array first, or nil
+  # {line, extents} of the loop in `rest` (the statements after the alloc
+  # `e`) that writes every element of e's array first, or nil; the extents
+  # are those of a nested form (nested_all?/3), [] for the strided one
   defp unzeroed_by({:=, _, [{x, _, xc}, {:alloc, _, [{_, _, ec}, len]}]}, rest)
        when is_atom(x) and is_atom(xc) and is_atom(ec) do
     {between, from} = Enum.split_while(rest, &(not mentions?(&1, x)))
@@ -3577,32 +3620,161 @@ defmodule Defk.Compiler do
 
   defp unzeroed_by(_e, _rest), do: nil
 
-  # the line of `loop` if it is the accepted for that writes all of x
-  defp writes_all({:for, fm, [{:<-, _, [{i, _, ic}, range]}, [do: body]]}, x, len)
-       when is_atom(i) and is_atom(ic) and x != i do
+  # the line of `loop` if it writes all of x: the strided single loop above,
+  # plain or `reduce:` (the loop may be the right side of a match whose left
+  # side does not mention x, as `{h, t} = for ..., reduce: {h, t}`), or a
+  # nest of range loops writing a row-major index (nested_all?/3)
+  defp writes_all({:=, _, [lhs, {:for, _, _} = loop]}, x, len) do
+    if mentions?(lhs, x), do: nil, else: writes_all(loop, x, len)
+  end
+
+  defp writes_all({:for, fm, args} = loop, x, len) do
+    with {:ok, gens, [], init, pat, body} <- loop_parts(args),
+         false <- mentions?(len, x) or mentions?(init, x) or mentions?(pat, x),
+         {:ok, extents} <-
+           if(strided_all?(gens, pat, body, x, len),
+             do: {:ok, []},
+             else: nested_all?(loop, x, len)
+           ) do
+      {fm[:line] || 0, extents}
+    else
+      _ -> nil
+    end
+  end
+
+  defp writes_all(_loop, _x, _len), do: nil
+
+  # {:ok, generators, filters, init, pattern, body statements} of a for's
+  # arguments: a plain `do:` (init and pattern nil) or a `reduce:` with one
+  # clause whose pattern is bound per trip. A generator binds a plain
+  # variable; anything else among the qualifiers is a filter here.
+  defp loop_parts(args) do
+    # `reduce: init` is a keyword list of its own, before the do block's
+    {quals, opts} = Enum.split_with(args, &(not Keyword.keyword?(&1)))
+    opts = Enum.concat(opts)
+
+    {gens, filters} =
+      Enum.split_with(quals, &match?({:<-, _, [{v, _, c}, _]} when is_atom(v) and is_atom(c), &1))
+
+    case {Enum.sort(Keyword.keys(opts)), opts[:do]} do
+      {[:do], body} ->
+        {:ok, gens, filters, nil, nil, block_stmts(body)}
+
+      {[:do, :reduce], [{:->, _, [[pat], body]}]} ->
+        {:ok, gens, filters, opts[:reduce], pat, block_stmts(body)}
+
+      _ ->
+        :error
+    end
+  end
+
+  defp block_stmts({:__block__, _, ss}), do: ss
+  defp block_stmts(s), do: [s]
+
+  # one generator over 0..(n - 1)//1 whose body writes x[k * i + c] for every
+  # c in 0..k-1 at its top level and mentions x nowhere else (for a reduce:
+  # the clause pattern binds neither x nor i; the fold's value may be
+  # anything, as the writes are statements of the clause body, which runs
+  # every trip)
+  defp strided_all?([{:<-, _, [{i, _, _}, range]}], pat, body, x, len) when i != x do
     {k, n} =
       case len do
         {:*, _, [k, n]} when is_integer(k) and k >= 1 -> {k, n}
         n -> {1, n}
       end
 
-    stmts =
-      case body do
-        {:__block__, _, ss} -> ss
-        s -> [s]
-      end
+    cs = for s <- body, c = unzeroed_write(s, x, i, k), do: c
 
-    cs = for s <- stmts, c = unzeroed_write(s, x, i, k), do: c
-
-    ok =
-      zero_based_to(range, n, x, k) and not mentions?(len, x) and
-        Enum.sort(cs) == Enum.to_list(0..(k - 1)) and count_var(body, x) == k and
-        not binds?(body, i)
-
-    if ok, do: fm[:line] || 0
+    zero_based_to(range, n, x, k) and Enum.sort(cs) == Enum.to_list(0..(k - 1)) and
+      count_var(body, x) == k and not binds?(body, i) and not mentions?(pat, i)
   end
 
-  defp writes_all(_loop, _x, _len), do: nil
+  defp strided_all?(_gens, _pat, _body, _x, _len), do: false
+
+  # Nested range loops: at every level `for v <- 0..(n - 1)//1` (several
+  # generators in one for are successive levels), the inner for a statement
+  # of the outer body, and the innermost body writing
+  # x[((v1 * n2 + v2) * n3 + v3) ...] once, as a statement of its own. The
+  # alloc's length is the product of the extents, in any order. Every trip
+  # writes one element, the trips write the elements 0..n1*...*nm-1 each
+  # once (an extent of 0 makes both empty; a negative one makes the alloc
+  # raise), nothing else in the nest mentions x, and no body binds a loop
+  # variable or a variable of the length, so the extents are the alloc's.
+  defp nested_all?(loop, x, len) do
+    with {:ok, levels, body} <- nest_levels(loop, x, len, []),
+         extents = Enum.map(levels, &elem(&1, 1)),
+         true <- permutation?(product_factors(len), extents),
+         [idx] <-
+           for(
+             {:=, _, [{{:., _, [Access, :get]}, _, [{^x, _, c}, idx]}, _]} <- body,
+             is_atom(c),
+             do: idx
+           ),
+         true <- row_major?(idx, levels) and count_var(loop, x) == 1 do
+      {:ok, extents}
+    else
+      _ -> :error
+    end
+  end
+
+  # {:ok, [{var, extent}] outermost first, innermost body statements}
+  defp nest_levels({:for, _, args}, x, len, acc) do
+    with {:ok, gens, [], nil, nil, body} <- loop_parts(args),
+         {:ok, vars} <- level_vars(gens, x),
+         levels = acc ++ vars,
+         names = Enum.map(levels, &elem(&1, 0)),
+         true <- Enum.uniq(names) == names,
+         false <- Enum.any?(names ++ MapSet.to_list(vars(len)), &binds?(body, &1)) do
+      case Enum.split_with(body, &match?({:for, _, _}, &1)) do
+        {[inner], others} ->
+          if mentions?(others, x), do: :error, else: nest_levels(inner, x, len, levels)
+
+        {[], _} ->
+          {:ok, levels, body}
+
+        _ ->
+          :error
+      end
+    else
+      _ -> :error
+    end
+  end
+
+  defp level_vars(gens, x) do
+    vars =
+      for {:<-, _, [{v, _, _}, {:..//, _, [0, {:-, _, [n, 1]}, 1]}]} <- gens,
+          v != x and not mentions?(n, x),
+          do: {v, n}
+
+    if length(vars) == length(gens), do: {:ok, vars}, else: :error
+  end
+
+  # idx is the row-major index of the levels' variables with their extents
+  defp row_major?({v, _, c}, [{v, _}]) when is_atom(c), do: true
+
+  defp row_major?({:+, _, [{:*, _, [inner, n]}, {v, _, c}]}, levels) when is_atom(c) do
+    case List.pop_at(levels, -1) do
+      {{^v, extent}, outer} when outer != [] -> same_ast?(n, extent) and row_major?(inner, outer)
+      _ -> false
+    end
+  end
+
+  defp row_major?(_idx, _levels), do: false
+
+  defp product_factors({:*, _, [a, b]}), do: product_factors(a) ++ product_factors(b)
+  defp product_factors(t), do: [t]
+
+  # the same terms, in any order
+  defp permutation?(as, bs) when length(as) == length(bs) do
+    Enum.reduce_while(bs, as, fn b, rest ->
+      case Enum.find_index(rest, &same_ast?(&1, b)) do
+        nil -> {:halt, :no}
+        i -> {:cont, List.delete_at(rest, i)}
+      end
+    end) == []
+  end
+
+  defp permutation?(_as, _bs), do: false
 
   # `range` is 0..(n - 1)//1 or 0..(n - 1), or for k = 1 also with length(x) - 1
   defp zero_based_to({:..//, _, [0, stop, 1]}, n, x, k), do: stop_at(stop, n, x, k)

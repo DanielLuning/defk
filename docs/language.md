@@ -1341,8 +1341,17 @@ malformed call is [`alloc-form`](compile-errors.md#alloc-form).
   `c` in `0..k-1` (not in a branch) and mentions `x` nowhere else, and
   nothing in between rebinds a variable of `n`, every element is written
   before anything can read it, and the buffer is not zeroed at all (the
-  fast-path report notes which allocs are). This is an optimisation:
-  the array is all zeros wherever it is not written, either way.
+  fast-path report notes which allocs are). The loop may be a
+  `for ..., reduce:` whose clause body holds the writes (its initial value
+  and pattern not mentioning `x`), also as the right side of a match
+  (`{h, t} = for ..., reduce: {h, t}`); and nested range loops
+  `for y <- 0..(h - 1)//1`, `for x <- 0..(w - 1)//1, c <- 0..(ch - 1)//1`
+  whose innermost body writes `x[(y * w + x) * ch + c]` once, with the
+  `alloc` length the product of the extents in any order, count too. A
+  loop plus a tail that writes the rest (`encode64`'s shape) does not:
+  showing that the tail writes exactly the rest needs `div`/`rem`
+  arithmetic the proof does not do. This is an optimisation: the array is
+  all zeros wherever it is not written, either way.
 
 ### Writing
 
