@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-17T18:30:36Z",
@@ -7,8 +7,8 @@
   "id": "defk-zet",
   "labels": [],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Trial Covenant contracts for the compile error codes promise",
   "type": "task",
-  "updated_at": "2026-10-17T18:30:36Z"
+  "updated_at": "2026-10-17T18:30:40Z"
 }
