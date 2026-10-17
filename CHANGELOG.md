@@ -50,6 +50,11 @@
   `module-attribute`, `read-only-array`, `tuple-return-call`,
   `array-accumulator`, all retired in 0.0.1) under "Retired", each with the
   version and why. `Defk.Errors.entries/0` returns them, marked retired.
+- Faster: a call that allocates (an `alloc/2` result, a bitstring
+  accumulator, a copy) no longer allocates and frees a table for its owned
+  buffers; the first four slots live in the call's frame. A one-buffer call
+  costs about half of what it did (a one-byte bitstring result 125 ns to
+  60-70 ns, under load). Results and the runtime contract are unchanged.
 
 ## 0.1.0
 
