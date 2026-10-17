@@ -13,3 +13,4 @@ erl_crash.dump
 
 # Covenant writes coverage beside the contract it checks; a frozen contract is never edited
 /test/stability/*/contracts/coverage*.json
+/cover/

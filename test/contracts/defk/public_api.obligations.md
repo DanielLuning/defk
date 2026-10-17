@@ -1,5 +1,5 @@
 ---
-modules: [Defk, Defk.Build]
+modules: [Defk, Defk.Build, Defk.Bits, Defk.Test, Defk.ElixirMode]
 ---
 
 ## Purpose
@@ -65,4 +65,25 @@ reports.
 - **why:** the mechanism is exercised with test-only entries that `config/config.exs` names, so its test cannot be frozen with the contract; this records where the promise is proven
 - **kind:** exception
 - **target:** test/deprecations_test.exs
+- **status:** active
+
+### defk.public_api.I8 — Each `Defk.Bits` function keeps its meaning
+- **scope:** every promised function of `Defk.Bits`, over the full range of its arguments
+- **must:** each returns what its documentation defines, computed here bit by bit by an independent reference: `wrap64/1` the low 64 bits as a signed value, `mulhi/2` the high half of the unsigned 128-bit product, `clz`, `ctz`, `popcount`, `rotl` and `rotr` on the 64-bit pattern or on a `width`-bit value, `f64_bits/1` the IEEE 754 bits, `crc32c/3` the reflected Castagnoli step without inversion; and the width forms raise `ArgumentError` for a width or a value out of their range
+- **why:** a kernel calls the same names as builtins and Elixir mode calls these functions, so their meaning is the meaning of those kernels; a function that kept its name and changed its value would break callers silently
+- **kind:** functional
+- **status:** active
+
+### defk.public_api.I9 — `Defk.Test` detects a disagreement
+- **scope:** `Defk.Test.assert_agrees/3,4`, `Defk.Test.agreement_reason/1`
+- **must:** `assert_agrees` returns the native outcome (`{:ok, value}` or `{:raise, exception}`) when the native call and Elixir mode agree (identical values, or the same exception module with the same agreement reason), and fails the test when they differ in value, in raising, in exception module or in reason, when the function is not exported, under `forced_yields: true` when only the forced run differs, and under `message: :exact` when only the message differs; it leaves forced yields off afterwards; `agreement_reason/1` names what went wrong (`:overflow`, `:index`, `:clause`)
+- **why:** users test their kernels with it; an `assert_agrees` that passed on a disagreement would hide the bugs it exists to find
+- **kind:** functional
+- **status:** active
+
+### defk.public_api.I10 — `Defk.ElixirMode.with_mode/2` switches the calling process only
+- **scope:** `Defk.ElixirMode.with_mode/2`
+- **must:** inside `fun`, kernel calls of the calling process run in the given mode (for modules compiled with Elixir mode); `with_mode` returns what `fun` returns; other processes keep their mode; the previous mode comes back afterwards, also when `fun` raises
+- **why:** tests and debugging switch one process to Elixir mode while the rest of the node runs natively
+- **kind:** functional
 - **status:** active

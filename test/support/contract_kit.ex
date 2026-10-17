@@ -101,21 +101,39 @@ defmodule Defk.ContractKit do
   Once per test run for the same examples: the live contract and every
   frozen copy of it compile the same corpus, and the modules are named after
   the files, so a second caller waits for the first and shares its result.
+  A shared result whose modules were unloaded since (a mutation run purges
+  the modules each test run loads) is compiled again.
   """
   def compile_frozen(examples, kind) do
     key = {__MODULE__, :frozen, kind, :erlang.phash2(examples)}
 
     :global.trans({key, self()}, fn ->
       case :persistent_term.get(key, nil) do
-        nil ->
-          compiled = Corpus.compile_all(examples, kind)
-          :persistent_term.put(key, compiled)
-          compiled
+        compiled when is_map(compiled) ->
+          if loaded?(compiled, examples, kind),
+            do: compiled,
+            else: compile_and_keep(key, examples, kind)
 
-        compiled ->
-          compiled
+        nil ->
+          compile_and_keep(key, examples, kind)
       end
     end)
+  end
+
+  defp compile_and_keep(key, examples, kind) do
+    compiled = Corpus.compile_all(examples, kind)
+    :persistent_term.put(key, compiled)
+    compiled
+  end
+
+  # every module a compile result says compiled is still loaded
+  defp loaded?(compiled, examples, kind) do
+    Enum.all?(
+      for({file, exs} <- examples, ex <- exs, Map.get(compiled, file) == :ok, do: {file, ex}),
+      fn {file, ex} ->
+        Code.ensure_loaded?(Module.concat([Corpus.named(file, ex, kind).module]))
+      end
+    )
   end
 
   @doc "A test name for a frozen file's examples."
