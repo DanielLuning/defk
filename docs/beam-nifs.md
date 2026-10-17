@@ -88,7 +88,7 @@ reading rather than an OTP rule:
 2. While a process runs a dirty NIF, OTP documents that "suspend or garbage
    collection of a process executing a dirty NIF cannot be done until the
    dirty NIF has returned", so a process in a long dirty call is not
-   suspendable — which `test/upgrade_test.exs` needs in order to recompile a
+   suspendable — which `test/contracts/defk/upgrade_contract_test.exs` needs in order to recompile a
    module under a running kernel.
 
 Every generated NIF is registered with flag `0` (a normal NIF)
@@ -199,7 +199,7 @@ failure alike — `defk_finish` in priv/defk_runtime.h. It runs in both
 wrappers immediately before a raise is constructed: `step_` for a resumed
 kernel (`step_fn/3` in lib/defk/compiler.ex) and `nif_` for a first call
 (`nif_fn/3` in lib/defk/compiler.ex). Process death is covered by the frame
-destructor (§2). `test/raise_cleanup_test.exs` checks both frames, including
+destructor (§2). `test/contracts/defk/runtime_contract_test.exs` checks both frames, including
 that the bytes are gone from `:erlang.memory(:binary)`.
 
 **Nothing unwinds across the NIF boundary.** A raise is a value built and
@@ -327,7 +327,7 @@ running) kills processes still running that code, and the old library frees
 their frames. A kernel survives one reload of its module; a second reload
 before it finishes purges its code and kills it (`docs/language.md` section 12).
 `__defk_stats__/0` counts the current library's frames only.
-`test/upgrade_test.exs` covers all of this.
+`test/contracts/defk/upgrade_contract_test.exs` covers all of this.
 
 ## 7. When not to use a NIF
 
@@ -399,5 +399,5 @@ part of the record (`AGENTS.md`, *Purpose and measurement*).
 - In-repo evidence: `priv/defk_runtime.h`, `lib/defk/build.ex`,
   `lib/defk/compiler.ex`, `lib/defk.ex`, `docs/project.md`, `CONTEXT.md`,
   `examples/README.md`, `examples/release_debian/README.md`,
-  `test/heap_binary_yield_test.exs`, `test/raise_cleanup_test.exs`,
-  `test/upgrade_test.exs`, `bench/tick_gap.exs`, `bench/yield_cost.exs`.
+  `test/heap_binary_yield_test.exs`, `test/contracts/defk/runtime_contract_test.exs`,
+  `test/contracts/defk/upgrade_contract_test.exs`, `bench/tick_gap.exs`, `bench/yield_cost.exs`.

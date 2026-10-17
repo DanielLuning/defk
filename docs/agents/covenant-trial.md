@@ -152,3 +152,85 @@ not fit Covenant's one-hour default.
   kept outside the frozen directory. Decide at the 0.2.0 release.
 - Contract tests read the code under test at run time, never into module
   attributes, or mutation (and any hot swap) cannot reach them.
+
+## The full surface (defk-ksc)
+
+The owner adopted the recommendation and asked for all four surfaces, for
+contracts that run from one version against another, for the duplicated
+tests to go, and for proof that nothing they covered was lost.
+
+### What changed
+
+- Four components under `test/contracts/defk/`: `error_codes` (I1-I6),
+  `kernel_subset` (I1-I2), `public_api` (I1-I10, I7 a `kind: exception`
+  naming `test/deprecations_test.exs`) and `runtime_contract` (I1-I6): 24
+  obligations; the 23 that need a test are covered.
+- `Defk.ContractKit` is the one helper a contract test may call besides the
+  promised API; `test/contract_kit_test.exs` reads every contract test,
+  frozen ones included, and fails on any other `Defk.*` reference or on a
+  `__defk_*__` hook outside the promised ones.
+- `test/stability/exceptions.exs` holds the exception lists (`fixed`,
+  `newly_supported`) that the tests held; `ci/frozen.sh` lets it change but
+  not lose an entry.
+- `mix defk.stability.freeze` also writes `test/stability/<version>/contracts/`;
+  `mix test` runs every frozen copy, `mix defk.contracts <version>` runs one
+  through Covenant.
+- Removed or moved: `stability_api_test`, `stability_kernels_test`,
+  `upgrade_test`, `concurrent_test`, `raise_cleanup_test`, and five tests of
+  `fault_containment_test` (what is left there is the handler's build, its
+  chain, the faults that must kill the node, and the message's text). The
+  error codes test lost its message-text checks to `compile_errors_test`.
+
+### One version against another
+
+Frozen as a made-up `9.9.9` in a scratch clone: the frozen contract held
+alone (`mix defk.contracts 9.9.9`, 250 tests) and beside the live one in one
+`mix test` (514 tests), once the kit compiled the frozen corpus once per run
+(two copies compiling the same modules at once had failed). With the code
+`pipe` renamed in `lib/`, the frozen contract failed I2 and I5.
+
+### Line coverage
+
+`mix test --cover` at 83c2e712 (before the trial) and at this branch, `lib/`
+and `priv/` identical between them: covered lines 5,955 before, 6,010 after,
+and no line covered before is uncovered after (the 11 the diff first named
+are the freeze task's, moved 18 lines down by the new code, and covered).
+Erlang's cover sees Elixir only, not the C runtime. One baseline test, a
+forced-GC timing case, failed under cover's slowdown; it is unrelated.
+
+### Mutation, contract tests only
+
+`--fail-fast`, `--jobs 1`, a loaded laptop (provisional timings):
+
+| Module | Contract | Mutants | Killed | Survived | Time |
+|---|---|---|---|---|---|
+| `Defk.Errors` | error_codes | 1197 | 679 | 427 | ~15 min |
+| `Defk.Bits` | public_api, before I8 | 190 | 0 | 186 | <1 min |
+| `Defk.Bits` | public_api, with I8 | 190 | 151 | 25 (+10 timeouts) | <1 min |
+| `Defk.Report` | public_api | 197 | 44 | 144 | <1 min |
+| `Defk.Test` | public_api, with I9 | 37 | 18 | 19 | <1 min |
+
+What the runs found:
+
+- **The public API contract proved names, not meaning.** `Defk.Bits` had no
+  kill: the snapshot test checks that a function exists, and the promise
+  says it keeps its meaning. I8 tests every function against a reference
+  written bit by bit; the survivors left are type guards for non-integer
+  arguments, error message text and range-check edges that change nothing
+  observable, and the timeouts are mutants that loop forever.
+- **`assert_agrees` could have stopped asserting.** Removing its comparison
+  survived: the kernel subset contract uses it but never checks that it
+  fails. I9 drives it with a module that has a kernel module's interface and
+  answers that disagree on purpose; every behaviour mutant is now killed,
+  and the survivors are failure-message text and `inspect` limits.
+- **A shared compile must survive a purge.** Covenant unloads the modules
+  each run loads; the kit's once-per-run compile now checks its modules are
+  still loaded.
+- `Defk.Errors`' 427 survivors are the registry's text (summary, why, hint)
+  and the doc generators: promised by nothing, tested by
+  `compile_errors_test`, `compile_errors_doc_test` and `scope_doc_test`,
+  which mutation of a contract does not run. `Defk.Report`'s are its text,
+  which the guide leaves open.
+
+The compiler itself (`lib/defk/compiler.ex`) is a separate run on mains
+power (defk-ksc.2).

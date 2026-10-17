@@ -11,10 +11,10 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
   example per file, and the public API the release promised into
   `test/stability/<version>/api.exs`, all read from the release's git tag
   (`v<version>`). From then on every `mix test` compiles each frozen kernel
-  and checks its results (test/stability_kernels_test.exs), compiles each
+  and checks its results (test/contracts/defk/kernel_subset_contract_test.exs), compiles each
   frozen rejection and checks it still fails with its code
   (test/contracts/defk/error_codes_contract_test.exs), and checks that each promised
-  macro, function and option is still there (test/stability_api_test.exs):
+  macro, function and option is still there (test/contracts/defk/public_api_contract_test.exs):
   the stability promise, checked mechanically. The files are never edited;
   docs/agents/stability.md has the rules.
 
@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
 
   The API snapshot (`api.exs`) is the surface docs/guides/stability.md
   ("The public API") promised at the tag, as the data
-  test/stability_api_test.exs reads:
+  test/contracts/defk/public_api_contract_test.exs reads:
 
     * the public modules with their documented macros and functions and
       every arity each is callable at: `Code.fetch_docs/1` on the modules
@@ -74,8 +74,16 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
   file back and stops if it does not give the example it was written from;
   `api.exs` is read back the same way, as the data it was written from.
 
-  The version's `kernels/` and `rejections/` directories and its `api.exs`
-  are written afresh. Run the task at the release commit, where the page
+  And the release's contract: `contracts/` is test/contracts/ at the tag
+  (the obligations, decision records and contract tests Covenant reads),
+  each contract test module renamed under the version and pointed at the
+  frozen obligations (`Defk.Stability.Contracts`). `mix test` runs the frozen
+  contract tests on every later commit; `mix defk.contracts <version>` runs
+  one version's contract through Covenant. A tag from before the contracts
+  existed (0.1.0) has none.
+
+  The version's `kernels/`, `rejections/` and `contracts/` directories and
+  its `api.exs` are written afresh. Run the task at the release commit, where the page
   list, the catalog, the options and the environment variables are the
   release's. Rerun for a version already frozen, it reproduces that
   version's files byte for byte.
@@ -99,10 +107,25 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
     write!(Path.join(root, "kernels"), kernels)
     write!(Path.join(root, "rejections"), doc_rejections(tag, pages) ++ registry_rejections(tag))
     write_api!(Path.join(root, "api.exs"), version, tag)
+    write_contracts!(version, tag)
   end
 
   def run(_),
     do: Mix.raise("usage: mix defk.stability.freeze <version>   (the tag is v<version>)")
+
+  # test/contracts/ at the tag, frozen (Defk.Stability.Contracts); a tag from
+  # before the contracts existed has none
+  defp write_contracts!(version, tag) do
+    case Defk.Stability.Contracts.write!(version, tag) do
+      0 ->
+        Mix.shell().info("#{tag} has no test/contracts/: no contract to freeze")
+
+      n ->
+        Mix.shell().info(
+          "#{n} contract file(s) written to #{Defk.Stability.Contracts.dir(version)}/"
+        )
+    end
+  end
 
   defp write!(dir, files) do
     File.rm_rf!(dir)
@@ -548,7 +571,7 @@ defmodule Mix.Tasks.Defk.Stability.Freeze do
     # configuration key and the environment variables.
     #
     # Frozen: this file is never edited. A later release adds a directory with
-    # its own file. test/stability_api_test.exs reads it and fails when an item
+    # its own file. test/contracts/defk/public_api_contract_test.exs reads it and fails when an item
     # listed here is missing, no longer exported, hidden, or has another arity.
     # Additions are not listed here, so they pass.
     %{

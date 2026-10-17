@@ -8,6 +8,60 @@ defmodule Defk.CompileErrorsTest do
 
   import Defk.TestKit
 
+  # permanent and planned in words
+  defp assert_kind(:subset, what), do: assert(what =~ "not in the kernel subset")
+  defp assert_kind(:planned, what), do: assert(what =~ "not supported yet")
+
+  defp assert_kind(:error, what),
+    do: refute(what =~ ~r/not in the kernel subset|not supported yet/)
+
+  describe "the registry's text" do
+    # The contract test checks that each example is rejected with its code;
+    # here, the message it gets: the kind in words, the public reader agreeing
+    # with the test's own, and no ticket id
+    test "each example's message says its kind, and diagnostics/1 reads it" do
+      for %{kind: kind, example: example} = e <- Defk.Errors.entries(),
+          kind != :retired and is_binary(example) do
+        msg = compile(__MODULE__, example, key: {e.code, :message})
+        assert [%{code: code, message: what}] = Defk.Errors.diagnostics(msg), msg
+        assert code == e.code
+        assert [what] == whats(msg)
+        assert_kind(kind, what)
+        refute msg =~ ~r/defk-[a-z0-9]{3}/, "a ticket ID in #{msg}"
+      end
+    end
+
+    test "an active entry has a summary, why and hint; a retired one says why" do
+      for e <- Defk.Errors.entries() do
+        keys = if e.kind == :retired, do: [:summary], else: [:summary, :why, :hint]
+        for k <- keys, do: assert(is_binary(Map.fetch!(e, k)) and e[k] != "", "#{e.code} #{k}")
+        if e.kind == :retired, do: assert(is_binary(e.retired.why) and e.retired.why != "")
+      end
+    end
+
+    # err!'s literal codes are checked when the compiler compiles: a typo, or a
+    # retired code, fails mix compile
+    test "the compiler's code check refuses a retired or unknown code" do
+      for %{kind: :retired, code: code} <- Defk.Errors.entries() do
+        assert_raise ArgumentError, ~r/^retired defk error code "#{code}": retired in /, fn ->
+          Defk.Errors.validate_code!(code)
+        end
+      end
+
+      assert Defk.Errors.validate_code!("unsupported-map") == :ok
+
+      assert_raise ArgumentError, ~r/^unknown defk error code/, fn ->
+        Defk.Errors.validate_code!("no-such-code")
+      end
+    end
+
+    test "explain!/1 prints the summary, and a retired code without a hint" do
+      out = ExUnit.CaptureIO.capture_io(fn -> Defk.Errors.explain!("bitwise") end)
+      assert out =~ Defk.Errors.fetch!("bitwise").summary
+      refute out =~ "hint:"
+    end
+  end
+
   describe "format" do
     test "a rejection prints Elixir's frame, why, hint and the code" do
       msg = compile(__MODULE__, "defk f(x :: i64) :: i64 do\n  m = %{a: x}\n  x\nend")
