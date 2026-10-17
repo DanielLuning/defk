@@ -5,35 +5,42 @@ defmodule Defk.Facts do
   # its insides. Pure: no process dictionary, no emission.
   #
   # Representation:
-  #   monomial - an atom of the symbolic bounds. Today: {:len, c}, the length
-  #              of the array in C variable c. (Later steps add i64 bindings
-  #              and products of two atoms.) Each has a rank, its binding's
-  #              order: parameters first, then fresh/2's counter.
+  #   monomial - an atom of the symbolic bounds: {:len, c}, the length of the
+  #              array in C variable c, or {:var, c}, the i64 in C variable
+  #              c. (A later step adds products of two atoms.) Each has a
+  #              rank, its binding's order: parameters first, then
+  #              fresh/2's counter.
   #   form     - a polynomial over monomials with integer coefficients plus a
   #              constant: %{k: integer, t: %{monomial => coefficient}}
   #   bound    - {q, form}: q * v <= form (an upper bound, in ubs) or
   #              q * v >= form (a lower bound, in lbs), q >= 1, the
   #              coefficients and q with no common divisor
-  # An i64 value's facts: lo, hi (constants, nil = unknown) and ubs, lbs.
-  # An array's facts: len_lo, a constant lower bound on its length, and
-  # len_lbs, lower bounds on its length. Every length is in 0..2^61 - 1
-  # (DEFK_ALLOC_MAX_BYTES, and the largest binary), so a bound over lengths
-  # also bounds a value by a constant (lo_of/1, hi_of/1).
+  # An i64 value's facts: lo, hi (constants, nil = unknown), eq (the form it
+  # is exactly, nil = none) and ubs, lbs. An array's facts: len_lo, a
+  # constant lower bound on its length, and len_lbs, len_ubs, lower and upper
+  # bounds on its length. Every length is in 0..2^61 - 1
+  # (DEFK_ALLOC_MAX_BYTES, and the largest binary) and every i64 in
+  # -2^63..2^63 - 1, so a bound over atoms also bounds a value by a constant
+  # (lo_of/1, hi_of/1).
   #
   # Facts are exact for checked arithmetic (an overflow raises, never
-  # wraps). They name array C variables, which are assigned in one place,
-  # never change length, and stay in scope only where every fact about them
-  # was derived.
+  # wraps); a case guard's checked arithmetic flags and computes on, so the
+  # compiler drops its exact form (inexact/1). An i64 value whose C is a C
+  # variable is that atom (eq/1). An atom's facts are its binding's, found
+  # in the scope the compiler passes (its env.vars): a binding is assigned
+  # in one place, or is a loop counter or an accumulator, whose facts hold
+  # wherever the binding is in scope, and an array never changes length. A
+  # fact whose atom is out of scope finds no binding and proves nothing
+  # (sound, if weak).
   #
   # The prover (le?/4) decides `form <= 0` by replacing the newest monomial
   # by one of its bounds until a constant is left, within a step budget; an
   # unproven query keeps the check. The facts of before map onto it one to
   # one (`i <= length(a) + k` is {1, len(a) + k}; a scaled fact
-  # `q * i <= p * length(a) + k` is {q, p * len(a) + k}), and the proofs
-  # in_bounds?/3 makes are those the per-kind rules made.
+  # `q * i <= p * length(a) + k` is {q, p * len(a) + k}).
   @moduledoc false
 
-  defstruct lo: nil, hi: nil, ubs: [], lbs: [], len_lo: nil, len_lbs: []
+  defstruct lo: nil, hi: nil, eq: nil, ubs: [], lbs: [], len_lo: nil, len_lbs: [], len_ubs: []
 
   @i64_min -0x8000000000000000
   @i64_max 0x7FFFFFFFFFFFFFFF
@@ -42,6 +49,10 @@ defmodule Defk.Facts do
   # the prover's step budget per query (one step: one monomial replaced);
   # measured on the suite and the examples, see docs/performance.md
   @budget 64
+
+  # the relative bounds a value keeps of each kind: the first ones, and a
+  # derivation lists the bounds shifted by constants (those of before) first
+  @max_bounds 4
 
   # ---------------------------------------------------------- carrier API --
   # A carrier is any value map; its facts live under :facts (absent = none).
@@ -62,6 +73,13 @@ defmodule Defk.Facts do
     put(carrier, struct!(facts(carrier), kw))
   end
 
+  # the facts a binding of value v keeps: v's, with the form v is exactly
+  def bound(v), do: %{facts(v) | eq: eq(v)}
+
+  # v without its exact form: a case guard's checked arithmetic, which
+  # flags an overflow and computes on
+  def inexact(v), do: put(v, %{facts(v) | eq: nil})
+
   # ------------------------------------------------------------- queries --
   # lo/hi/len_lo are the raw constant bounds; lo_of/hi_of fold the relative
   # bounds in, so they may know more. The split is load-bearing: a caller
@@ -76,12 +94,29 @@ defmodule Defk.Facts do
   def ubs(carrier), do: facts(carrier).ubs
   def lbs(carrier), do: facts(carrier).lbs
   def len_lbs(carrier), do: facts(carrier).len_lbs
+  def len_ubs(carrier), do: facts(carrier).len_ubs
 
   # the one constant a value is known to be, or nil
   def const(carrier) do
     f = facts(carrier)
     if is_integer(f.lo) and f.lo == f.hi, do: f.lo
   end
+
+  # The form an i64 value is exactly, or nil: its recorded form, its one
+  # constant, or the atom of the C variable it reads.
+  def eq(carrier) do
+    f = facts(carrier)
+
+    cond do
+      f.eq != nil -> f.eq
+      is_integer(f.lo) and f.lo == f.hi -> form_const(f.lo)
+      c_var?(carrier) -> form_var(carrier.c)
+      true -> nil
+    end
+  end
+
+  defp c_var?(%{t: :i64, c: c}) when is_binary(c), do: Regex.match?(~r/^[pv]_\w+$/, c)
+  defp c_var?(_), do: false
 
   def nonneg?(carrier) do
     f = facts(carrier)
@@ -111,50 +146,82 @@ defmodule Defk.Facts do
 
     put(carrier, %__MODULE__{
       lo: max(fa.len_lo || 0, 0),
+      eq: if(own?, do: form_len(a.c)),
       lbs: if(own?, do: fa.len_lbs ++ [eq], else: fa.len_lbs),
-      ubs: if(own?, do: [eq], else: [])
+      ubs: if(own?, do: [eq], else: fa.len_ubs)
     })
   end
 
-  # `alloc(e, n)`: the array's length has n's lower bounds
+  # `alloc(e, n)`: the array's length is n (an alloc with any other length
+  # raises), so it has n's bounds both ways and n's exact form
   def len_from(arr, n) do
     fn_ = facts(n)
-    put(arr, %{facts(arr) | len_lo: fn_.lo, len_lbs: fn_.lbs})
+    e = exact_bound(n)
+
+    put(arr, %{
+      facts(arr)
+      | len_lo: fn_.lo,
+        len_lbs: cap(fn_.lbs ++ e),
+        len_ubs: cap(fn_.ubs ++ e)
+    })
   end
 
-  # a copy `b` of array `a`: a's length facts, and len(b) >= len(a)
+  # a copy `b` of array `a`: a's length facts, and len(b) == len(a)
   def len_like(b, a) do
     fa = facts(a)
-    put(b, %{facts(b) | len_lo: fa.len_lo, len_lbs: fa.len_lbs ++ [{1, form_len(a.c)}]})
+    same = [{1, form_len(a.c)}]
+
+    put(b, %{
+      facts(b)
+      | len_lo: fa.len_lo,
+        len_lbs: fa.len_lbs ++ same,
+        len_ubs: cap(fa.len_ubs ++ same)
+    })
   end
 
-  # an accumulator takes the length facts of its initial value
+  # an accumulator takes the length facts of its initial value (the lower
+  # ones: covers?/2 is what keeps them across iterations)
   def len_facts_of(carrier, v) do
     fv = facts(v)
     put(carrier, %{facts(carrier) | len_lo: fv.len_lo, len_lbs: fv.len_lbs})
   end
 
-  # a range counter counting up from `start` to `stop`: the lower bounds of
-  # the start and the upper bounds of the stop (the constants given)
-  def between(carrier, start, stop, lo, hi) do
-    put(carrier, %__MODULE__{lo: lo, hi: hi, lbs: facts(start).lbs, ubs: facts(stop).ubs})
+  # a range counter between `low` and `high` (start and stop counting up,
+  # stop and start counting down): the lower bounds of `low` and the upper
+  # bounds of `high`, their exact forms included, and the constants given
+  def between(carrier, low, high, lo, hi) do
+    put(carrier, %__MODULE__{
+      lo: lo,
+      hi: hi,
+      lbs: cap(facts(low).lbs ++ exact_bound(low)),
+      ubs: cap(facts(high).ubs ++ exact_bound(high))
+    })
   end
 
   # ------------------------------------------------------------- proving --
   # The only functions whose answers may drop a check. A proof carries its
-  # support: the C variables of the arrays whose lengths it reasoned about,
-  # which the flagged-strip classifier must see (ADR-0007).
+  # support: the C variables of the atoms it reasoned about, which the
+  # flagged-strip classifier must see (ADR-0007). `scope` is the compiler's
+  # env.vars: the bindings whose facts an atom's are.
 
   # a value within lo..hi needs no i64 overflow check
   def prove_i64(lo, hi),
     do: is_integer(lo) and is_integer(hi) and lo >= @i64_min and hi <= @i64_max
 
+  # an i64 value v whose facts keep it inside i64, by the prover
+  def fits_i64?(v, scope) do
+    lookup = lookup(scope, nil)
+
+    match?({:ok, _}, value_le(1, v, form_const(-@i64_max), lookup)) and
+      match?({:ok, _}, value_le(-1, v, form_const(@i64_min), lookup))
+  end
+
   # 0 <= i < length(a); with a width w (a word load), 0 <= i and
   # i + w <= length(a)
-  def in_bounds?(a, i, w \\ 1), do: prove_in_bounds(a, i, w) != :unproven
+  def in_bounds?(a, i, w \\ 1, scope \\ %{}), do: prove_in_bounds(a, i, w, scope) != :unproven
 
-  def prove_in_bounds(a, i, w \\ 1) do
-    lookup = %{{:len, a.c} => facts(a)}
+  def prove_in_bounds(a, i, w \\ 1, scope \\ %{}) do
+    lookup = lookup(scope, a)
 
     with {:ok, s1} <- value_le(-1, i, form_const(0), lookup),
          {:ok, s2} <- value_le(1, i, form_sub(form_const(w), form_len(a.c)), lookup) do
@@ -167,28 +234,55 @@ defmodule Defk.Facts do
   # the fact that would drop the check `0 <= i` / `i + w <= length(a)` when
   # nothing does: the report names it (the perturbations stay in here, where
   # the representation is)
-  def missing(a, i, w \\ 1) do
+  def missing(a, i, w \\ 1, scope \\ %{}) do
     low = assert(i, lo: max(lo(i) || 0, 0))
     high = put(i, %{facts(i) | ubs: [{1, form_sub(form_len(a.c), form_const(w))} | ubs(i)]})
 
     cond do
-      in_bounds?(a, i, w) -> :none
-      in_bounds?(a, low, w) -> :low
-      in_bounds?(a, high, w) -> :high
+      in_bounds?(a, i, w, scope) -> :none
+      in_bounds?(a, low, w, scope) -> :low
+      in_bounds?(a, high, w, scope) -> :high
       true -> :both
     end
   end
 
+  # An atom's facts: array a's own (the one a proof is about), else its
+  # binding's in scope, else none. A binding's exact form is never its own
+  # atom (bound/1 records the value's), so it is a bound over older atoms.
+  defp lookup(scope, a) do
+    fn
+      {:len, c} when a != nil and c == a.c -> facts(a)
+      m -> atom_facts(scope, m)
+    end
+  end
+
+  defp atom_facts(scope, {kind, c}) do
+    Enum.find_value(scope, %__MODULE__{}, fn
+      {_, %{c: ^c, t: t} = b} -> if atom_kind(t) == kind, do: facts(b)
+      _ -> nil
+    end)
+  end
+
+  defp atom_kind(:i64), do: :var
+  defp atom_kind({:arr, _}), do: :len
+  defp atom_kind(_), do: nil
+
   # Prove c * v + rest <= 0 for a value v (c = 1 or -1): v is replaced by
-  # each of its bounds in c's direction, then by its constant bound, and the
-  # form left is handed to the prover. Gives {:ok, support} or :no.
+  # each of its bounds in c's direction, then by its constant bound, then by
+  # its exact form, and the form left is handed to the prover. Gives
+  # {:ok, support} or :no.
   defp value_le(c, v, rest, lookup) do
     f = facts(v)
+    exact = for e <- [eq(v)], e != nil, map_size(e.t) > 0, do: {1, e}
 
     candidates =
       if c > 0,
-        do: Enum.map(f.ubs, &replace_upper(c, &1, rest)) ++ [constant(c, f.hi, rest)],
-        else: Enum.map(f.lbs, &replace_lower(c, &1, rest)) ++ [constant(c, f.lo, rest)]
+        do:
+          Enum.map(f.ubs, &replace_upper(c, &1, rest)) ++
+            [constant(c, f.hi, rest)] ++ Enum.map(exact, &replace_upper(c, &1, rest)),
+        else:
+          Enum.map(f.lbs, &replace_lower(c, &1, rest)) ++
+            [constant(c, f.lo, rest)] ++ Enum.map(exact, &replace_lower(c, &1, rest))
 
     Enum.find_value(candidates, :no, fn
       nil ->
@@ -216,7 +310,7 @@ defmodule Defk.Facts do
   defp le?(form, lookup, budget, support) do
     {x, c} = Enum.max_by(form.t, fn {m, _} -> rank(m) end)
     rest = %{form | t: Map.delete(form.t, x)}
-    fx = Map.get(lookup, x, %__MODULE__{})
+    fx = lookup.(x)
     {lo, hi} = monomial_range(x, fx)
     {lbs, ubs} = monomial_bounds(x, fx)
 
@@ -259,19 +353,27 @@ defmodule Defk.Facts do
   defp constant(_c, nil, _rest), do: nil
   defp constant(c, b, rest), do: form_add(rest, form_const(c * b))
 
-  # a monomial's constant bounds: a length is always in 0..2^61 - 1
+  # a monomial's constant bounds: a length is always in 0..2^61 - 1, an i64
+  # in -2^63..2^63 - 1
   defp monomial_range({:len, _}, f), do: {max(f.len_lo || 0, 0), @len_max}
+  defp monomial_range({:var, _}, f), do: {f.lo || @i64_min, f.hi || @i64_max}
 
-  # a monomial's relative bounds: {lower, upper}; a length has only lower ones
-  defp monomial_bounds({:len, _}, f), do: {f.len_lbs, []}
+  # a monomial's relative bounds, {lower, upper}; an i64 binding's exact
+  # form bounds it both ways
+  defp monomial_bounds({:len, _}, f), do: {f.len_lbs, f.len_ubs}
 
-  defp support_of({:len, c}), do: c
+  defp monomial_bounds({:var, c}, f) do
+    exact = if f.eq != nil and f.eq != form_var(c), do: [{1, f.eq}], else: []
+    {exact ++ f.lbs, exact ++ f.ubs}
+  end
+
+  defp support_of({_, c}), do: c
 
   # the newest monomial is replaced first: parameters are the oldest, then
   # the bindings in fresh/2's order (their C names carry its counter)
-  defp rank({:len, "p_" <> _ = c}), do: {0, c}
+  defp rank({_, "p_" <> _ = c}), do: {0, c}
 
-  defp rank({:len, c}) do
+  defp rank({_, c}) do
     case Regex.run(~r/_(\d+)$/, c) do
       [_, n] -> {1, String.to_integer(n)}
       _ -> {0, c}
@@ -284,10 +386,10 @@ defmodule Defk.Facts do
   # fact and stays on the carrier).
 
   # The length facts are len_lo, a constant lower bound, and len_lbs, lower
-  # bounds relative to other arrays. A relative bound names an array's C
-  # variable, assigned before the loop and never changed while it runs (the
-  # accumulator's own variable is fresh, so no bound names it), which is
-  # what makes the fact true at every iteration when every new value has it.
+  # bounds relative to other atoms. A relative bound names atoms bound
+  # before the loop and never changed while it runs (the accumulator's own
+  # variable is fresh, so no bound names it), which is what makes the fact
+  # true at every iteration when every new value has it.
 
   # the accumulator carries facts a new value may not have
   def carries?(carrier), do: is_integer(len_lo(carrier)) or len_lbs(carrier) != []
@@ -299,7 +401,7 @@ defmodule Defk.Facts do
   # without it). The constant bound asks for r's own len_lo, as before.
   def covers?(a, r) do
     al = len_lo(a)
-    lookup = %{{:len, r.c} => facts(r)}
+    lookup = lookup(%{}, r)
 
     (not is_integer(al) or (is_integer(len_lo(r)) and len_lo(r) >= al)) and
       Enum.all?(len_lbs(a), fn {q, p} ->
@@ -324,25 +426,30 @@ defmodule Defk.Facts do
   # The value of an if, cond or case whose arms give `arms` has the facts
   # every arm's value has, each true of whichever arm is taken: the loosest
   # constant bounds (the smallest lo and len_lo, the largest hi) when every
-  # arm has one, and each relative bound every arm has, at its loosest
-  # constant (the smallest for a lower bound, the largest for an upper). A
-  # bound every arm has names an array bound before the branch, since an
-  # array bound inside one arm is unknown to the others, so it is in scope
-  # after the branch; an accumulator keeps such a length fact across
-  # iterations (covers?/2) when the branch's value has it with a constant
-  # as large.
+  # arm has one, the exact form when every arm has the same one, and each
+  # relative bound every arm has (an arm's exact form counts as a bound both
+  # ways), at its loosest constant (the smallest for a lower bound, the
+  # largest for an upper). A bound every arm has names atoms bound before
+  # the branch, since an atom bound inside one arm is unknown to the others,
+  # so it is in scope after the branch; an accumulator keeps such a length
+  # fact across iterations (covers?/2) when the branch's value has it with a
+  # constant as large.
   def join(carrier, []), do: carrier
 
   def join(carrier, arms) do
     fs = Enum.map(arms, &facts/1)
+    rel = Enum.map(arms, &%{facts(&1) | lbs: lbs_of(&1), ubs: ubs_of(&1)})
+    eqs = Enum.map(arms, &eq/1)
 
     put(carrier, %__MODULE__{
       lo: joined(fs, & &1.lo, &min/2),
       hi: joined(fs, & &1.hi, &max/2),
-      lbs: common(fs, & &1.lbs, &min/2),
-      ubs: common(fs, & &1.ubs, &max/2),
+      eq: if(hd(eqs) != nil and Enum.all?(eqs, &(&1 == hd(eqs))), do: hd(eqs)),
+      lbs: common(rel, & &1.lbs, &min/2),
+      ubs: common(rel, & &1.ubs, &max/2),
       len_lo: joined(fs, & &1.len_lo, &min/2),
-      len_lbs: common(fs, & &1.len_lbs, &min/2)
+      len_lbs: common(fs, & &1.len_lbs, &min/2),
+      len_ubs: common(fs, & &1.len_ubs, &max/2)
     })
   end
 
@@ -360,6 +467,9 @@ defmodule Defk.Facts do
   end
 
   # --------------------------------------------------------- derivations --
+  # Each operation's exact form is the operands' combined, when both have
+  # one; the relative bounds of before (shifted by the other operand's
+  # constant bounds) come first, then those shifted by its exact form.
 
   def add_facts(a, b) do
     {fa, fb} = {facts(a), facts(b)}
@@ -367,38 +477,83 @@ defmodule Defk.Facts do
     %__MODULE__{
       lo: add(fa.lo, fb.lo),
       hi: add(fa.hi, fb.hi),
-      lbs: merge(shift(fa.lbs, fb.lo), shift(fb.lbs, fa.lo), &max/2),
-      ubs: merge(shift(fa.ubs, fb.hi), shift(fb.ubs, fa.hi), &min/2)
+      eq: both(eq(a), eq(b), &form_add/2),
+      lbs:
+        merge(shift(fa.lbs, fb.lo), shift(fb.lbs, fa.lo), &max/2)
+        |> merge(shift_by(lbs_of(a), rel_eq(b)) ++ shift_by(lbs_of(b), rel_eq(a)), &max/2)
+        |> cap(),
+      ubs:
+        merge(shift(fa.ubs, fb.hi), shift(fb.ubs, fa.hi), &min/2)
+        |> merge(shift_by(ubs_of(a), rel_eq(b)) ++ shift_by(ubs_of(b), rel_eq(a)), &min/2)
+        |> cap()
     }
   end
 
+  # a - b: a's bounds shifted by -b, and b's bounds flipped and shifted by
+  # a (q * b >= p gives q * (a - b) <= q * a - p)
   def sub_facts(a, b) do
     {fa, fb} = {facts(a), facts(b)}
+    neg_b = negated(b)
 
     %__MODULE__{
       lo: add(fa.lo, neg(fb.hi)),
       hi: add(fa.hi, neg(fb.lo)),
-      lbs: shift(fa.lbs, neg(fb.hi)),
-      ubs: shift(fa.ubs, neg(fb.lo))
+      eq: both(eq(a), eq(b), &form_sub/2),
+      lbs:
+        shift(fa.lbs, neg(fb.hi))
+        |> merge(shift_by(lbs_of(a), rel_eq(neg_b)) ++ shift_by(neg_b.lbs, rel_eq(a)), &max/2)
+        |> cap(),
+      ubs:
+        shift(fa.ubs, neg(fb.lo))
+        |> merge(shift_by(ubs_of(a), rel_eq(neg_b)) ++ shift_by(neg_b.ubs, rel_eq(a)), &min/2)
+        |> cap()
+    }
+  end
+
+  # -a: the bounds swapped and negated, the exact form negated
+  def neg_facts(a), do: negated(a)
+
+  defp negated(a) do
+    fa = facts(a)
+    flip = fn {q, p} -> {q, form_scale(p, -1)} end
+
+    %__MODULE__{
+      lo: neg(fa.hi),
+      hi: neg(fa.lo),
+      eq: (e = eq(a)) && form_scale(e, -1),
+      lbs: Enum.map(ubs_of(a), flip),
+      ubs: Enum.map(lbs_of(a), flip)
     }
   end
 
   # a product: lo..hi from the operands' (nil when one is unbounded), and
-  # for a constant k >= 1 times v, v's facts scaled by k
+  # for a constant k >= 1 times v, v's facts scaled by k; times a constant,
+  # the exact form scaled (a product of two atoms has none: degree 2 is a
+  # later step)
   def mul_facts(a, b) do
     {fa, fb} = {facts(a), facts(b)}
 
-    cond do
-      is_integer(fa.lo) and fa.lo == fa.hi and fa.lo > 0 ->
-        scaled(fb, fa.lo)
+    f =
+      cond do
+        is_integer(fa.lo) and fa.lo == fa.hi and fa.lo > 0 ->
+          scaled(fb, fa.lo)
 
-      is_integer(fb.lo) and fb.lo == fb.hi and fb.lo > 0 ->
-        scaled(fa, fb.lo)
+        is_integer(fb.lo) and fb.lo == fb.hi and fb.lo > 0 ->
+          scaled(fa, fb.lo)
 
-      true ->
-        {lo, hi} = mul_bounds({fa.lo, fa.hi}, {fb.lo, fb.hi})
-        %__MODULE__{lo: lo, hi: hi}
-    end
+        true ->
+          {lo, hi} = mul_bounds({fa.lo, fa.hi}, {fb.lo, fb.hi})
+          %__MODULE__{lo: lo, hi: hi}
+      end
+
+    eq =
+      case {const(a), const(b)} do
+        {k, _} when is_integer(k) -> (e = eq(b)) && form_scale(e, k)
+        {_, k} when is_integer(k) -> (e = eq(a)) && form_scale(e, k)
+        _ -> nil
+      end
+
+    %{f | eq: eq}
   end
 
   # q * v <= p scaled by k: q * (k * v) <= k * p
@@ -444,14 +599,17 @@ defmodule Defk.Facts do
     }
   end
 
+  # min(a, b) is at most each operand (their exact forms included) and at
+  # least what both are at least; max the mirror
   def minmax_facts(:min, a, b) do
     {fa, fb} = {facts(a), facts(b)}
 
     %__MODULE__{
       lo: both(fa.lo, fb.lo, &min/2),
       hi: either(fa.hi, fb.hi, &min/2),
-      lbs: intersect(fa.lbs, fb.lbs, &min/2),
-      ubs: merge(fa.ubs, fb.ubs, &min/2)
+      lbs: intersect(lbs_of(a), lbs_of(b), &min/2) |> cap(),
+      ubs:
+        merge(fa.ubs, fb.ubs, &min/2) |> merge(exact_bound(a) ++ exact_bound(b), &min/2) |> cap()
     }
   end
 
@@ -461,8 +619,9 @@ defmodule Defk.Facts do
     %__MODULE__{
       lo: either(fa.lo, fb.lo, &max/2),
       hi: both(fa.hi, fb.hi, &max/2),
-      lbs: merge(fa.lbs, fb.lbs, &max/2),
-      ubs: intersect(fa.ubs, fb.ubs, &max/2)
+      lbs:
+        merge(fa.lbs, fb.lbs, &max/2) |> merge(exact_bound(a) ++ exact_bound(b), &max/2) |> cap(),
+      ubs: intersect(ubs_of(a), ubs_of(b), &max/2) |> cap()
     }
   end
 
@@ -513,17 +672,35 @@ defmodule Defk.Facts do
   def neg(x) when is_integer(x), do: -x
   def neg(_), do: nil
 
+  # a value's exact form as a bound, when it has atoms (a constant one is
+  # its lo and hi)
+  defp exact_bound(v), do: for(e <- [rel_eq(v)], e != nil, do: {1, e})
+
+  # the exact form, when it has atoms
+  defp rel_eq(%__MODULE__{eq: e}), do: if(e != nil and map_size(e.t) > 0, do: e)
+
+  defp rel_eq(v) do
+    e = eq(v)
+    if e != nil and map_size(e.t) > 0, do: e
+  end
+
+  # the relative bounds with the exact form among them
+  defp lbs_of(v), do: facts(v).lbs ++ exact_bound(v)
+  defp ubs_of(v), do: facts(v).ubs ++ exact_bound(v)
+
   # --------------------------------------------------------------- forms --
 
   def form_const(k), do: %{k: k, t: %{}}
   def form_len(c), do: %{k: 0, t: %{{:len, c} => 1}}
+  def form_var(c), do: %{k: 0, t: %{{:var, c} => 1}}
 
   def form_add(a, b),
     do: %{k: a.k + b.k, t: Map.merge(a.t, b.t, fn _, x, y -> x + y end) |> drop_zeros()}
 
   def form_sub(a, b), do: form_add(a, form_scale(b, -1))
 
-  def form_scale(%{k: k, t: t}, c), do: %{k: k * c, t: Map.new(t, fn {m, x} -> {m, x * c} end)}
+  def form_scale(%{k: k, t: t}, c),
+    do: %{k: k * c, t: t |> Map.new(fn {m, x} -> {m, x * c} end) |> drop_zeros()}
 
   defp drop_zeros(t), do: Map.reject(t, fn {_, x} -> x == 0 end)
 
@@ -543,6 +720,7 @@ defmodule Defk.Facts do
   end
 
   defp default_range({:len, _}), do: {0, @len_max}
+  defp default_range({:var, _}), do: {@i64_min, @i64_max}
 
   # a bound in normal form: q and the coefficients with no common divisor
   # (the constant rounded down for an upper bound, up for a lower one)
@@ -557,6 +735,12 @@ defmodule Defk.Facts do
 
   defp shift(bounds, k),
     do: Enum.map(bounds, fn {q, p} -> {q, form_add(p, form_const(q * k))} end)
+
+  # the bounds of v + e from those of v, for an exact form e with atoms
+  defp shift_by(_bounds, nil), do: []
+
+  defp shift_by(bounds, e),
+    do: Enum.map(bounds, fn {q, p} -> {q, form_add(p, form_scale(e, q))} end)
 
   # the bounds of both lists, one per shape (q and terms) at the tighter constant
   defp merge(xs, ys, tighter) do
@@ -577,13 +761,15 @@ defmodule Defk.Facts do
 
   defp same_shape?({q, p}, {q1, p1}), do: q == q1 and p.t == p1.t
 
+  defp cap(bounds), do: Enum.take(bounds, @max_bounds)
+
   # ------------------------------------------------------------ plumbing --
 
   defp floor_div(a, b), do: Integer.floor_div(a, b)
   defp ceil_div(a, b), do: -Integer.floor_div(-a, b)
 
   # combine optional bounds: `both` needs both known, `either` is valid with one
-  defp both(x, y, f) when is_integer(x) and is_integer(y), do: f.(x, y)
+  defp both(x, y, f) when x != nil and y != nil, do: f.(x, y)
   defp both(_, _, _), do: nil
 
   defp either(nil, y, _), do: y
