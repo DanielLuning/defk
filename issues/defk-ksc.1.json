@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [
     "defk-ksc.2"
@@ -10,8 +10,8 @@
   "labels": [],
   "parent": "defk-ksc",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Contracts for the public API, kernel subset and runtime contract; versioned contracts; remove duplicates; coverage diff",
   "type": "task",
-  "updated_at": "2026-10-17T20:12:23Z"
+  "updated_at": "2026-10-17T20:12:24Z"
 }
