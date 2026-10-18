@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "PR #36",
+      "timestamp": "2026-10-18T20:07:25Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "report: unzeroed-alloc note names the use line, not the loop's line, for a kernel from a location: :keep macro",
   "type": "bug",
-  "updated_at": "2026-10-18T20:00:19Z"
+  "updated_at": "2026-10-18T20:07:25Z"
 }
