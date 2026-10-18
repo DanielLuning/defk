@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "PR #35: decode64 and decode58 rewritten with raising guards; same checks, decode58 batch ~21% faster (dummy alloc was in its loop). performance.md 6.35. Waiting for owner merge.",
+      "timestamp": "2026-10-18T17:40:45Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "codecs: test whether decode64 and decode58 should use raising guards instead of alloc(u8, -1)",
   "type": "task",
-  "updated_at": "2026-10-18T17:33:06Z"
+  "updated_at": "2026-10-18T17:40:45Z"
 }
