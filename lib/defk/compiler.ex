@@ -3470,23 +3470,23 @@ defmodule Defk.Compiler do
   # nested form's extents may be negative with a positive product (two of
   # them): no trip writes then, so the buffer is zeroed when any extent is
   # negative, a test that is false for every array the loop writes.
-  defp unzeroed_alloc(e, v, node, {line, []}, _yield?, _env) do
+  defp unzeroed_alloc(e, v, node, {at, []}, _yield?, _env) do
     note(
       :alloc,
       node,
       :unzeroed,
-      "not zeroed: the loop on line #{line} writes every element first"
+      "not zeroed: the loop on #{line_from(at, node)} writes every element first"
     )
 
     {[], "defk_alloc_raw_#{e}(ctx, #{v.c})"}
   end
 
-  defp unzeroed_alloc(e, v, node, {line, extents}, yield?, env) do
+  defp unzeroed_alloc(e, v, node, {at, extents}, yield?, env) do
     note(
       :alloc,
       node,
       :unzeroed,
-      "not zeroed: the loops on line #{line} write every element first (zeroed only if an extent is negative)"
+      "not zeroed: the loops on #{line_from(at, node)} write every element first (zeroed only if an extent is negative)"
     )
 
     {ss, vs} = extents |> Enum.map(&lower_expr(&1, env)) |> Enum.unzip()
@@ -3703,7 +3703,7 @@ defmodule Defk.Compiler do
              do: {:ok, []},
              else: nested_all?(loop, x, len)
            ) do
-      {fm[:line] || 0, extents}
+      {meta_line(fm) || 0, extents}
     else
       _ -> nil
     end
@@ -6875,6 +6875,21 @@ defmodule Defk.Compiler do
         Keyword.get(m, :line)
     end
   end
+
+  # "line N" for a line `at` (meta_line/1) named in the text of a note on
+  # `node`, with its file when that is not the note's own: a reader looks
+  # for the line in the file the note is listed under.
+  defp line_from(at, node) do
+    {file, line} = in_file(at)
+    {note_file, _} = in_file(note_line(node))
+
+    if file == note_file,
+      do: "line #{line}",
+      else: "line #{line} of #{Path.relative_to_cwd(file)}"
+  end
+
+  defp in_file({file, line}), do: {file, line}
+  defp in_file(line), do: {ctx(:file), line}
 
   # a[i], or the word load u64_le(bytes, i), of width w: its bounds check
   # dropped, or kept with the facts that would drop it. `proof` is the

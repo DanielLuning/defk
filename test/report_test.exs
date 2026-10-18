@@ -98,6 +98,13 @@ defmodule Defk.ReportTest.Gen do
 
   Defk.ReportMacros.scaler_keep(:scale_keep)
   Defk.ReportMacros.scaler(:scale_plain)
+
+  Defk.ReportMacros.filler_keep(
+    :fill_keep,
+    for j <- 0..(length(a) - 1)//1 do
+      out[j] = a[j] + k
+    end
+  )
 end
 
 defmodule Defk.ReportTest do
@@ -395,6 +402,28 @@ defmodule Defk.ReportTest do
       assert {at.("for i <- 0..(length(a) - 1)//1 do"), :loop} in notes
       assert {at.("out[i] = a[i] * k"), :bounds} in notes
       assert notes |> Enum.map(&elem(&1, 0)) |> Enum.uniq() |> length() >= 4
+    end
+
+    test "with location: :keep, the unzeroed alloc names the loop's line in the macro's file" do
+      loop = macro_line("for i <- 0..(length(a) - 1)//1 do", "defmacro scaler_keep")
+
+      text = "not zeroed: the loop on line #{loop} writes every element first"
+
+      assert [text] ==
+               for({{:scale_keep, 2}, _, {:alloc, :unzeroed, t}} <- Gen.__defk_report__(), do: t)
+    end
+
+    test "a loop in another file than the unzeroed alloc's is named with its file" do
+      loop = line_of(Gen, ":fill_keep,") + 1
+      file = Path.relative_to_cwd(__ENV__.file)
+      alloc = {@macros, macro_line("unquote(out) = alloc(f64", "defmacro filler_keep")}
+      text = "not zeroed: the loop on line #{loop} of #{file} writes every element first"
+
+      assert [{alloc, text}] ==
+               for(
+                 {{:fill_keep, 2}, l, {:alloc, :unzeroed, t}} <- Gen.__defk_report__(),
+                 do: {l, t}
+               )
     end
 
     test "without it, every note is on the line that calls the macro" do
