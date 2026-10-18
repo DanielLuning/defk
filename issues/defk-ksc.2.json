@@ -9,9 +9,15 @@
   "id": "defk-ksc.2",
   "labels": [],
   "parent": "defk-ksc",
+  "comments": [
+    {
+      "text": "PR #33. 5,418 compiler mutants; detected 46% by either contract (error_codes 29%, kernel_subset 41%). 32 never returned (9 hangs, 20 watchdog stops, 3 VM crashes). Results in docs/agents/covenant-trial.md.",
+      "timestamp": "2026-10-18T15:11:45Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Mutation testing of lib/defk/compiler.ex against the contracts",
   "type": "task",
-  "updated_at": "2026-10-17T21:26:13Z"
+  "updated_at": "2026-10-18T15:11:45Z"
 }
