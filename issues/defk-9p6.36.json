@@ -5,11 +5,13 @@
   "created": "2026-10-18T17:46:53Z",
   "description": "The Measured block in examples/codecs.exs is from an older run. On 2026-10-18 (defk-9p6.34) the run was much faster across the board: base64 1 MB round trip defk 0.47 ms (6.2x) against the header's 1.04 ms (2.9x); hex 0.67 ms (3.65x) against 1.25 ms (2.0x); base58 10k defk 3.36 ms (3.3x) against 4.8-5.1 ms. The hex verdict text (at the 2x line, encode 1.5x over the BIF) and the report reasons may no longer hold. Rerun three times (best of 15, mark loaded runs provisional), update the block, the recommendation and the reason strings, and say in docs/performance.md what made the difference if it can be found (compiler changes since the block was written).",
   "id": "defk-9p6.36",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-9p6",
   "priority": 2,
   "status": "open",
   "title": "codecs: refresh the header's Measured block",
   "type": "task",
-  "updated_at": "2026-10-18T17:46:53Z"
+  "updated_at": "2026-10-18T17:46:59Z"
 }
