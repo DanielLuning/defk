@@ -80,7 +80,7 @@ Replace the fact model with one representation:
   (products, `defk-pvt`) +1.7% (+0.9% without `SatEx.Kernels`) after
   cutting a second fact lookup per step and the ranking of one-term forms;
   the chain is at about +14%, under the ceiling, with about 1% left
-  (`docs/performance.md` 6.36).
+  (`docs/performance.md` 6.37).
 - **Raising guards become the way to state facts about arguments** in a
   kernel, which the language docs would describe.
 - **Out of scope:** degree 3 and nested products, facts across loop

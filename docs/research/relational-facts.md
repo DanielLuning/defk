@@ -713,7 +713,7 @@ what it adds.
    checked product) states the shape. `pcm_mix`'s `j * m` keeps its
    overflow check (the outer body does not know `m >= 0`); the bounds
    checks go. Soundness: `test/product_facts_test.exs`; cost and
-   measurements: `docs/performance.md` 6.36.*
+   measurements: `docs/performance.md` 6.37.*
 5. **Later, only if wanted:** `rem` bounds, scalar accumulator invariants
    (assume, check each new value, retry), `case` guards. Not needed by the
    four tickets.

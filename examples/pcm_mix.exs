@@ -58,7 +58,7 @@
 #     m = div(length(bufs), n) is proven through m * n <= length(bufs). It
 #     still runs scalar: its i64 adds keep their overflow checks (sums of
 #     arbitrary i64 samples). Proving it cut the kernel by 15-30%
-#     (docs/performance.md 6.36); before, the loop was ~70% of the kernel at
+#     (docs/performance.md 6.37); before, the loop was ~70% of the kernel at
 #     1 s chunks (0.2-0.29 ms of 0.3-0.37 ms, timed phase by phase);
 #   - out = alloc(t, total) with total = length(held) + m: out[i] is proven
 #     only with the loop bound min(length(all), length(out));
