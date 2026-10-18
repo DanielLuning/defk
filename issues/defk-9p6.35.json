@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "PR #38",
+      "timestamp": "2026-10-18T21:05:09Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "hash_chain: test whether the nonce guard should be a raising guard instead of alloc(u8, -1)",
   "type": "task",
-  "updated_at": "2026-10-18T20:49:58Z"
+  "updated_at": "2026-10-18T21:05:09Z"
 }
