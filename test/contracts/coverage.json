@@ -1,9 +1,9 @@
 {
   "apps": {
     "defk": {
-      "active": 20,
+      "active": 23,
       "coverage": 1.0,
-      "covered": 20
+      "covered": 23
     }
   },
   "components": {
@@ -323,10 +323,10 @@
       }
     },
     "defk.public_api": {
-      "active": 6,
+      "active": 9,
       "app": "defk",
       "coverage": 1.0,
-      "covered": 6,
+      "covered": 9,
       "form": "light",
       "obligations": {
         "defk.public_api.I1": {
@@ -337,6 +337,17 @@
           "testable": true,
           "tests": [
             "test the public API of 0.1.0 every promised macro and function exists, is exported and documented, with its arity"
+          ]
+        },
+        "defk.public_api.I10": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 2,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I10: with_mode/2 switches the calling process only a kernel runs in the given mode inside fun, and fun's value is returned",
+            "test I10: with_mode/2 switches the calling process only other processes keep their mode, and the previous mode comes back, also after a raise"
           ]
         },
         "defk.public_api.I2": {
@@ -396,6 +407,38 @@
           "status": "active",
           "testable": false,
           "tests": []
+        },
+        "defk.public_api.I8": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 9,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "property I8: 64-bit pattern functions clz/1, ctz/1 and popcount/1 count bits of the 64-bit pattern",
+            "property I8: 64-bit pattern functions f64_bits/1 is the IEEE 754 bit pattern",
+            "property I8: 64-bit pattern functions mulhi/2 is the high half of the unsigned 128-bit product, as an i64 pattern",
+            "property I8: 64-bit pattern functions rotl/2 and rotr/2 rotate the 64-bit pattern, n taken modulo 64",
+            "property I8: 64-bit pattern functions wrap64/1 is the low 64 bits as a signed value",
+            "property I8: width-bit functions clz/2 and ctz/2 count bits of a width-bit value, width for 0",
+            "property I8: width-bit functions crc32c/3 is the reflected Castagnoli step over width/8 bytes, without inversion",
+            "property I8: width-bit functions rotl/3 and rotr/3 rotate a width-bit value, n taken modulo width",
+            "test I8: width-bit functions a width or a value out of range raises ArgumentError"
+          ]
+        },
+        "defk.public_api.I9": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 5,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I9: Defk.Test detects a disagreement a different value, or a raise against a value, fails",
+            "test I9: Defk.Test detects a disagreement a function that is not exported fails",
+            "test I9: Defk.Test detects a disagreement agreement returns the native outcome, values and raises alike",
+            "test I9: Defk.Test detects a disagreement another exception module or reason fails; another message only under message: :exact",
+            "test I9: Defk.Test detects a disagreement forced_yields: true also compares a forced run, and turns forced yields off after"
+          ]
         }
       }
     },
@@ -484,8 +527,8 @@
   },
   "covenant": "0.2.0",
   "totals": {
-    "active": 20,
+    "active": 23,
     "coverage": 1.0,
-    "covered": 20
+    "covered": 23
   }
 }
