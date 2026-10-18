@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-18T16:36:36Z",
+  "description": "Review 2026-10-18 (owner): unit tests that repeat a contract test go (elixir_mode_test config-mode and with_mode tests, defk_test assert_agrees test; compile_errors_test compiles one example per kind, not all); contract tests assert no unpromised text (public_api I3 'vectorised', fault I4 'segmentation fault'); runtime_contract modules: [Defk]; mix ci fails when test/contracts/coverage.json is stale. Coverage measured: contracts reach 4,549 lines, units 6,114, contract-only lib lines 19 (error branches).",
+  "id": "defk-jaq",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Contracts and unit tests: remove duplicates, unpromised text out of contracts, coverage.json gate",
+  "type": "task",
+  "updated_at": "2026-10-18T16:36:36Z"
+}
