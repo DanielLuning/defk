@@ -262,6 +262,9 @@ defmodule Defk.MixProject do
         # every active obligation under test/contracts/ has a passing test,
         # read from the results the test run just recorded
         "covenant.check --no-run",
+        # covenant.check rewrites the committed coverage file: a change to the
+        # obligations commits it too, or this fails
+        "cmd git diff --exit-code -- test/contracts/coverage.json",
         "docs --warnings-as-errors",
         "credo --strict",
         "dialyzer",

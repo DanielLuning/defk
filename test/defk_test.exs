@@ -1,18 +1,9 @@
 defmodule DefkTest do
   use ExUnit.Case, async: true
 
-  test "Defk.Test.assert_agrees works" do
-    defmodule T do
-      use Defk
-
-      defk add1(x :: i64) :: i64 do
-        x + 1
-      end
-    end
-
-    assert Defk.Test.assert_agrees(T, :add1, [5]) == {:ok, 6}
-  end
-
+  # assert_agrees/3,4 itself is a promise, tested as public API I9
+  # (test/contracts/defk/test_helpers_contract_test.exs); here, the mapping
+  # of the runtime's message templates to agreement reasons
   test "Defk.Test.agreement_reason/1 normalises the kernel's and Elixir mode's messages" do
     reasons = [
       {%ArithmeticError{message: "i64 overflow in 3 * 4"}, :overflow},

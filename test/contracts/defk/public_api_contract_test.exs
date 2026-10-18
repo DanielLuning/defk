@@ -167,9 +167,11 @@ defmodule Defk.Contract.PublicApiTest do
     assert mod.__defk_elixir__(:twice, [4]) == 8
   end
 
-  # the report has a vectorisation line per loop whatever CC is
+  # the report's text is not promised (test/report_test.exs reads it); that
+  # the option yields a report for the module is
   defp assert_option_honoured(:report, :full, mod) do
-    assert Defk.Report.format(mod) =~ "vectorised"
+    report = Defk.Report.format(mod)
+    assert is_binary(report) and report != ""
   end
 
   # fill/1 allocates 8 bytes per element: a count past the budget raises

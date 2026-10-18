@@ -13,11 +13,12 @@ test/contracts/
   defk/
     error_codes.*        # the compile error codes (I1-I6)
     kernel_subset.*      # frozen kernels keep their results; the one rule (I1-I2)
-    public_api.*         # the promised modules, options, config and env (I1-I7)
+    public_api.*         # the promised API, and the meaning of its functions (I1-I10)
     runtime_contract.*   # preemption, isolation, faults, cleanup, upgrade (I1-I6)
     *_contract_test.exs  # the tagged contract tests
   system/decisions.yml   # records that hold for every component
-  coverage.json          # written by mix covenant.check, committed
+  coverage.json          # written by mix covenant.check, committed; mix ci
+                         # fails when the committed file is stale
 ```
 
 - `mix test` runs the contract tests with the rest of the suite, and every

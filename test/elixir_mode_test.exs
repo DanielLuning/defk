@@ -748,45 +748,10 @@ defmodule Defk.ElixirModeTest do
       end
     end
 
-    test "config :defk, mode: :elixir makes kernel calls run in Elixir mode" do
-      src = """
-      defmodule Defk.ElixirModeTest.Configured do
-        use Defk
-        defk twice(x :: i64) :: i64 do
-          IO.inspect(x * 2)
-        end
-      end
-      """
-
-      Application.put_env(:defk, :mode, :elixir)
-
-      try do
-        Code.compile_string(src)
-      after
-        Application.delete_env(:defk, :mode)
-      end
-
-      mod = Module.concat(__MODULE__, Configured)
-      assert capture_io(fn -> assert mod.twice(4) == 8 end) == "8\n"
-
-      assert capture_io(fn ->
-               Defk.ElixirMode.with_mode(:native, fn -> assert mod.twice(4) == 8 end)
-             end) == ""
-    end
-
-    test "with_mode/2 switches only the calling process" do
-      x = f64s([1.0])
-
-      assert capture_io(fn -> Defk.ElixirMode.with_mode(:elixir, fn -> K.debug(1, x) end) end) =~
-               "acc: 1.0"
-
-      Defk.ElixirMode.with_mode(:elixir, fn ->
-        task = Task.async(fn -> capture_io(fn -> K.debug(1, x) end) end)
-        assert Task.await(task) == ""
-      end)
-
-      assert Process.get(:defk_mode) == nil
-    end
+    # `config :defk, mode:` picking the call path, and with_mode/2 switching
+    # the calling process only, are promises: public API I5 and I10
+    # (test/contracts/defk/public_api_contract_test.exs,
+    # test_helpers_contract_test.exs)
   end
 
   describe "use Defk, elixir_mode: true" do
