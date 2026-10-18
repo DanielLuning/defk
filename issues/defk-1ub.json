@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-18T20:48:44Z",
   "created": "2026-10-18T19:49:30Z",
   "description": "Two tests failed on timing alone on 2026-10-18 (defk-9p6.34, PR #35, a change to an example and a doc only); both passed on rerun.\n\n1. test/strip_copies_test.exs:184 'a call killed mid-copy frees its buffers' (Defk.StripCopiesTest) failed in local mix ci on an M-series Mac under load ~2-3 on 12 cores: 'the kernel finished before it could be killed, every time' (kill_mid_copy/2 at line 218, via Defk.TestKit.forced/2). It failed again when the file ran alone, then passed on main and on the branch a few minutes later. The kill races the copy; on a fast or busy machine the copy can finish first on every attempt.\n\n2. test/linear_facts_test.exs:563 'property a dropped overflow check over linear shapes is never wrong' (Defk.LinearFactsTest) hit ExUnit's 60 s timeout on the CI linux-x86_64-clang runner (2 vCPU), run 39150694152, the stack inside Code.Formatter (formatting generated code). The rerun of the same job passed in 7m17s. Earlier PR runs passed, so the property runs near the limit on that runner.\n\nFix so each test is deterministic or has margin: e.g. make the copy long enough (or the kill earlier) that a kill mid-copy is certain, and give the property a bounded size/run count or an explicit @tag timeout with a reason, or cheaper generation (skip formatting unless a case fails). Do not just raise timeouts without measuring how long the property takes on the 2-vCPU runner.",
   "id": "defk-1ub",
@@ -15,8 +16,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Flaky tests: strip_copies kill-mid-copy timing and a linear_facts property timeout",
   "type": "bug",
-  "updated_at": "2026-10-18T20:33:48Z"
+  "updated_at": "2026-10-18T20:48:44Z"
 }
