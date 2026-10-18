@@ -5,11 +5,13 @@
   "created": "2026-10-18T17:46:52Z",
   "description": "examples/hash_chain.exs:515 still checks a negative nonce with _ = alloc(u8, if(first \u003c 0 and n \u003e 0, do: -1, else: 0)) (comment at line 484). defk-9p6.34 (PR #35) rewrote codecs decode64/decode58 with raising guards: same checks, and decode58 got ~21% faster because its dummy alloc sat in a loop (docs/performance.md 6.35). Do the same here: rewrite with if c, do: raise(ArgumentError, ...); compare the fast-path report and the C (bounds, overflow, allocs) before and after; check the error outcome and Elixir-mode agreement; measure if the guard is in a hot path. Done when the trick is gone or the reason to keep it is in the example's comment.",
   "id": "defk-9p6.35",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-9p6",
   "priority": 2,
   "status": "open",
   "title": "hash_chain: test whether the nonce guard should be a raising guard instead of alloc(u8, -1)",
   "type": "task",
-  "updated_at": "2026-10-18T17:46:52Z"
+  "updated_at": "2026-10-18T17:46:59Z"
 }
