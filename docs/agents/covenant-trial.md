@@ -234,3 +234,112 @@ What the runs found:
 
 The compiler itself (`lib/defk/compiler.ex`) is a separate run on mains
 power (defk-ksc.2).
+
+## The compiler (defk-ksc.2)
+
+`covenant.mutate --module Defk.Compiler`, `--fail-fast`, `--jobs 1`, against
+two contracts, on a laptop on mains power (timings provisional): 5,418
+mutants of `lib/defk/compiler.ex`, 572 of them invalid (the mutated code does
+not compile), the same ids in both runs.
+
+- **error_codes:** about 4 hours. It compiles every registry example and
+  frozen rejection at run time, so it sees every mutant.
+- **kernel_subset:** about 5.5 hours of running, plus about 2 hours lost to
+  one hang (below). Only its frozen corpus sees a mutant: the agreement
+  kernels in the test file are compiled once, when the test file compiles.
+- The runtime contract was not run: its kernels, too, are compiled with the
+  test file, so a mutation run there would measure almost nothing.
+
+Detected = killed, or the call never returned (a hang, a watchdog stop or
+a VM crash: each breaks a promise). Per section of `compiler.ex`, of the
+4,846 valid mutants:
+
+| Section | Valid | error_codes | kernel_subset | Either |
+|---|---|---|---|---|
+| (module top) | 41 | 59% | 73% | 80% |
+| entry | 67 | 57% | 52% | 66% |
+| rejections | 86 | 38% | 6% | 40% |
+| parsing | 99 | 30% | 25% | 31% |
+| kernels | 125 | 35% | 34% | 42% |
+| blocks | 43 | 56% | 44% | 58% |
+| statements | 262 | 35% | 29% | 43% |
+| array values | 181 | 43% | 58% | 62% |
+| expressions | 791 | 37% | 49% | 53% |
+| bitwise | 170 | 23% | 41% | 44% |
+| calls | 527 | 14% | 28% | 31% |
+| alloc zeroing | 87 | 20% | 45% | 46% |
+| range copies | 305 | 7% | 25% | 25% |
+| bitstrings | 79 | 24% | 56% | 59% |
+| loops | 201 | 33% | 44% | 51% |
+| strip record | 171 | 33% | 56% | 56% |
+| the record classifier | 506 | 25% | 42% | 43% |
+| case | 313 | 27% | 46% | 49% |
+| element types | 73 | 19% | 62% | 63% |
+| emitting | 246 | 59% | 70% | 76% |
+| helpers | 66 | 52% | 50% | 53% |
+| more rejections | 225 | 20% | 28% | 36% |
+| report | 182 | 13% | 15% | 16% |
+| **total** | **4,846** | **29%** | **41%** | **46%** |
+
+38 kernel_subset ids have no verdict (a log was overwritten; see below) and
+count as not detected, so its column is a slight undercount.
+
+### What the 2,627 survivors of both are
+
+- **Unpromised output.** Message and hint text (`string_empty`, 453, and the
+  argument-description table of `builtin-arguments`, about 50 entries such
+  as `sin: "a number"`), error locations, the checking of rewrites, and the
+  fast-path report (152 in `report`). The guide promises none of it.
+- **Paths the corpus does not reach.** `range copies` (25%), `calls` (31%)
+  and the rejection detection branches (`fn_argument!`,
+  `generator_pattern!`): the frozen corpus and the registry hold one or a
+  few kernels per feature, so they sample a feature rather than cover it.
+  These are the places where the contracts lean on the unit tests
+  (`range_copy_test`, the call and inlining tests), which a contract
+  mutation run does not run.
+- **Equivalent or near-equivalent mutants**, such as bounds on facts that
+  only cost a check, or an `integer_shift` on a limit no kernel reaches.
+  These were not sorted one by one.
+
+### What broke during the runs
+
+- **The kit's shared compile reused a mutated compiler's results.** The
+  clean re-run after a worker group failed. The cache key now holds the md5
+  of every loaded defk module (`Defk.ContractKit.compile_frozen/2`).
+- **Hangs Covenant cannot stop.** Removing a loop's step (`i += k`, the
+  `incr` of a range loop, `k += 1` of an array loop, a strip or flagged
+  loop's body) makes a frozen kernel compiled with `yield: false` loop
+  forever inside native code. No safepoint means the VM cannot stop the test
+  process, so Covenant's per-test timeout and its watchdog never fire, and
+  the worker hung for about 2 hours on the first one (`m3324`). A guard
+  script in the session killed a run whose log was silent for 4 minutes,
+  recorded the mutant and continued: 9 hangs in all, among them `m4796`,
+  which removes the `sigsetjmp` guard of the emitted step function.
+- **Watchdog stops end a focused run.** Under `--only`, a mutant the
+  watchdog stopped ended the run (20 of them, loops again); the guard
+  counts these as "no return" too.
+- **VM crashes.** 3 mutants of the emitted step function (`m4811` removes
+  the fetch of the suspended frame; `m4830` and `m4849` are beside it)
+  crash the worker VM with a segmentation fault: the fault happens before
+  the kernel's fault handler is armed, so the node dies, as
+  `runtime-contract.md` says it would for a fault outside kernel code.
+  Covenant reports only "worker exited with status 139", without the
+  mutant's id.
+
+In all, 32 mutants never returned (9 hangs, 20 watchdog stops, 3 crashes);
+each counts as detected.
+
+### What this says
+
+- Together the two contracts detect about half of the compiler's mutants
+  (46%); most of the rest change text the promise leaves open or paths the
+  corpus samples thinly. The contracts are a promise-level check, not a
+  replacement for the unit tests of the compiler's sections.
+- To raise the contract's reach where it matters, grow the frozen corpus
+  where it is thin: range copies, calls and inlining, and one kernel per
+  rejection branch. `dev/stability/sample.exs` is where the next release's
+  frozen sample is listed.
+- A full compiler mutation costs about 10 hours of one laptop at 4–5 cores
+  and needs a hang guard; it is an occasional audit, not a gate. Two limits
+  are Covenant's: a non-preemptible native hang is never stopped, and a VM
+  crash loses the mutant's id. Both are worth reporting upstream.
