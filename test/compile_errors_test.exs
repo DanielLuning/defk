@@ -1,36 +1,12 @@
 defmodule Defk.CompileErrorsTest do
-  # Every error code's example is rejected with that code, and its rewrite
-  # compiles (Defk.Errors.entries/0). Also: the format of a compile error, the
-  # targeted hints for first-write forms, and collecting every rejection in a
-  # module without the errors an earlier one causes.
+  # The format of a compile error, the targeted hints for first-write forms,
+  # and collecting every rejection in a module without the errors an earlier
+  # one causes: what the stability promise leaves open. The promised part of
+  # the codes (each code's example is rejected with it, a code is never
+  # reused or removed) is test/contracts/defk/error_codes_contract_test.exs.
   use ExUnit.Case, async: true
 
   import Defk.TestKit
-
-  # the codes the compiler raises; a retired code has no example, and that
-  # it is never raised is checked in test/stability_codes_test.exs
-  @active for %{kind: kind} = e <- Defk.Errors.entries(), kind != :retired, do: e
-
-  # the examples and rewrites of every code, compiled concurrently (a
-  # distinct key each, so no two tasks compile one module):
-  # %{code => {example_result, rewrite_result}}
-  setup_all do
-    results =
-      @active
-      |> Enum.filter(& &1.example)
-      |> Task.async_stream(
-        fn e ->
-          {e.code,
-           {compile(__MODULE__, e.example, key: {e.code, :example}),
-            compile(__MODULE__, e.rewrite, key: {e.code, :rewrite})}}
-        end,
-        timeout: :infinity,
-        ordered: false
-      )
-      |> Map.new(fn {:ok, r} -> r end)
-
-    %{results: results}
-  end
 
   # permanent and planned in words
   defp assert_kind(:subset, what), do: assert(what =~ "not in the kernel subset")
@@ -39,63 +15,50 @@ defmodule Defk.CompileErrorsTest do
   defp assert_kind(:error, what),
     do: refute(what =~ ~r/not in the kernel subset|not supported yet/)
 
-  describe "every code" do
-    # Codes with `example: nil` come from the build environment, not from kernel
-    # source (no-c-compiler), so no module body triggers them; test/build_test.exs
-    # covers them.
-    for %{code: code, example: example} <- @active, example do
-      @code code
-      test "#{code}: the example is rejected with it and the rewrite compiles", %{
-        results: results
-      } do
-        %{kind: kind} = Defk.Errors.fetch!(@code)
-        {msg, rewrite} = Map.fetch!(results, @code)
-        assert is_binary(msg), "the example for #{@code} compiled"
-        assert codes(msg) == [@code], msg
-        # the public reader agrees with the test's own
-        assert [%{code: @code, message: what}] = Defk.Errors.diagnostics(msg), msg
+  describe "the registry's text" do
+    # The contract test checks that each example is rejected with its code;
+    # here, the message it gets: the kind in words, the public reader agreeing
+    # with the test's own, and no ticket id
+    test "each example's message says its kind, and diagnostics/1 reads it" do
+      for %{kind: kind, example: example} = e <- Defk.Errors.entries(),
+          kind != :retired and is_binary(example) do
+        msg = compile(__MODULE__, example, key: {e.code, :message})
+        assert [%{code: code, message: what}] = Defk.Errors.diagnostics(msg), msg
+        assert code == e.code
         assert [what] == whats(msg)
         assert_kind(kind, what)
         refute msg =~ ~r/defk-[a-z0-9]{3}/, "a ticket ID in #{msg}"
-        assert rewrite == :ok, "the rewrite for #{@code} does not compile:\n#{rewrite}"
       end
     end
 
-    # the slug form of a code: test/compile_errors_doc_test.exs
-    test "codes are unique, with a kind, summary, why and hint" do
-      codes = Enum.map(Defk.Errors.entries(), & &1.code)
-      assert codes == Enum.uniq(codes)
-
-      for e <- Defk.Errors.entries(), do: assert(e.kind in [:subset, :planned, :error, :retired])
-
-      for e <- @active,
-          k <- [:summary, :why, :hint],
-          do: assert(is_binary(Map.fetch!(e, k)) and e[k] != "", "#{e.code} #{k}")
+    test "an active entry has a summary, why and hint; a retired one says why" do
+      for e <- Defk.Errors.entries() do
+        keys = if e.kind == :retired, do: [:summary], else: [:summary, :why, :hint]
+        for k <- keys, do: assert(is_binary(Map.fetch!(e, k)) and e[k] != "", "#{e.code} #{k}")
+        if e.kind == :retired, do: assert(is_binary(e.retired.why) and e.retired.why != "")
+      end
     end
 
-    # Every code literal in lib/ is an active code of the registry (never a
-    # retired one), and every active code is used somewhere in lib/. Not
-    # errors.ex: it defines every code, so it would make the second half pass
-    # for any code. Not test.ex: its strings are message fragments
-    # ("non-finite"), not codes. err! checks its own literal codes when the
-    # compiler compiles (Errors.validate_code!/1); the rewrites, clauses,
-    # raise and diagnostics modules pass theirs as data.
-    test "every code literal in lib/ is an active registry code, and every active code is used" do
-      src =
-        (Path.wildcard("lib/**/*.ex") -- ["lib/defk/errors.ex", "lib/defk/test.ex"])
-        |> Enum.map_join("\n", &File.read!/1)
+    # err!'s literal codes are checked when the compiler compiles: a typo, or a
+    # retired code, fails mix compile
+    test "the compiler's code check refuses a retired or unknown code" do
+      for %{kind: :retired, code: code} <- Defk.Errors.entries() do
+        assert_raise ArgumentError, ~r/^retired defk error code "#{code}": retired in /, fn ->
+          Defk.Errors.validate_code!(code)
+        end
+      end
 
-      used =
-        ~r/"([a-z0-9]+(?:-[a-z0-9]+)+|recursion|pipe)"[,)]/
-        |> Regex.scan(src)
-        |> MapSet.new(&Enum.at(&1, 1))
+      assert Defk.Errors.validate_code!("unsupported-map") == :ok
 
-      registry = MapSet.new(@active, & &1.code)
-      retired = MapSet.new(Defk.Errors.entries() -- @active, & &1.code)
+      assert_raise ArgumentError, ~r/^unknown defk error code/, fn ->
+        Defk.Errors.validate_code!("no-such-code")
+      end
+    end
 
-      assert MapSet.intersection(used, retired) == MapSet.new(), "retired codes a module names"
-      assert MapSet.difference(used, registry) == MapSet.new(), "codes not in the registry"
-      assert MapSet.difference(registry, used) == MapSet.new(), "registry codes no module uses"
+    test "explain!/1 prints the summary, and a retired code without a hint" do
+      out = ExUnit.CaptureIO.capture_io(fn -> Defk.Errors.explain!("bitwise") end)
+      assert out =~ Defk.Errors.fetch!("bitwise").summary
+      refute out =~ "hint:"
     end
   end
 

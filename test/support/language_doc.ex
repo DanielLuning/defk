@@ -55,7 +55,7 @@ defmodule Defk.LanguageDoc do
   # block's own `defmodule Name` is renamed and the iex lines call it as
   # `Name`. The generated error catalogue (docs/compile-errors.md, "Codes") is
   # the registry's text (test/compile_errors_doc_test.exs) and its examples are
-  # checked from the registry (test/compile_errors_test.exs), so it is left
+  # checked from the registry (test/contracts/defk/error_codes_contract_test.exs), so it is left
   # out here.
 
   import ExUnit.Assertions

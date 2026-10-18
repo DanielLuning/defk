@@ -1,29 +1,28 @@
-# Checks the promised public API of each released version against the code.
-#
-# test/stability/<version>/api.exs holds the surface that
-# docs/guides/stability.md promised at that release, as data, frozen at the
-# release tag (never edited; a release adds a directory). For each file this
-# test checks that every listed macro and function still exists with that
-# arity, is exported and is documented; that a kernel module still gets the
-# generated functions and the kernel's function with its @spec; and that
-# each `use Defk` option, the kernel option, the config key and the
-# environment variables are still honoured. Containment only: an addition is
-# not listed in the snapshot, so it passes; a removal, a rename or an arity
-# change fails. The fix for a failure is a deprecation (stability.md, "How a
-# change is made"), not an edit of the snapshot.
-#
-# async: false: the config and env var checks set process-global state
-# (the application env, the system env) while a module compiles.
-defmodule Defk.StabilityApiTest do
-  use ExUnit.Case, async: false
+defmodule Defk.Contract.PublicApiTest do
+  # The public API (test/contracts/defk/public_api.obligations.md): every
+  # release's promised surface, frozen as data in
+  # test/stability/<version>/api.exs, checked against the code. Containment
+  # only: an addition is not listed in a snapshot, so it passes; a removal, a
+  # rename or an arity change fails. The fix for a failure is a deprecation
+  # (stability.md, "How a change is made"), not an edit of the snapshot. Like
+  # every contract test it calls only defk's public API and Defk.ContractKit
+  # (test/contracts/README.md).
+  #
+  # async: false: the config and env var checks set process-global state
+  # (the application env, the system env) while a module compiles.
+  use Covenant.Case, component: "defk.public_api", async: false
 
   import ExUnit.CaptureIO
 
-  for path <- Path.wildcard(Path.expand("stability/*/api.exs", __DIR__)) do
-    {api, []} = Code.eval_file(path)
+  alias Defk.ContractKit, as: Kit
+
+  for path <- Kit.api_paths(), do: @external_resource(path)
+
+  for api <- Kit.api_snapshots() do
     @api api
 
     describe "the public API of #{api.version}" do
+      @tag obligation: "defk.public_api.I1"
       test "every promised macro and function exists, is exported and documented, with its arity" do
         broken =
           for {mod, items} <- @api.modules,
@@ -41,8 +40,9 @@ defmodule Defk.StabilityApiTest do
                )
       end
 
+      @tag obligation: "defk.public_api.I2"
       test "a kernel module gets the generated functions and the kernel's function with its @spec" do
-        {mod, beam} = compile_kernel_module("K", "use Defk")
+        {mod, beam} = compile_kernel_module("K#{version_tag(@api)}", "use Defk")
 
         for {kind, name, arity} <- @api.generated do
           assert kind == :function and function_exported?(mod, name, arity),
@@ -58,11 +58,12 @@ defmodule Defk.StabilityApiTest do
         for check <- @api.kernel_function, do: assert_kernel_function(check, mod, beam, :twice, 1)
       end
 
-      test "a kernel module accepts each `use Defk` option" do
+      @tag obligation: "defk.public_api.I3"
+      test "a kernel module accepts and honours each `use Defk` option" do
         for {option, value} <- @api.use_defk_options do
           {mod, _} =
             compile_kernel_module(
-              "Option.#{Macro.camelize("#{option}")}",
+              "Option#{version_tag(@api)}.#{Macro.camelize("#{option}")}",
               "use Defk, #{option}: #{inspect(value)}"
             )
 
@@ -71,10 +72,13 @@ defmodule Defk.StabilityApiTest do
         end
       end
 
+      @tag obligation: "defk.public_api.I4"
       test "a kernel accepts each kernel option" do
         for {option, value} <- @api.kernel_options do
           {mod, _} =
-            compile_kernel_module("KernelOption.#{Macro.camelize("#{option}")}", "use Defk",
+            compile_kernel_module(
+              "KernelOption#{version_tag(@api)}.#{Macro.camelize("#{option}")}",
+              "use Defk",
               twice: "#{option}: #{inspect(value)}"
             )
 
@@ -82,13 +86,16 @@ defmodule Defk.StabilityApiTest do
         end
       end
 
+      @tag obligation: "defk.public_api.I5"
       test "config :defk, mode: accepts each value, and it picks the call path" do
         for {app, key, values} <- @api.config, value <- values do
           Application.put_env(app, key, value)
 
           {mod, _} =
             try do
-              compile_kernel_module("Configured.#{Macro.camelize("#{value}")}", "use Defk",
+              compile_kernel_module(
+                "Configured#{version_tag(@api)}.#{Macro.camelize("#{value}")}",
+                "use Defk",
                 twice: :inspect
               )
             after
@@ -101,11 +108,15 @@ defmodule Defk.StabilityApiTest do
         end
       end
 
+      @tag obligation: "defk.public_api.I6"
       test "the build reads each environment variable" do
         for name <- @api.env, do: assert_env_read(name)
       end
     end
   end
+
+  # a module name part per snapshot, so two versions never compile one module
+  defp version_tag(api), do: "V" <> String.replace(api.version, ".", "_")
 
   # nil when the macro or function is exported and documented at that arity,
   # else why not
@@ -167,15 +178,17 @@ defmodule Defk.StabilityApiTest do
     assert_raise ArgumentError, ~r/max_owned_bytes/, fn -> mod.fill(bytes) end
   end
 
-  # Defk.Build is internal; reading its two lookups costs no C build, where
-  # a build with a bad CC or ERTS_INCLUDE_DIR would
+  # reading the build's two lookups costs no C build, where a build with a
+  # bad CC or ERTS_INCLUDE_DIR would
   defp assert_env_read("CC") do
-    with_env("CC", "stability-cc", fn -> assert Defk.Build.compiler() == {"stability-cc", []} end)
+    with_env("CC", "stability-cc", fn ->
+      assert Kit.build_env().cc == {"stability-cc", []}
+    end)
   end
 
   defp assert_env_read("ERTS_INCLUDE_DIR") do
     dir = "/stability/erts/include"
-    with_env("ERTS_INCLUDE_DIR", dir, fn -> assert Defk.Build.erts_include() == dir end)
+    with_env("ERTS_INCLUDE_DIR", dir, fn -> assert Kit.build_env().erts_include == dir end)
   end
 
   defp with_env(name, value, fun) do

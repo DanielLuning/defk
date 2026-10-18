@@ -13,4 +13,9 @@ Code.require_file("../examples/fuzzy_search/lib/fuzzy_search/kernels.ex", __DIR_
 #   the valgrind emulator and under ASan with +Mea min (allocators off);
 #   verify/valgrind runs with --exclude erlang_memory
 clang = if Defk.Build.clang?(), do: [], else: [:clang]
-ExUnit.start(exclude: [:deep, :divergence, :timing, :sanitize] ++ clang)
+# Covenant.Formatter records which contract obligations passed, so `mix ci`
+# checks contract coverage (`mix covenant.check --no-run`) without a second run
+ExUnit.start(
+  exclude: [:deep, :divergence, :timing, :sanitize] ++ clang,
+  formatters: [ExUnit.CLIFormatter, Covenant.Formatter]
+)

@@ -143,7 +143,7 @@ same library (the same kernel source) keeps the counters.
 - Agreement of every kernel with its Elixir mode, on edge values and
   generated inputs, and with a forced yield at every safepoint (see
   [Testing kernels](testing.md)).
-- `test/resume_test.exs`, `test/upgrade_test.exs`,
+- `test/resume_test.exs`, `test/contracts/defk/upgrade_contract_test.exs`,
   `test/fault_containment_test.exs` (faults injected into a kernel, in the
   VM and in a child VM), and measurements of the scheduler gap beside a
   yielding kernel and of the cost of yielding.

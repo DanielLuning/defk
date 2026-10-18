@@ -26,7 +26,7 @@ and stay out (the rejections are their own corpus, below).
 
 Each file is Markdown in the form `Defk.LanguageDoc.extract/1` reads: a
 comment naming the source, the kernel block, then its `iex>` block or a
-`compiles:` annotation. `test/stability_kernels_test.exs` compiles each
+`compiles:` annotation. `test/contracts/defk/kernel_subset_contract_test.exs` compiles each
 kernel natively and in Elixir mode, runs each recorded step in both, and
 requires the two to agree and the native result to be the recorded one.
 
@@ -72,7 +72,7 @@ kernel block):
   kernel) stays out, and the task says so;
 - the `error:` examples of the same doc pages.
 
-`test/stability_rejections_test.exs` compiles each and requires one of:
+`test/contracts/defk/error_codes_contract_test.exs` (obligation `defk.error_codes.I5`) compiles each and requires one of:
 
 - it is still rejected, and the recorded code is among the error codes
   raised (which error comes first is not promised; a rejection with other
@@ -82,12 +82,12 @@ kernel block):
   valid and the code covers nothing else;
 - it compiles now under a code that stays active (the code covers other
   constructs: say `enum-reduce` once `Enum.reduce/3` is valid but
-  `Enum.reduce/2` is not), and the file is listed in the test's
-  `@newly_supported` with words of the CHANGELOG entry that names the
-  change.
+  `Enum.reduce/2` is not), and the file is listed under `newly_supported`
+  in `test/stability/exceptions.exs` with words of the CHANGELOG entry that
+  names the change.
 
 A frozen rejection that compiles with neither is a broken promise, as is one
-listed in `@newly_supported` that is still rejected. A compile error stops
+listed under `newly_supported` that is still rejected. A compile error stops
 before the C build, so the corpus costs well under a second.
 
 ### The API snapshot
@@ -115,7 +115,7 @@ by the same task:
 The modules and the generated functions are the tag's; the options, the
 environment variables, the kernel option and the configuration key are the
 code's the task runs in, so the task runs at the release commit (as it does
-for the page list and the catalog). `test/stability_api_test.exs` requires
+for the page list and the catalog). `test/contracts/defk/public_api_contract_test.exs` requires
 every listed item to exist, exported and documented, with its arity, and
 every option, key and variable to be honoured: containment, so an addition
 passes and a removal, a rename or an arity change fails.
@@ -145,16 +145,53 @@ passes and a removal, a rename or an arity change fails.
   its check.
 - **A failing frozen check is a broken promise**, to be fixed in the code,
   with one exception: a bug fix that changes a recorded result or
-  acceptance, named in the CHANGELOG. Then the test's `@fixed` list gets an
-  entry naming the file and words of the CHANGELOG entry, with a comment.
-  The example must then keep failing, and the entry stays for as long as
-  the file does. A frozen rejection that becomes valid is not a failure of
-  the promise but a change to record: retire its code, or list the file in
-  `@newly_supported` the same way (see "Rejections").
+  acceptance, named in the CHANGELOG. Then `fixed` in
+  `test/stability/exceptions.exs` gets an entry naming the file and words
+  of the CHANGELOG entry, with a comment. The example must then keep
+  failing, and the entry stays for as long as the file does. A frozen
+  rejection that becomes valid is not a failure of the promise but a change
+  to record: retire its code, or list the file under `newly_supported` the
+  same way (see "Rejections").
+- **The exception list is live and only grows.**
+  `test/stability/exceptions.exs` is the one file under `test/stability/`
+  outside a version's directory that changes besides the ledger: every
+  contract test, frozen or not, reads it, so an exception found after a
+  release reaches that release's frozen contract. `ci/frozen.sh` fails when
+  an entry is dropped.
 - **Keep it fast.** Modules are named after their file and source, so an
   unchanged example hits the native build cache; a warm run takes well
   under a second. The task reads each file back before it finishes, so a
   frozen file always gives the example it was written from.
+
+## Frozen contracts
+
+The checks above are Covenant contract tests (`test/contracts/README.md`):
+the four surfaces of the promise are four components under
+`test/contracts/defk/` (`error_codes`, `kernel_subset`, `public_api`,
+`runtime_contract`), each with numbered obligations and tests tagged with
+them. A release freezes its contract with its data:
+`test/stability/<version>/contracts/` is `test/contracts/` at the tag, each
+contract test module renamed under the version (`Defk.Contract.V0_2_0.*`)
+and pointed at the frozen obligations (`Defk.Stability.Contracts`). From
+then on:
+
+- `mix test` runs every frozen contract test on every commit, beside the
+  live ones; a frozen copy is that release's checker, so a later change to
+  the live test cannot weaken an old release's check;
+- `mix defk.contracts <version>` (or `--all`) runs one version's contract
+  through Covenant: coverage of its obligations, its tags, its records. Its
+  `coverage.json` is written next to the frozen contract and ignored by
+  git;
+- a frozen contract test may call only defk's promised API (as the API
+  snapshots list it), ExUnit, StreamData, Covenant and `Defk.ContractKit`
+  (`test/support/contract_kit.ex`), whose functions keep their meaning
+  forever while their implementation follows defk's internals;
+  `test/contract_kit_test.exs` checks every contract test, frozen ones
+  included. A kit function is never removed or changed in meaning: a new
+  need is a new function.
+
+0.1.0 predates the contracts, so its directory has none; its data is
+checked by the live contract.
 
 ## Releasing
 
@@ -169,8 +206,9 @@ The release's own files are frozen from its tag, after the matrix has
 passed on the release commit, in a commit that follows the tag:
 
 1. `mix defk.stability.freeze <version>` writes
-   `test/stability/<version>/kernels/`, `rejections/` and `api.exs` from
-   the tag. The task runs in the `:test` environment (it needs
+   `test/stability/<version>/kernels/`, `rejections/`, `contracts/` and
+   `api.exs` from the tag, then `mix defk.contracts <version>` checks the
+   frozen contract against the release commit. The task runs in the `:test` environment (it needs
    `Defk.LanguageDoc`); for the API snapshot it checks the tag out into a
    temporary git worktree, compiles it there and removes it. Rerun for a
    version already frozen, it reproduces that version's files byte for

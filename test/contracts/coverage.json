@@ -1,0 +1,534 @@
+{
+  "apps": {
+    "defk": {
+      "active": 23,
+      "coverage": 1.0,
+      "covered": 23
+    }
+  },
+  "components": {
+    "defk.error_codes": {
+      "active": 6,
+      "app": "defk",
+      "coverage": 1.0,
+      "covered": 6,
+      "form": "light",
+      "obligations": {
+        "defk.error_codes.I1": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 72,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I1: an active code rejects its own example accumulator-pattern: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example accumulator-shape: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example alloc-form: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example array-rebind-in-loop: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example attribute-value: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example binary-literal: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example bitstring-match: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example bitstring-segment: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example bitstring-use: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example branch-tuple: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example branch-types: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example builtin-arguments: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example builtin-name: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example case-form: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example case-guard: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example case-pattern-type: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example case-pattern: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example case-subject: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example clause-head: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example clause-pattern: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example clause-types: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example cond-without-true: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example duplicate-kernel: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example empty-block: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example enum-find: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example enum-reduce: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example fn-argument: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example for-collect: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example for-form: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example for-option: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example generator-pattern: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example generator-source: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example if-without-else: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example integer-literal: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example kernel-head: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example nested-tuple: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example no-body: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example not-an-array: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example operand-type: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example pipe: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example raise-message: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example raise-module: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example raise-value: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example range-step: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example recursion: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example reduce-clauses: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example reduce-while-tail: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example return-type: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example shift-overflow: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example tuple-argument: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example tuple-binding: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example tuple-parameter: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example tuple-size: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example type-mismatch: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example u64-with-i64: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example undefined-attribute: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example undefined-function: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example undefined-variable: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unknown-option: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unknown-type: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unsupported-atom: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unsupported-call: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unsupported-construct: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unsupported-expression: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unsupported-fn: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unsupported-list: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unsupported-map: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unsupported-pattern: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example unsupported-string: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example untyped-parameter: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example write-as-value: the example is rejected with it alone and the rewrite compiles",
+            "test I1: an active code rejects its own example write-not-returned: the example is rejected with it alone and the rewrite compiles"
+          ]
+        },
+        "defk.error_codes.I2": {
+          "failing": 0,
+          "kind": "persisted_format",
+          "passing": 1,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I2: a released code stays in the registry every released code is in the registry, active or retired, and listed once"
+          ]
+        },
+        "defk.error_codes.I3": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 3,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I3: a code is never reused a retired code is a released code, marked retired in the ledger, with its version",
+            "test I3: a code is never reused the compiler names only active codes, and every active code",
+            "test I3: a code is never reused the registry lists each code once, with a known kind"
+          ]
+        },
+        "defk.error_codes.I4": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 2,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I4: a retired code stays in the catalogue a retired code says the version that retired it, and has no example",
+            "test I4: a retired code stays in the catalogue explain!/1 prints a retired code as retired, with its version"
+          ]
+        },
+        "defk.error_codes.I5": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 75,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/docs-guides-getting-started-169.md error unsupported-call: sum",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-accumulator-pattern.md error accumulator-pattern: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-accumulator-shape.md error accumulator-shape: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-alloc-form.md error alloc-form: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-array-rebind-in-loop.md error array-rebind-in-loop: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-attribute-value.md error attribute-value: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-binary-literal.md error binary-literal: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-bitstring-match.md error bitstring-match: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-bitstring-segment.md error bitstring-segment: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-bitstring-use.md error bitstring-use: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-branch-tuple.md error branch-tuple: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-branch-types.md error branch-types: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-builtin-arguments.md error builtin-arguments: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-builtin-name.md error builtin-name: abs",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-case-form.md error case-form: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-case-guard.md error case-guard: g",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-case-pattern-type.md error case-pattern-type: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-case-pattern.md error case-pattern: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-case-subject.md error case-subject: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-clause-head.md error clause-head: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-clause-pattern.md error clause-pattern: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-clause-types.md error clause-types: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-cond-without-true.md error cond-without-true: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-duplicate-kernel.md error duplicate-kernel: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-empty-block.md error empty-block: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-enum-find.md error enum-find: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-enum-reduce.md error enum-reduce: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-fn-argument.md error fn-argument: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-for-collect.md error for-collect: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-for-form.md error for-form: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-for-option.md error for-option: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-generator-pattern.md error generator-pattern: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-generator-source.md error generator-source: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-if-without-else.md error if-without-else: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-integer-literal.md error integer-literal: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-kernel-head.md error kernel-head: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-nested-tuple.md error nested-tuple: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-no-body.md error no-body: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-not-an-array.md error not-an-array: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-operand-type.md error operand-type: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-pipe.md error pipe: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-raise-message.md error raise-message: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-raise-module.md error raise-module: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-raise-value.md error raise-value: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-range-step.md error range-step: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-recursion.md error recursion: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-reduce-clauses.md error reduce-clauses: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-reduce-while-tail.md error reduce-while-tail: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-return-type.md error return-type: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-shift-overflow.md error shift-overflow: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-tuple-argument.md error tuple-argument: g",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-tuple-binding.md error tuple-binding: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-tuple-parameter.md error tuple-parameter: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-tuple-size.md error tuple-size: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-type-mismatch.md error type-mismatch: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-u64-with-i64.md error u64-with-i64: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-undefined-attribute.md error undefined-attribute: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-undefined-function.md error undefined-function: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-undefined-variable.md error undefined-variable: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unknown-option.md error unknown-option: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unknown-type.md error unknown-type: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unsupported-atom.md error unsupported-atom: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unsupported-call.md error unsupported-call: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unsupported-construct.md error unsupported-construct: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unsupported-expression.md error unsupported-expression: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unsupported-fn.md error unsupported-fn: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unsupported-list.md error unsupported-list: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unsupported-map.md error unsupported-map: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unsupported-pattern.md error unsupported-pattern: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-unsupported-string.md error unsupported-string: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-untyped-parameter.md error untyped-parameter: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-write-as-value.md error write-as-value: f",
+            "test I5: a frozen rejection keeps its code 0.1.0/rejections/lib-defk-errors-write-not-returned.md error write-not-returned: fill",
+            "test I5: a frozen rejection keeps its code every exception names a frozen file and its CHANGELOG entry",
+            "test I5: a frozen rejection keeps its code the corpus holds every release's rejections"
+          ]
+        },
+        "defk.error_codes.I6": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 1,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I6: explain!/1 refuses an unknown code an unknown code raises, a known one prints its entry"
+          ]
+        }
+      }
+    },
+    "defk.kernel_subset": {
+      "active": 2,
+      "app": "defk",
+      "coverage": 1.0,
+      "covered": 2,
+      "form": "light",
+      "obligations": {
+        "defk.kernel_subset.I1": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 65,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/README-58.md run: dot",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-cheatsheet-11.md run: dot",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-cheatsheet-126.md run: fnv1a",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-cheatsheet-155.md run: sign",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-cheatsheet-186.md run: first_negative",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-cheatsheet-201.md run: evens",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-getting-started-127.md run: positives",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-getting-started-246.md run: max_count",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-getting-started-60.md run: sum",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-runtime-contract-65.md run: bump",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-testing-168.md run: row_max_sum",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-guides-testing-34.md run: count_below",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1012.md run: clip",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1107.md run: rebind",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1173.md run: get",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1222.md run: sum_words",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1289.md run: unpack",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-132.md run: classify",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1383.md run: histogram",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1403.md run: update",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1430.md run: update_many",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1513.md run: snapshot",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1596.md run: first_nonempty",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1664.md run: classify",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1743.md run: split",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1786.md run: pick_sum",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1833.md run: even_sum",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1883.md run: prime_early?",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1916.md run: insert",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-195.md run: dod_bits",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-1969.md run: fft_size",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-2014.md run: count_primes",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-351.md run: mean_var",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-394.md run: mul",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-459.md run: total",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-506.md run: gt",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-671.md run: crc32c_of",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-734.md run: fnv1a64",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-806.md run: mix32",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-832.md run: hex_digit",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-877.md run: pack",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-89.md run: dot",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-language-914.md run: dod_bits",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/docs-scope-19.md run: total",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/examples-cosine_topk-154.md compiles a catalog kernel module: topk",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/examples-geo_nearest-54.md compiles a catalog kernel module: nearest",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/examples-gorilla_encode-168.md compiles a catalog kernel module: xor_bits",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/examples-hll_update_many-106.md compiles a catalog kernel module: update_many",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/examples-image_blur-52.md compiles a catalog kernel module: gray_blur",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/examples-lz4_snappy_decode-205.md compiles a catalog kernel module: snappy_decode",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/examples-rolling_stats-51.md compiles a catalog kernel module: mean_std",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-bitstrings.md run: pack",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-comparisons.md run: cmp_if",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-early-exit-and-case.md run: abs_sum_until",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-element-types.md run: at",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-i64-arithmetic.md run: add",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-index-errors.md run: get",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-masks-and-bits.md run: mask32",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-multi-clause.md run: pick",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-non-finite.md run: arith",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-raise.md run: arg",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-support-examples-1.md compiles the catalog's example kernels: add",
+            "test I1: a frozen kernel keeps compiling and keeps its results 0.1.0/kernels/test-u64-arithmetic.md run: add",
+            "test I1: a frozen kernel keeps compiling and keeps its results every exception names a frozen file and its CHANGELOG entry",
+            "test I1: a frozen kernel keeps compiling and keeps its results the corpus holds every release's kernels"
+          ]
+        },
+        "defk.kernel_subset.I2": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 6,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "property I2: a kernel agrees with Elixir a float reduction over an array, empty arrays included",
+            "property I2: a kernel agrees with Elixir an allocated array returned",
+            "property I2: a kernel agrees with Elixir array reads in and out of bounds",
+            "property I2: a kernel agrees with Elixir case on bits and the bitwise builtins",
+            "property I2: a kernel agrees with Elixir early exit from a search",
+            "property I2: a kernel agrees with Elixir integer arithmetic, division and cond"
+          ]
+        }
+      }
+    },
+    "defk.public_api": {
+      "active": 9,
+      "app": "defk",
+      "coverage": 1.0,
+      "covered": 9,
+      "form": "light",
+      "obligations": {
+        "defk.public_api.I1": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 1,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test the public API of 0.1.0 every promised macro and function exists, is exported and documented, with its arity"
+          ]
+        },
+        "defk.public_api.I10": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 2,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I10: with_mode/2 switches the calling process only a kernel runs in the given mode inside fun, and fun's value is returned",
+            "test I10: with_mode/2 switches the calling process only other processes keep their mode, and the previous mode comes back, also after a raise"
+          ]
+        },
+        "defk.public_api.I2": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 1,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test the public API of 0.1.0 a kernel module gets the generated functions and the kernel's function with its @spec"
+          ]
+        },
+        "defk.public_api.I3": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 1,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test the public API of 0.1.0 a kernel module accepts and honours each `use Defk` option"
+          ]
+        },
+        "defk.public_api.I4": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 1,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test the public API of 0.1.0 a kernel accepts each kernel option"
+          ]
+        },
+        "defk.public_api.I5": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 1,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test the public API of 0.1.0 config :defk, mode: accepts each value, and it picks the call path"
+          ]
+        },
+        "defk.public_api.I6": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 1,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test the public API of 0.1.0 the build reads each environment variable"
+          ]
+        },
+        "defk.public_api.I7": {
+          "failing": 0,
+          "kind": "exception",
+          "passing": 0,
+          "status": "active",
+          "testable": false,
+          "tests": []
+        },
+        "defk.public_api.I8": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 9,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "property I8: 64-bit pattern functions clz/1, ctz/1 and popcount/1 count bits of the 64-bit pattern",
+            "property I8: 64-bit pattern functions f64_bits/1 is the IEEE 754 bit pattern",
+            "property I8: 64-bit pattern functions mulhi/2 is the high half of the unsigned 128-bit product, as an i64 pattern",
+            "property I8: 64-bit pattern functions rotl/2 and rotr/2 rotate the 64-bit pattern, n taken modulo 64",
+            "property I8: 64-bit pattern functions wrap64/1 is the low 64 bits as a signed value",
+            "property I8: width-bit functions clz/2 and ctz/2 count bits of a width-bit value, width for 0",
+            "property I8: width-bit functions crc32c/3 is the reflected Castagnoli step over width/8 bytes, without inversion",
+            "property I8: width-bit functions rotl/3 and rotr/3 rotate a width-bit value, n taken modulo width",
+            "test I8: width-bit functions a width or a value out of range raises ArgumentError"
+          ]
+        },
+        "defk.public_api.I9": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 5,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I9: Defk.Test detects a disagreement a different value, or a raise against a value, fails",
+            "test I9: Defk.Test detects a disagreement a function that is not exported fails",
+            "test I9: Defk.Test detects a disagreement agreement returns the native outcome, values and raises alike",
+            "test I9: Defk.Test detects a disagreement another exception module or reason fails; another message only under message: :exact",
+            "test I9: Defk.Test detects a disagreement forced_yields: true also compares a forced run, and turns forced yields off after"
+          ]
+        }
+      }
+    },
+    "defk.runtime_contract": {
+      "active": 6,
+      "app": "defk",
+      "coverage": 1.0,
+      "covered": 6,
+      "form": "light",
+      "obligations": {
+        "defk.runtime_contract.I1": {
+          "failing": 0,
+          "kind": "non_functional",
+          "passing": 2,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I1: a long kernel yields, and yielding never changes a result a kernel without a loop, and one with yield: false, never yield",
+            "test I1: a long kernel yields, and yielding never changes a result a long call yields and gives the result a forced-yield call gives"
+          ]
+        },
+        "defk.runtime_contract.I2": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 1,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I2: concurrent calls share nothing many processes calling the same kernel at once all get the right result"
+          ]
+        },
+        "defk.runtime_contract.I3": {
+          "failing": 0,
+          "kind": "security",
+          "passing": 2,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I3: a runtime error is an ordinary exception in the caller a write to an input array writes a copy; an index out of range raises",
+            "test I3: a runtime error is an ordinary exception in the caller an overflow raises ArithmeticError and a kernel's raise its exception, both rescuable"
+          ]
+        },
+        "defk.runtime_contract.I4": {
+          "failing": 0,
+          "kind": "security",
+          "passing": 5,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test a fault after the kernel yielded is contained and its frame freed",
+            "test a segmentation fault raises RuntimeError in the caller, and the library works on",
+            "test an illegal instruction is contained the same way",
+            "test other processes and other kernels keep running while one faults",
+            "test the fault is raised in the calling process only"
+          ]
+        },
+        "defk.runtime_contract.I5": {
+          "failing": 0,
+          "kind": "non_functional",
+          "passing": 3,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test I5: a call frees its memory, however it ends a process killed while its kernel is suspended frees its frame",
+            "test I5: a call frees its memory, however it ends a raise after alloc frees every owned buffer",
+            "test I5: a call frees its memory, however it ends alloc/2 raises ArgumentError for a length over 2^48 bytes"
+          ]
+        },
+        "defk.runtime_contract.I6": {
+          "failing": 0,
+          "kind": "functional",
+          "passing": 6,
+          "status": "active",
+          "testable": true,
+          "tests": [
+            "test a kernel suspended across an upgrade finishes in the old library",
+            "test counters are per library: a new library starts at zero, an old call stays in the old one",
+            "test killing a kernel suspended across an upgrade frees its frame in the old library",
+            "test purging the old code kills the suspended kernel, like any process in old code",
+            "test reloading the same source while a kernel is suspended keeps the library",
+            "test reloading with no live frames runs the new code"
+          ]
+        }
+      }
+    }
+  },
+  "covenant": "0.2.0",
+  "totals": {
+    "active": 23,
+    "coverage": 1.0,
+    "covered": 23
+  }
+}

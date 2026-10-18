@@ -2,8 +2,8 @@ defmodule Defk.StabilityCorpus do
   @moduledoc false
   # The frozen files of test/stability/<version>/<kind>/ (`mix
   # defk.stability.freeze` writes them; docs/agents/stability.md has the
-  # rules), read for the stability tests: test/stability_kernels_test.exs
-  # (kind `:kernels`) and test/stability_rejections_test.exs (kind
+  # rules), read for the stability tests: test/contracts/defk/kernel_subset_contract_test.exs
+  # (kind `:kernels`) and test/contracts/defk/error_codes_contract_test.exs (kind
   # `:rejections`). Each file is Markdown in the form Defk.LanguageDoc reads,
   # and holds one example.
 

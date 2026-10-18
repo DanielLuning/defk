@@ -2279,7 +2279,7 @@ including ordinary `def`s of the kernel's own module, are not callable
 - **Hot code upgrade.** A kernel suspended across a reload of its module
   finishes in the library it started in. A second reload (or `:code.purge/1`)
   before it finishes kills it, like any process running old Erlang code
-  (`test/upgrade_test.exs`).
+  (`test/contracts/defk/upgrade_contract_test.exs`).
 - **Testing yields.** `Mod.__defk_force_yields__(true)` makes the module's
   kernels yield at every clock read, so a test can run every resume path.
 

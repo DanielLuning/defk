@@ -19,3 +19,7 @@ if config_env() == :test do
       }
     ]
 end
+
+# Covenant (a dev and test tool): the Contract and its tests share one
+# directory, test/contracts/ (README.md there)
+config :covenant, contracts_dir: "test/contracts", test_paths: ["test/contracts"]

@@ -1,0 +1,30 @@
+- id: retire-never-remove
+  date: "2026-10-17"
+  decision: A code whose construct becomes valid is retired (kind :retired, with the version and why) and stays in the registry and the ledger; it is never removed or reused.
+  driver: The stability promise (docs/guides/stability.md) covers the codes from 0.1.0; tools and pages name codes, and a removed or reused code silently changes what they mean.
+  alternatives:
+    - option: Remove a code when its construct becomes valid
+      rejected: An old log or answer would name a code the catalogue no longer explains.
+    - option: Reuse a freed code for a new rejection
+      rejected: One name would mean two constructs across releases.
+  approved_by: owner (docs/guides/stability.md, 0.1.0)
+  conditions:
+    - text: The ledger of released codes exists
+      check: { kind: file, path: test/stability/codes.txt }
+    - text: The registry lives in lib/defk/errors.ex
+      check: { kind: file, path: lib/defk/errors.ex }
+  expires: At the next major version, which may remove what was deprecated
+
+- id: frozen-rejections-are-data
+  date: "2026-10-17"
+  decision: The rejected examples a release shipped are frozen as Markdown data under test/stability/<version>/rejections/, and contract tests read them through Defk.ContractKit; the exceptions (a frozen rejection that compiles now under an active code) are listed with their CHANGELOG words in the live test/stability/exceptions.exs, never in a frozen file.
+  driver: A frozen file is never edited (docs/agents/stability.md), and a release's contract tests are frozen too (record contracts-frozen-per-release), so an exception found later cannot live in either.
+  alternatives:
+    - option: List the exceptions in the contract test's source
+      rejected: A frozen copy of the test could never learn of a later exception.
+  approved_by: owner (docs/agents/stability.md)
+  conditions:
+    - text: The 0.1.0 rejections are frozen
+      check: { kind: file, path: test/stability/0.1.0/rejections }
+    - text: The frozen-file gate exists
+      check: { kind: file, path: ci/frozen.sh }
