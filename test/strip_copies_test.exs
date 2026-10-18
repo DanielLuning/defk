@@ -186,38 +186,69 @@ defmodule Defk.StripCopiesTest do
     odd = binary_part(<<0>> <> i64s(List.duplicate(1, 4 * @mib)), 1, 32 * @mib)
 
     forced(K, fn ->
-      kill_mid_copy(fn -> K.copy_first(a) end)
-      kill_mid_copy(fn -> K.sum_after(odd) end)
+      # 64 strips of copy, then the write
+      kill_mid_copy(fn -> K.copy_first(a) end, 64)
+      # 32 strips of copy at entry, then the loop
+      kill_mid_copy(fn -> K.sum_after(odd) end, 32)
     end)
 
     assert_frames_live(K)
   end
 
-  # Spawns the call and kills it once its frame is a resource (the first
-  # strip's yield), while the copy is under way; the frame's destructor
-  # then frees the buffer, which frames_live back at 0 shows (it is
-  # decremented after the release). Binary memory is no signal here: ERTS
-  # frees a block from another scheduler's allocator later, on that
-  # allocator's next allocation. Under heavy load the process can be starved
-  # until the kernel finished; that attempt proves nothing, so try again.
-  defp kill_mid_copy(fun, attempts \\ 20) do
-    pid = spawn(fun)
+  # Spawns the call and kills it while it is suspended at a yield inside the
+  # kernel with fewer than `strips` yields done, so its frame is a resource
+  # and the copy is under way; the frame's destructor then frees the buffer,
+  # which frames_live back at 0 shows (it is decremented after the release).
+  # Binary memory is no signal here: ERTS frees a block from another
+  # scheduler's allocator later, on that allocator's next allocation.
+  #
+  # Polling for the frame and then killing raced the copy: 64 MiB in 1 MiB
+  # strips takes about 1 ms on a fast machine, so a poll every millisecond
+  # mostly found the call done. Instead the call tells the test it starts,
+  # and the test suspends it at once; a suspension takes effect at the
+  # call's next yield, a strip or two into the copy (at most 11 seen in 8,000
+  # tries on 12 and on 2 schedulers, under a load of up to 30). An attempt
+  # that the call outran proves nothing and is tried again.
+  defp kill_mid_copy(fun, strips, attempts \\ 20) do
+    parent = self()
+    y0 = K.__defk_stats__().yields
+
+    pid =
+      spawn(fn ->
+        send(parent, {:starting, self()})
+        fun.()
+      end)
+
     ref = Process.monitor(pid)
+    assert_receive {:starting, ^pid}, @timeout
+    caught = suspended_in_kernel?(pid) and K.__defk_stats__().yields - y0 < strips
+    Process.exit(pid, :kill)
 
-    wait_until(
-      fn -> K.__defk_stats__().frames_live > 0 or not Process.alive?(pid) end,
-      @timeout
-    )
-
-    if Process.alive?(pid) do
-      Process.exit(pid, :kill)
+    if caught do
       assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, @timeout
       assert_frames_live(K)
     else
       assert_receive {:DOWN, ^ref, :process, ^pid, _}, @timeout
-      assert attempts > 1, "the kernel finished before it could be killed, every time"
+      assert attempts > 1, "the kernel finished its copy before it could be killed, every time"
       assert_frames_live(K)
-      kill_mid_copy(fun, attempts - 1)
+      kill_mid_copy(fun, strips, attempts - 1)
+    end
+  end
+
+  # Suspends `pid` (synchronous: it returns once the suspension took
+  # effect) and tells whether it stopped at a yield inside a kernel of K.
+  defp suspended_in_kernel?(pid) do
+    :erlang.suspend_process(pid)
+    in_kernel?(pid) and K.__defk_stats__().frames_live > 0
+  catch
+    # the process ran to its end and exited first
+    :error, :badarg -> false
+  end
+
+  defp in_kernel?(pid) do
+    case Process.info(pid, :current_function) do
+      {:current_function, {K, f, _}} -> String.starts_with?(Atom.to_string(f), "__defk_native_")
+      _ -> false
     end
   end
 end

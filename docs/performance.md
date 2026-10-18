@@ -227,6 +227,37 @@ one tick. One run of a short job gives only 15-45 ticks, so p99 equals max
 - **Source:** `lib/defk/bench/tick_gap.ex`, [`bench/tick_gap.exs`](https://github.com/DanielLuning/defk/blob/main/bench/tick_gap.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs) (2ae646a), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs).
 - **Status:** measured (method).
 
+### 1.9 Tests: `assert x, message` builds the message every time; a kill timed by polling loses to a 1 ms copy
+
+ExUnit's `assert/2` is a function, so its message is built on every call,
+passed or not. In a property's inner loop that is most of the run.
+
+- **Numbers:** the linear-facts soundness properties (300 cases, ~830
+  inputs each) built a `Macro.to_string/1` message per input: the overflow
+  property took 3.4-3.8 s over four seeds, of which compiling the 300
+  kernels was 0.2 s. With the message built only on failure
+  (`if not ok, do: flunk(...)`), 0.39 s; on 2 schedulers (`+S 2:2`, an
+  estimate of the 2-vCPU CI runner) 3.5 s became 0.37 s, and the bounds
+  property 1.3 s became 0.23 s. The CI runner had hit ExUnit's 60 s timeout
+  with the old spelling (full suite, `max_cases: 8` on 2 vCPU).
+- **The kill:** a forced-yield copy of 64 MiB in 1 MiB strips takes ~1 ms
+  once the allocator is warm (24 ms the first time), so a test that polls
+  every millisecond for the frame and then kills found the call still
+  running in 1 of 50 tries. Having the call send a message as it starts and
+  suspending it at once stops it at its first or second yield (8,000 of
+  8,000 tries, the latest at yield 11 of 64, on 12 and on 2 schedulers at
+  load up to ~30).
+  `:erlang.suspend_process/1` returns once the suspension has taken effect,
+  which a running process does at its next yield. Stepping a process with
+  resume-then-suspend does not work: a suspend that arrives before the
+  process is scheduled in takes effect before it runs any code, so under
+  load it made no progress for 30 s.
+- **Conditions:** M-series Mac, 12 schedulers unless noted, Elixir 1.20.2,
+  OTP 29; load 2-12 for the property timings, 16 busy loops added for the
+  kill runs, so provisional.
+- **Source:** `defk-1ub`, [`test/linear_facts_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/linear_facts_test.exs), [`test/strip_copies_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/strip_copies_test.exs).
+- **Status:** provisional.
+
 ---
 
 ## 2. Fast Elixir on binaries and numbers
@@ -2756,4 +2787,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
   `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`,
-  `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)).
+  `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`.
