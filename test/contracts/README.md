@@ -46,6 +46,18 @@ Rules for a contract test:
   it: the text of a message is not promised, so a test on it stays in
   `test/`.
 
+Contracts are for the promise, unit tests for the rest (owner,
+2026-10-18). A contract test proves an obligation and is frozen with the
+release; it is not where the compiler's sections, the messages, the report
+or the generated C get their tests, and the mutation runs show why: the
+contracts detect about half of the compiler's mutants, and what they miss
+is mostly unpromised text and paths the frozen corpus samples thinly
+(`docs/agents/covenant-trial.md`, "The compiler"). A change to a section
+of the compiler gets a unit test beside that section's others; a change to
+a promise gets an obligation and a contract test. Do not move a unit test
+here to raise a contract's count, and do not add an obligation for
+behaviour the guide leaves open.
+
 An obligation's id is never reused; a retired one keeps its number with
 `status: retired`. A promise proven by a test that cannot be frozen is an
 obligation of `kind: exception` naming that test as its `target`.

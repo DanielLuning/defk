@@ -102,10 +102,12 @@ defmodule Defk.ContractKit do
   frozen copy of it compile the same corpus, and the modules are named after
   the files, so a second caller waits for the first and shares its result.
   A shared result whose modules were unloaded since (a mutation run purges
-  the modules each test run loads) is compiled again.
+  the modules each test run loads) is compiled again, and so is one that
+  other defk code compiled: the key holds the loaded code's identity, so a
+  result a mutated compiler gave is never reused by the unmutated one.
   """
   def compile_frozen(examples, kind) do
-    key = {__MODULE__, :frozen, kind, :erlang.phash2(examples)}
+    key = {__MODULE__, :frozen, kind, :erlang.phash2({examples, defk_code()})}
 
     :global.trans({key, self()}, fn ->
       case :persistent_term.get(key, nil) do
@@ -118,6 +120,12 @@ defmodule Defk.ContractKit do
           compile_and_keep(key, examples, kind)
       end
     end)
+  end
+
+  # the md5 of every loaded module of the defk application
+  defp defk_code do
+    {:ok, mods} = :application.get_key(:defk, :modules)
+    for mod <- mods, :code.is_loaded(mod) != false, do: {mod, mod.module_info(:md5)}
   end
 
   defp compile_and_keep(key, examples, kind) do
