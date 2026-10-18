@@ -36,6 +36,25 @@ next_sum/1  test/report_test.exs:16
   20 |   end
 ```
 
+When one small fact about the kernel's values would prove the missing
+half, the note names it. Here a raising guard `if w < 1, do: raise(...)`
+before the loop (docs/language.md, "Preconditions: raising guards") would
+drop both checks:
+
+```text
+  6 |       n -> if x[i] > x[i - w], do: n + 1, else: n  # x[i]: bounds check kept; nothing proves 0 <= i (it would follow from w >= 0)
+    |                                                    # x[i - w]: bounds check kept; nothing proves i - w < length(x) (it would follow from w >= 0)
+```
+
+The fact is a hint: the residual with the fewest terms that the proof
+search reached, when it has at most two variables or lengths and a small
+constant. Another fact could also do.
+
+An `if`, `cond` or `case` value whose arms are pure arithmetic becomes a
+select, which computes every arm. An arm that dropped a check only because
+its condition holds is not computed when untaken, and the note says so:
+`if: a branch; not a select: arm 1 relies on its condition to drop a check`.
+
 ## The data
 
 Every module that uses `Defk` has `__defk_report__/0`, a list of

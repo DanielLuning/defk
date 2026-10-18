@@ -1372,7 +1372,11 @@ names each kept bounds check and the fact that would drop it. See
   is check-free (not measured yet).
 - **Conditions:** under load.
 - **Source:** [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), `defk-n7k`; `defk-upc` comment 2026-10-10; [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs), `defk-siy`; `defk-qdz` (`test/linear_facts_test.exs`).
-- **Status:** provisional. Still open: `defk-siy` (its second loop, `acc[i - m]`, needs `m >= 0` from a guard), `defk-n7k`, `defk-9za`.
+- **Status:** provisional. Since facts from conditions (`defk-b38`, 6.34),
+  `defk-9za`'s rolling difference and `defk-siy`'s second loop
+  (`acc[i - m]` after `if m < 0, do: raise(...)`) are check-free
+  (`test/condition_facts_test.exs`). Still open: `defk-n7k` and
+  `pcm_mix`'s `bufs[j * m + i]` (products of two variables).
 
 <!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
@@ -2317,6 +2321,47 @@ the verdict they claim. Two gave a better one than on macOS:
 - **Source:** `defk-qdz`; soundness: `test/linear_facts_test.exs`
   (generated linear shapes, every dropped check against the arithmetic),
   and the whole suite under AddressSanitizer with no report.
+- **Status:** measured, provisional.
+
+### 6.34 Facts from conditions drop 1% of bounds and 2% of overflow checks for ~5% more compiler time
+
+- **Numbers:** over the 102 test and example files of `mix dump_c`
+  (the new test file left out), the bounds checks in the generated C went
+  from 3,415 to 3,375 call sites, the overflow checks from 6,059 to 5,958,
+  the range-limit tests from 723 to 719; no file gained a check. Most
+  come from guards the code already had: `Codecs.Kernels` 60 -> 52,
+  `Defk.BinaryLiteralsTest.K` 8 -> 2, `AllocUnzeroedTest` 198 -> 192,
+  `HashChain` 19 -> 15. The acceptance kernels (a rolling difference at a
+  window `w` after `if w < 1, do: raise(...)`, `acc[i - m]` for
+  `i <- m..` after `if m < 0, do: raise(...)`) are check-free, and
+  without the guard the report names `w >= 0` and `m >= 0`.
+  `decode16`, rewritten with raising guards instead of `alloc(u8, -1)`,
+  keeps the same checks (5 bounds checks dropped, none kept) and loses its
+  two dummy allocs. Compiler time (`Defk.Compiler.compile` over the same
+  modules, clang not included), three rounds interleaved with main
+  (`defk-qdz`): 2,382 / 2,393 / 2,362 ms against 2,503 / 2,506 / 2,482 ms
+  (+5.0% on the means); without `SatEx.Kernels` +4.5%. With steps 1-2
+  (+2.4%, +4.6%) the chain is at about +12.4% of the compiler before
+  step 1, under the +15% ceiling of ADR-0007.
+- **What it took:** the first version cost +6.3%, most of it the
+  report's hint: a kept check searched again for the fact it would follow
+  from (`SatEx.Kernels`, 1,793 kept checks, +13%). Three cuts: the hint
+  search's budget is 16 steps, not 64; an index with no relative bound and
+  no exact form over variables is not searched (it can only give a
+  restated goal); and a residual in the accessed array's length alone
+  (`a[11]`: "length(a) >= 12") is no hint, which also removed 1,500 such
+  restatements from `SatEx.Kernels`' report. A plain variable index now
+  also tries its own atom in the prover (a narrowed length may name it):
+  switching that off alone changed `SatEx.Kernels` by less than the noise
+  between two identical runs (about 30 ms of 450).
+- **Not measured:** run time. The dropped checks are in guarded branches
+  and short loops of the catalog, not in the hot loops of 6.2.
+- **Conditions:** load 2.4-3.9 on 12 cores; provisional.
+- **Source:** `defk-b38`; soundness: `test/condition_facts_test.exs`
+  (generated guards, conditions and linear indices; every dropped bounds
+  and overflow check checked where the condition holds, at the loop's ends
+  and the roots of every linear function in it), and the whole suite under
+  AddressSanitizer.
 - **Status:** measured, provisional.
 
 ---

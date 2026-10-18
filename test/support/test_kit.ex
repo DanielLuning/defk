@@ -107,6 +107,13 @@ defmodule Defk.TestKit do
       flunk("#{inspect(mod)} has no kernel #{name}")
   end
 
+  @doc """
+  Kernel `name` in `mod` has no element access with its bounds check (the
+  argument reads, defk_get_i64_arg and the like, do not count).
+  """
+  def bounds_check_free?(mod, name),
+    do: not (kernel_c(mod, name) =~ ~r/defk_(put|get)_[a-z0-9]+\(ctx/)
+
   # ------------------------------------------------------------- yielding --
 
   @doc """

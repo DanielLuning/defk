@@ -66,7 +66,13 @@ Replace the fact model with one representation:
   the flagged-strip classifier (`fixed_indices?/3`).
 - **Cost:** a bounded search per query; estimated 1-2% of the compiler's
   own time on the test suite, about 10% if every query exhausted its budget
-  (provisional, from a prototype prover; clang not included).
+  (provisional, from a prototype prover; clang not included). **Ceiling**
+  (maintainer, 2026-10-17): the whole chain may cost at most about +15% of
+  the compiler's own time (`Defk.Compiler.compile` over the test kernels
+  and examples, clang not included), measured against the compiler before
+  step 1. Each step reports its cost and the running total in
+  `docs/performance.md`; a step that would pass the ceiling cuts repeated
+  work first, then asks the maintainer.
 - **Raising guards become the way to state facts about arguments** in a
   kernel, which the language docs would describe.
 - **Out of scope:** degree 3 and nested products, facts across loop

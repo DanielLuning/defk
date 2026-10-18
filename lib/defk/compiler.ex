@@ -922,7 +922,7 @@ defmodule Defk.Compiler do
           "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
       end
 
-    note_bounds(target, 1, proven)
+    note_bounds(target, 1, proven, {a, i, env})
     {[sa, si, sv, sc, store], env}
   end
 
@@ -936,16 +936,18 @@ defmodule Defk.Compiler do
   defp lower_stmt({:if, _, [cond, kw]} = node, env) when is_list(kw) do
     note_branch_stmt(node, "a statement, and a select is for a value")
     ref = make_ref()
-    {sc, c} = lower_cond(cond, env)
-    {sa, _} = srec_arm(ref, 0, fn -> lower_stmts(Keyword.fetch!(kw, :do), env) end)
+    {sc, c, rel} = lower_test(cond, env)
+    do_ast = Keyword.fetch!(kw, :do)
+    {sa, _} = srec_arm(ref, 0, fn -> lower_stmts(do_ast, narrow(env, rel, true)) end)
+    after_env = guarded(env, rel, do_ast, kw[:else])
 
     case Keyword.fetch(kw, :else) do
       {:ok, e} ->
-        {sb, _} = srec_arm(ref, 1, fn -> lower_stmts(e, env) end)
-        {[sc, "if (#{c}) {\n", sa, "} else {\n", sb, "}\n"], env}
+        {sb, _} = srec_arm(ref, 1, fn -> lower_stmts(e, narrow(env, rel, false)) end)
+        {[sc, "if (#{c}) {\n", sa, "} else {\n", sb, "}\n"], after_env}
 
       :error ->
-        {[sc, "if (#{c}) {\n", sa, "}\n"], env}
+        {[sc, "if (#{c}) {\n", sa, "}\n"], after_env}
     end
   end
 
@@ -1774,7 +1776,7 @@ defmodule Defk.Compiler do
     # an in-range read cannot fail but by its inf/NaN check, which a float
     # expression may defer to its own check (float_tree)
     v = if match?({:proven, _}, proven), do: Map.put(v, :pure_read, raw), else: v
-    note_bounds(node, 1, proven)
+    note_bounds(node, 1, proven, {a, i, env})
     {[sa, si], v}
   end
 
@@ -1857,22 +1859,29 @@ defmodule Defk.Compiler do
 
   defp lower_node({op, _, [a, b]} = node, env)
        when op in [:==, :!=, :===, :!==, :<, :>, :<=, :>=] do
-    {stmts, [va, vb]} = lower_ops([a, b], env)
-    {stmts, val(compare_c(op, va, vb, node), :bool)}
+    lowered = [lower_expr(a, env), lower_expr(b, env)]
+    rel = relation(op, lowered)
+    {stmts, [va, vb]} = in_order(lowered, env, :comma)
+    {stmts, Map.put(val(compare_c(op, va, vb, node), :bool), :rel, rel)}
   end
 
   defp lower_node({op, m, [a, b]}, env) when op in [:and, :or, :&&, :||] do
     ref = make_ref()
+    and? = op in [:and, :&&]
     {sa, va} = lower_expr(a, env)
-    {sb, vb} = srec_arm(ref, 0, fn -> lower_expr(b, env) end)
+    # the right side of an `and` runs only when the left holds; in a case
+    # guard an overflowed left side may run it anyway (guard_short_circuit/5)
+    benv = if and? and not Map.has_key?(env, :bad), do: narrow(env, va[:rel], true), else: env
+    {sb, vb} = srec_arm(ref, 0, fn -> lower_expr(b, benv) end)
     bool!(va, a, op)
     bool!(vb, b, op)
-    cop = if op in [:and, :&&], do: "&&", else: "||"
+    cop = if and?, do: "&&", else: "||"
+    rel = if va[:rel] || vb[:rel], do: {if(and?, do: :and, else: :or), va[:rel], vb[:rel]}
 
     if IO.iodata_length(sb) == 0 do
       # inline right side: its rows run with the statement after all
       srec_drop_frame(ref)
-      {sa, val(guard_short_circuit(va, vb, cop, m, env), :bool)}
+      {sa, Map.put(val(guard_short_circuit(va, vb, cop, m, env), :bool), :rel, rel)}
     else
       # right side needs statements: keep short-circuit semantics explicitly
       tmp = fresh("sc", :bool)
@@ -1881,14 +1890,14 @@ defmodule Defk.Compiler do
       srec_arm(ref, 0, fn -> srec_assign(tmp, vb.c) end)
 
       {[sa, "#{tmp} = #{va.c};\nif (#{test}) {\n", sb, "#{tmp} = #{vb.c};\n}\n"],
-       val(tmp, :bool, tmp)}
+       Map.put(val(tmp, :bool, tmp), :rel, rel)}
     end
   end
 
   defp lower_node({op, _, [a]}, env) when op in [:not, :!] do
     {s, v} = lower_expr(a, env)
     bool!(v, a, op)
-    {s, val("(!#{v.c})", :bool)}
+    {s, Map.put(val("(!#{v.c})", :bool), :rel, v[:rel] && {:not, v.rel})}
   end
 
   defp lower_node({:-, _, [a]} = node, env) do
@@ -2303,9 +2312,15 @@ defmodule Defk.Compiler do
   end
 
   defp lower_cond(cond, env) do
+    {s, c, _rel} = lower_test(cond, env)
+    {s, c}
+  end
+
+  # a condition's statements and C, and what it says (Facts.holds/2)
+  defp lower_test(cond, env) do
     {s, v} = lower_expr(cond, env)
     bool!(v, cond, "a condition")
-    {s, v.c}
+    {s, v.c, v[:rel]}
   end
 
   defp clause_parts({:->, _, [[c], body]}), do: {c, body}
@@ -2358,42 +2373,74 @@ defmodule Defk.Compiler do
   defp lower_arms(clauses, name, node, env) do
     ref = make_ref()
 
-    arms =
+    # each arm sees its condition and the negations of the conditions
+    # before it; a later condition sees those negations too
+    {lowered, _} =
       clauses
       |> Enum.with_index()
-      |> Enum.map(fn
-        {{:nomatch, s}, _k} ->
-          {nil, nil, :nomatch, s, nil}
+      |> Enum.map_reduce(env, fn
+        {{:nomatch, s}, _k}, aenv ->
+          {{{nil, nil, :nomatch, s, nil}, {aenv, aenv}}, aenv}
 
-        {{c, body}, k} ->
+        {{c, body}, k}, aenv ->
           # the first arm's condition runs unconditionally; a later arm's
           # runs only when the arms before it did not take (it sits in their
           # else blocks), like the arm's own body
-          cond =
+          {cond, rel} =
             cond do
-              c == true -> :else
-              k == 0 -> lower_cond(c, env)
-              true -> srec_arm(ref, k, fn -> lower_cond(c, env) end)
+              c == true -> {:else, nil}
+              k == 0 -> test_parts(lower_test(c, aenv))
+              true -> srec_arm(ref, k, fn -> test_parts(lower_test(c, aenv)) end)
             end
 
-          {sb, v} = srec_arm(ref, k, fn -> lower_block(body, env) end)
-          {c, body, cond, sb, v}
+          benv = narrow(aenv, rel, true)
+          {sb, v} = srec_arm(ref, k, fn -> lower_block(body, benv) end)
+          {{{c, body, cond, sb, v}, {aenv, benv}}, narrow(aenv, rel, false)}
       end)
 
+    {arms, envs} = Enum.unzip(lowered)
+    relies = relies_on_condition(arms, envs, env)
     vals = for {_, _, _, _, v} <- arms, v, do: v
 
     if Enum.any?(vals, &Map.has_key?(&1, :elems)) do
-      tuple_arms(arms, vals, name, node, env, ref)
+      tuple_arms(arms, vals, name, node, env, {ref, relies})
     else
       arms = bits_arms(arms)
       vals = for({_, _, _, _, v} <- arms, v, do: v)
       t = branch_type!(vals, name, node)
       tmp = fresh(name, t)
-      {lower_branch(arms, [t], [tmp], env, node, ref), branch_val(tmp, t, vals)}
+      {lower_branch(arms, [t], [tmp], env, node, {ref, relies}), branch_val(tmp, t, vals)}
     end
   end
 
-  defp tuple_arms(arms, vals, name, node, env, ref) do
+  defp test_parts({s, c, rel}), do: {{s, c}, rel}
+
+  # The first arm (counted from 0) whose body, or condition, dropped a check
+  # by the conditions it runs under, or nil. A select computes every arm and
+  # condition whether taken or not, so such an arm keeps the chain
+  # (ADR-0007). Asked only of arms a select could take: each narrowed one
+  # is lowered again in the branch's own env, and its C compared.
+  defp relies_on_condition(arms, envs, env) do
+    if select?(arms) do
+      Enum.zip(arms, envs)
+      |> Enum.find_index(fn {{c, body, cond, sb, v}, {cenv, benv}} ->
+        (benv != env and not same_c?(probe(fn -> lower_block(body, env) end), {sb, v})) or
+          (cenv != env and match?({_, _}, cond) and
+             not same_c?(probe(fn -> lower_cond(c, env) end), cond))
+      end)
+    end
+  end
+
+  # a lowering's {stmts, value or C} gives the same C as another's
+  defp same_c?({:ok, {s, x}}, {s0, x0}),
+    do: IO.iodata_to_binary(s) == IO.iodata_to_binary(s0) and c_of(x) == c_of(x0)
+
+  defp same_c?(:error, _), do: false
+
+  defp c_of(c) when is_binary(c), do: c
+  defp c_of(v), do: parts(v)
+
+  defp tuple_arms(arms, vals, name, node, env, branch) do
     sizes = Enum.map(vals, &length(Map.get(&1, :elems, [nil])))
 
     if not Enum.all?(vals, &Map.has_key?(&1, :elems)) or not match?([_], Enum.uniq(sizes)) do
@@ -2433,7 +2480,7 @@ defmodule Defk.Compiler do
         branch_val(tmp, t, for({_, _, _, _, v} <- arms, v, do: Enum.at(v.elems, i)))
       end)
 
-    {lower_branch(arms, ts, tmps, env, node, ref), %{t: {:tuple, ts}, elems: elems}}
+    {lower_branch(arms, ts, tmps, env, node, branch), %{t: {:tuple, ts}, elems: elems}}
   end
 
   # The value of an if, cond or case in temporary `tmp` of type `t`, its arms
@@ -2470,15 +2517,16 @@ defmodule Defk.Compiler do
 
   # the code that assigns each of `tmps` (of types `ts`) its element of the
   # value of the arm taken; `node` is the if, cond or case
-  defp lower_branch(arms, ts, tmps, env, node, ref) do
-    sel = select?(arms)
+  # `relies`: the first arm that relies on its condition (relies_on_condition/3)
+  defp lower_branch(arms, ts, tmps, env, node, {ref, relies}) do
+    sel = relies == nil and select?(arms)
 
     # a select's arms run inline in the assigned statement; a chain assigns
     # each arm's value to the temporaries inside that arm's block
     if sel, do: srec_drop_frame(ref), else: record_arm_assigns(arms, tmps, ref)
 
     code = if(sel, do: select(arms, ts, tmps, env), else: chain(arms, tmps))
-    note_branch(node, arms, code, tmps)
+    note_branch(node, arms, code, tmps, relies)
     code
   end
 
@@ -2923,7 +2971,7 @@ defmodule Defk.Compiler do
   defp emit_builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], node, env) when f in @loads do
     w = Defk.Builtins.load_width(f)
     proven = Facts.check(a, i, w, env)
-    note_bounds(node, w, proven)
+    note_bounds(node, w, proven, {a, i, env})
 
     c =
       case proven do
@@ -4068,8 +4116,8 @@ defmodule Defk.Compiler do
   end
 
   defp lower_quals([filter | rest], env, inner) do
-    {sc, c} = lower_cond(filter, env)
-    inner = srec_arm(make_ref(), 0, fn -> lower_quals(rest, env, inner) end)
+    {sc, c, rel} = lower_test(filter, env)
+    inner = srec_arm(make_ref(), 0, fn -> lower_quals(rest, narrow(env, rel, true), inner) end)
     [sc, "if (#{c}) {\n", inner, "}\n"]
   end
 
@@ -4135,7 +4183,7 @@ defmodule Defk.Compiler do
            "(#{st} > 0 ? #{i} > #{e} : #{i} < #{e})", "#{i} += #{st};\n", val(i, :i64), nil}
       end
 
-    env = put_var(env, name, iv)
+    env = put_var(env, name, iv) |> nonempty(step, va, vb)
 
     in_loop(fn id ->
       {rows, {body, flat?}} =
@@ -4149,6 +4197,18 @@ defmodule Defk.Compiler do
       loop_at(range)
       [setup, loop(id, done, strip, flat?, [body, incr], rows)]
     end)
+  end
+
+  # The body of a range with a literal step runs only when the range is not
+  # empty: start <= stop counting up, start >= stop counting down. The
+  # bounds are computed before the loop, never in a strip, so a checked
+  # one narrows too.
+  defp nonempty(env, step, va, vb) do
+    case literal_int(step) do
+      k when is_integer(k) and k > 0 -> narrow(env, Facts.relation(:<=, va, vb), true)
+      k when is_integer(k) and k < 0 -> narrow(env, Facts.relation(:>=, va, vb), true)
+      _ -> env
+    end
   end
 
   # Stepping past the last element of a range that ends within one step of the
@@ -5345,14 +5405,22 @@ defmodule Defk.Compiler do
   end
 
   # An if/else chain over [{cond_ast | true, body_ast} | {:nomatch, stmts}],
-  # each body lowered by `lower_body.(body_ast, env)`.
+  # each body lowered by `lower_body.(body_ast, env)`, in the env its
+  # condition and the negations of the conditions before it narrow.
   defp branch_chain(arms, env, lower_body) do
     arms
-    |> Enum.map(fn
-      {:nomatch, s} -> {:nomatch, s}
-      {true, body} -> {true, lower_body.(body, env)}
-      {c, body} -> {lower_cond(c, env), lower_body.(body, env)}
+    |> Enum.map_reduce(env, fn
+      {:nomatch, s}, aenv ->
+        {{:nomatch, s}, aenv}
+
+      {true, body}, aenv ->
+        {{true, lower_body.(body, aenv)}, aenv}
+
+      {c, body}, aenv ->
+        {sc, cc, rel} = lower_test(c, aenv)
+        {{{sc, cc}, lower_body.(body, narrow(aenv, rel, true))}, narrow(aenv, rel, false)}
     end)
+    |> elem(0)
     |> List.foldr([], fn
       {:nomatch, s}, _ -> s
       {true, sb}, _ -> sb
@@ -5818,6 +5886,70 @@ defmodule Defk.Compiler do
   # satisfy, the derivations, and the proofs (in_bounds?, in_i64?) that drop
   # checks. This file creates facts and asks those questions; it holds no
   # fact algebra of its own.
+
+  # A comparison's relation (Facts.relation/3), from i64 operands computed
+  # without a check: a flagged strip computes on past a failed check, so a
+  # condition on a checked value could narrow by a wrong one (ADR-0007).
+  # The operands are judged before in_order/3 may move one into a local.
+  defp relation(op, [{_, va}, {_, vb}]) do
+    if va.t == :i64 and vb.t == :i64 and check_free?(va) and check_free?(vb),
+      do: Facts.relation(op, va, vb)
+  end
+
+  # every check calls a runtime helper (defk_*), and every raise goes
+  # through ctx
+  defp check_free?(%{c: c}), do: not (c =~ "ctx" or c =~ "defk_")
+
+  # `env` where relation `rel` is `true?` (Facts.holds/2): each fact on its
+  # newest atom, in that atom's binding (env.atoms and the i64 binding for a
+  # C variable, the array binding for a length), so a read of the binding
+  # and the prover both see it. The env is lexical: the facts end with the
+  # branch, filter or loop body they were made for.
+  defp narrow(env, rel, true?) do
+    rel
+    |> Facts.holds(true?)
+    |> Enum.reduce(env, fn d, env ->
+      {x, kind, b} = Facts.narrowing(d)
+      narrow_atom(env, x, kind, b)
+    end)
+  end
+
+  defp narrow_atom(env, {:var, c} = x, kind, b) do
+    atoms = env[:atoms] || %{}
+    f = Facts.facts(Facts.narrow(%{facts: atoms[c] || Facts.none()}, x, kind, b))
+
+    Map.merge(env, %{atoms: Map.put(atoms, c, f), vars: narrow_vars(env.vars, x, kind, b)})
+  end
+
+  defp narrow_atom(env, {:len, _} = x, kind, b),
+    do: %{env | vars: narrow_vars(env.vars, x, kind, b)}
+
+  defp narrow_vars(vars, {_, c} = x, kind, b) do
+    Map.new(vars, fn
+      {n, %{c: ^c} = v} -> {n, Facts.narrow(v, x, kind, b)}
+      kv -> kv
+    end)
+  end
+
+  # A raising guard: the statements after `if c` see the condition of the
+  # arm that does not raise, as the one that does never reaches them.
+  defp guarded(env, rel, do_ast, else_ast) do
+    case {raises?(do_ast), raises?(else_ast)} do
+      {true, false} -> narrow(env, rel, false)
+      {false, true} -> narrow(env, rel, true)
+      _ -> env
+    end
+  end
+
+  # every path through the block raises: one of its statements is a raise,
+  # or an if whose arms both raise
+  defp raises?({:__block__, _, es}), do: Enum.any?(es, &raises?/1)
+  defp raises?({:raise, _, args}) when is_list(args), do: true
+
+  defp raises?({:if, _, [_, kw]}) when is_list(kw),
+    do: raises?(Keyword.get(kw, :do)) and raises?(Keyword.get(kw, :else))
+
+  defp raises?(_), do: false
 
   # ------------------------------------------------------- element types --
   # A narrow element (u8, i16, i32, f32) widens when read: an integer to an
@@ -6747,8 +6879,10 @@ defmodule Defk.Compiler do
   # a[i], or the word load u64_le(bytes, i), of width w: its bounds check
   # dropped, or kept with the facts that would drop it. `proof` is the
   # access's own (Facts.check/4), which names the half that fails, so what
-  # is named is what the proof would accept.
-  defp note_bounds(node, w, proof) do
+  # is named is what the proof would accept. A failing half names the fact
+  # it would follow from when that is small (Facts.residual/5): a value `a`
+  # indexed by `i`, in `env`.
+  defp note_bounds(node, w, proof, {a, i, env}) do
     {text, arr, idx} =
       case node do
         {{:., _, [Access, :get]}, _, [arr, idx]} -> {src_text(node), arr, idx}
@@ -6761,21 +6895,81 @@ defmodule Defk.Compiler do
 
       {:unproven, half} ->
         {arr, idx} = {src_text(arr), src_text(idx)}
-        low = "0 <= #{idx}"
 
-        high =
-          if w == 1, do: "#{idx} < length(#{arr})", else: "#{idx} + #{w} <= length(#{arr})"
+        named = fn h, what ->
+          case Facts.residual(a, i, w, h, env) |> hint_text(env) do
+            nil -> what
+            fact -> "#{what} (it would follow from #{fact})"
+          end
+        end
+
+        low = fn -> named.(:low, "0 <= #{idx}") end
+
+        high = fn ->
+          named.(
+            :high,
+            if(w == 1, do: "#{idx} < length(#{arr})", else: "#{idx} + #{w} <= length(#{arr})")
+          )
+        end
 
         missing =
           case half do
-            :low -> low
-            :high -> high
-            :both -> "#{low} and #{high}"
+            :low -> low.()
+            :high -> high.()
+            :both -> "#{low.()} and #{high.()}"
           end
 
         note(:bounds, node, :kept, "#{text}: bounds check kept; nothing proves #{missing}")
     end
   end
+
+  # A residual D (the fact D <= 0) in source names: an atom by the binding
+  # in scope whose C variable it is, a length as length(name); nil when an
+  # atom has no such binding (a temporary, or a shadowed name).
+  defp hint_text(nil, _env), do: nil
+
+  defp hint_text(d, env) do
+    names = Map.new(d.t, fn {m, _} -> {m, atom_name(m, env)} end)
+
+    cond do
+      Enum.any?(names, fn {_, n} -> n == nil end) ->
+        nil
+
+      map_size(d.t) == 1 ->
+        case Facts.narrowing(d) do
+          {x, :lo, b} -> "#{names[x]} >= #{b}"
+          {x, :hi, b} -> "#{names[x]} <= #{b}"
+        end
+
+      true ->
+        {pos, neg} =
+          d.t |> Enum.sort_by(fn {m, _} -> names[m] end) |> Enum.split_with(&(elem(&1, 1) > 0))
+
+        sum = fn ts ->
+          Enum.map_join(ts, " + ", fn
+            {m, c} when abs(c) == 1 -> names[m]
+            {m, c} -> "#{abs(c)} * #{names[m]}"
+          end)
+        end
+
+        case {pos, neg} do
+          {[], _} -> "#{sum.(neg)} >= #{d.k}"
+          {_, []} -> "#{sum.(pos)} <= #{-d.k}"
+          _ -> "#{sum.(pos)} <= #{sum.(neg)}#{offset(-d.k)}"
+        end
+    end
+  end
+
+  defp atom_name({kind, c}, env) do
+    Enum.find_value(env.vars, fn
+      {n, %{c: ^c}} -> if kind == :len, do: "length(#{n})", else: "#{n}"
+      _ -> nil
+    end)
+  end
+
+  defp offset(0), do: ""
+  defp offset(k) when k > 0, do: " + #{k}"
+  defp offset(k), do: " - #{-k}"
 
   # Macro.to_string/1 (which runs the formatter), short-cut for the usual
   # a[i +- k]
@@ -6794,13 +6988,21 @@ defmodule Defk.Compiler do
 
   defp src_text(ast), do: Macro.to_string(ast)
 
-  # an if/cond/case value: lower_branch/5's choice, and why not a select
-  defp note_branch(node, arms, code, tmps) do
+  # an if/cond/case value: lower_branch/6's choice, and why not a select
+  defp note_branch(node, arms, code, tmps, relies) do
     name = elem(node, 0)
 
     cond do
       not select?(arms) ->
         note(:branch, node, :branch, "#{name}: a branch; not a select: #{why_not_select(arms)}")
+
+      relies != nil ->
+        note(
+          :branch,
+          node,
+          :branch,
+          "#{name}: a branch; not a select: arm #{relies + 1} relies on its condition to drop a check"
+        )
 
       # select/4 found nothing that can raise and gave the plain chain
       code == chain(arms, tmps) ->

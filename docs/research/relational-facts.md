@@ -670,6 +670,25 @@ what it adds.
    rule for flagged strips; the report's residual hint. Done when 9za's and
    siy loop 2's kernels (with `m >= 0`) are check-free and the report names
    `w >= 0` / `m >= 0` when the guard is missing.
+   *Landed as `defk-b38` (2026-10-17). A comparison's bool value carries
+   its relation (`Defk.Facts.relation/3`, from operands whose C calls no
+   checked helper, judged before `in_order/3` may move one into a local);
+   `Facts.holds/2` turns it into forms `D <= 0`, and `narrow/3` records
+   each on its newest atom, in `env.atoms` and in the i64 or array binding,
+   so a read of the binding sees it too. Arms see their condition and the
+   earlier ones' negations (`lower_arms`, `branch_chain`, the statement
+   `if`); a statement `if` one of whose arms raises (`raises?/1`) narrows
+   the rest of the block. A plain variable read now also tries its own atom
+   in `value_le`, as a newer atom's fact may name it (`length(x) >= k + 1`
+   after `k < length(x)`). The select rule lowers each narrowed arm (and
+   later condition) again in the branch's own env under `probe/1` and
+   compares the C. In a case guard the right side of `and` is not narrowed:
+   an overflowed left side may run it. The report's hint
+   (`Facts.residual/5`) leaves out residuals reached through a limit no
+   fact states (an i64 or length limit, a length >= 0), as "k <= -1" for
+   `x[k]` was the usual result otherwise. `decode16` changed no check.
+   Soundness: `test/condition_facts_test.exs`; cost: `docs/performance.md`
+   6.34.*
 4. **Degree-2 monomials (defk-n7k, `pcm_mix`).** Products of atoms in
    forms, the `div` rule with a symbolic divisor, equality guards with
    products, substitution into a product with a known-sign factor, the

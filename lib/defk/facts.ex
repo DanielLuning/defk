@@ -54,6 +54,15 @@ defmodule Defk.Facts do
   # derivation lists the bounds shifted by constants (those of before) first
   @max_bounds 4
 
+  # the report's hint names a residual whose constant is at most this: one
+  # from an i64 or length limit names no fact a kernel states
+  @hint_max 2 ** 32
+
+  # the hint's search budget: a residual small enough to name is a few
+  # replacements from the goal, and a kept check is searched for it again
+  # (the whole search fails), so it gets less than a proof
+  @hint_budget 16
+
   # ---------------------------------------------------------- carrier API --
   # A carrier is any value map; its facts live under :facts (absent = none).
 
@@ -209,6 +218,97 @@ defmodule Defk.Facts do
     })
   end
 
+  # ---------------------------------------------------------- conditions --
+  # What a condition says when it is true (or false): a relation is
+  # {:cmp, op, a, b} for a comparison of two exact i64 forms, {:and, x, y},
+  # {:or, x, y} or {:not, x} over relations, or nil (nothing known). The
+  # compiler makes a comparison's relation only from operands computed
+  # without a check that a flagged strip could run on past (ADR-0007), and
+  # narrows the scope of a taken branch by it (narrowing/1).
+
+  @cmp_ops [:<, :<=, :==, :===, :>=, :>, :!=, :!==]
+
+  # the relation of `a op b`, or nil when an operand has no exact form
+  def relation(op, a, b) when op in @cmp_ops do
+    {ea, eb} = {eq(a), eq(b)}
+    if ea && eb, do: {:cmp, op, ea, eb}
+  end
+
+  # The forms D with D <= 0 that hold when relation `rel` is `true?`: a
+  # comparison, and both sides of an `and` that holds or an `or` that does
+  # not. A disjunction and `!=` give nothing; a constant form (a test that
+  # is always or never true) gives nothing either.
+  def holds(nil, _true?), do: []
+  def holds({:not, x}, true?), do: holds(x, not true?)
+  def holds({:and, x, y}, true), do: holds(x, true) ++ holds(y, true)
+  def holds({:or, x, y}, false), do: holds(x, false) ++ holds(y, false)
+  def holds({op, _, _}, _true?) when op in [:and, :or], do: []
+
+  def holds({:cmp, op, a, b}, true?) do
+    op = if true?, do: op, else: negated_op(op)
+
+    case op do
+      :< -> [form_add(form_sub(a, b), form_const(1))]
+      :<= -> [form_sub(a, b)]
+      :> -> [form_add(form_sub(b, a), form_const(1))]
+      :>= -> [form_sub(b, a)]
+      eq when eq in [:==, :===] -> [form_sub(a, b), form_sub(b, a)]
+      _ne -> []
+    end
+    |> Enum.filter(&(map_size(&1.t) > 0))
+  end
+
+  defp negated_op(op),
+    do: %{<: :>=, <=: :>, >: :<=, >=: :<, ==: :!=, ===: :!==, !=: :==, !==: :===}[op]
+
+  # D <= 0 as a fact on D's newest monomial x, over older ones only:
+  # {x, :lo | :hi, constant} when the rest of D is a constant, else
+  # {x, :lb | :ub, {q, form}}
+  def narrowing(%{t: t} = d) when map_size(t) > 0 do
+    {x, c} = Enum.max_by(t, fn {m, _} -> rank(m) end)
+    rest = %{d | t: Map.delete(t, x)}
+    const? = map_size(rest.t) == 0
+
+    cond do
+      # c * x <= -rest
+      c > 0 and const? -> {x, :hi, floor_div(-rest.k, c)}
+      c > 0 -> {x, :ub, norm(c, form_scale(rest, -1), :ub)}
+      # -c * x >= rest
+      const? -> {x, :lo, ceil_div(rest.k, -c)}
+      true -> {x, :lb, norm(-c, rest, :lb)}
+    end
+  end
+
+  # the carrier (a binding of atom x) with the fact `kind`, `b` added; a
+  # narrowed bound comes first, as it is the one the branch is about
+  def narrow(carrier, {:var, _}, kind, b) do
+    f = facts(carrier)
+
+    put(
+      carrier,
+      case kind do
+        :lo -> %{f | lo: either(f.lo, b, &max/2)}
+        :hi -> %{f | hi: either(f.hi, b, &min/2)}
+        :lb -> %{f | lbs: cap([b | f.lbs])}
+        :ub -> %{f | ubs: cap([b | f.ubs])}
+      end
+    )
+  end
+
+  def narrow(carrier, {:len, _}, kind, b) do
+    f = facts(carrier)
+
+    put(
+      carrier,
+      case kind do
+        :lo -> %{f | len_lo: either(f.len_lo, b, &max/2)}
+        :hi -> %{f | len_ubs: cap([{1, form_const(b)} | f.len_ubs])}
+        :lb -> %{f | len_lbs: cap([b | f.len_lbs])}
+        :ub -> %{f | len_ubs: cap([b | f.len_ubs])}
+      end
+    )
+  end
+
   # ------------------------------------------------------------- proving --
   # The only functions whose answers may drop a check. A proof carries its
   # support: the C variables of the atoms it reasoned about, which the
@@ -276,6 +376,88 @@ defmodule Defk.Facts do
     end
   end
 
+  # The fact the failing half `half` (:low or :high) of a's check would
+  # follow from, for the report: of the forms the search reached by
+  # replacing at least one bound, the one with the fewest monomials, when it
+  # has at most two and a small constant; else nil. A residual in the
+  # accessed array's length alone (`length(a) >= 12` for `a[11]`) restates
+  # the check at an extreme of the index, so it is no hint; an index with
+  # no relative bound and no exact form over atoms can only give that one,
+  # and is not searched. A hint, not a promise: another fact could also do.
+  # Gives a form D, the hint being D <= 0.
+  def residual(a, i, w, half, scope) do
+    {c, rest} =
+      case half do
+        :low -> {-1, form_const(0)}
+        :high -> {1, form_sub(form_const(w), form_len(a.c))}
+      end
+
+    f = facts(i)
+
+    {bounds, b, replace} =
+      if c > 0, do: {f.ubs, f.hi, &replace_upper/3}, else: {f.lbs, f.lo, &replace_lower/3}
+
+    if bounds != [] or rel_eq(i) != nil do
+      # the exact form restates the goal (:goal): only what follows from it
+      # is a hint
+      candidates =
+        Enum.map(bounds, &{replace.(c, &1, rest), :ok}) ++
+          [{constant(c, b, rest), :ok}] ++
+          for e <- [rel_eq(i)], e, do: {replace.(c, {1, e}, rest), :goal}
+
+      walk = {lookup(scope, a), [{:len, a.c}]}
+
+      {_, best} =
+        Enum.reduce(candidates, {@hint_budget, nil}, fn
+          {nil, _}, acc -> acc
+          {form, state}, {left, best} -> walk(form, walk, left, state, best)
+        end)
+
+      if best != nil and map_size(best.t) <= 2 and abs(best.k) <= @hint_max, do: best
+    end
+  end
+
+  # le?/4's search to its end (it fails), keeping the best residual. A form
+  # reached through a limit no fact states (an i64 or length limit, a length
+  # at least 0) names nothing a kernel could state, and nor does what
+  # follows from it (:tainted). `own`: the monomials of a restated goal.
+  defp walk(%{t: t}, _walk, budget, _state, best) when map_size(t) == 0, do: {budget, best}
+  defp walk(_form, _walk, 0, _state, best), do: {0, best}
+
+  defp walk(form, {lookup, own} = walk, budget, state, best) do
+    best =
+      if state == :ok and Map.keys(form.t) != own and
+           (best == nil or map_size(form.t) < map_size(best.t)),
+         do: form,
+         else: best
+
+    {x, c} = Enum.max_by(form.t, fn {m, _} -> rank(m) end)
+    rest = %{form | t: Map.delete(form.t, x)}
+    fx = lookup.(x)
+    {lo, hi} = monomial_range(x, fx)
+    {lbs, ubs} = monomial_bounds(x, fx)
+    stated = if state == :tainted, do: :tainted, else: :ok
+    by_limit = if stated_range?(x, fx, c), do: stated, else: :tainted
+
+    candidates =
+      if c > 0,
+        do:
+          Enum.map(ubs, &{replace_upper(c, &1, rest), stated}) ++
+            [{constant(c, hi, rest), by_limit}],
+        else:
+          Enum.map(lbs, &{replace_lower(c, &1, rest), stated}) ++
+            [{constant(c, lo, rest), by_limit}]
+
+    Enum.reduce(candidates, {budget - 1, best}, fn
+      {nil, _}, acc -> acc
+      {cand, st}, {left, best} -> walk(cand, walk, left, st, best)
+    end)
+  end
+
+  # the constant bound of x in c's direction is a fact, not a limit
+  defp stated_range?({:var, _}, f, c), do: if(c > 0, do: f.hi, else: f.lo) != nil
+  defp stated_range?({:len, _}, f, c), do: c < 0 and is_integer(f.len_lo) and f.len_lo > 0
+
   # An atom's facts: array a's own (the one a proof is about), else its
   # binding's in scope, else none. A binding's exact form is never its own
   # atom (bound/1 records the value's), so it is a bound over older atoms.
@@ -303,9 +485,10 @@ defmodule Defk.Facts do
   # {:ok, support} or :no.
   defp value_le(c, v, rest, lookup) do
     f = facts(v)
-    # a value that reads its own C variable has that binding's facts: its
-    # atom would only repeat them
-    exact = for e <- [f.eq && rel_eq(v)], e, do: {1, e}
+    # a value that reads its own C variable has that binding's facts, but
+    # its atom is also what newer atoms' facts name (a condition that
+    # narrowed length(a) by it), so it is tried last
+    exact = for e <- [rel_eq(v)], e, do: {1, e}
 
     candidates =
       if c > 0,

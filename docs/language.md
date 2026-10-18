@@ -1208,11 +1208,30 @@ lengths, through:
 - lengths: `out = alloc(e, n)` has length `n`, and a copy has its
   original's length, so `out[i]` for `i <- 0..(n - 1)//1` is in range
   whatever `n` is;
-- branches: `last = if c, do: n - 1, else: n - 2` is at most `n - 1`.
+- branches: `last = if c, do: n - 1, else: n - 2` is at most `n - 1`;
+- conditions: a comparison holds where it was tested true, in an `if` or
+  `cond` arm (a later `cond` arm also sees the earlier conditions false),
+  after a `for` filter and on the right side of `and`. `and` gives both
+  sides, `not` the opposite, and `not (a or b)` both opposites. Inside
+  `if i >= w`, `x[i - w]` has `0 <= i - w`;
+- loops that run: the body of `i <- 0..(n - 1)//1` runs only when
+  `n >= 1`;
+- [raising guards](#preconditions-raising-guards): after
+  `if w < 1, do: raise(...)`, the rest of the block has `w >= 1`.
 
-It does not use conditions (`if i >= w`) or products of two variables
-(`j * m`) yet: such an index keeps its check, and the fast-path report
-says which half (`0 <= i` or `i < length(a)`) nothing proves.
+It does not use products of two variables (`j * m`), a `!=` or an `or`
+that holds, or `case` guards yet: such an index keeps its check, and the
+fast-path report says which half (`0 <= i` or `i < length(a)`) nothing
+proves, and, when one small fact would prove it, that fact:
+`nothing proves i - w < length(x) (it would follow from w >= 0)`. That
+is a hint, not a promise: another fact could also do.
+
+A condition narrows only from operands that are variables, literals,
+lengths, or arithmetic the compiler proved cannot overflow, so
+`if i + 1 < w` with a checked `i + 1` proves nothing about `i`. An `if`
+value whose arm relies on its condition to drop a check is a branch,
+never a select (the fast-path report says so): a select computes every
+arm, also the one not taken.
 
 ### Word loads
 
@@ -2099,6 +2118,47 @@ iex> M.first_zero(<<1, 0, 2>>, 7)
   kernel's own errors, after its buffers are freed, also from inside a
   yielding loop or an inlined call. In Elixir mode it is the `raise` itself,
   so both give the same exception with the same message.
+
+#### Preconditions: raising guards
+
+State what a kernel needs of its arguments with a **raising guard**: an
+`if` statement whose only arm raises, at the top of the kernel. It checks
+the arguments at run time, the same way in Elixir mode, and the compiler
+may rely on its negation in everything after it, such as an index being
+in range:
+
+```elixir
+defk rises(x :: [i64], w :: i64) :: i64 do
+  if w < 1, do: raise(ArgumentError, "w must be at least 1")
+
+  for i <- w..(length(x) - 1)//1, reduce: 0 do
+    n -> if x[i] > x[i - w], do: n + 1, else: n
+  end
+end
+```
+
+```elixir
+iex> M.rises(<<1::64-native, 3::64-native, 2::64-native, 5::64-native>>, 1)
+2
+iex> M.rises(<<1::64-native>>, 0)
+** (ArgumentError) w must be at least 1
+```
+
+`x[i]` and `x[i - w]` have no bounds check: `i >= w` from the range and
+`w >= 1` from the guard give `0 <= i - w` and `0 <= i`, and
+`i <= length(x) - 1` gives the rest. Without the guard both keep their
+checks, and the fast-path report names the fact they lack:
+`x[i - w]: bounds check kept; nothing proves i - w < length(x) (it would
+follow from w >= 0)`. The guard costs one compare per call; a check in the
+loop costs one per element and may keep clang from vectorising it.
+
+An `if` whose `else` arm raises works the same way the other round
+(`if ok, do: ..., else: raise(...)`): the statements after it see the
+condition true. What the rest of the block learns is what the condition
+that does not raise says, by the rules for [conditions](#reading):
+`if a or b, do: raise(...)` gives `not a` and `not b`, and
+`if n != len, do: raise(...)` gives `n == len`; `if a and b, do: raise(...)`
+gives nothing, as `not a or not b` names no single fact.
 
 ### Blocks
 
