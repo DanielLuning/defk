@@ -2,13 +2,14 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-18T16:13:56Z",
   "created": "2026-10-17T20:12:14Z",
   "description": "Owner 2026-10-17, after the defk-zet trial (PR #31): contract tests for every surface of docs/guides/stability.md (kernel subset, runtime contract, public API, error codes), contracts frozen per release and run against later code, the duplicated tests removed, and the loss checked by a line coverage diff (baseline 83c2e712, before the trial) and mutation (small modules; the compiler on mains power only). Owner choices: remove duplicates only; frozen at release (not from git tags); all three coverage checks.",
   "id": "defk-ksc",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "Covenant contracts for the full stability surface",
   "type": "epic",
-  "updated_at": "2026-10-17T20:12:14Z"
+  "updated_at": "2026-10-18T16:13:56Z"
 }
