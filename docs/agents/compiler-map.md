@@ -104,7 +104,11 @@ literal message (`Defk.Messages`).
 
 One file per feature area, named after it (`test/<area>_test.exs`); shared
 kernels and helpers in `test/support/` (`examples.ex` is the catalog's
-kernels, `language_doc.ex` checks doc examples). Conventions that matter:
+kernels, `language_doc.ex` checks doc examples). The promises of
+`docs/guides/stability.md` are checked elsewhere, by the contract tests
+under `test/contracts/` (frozen per release); a unit test checks how a
+section of the compiler does its job, and that is where a change to a
+section gets its test. Conventions that matter:
 
 - Agreement with Elixir mode (`Defk.Test.assert_agrees`) and forced yields
   (`__defk_force_yields__/1`) are the backbone: cover every resume path.
