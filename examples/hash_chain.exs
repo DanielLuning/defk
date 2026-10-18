@@ -94,7 +94,20 @@
 # Elixir mode; the 1M- and 10M-step digests in check:; HMAC rounds for keys
 # of 0, 32, 64, 65 and 100 bytes, clients from 0 to 70 bytes (one and two
 # inner blocks), nonces across digit-count boundaries and near the i64 limit,
-# against :crypto.mac, both Elixir HMACs and Elixir mode.
+# against :crypto.mac, both Elixir HMACs and Elixir mode; negative nonces
+# raise the same ArgumentError in the kernel and Elixir mode.
+#
+# Bad input: a negative nonce raises ArgumentError "negative nonce" from a
+# raising guard (`if c, do: raise ...`), once per call before the rounds. It
+# was written before kernels had `raise` as alloc(u8, -1) ("alloc/2:
+# negative length -1"). The rewrite changed no check: the report shows the
+# same bounds checks dropped and kept before and after (93 and 20) and the
+# same loop and alloc notes, and the C the same checked arithmetic. Only the
+# dummy alloc went: it was the kernel's ninth alloc of a call (the inlined
+# sha256 makes four), so it took an owned-buffer slot one past the eight the
+# table holds before it grows. A call with few nonces is 60-110 ns faster
+# without it (3-5% at 1 nonce, 1-2% at 10, nothing measurable at 100;
+# interleaved under load, provisional).
 #
 # Realistic sizes: a 10M-step chain (about 1 s for Elixir, so the verdict is
 # measured there), 1M HMAC nonces (a long player history).
@@ -481,7 +494,9 @@ defmodule HashChain.Source do
       # = first..first + n - 1, the digests packed back to back (32 bytes
       # each). The key's two padded blocks are compressed once per call, so
       # each round costs the inner blocks (one while the message is under 56
-      # bytes) and one outer block. A negative nonce raises (alloc(u8, -1)).
+      # bytes) and one outer block. A negative nonce raises ArgumentError (a
+      # raising guard, once per call): the digit loop writes only
+      # non-negative numbers.
       defk hmac_sha256_rounds(key :: [u8], client :: [u8], first :: i64, n :: i64) :: [u8] do
         kh = sha256(key)
         ipad = alloc(u8, 64)
@@ -512,7 +527,7 @@ defmodule HashChain.Source do
 
         mbuf[cl] = 58
         out = alloc(u8, 32 * max(n, 0))
-        _ = alloc(u8, if(first < 0 and n > 0, do: -1, else: 0))
+        if first < 0 and n > 0, do: raise(ArgumentError, "negative nonce")
 
         for r <- 0..(n - 1)//1 do
           nonce = first + r
@@ -753,14 +768,38 @@ hmac_ok =
   end
   |> Enum.all?()
 
-agree = vectors_ok and random_ok and chain_ok and hmac_ok
+# A negative nonce raises ArgumentError "negative nonce" in the kernel and in
+# Elixir mode alike (the Elixir HMACs would hash a "-"; the kernel's digit
+# loop writes only non-negative numbers). With no rounds there is no nonce,
+# so a negative first with n <= 0 returns no digests.
+outcome = fn f ->
+  try do
+    {:ok, f.()}
+  rescue
+    e -> {:raise, e.__struct__, Exception.message(e)}
+  end
+end
+
+negative_ok =
+  for {first, n} <- [{-1, 1}, {-3, 5}, {-9_223_372_036_854_775_808, 2}, {-1, 0}, {-1, -4}] do
+    want = if n > 0, do: {:raise, ArgumentError, "negative nonce"}, else: {:ok, <<>>}
+    args = ["key", "client", first, n]
+
+    outcome.(fn -> apply(Kernels, :hmac_sha256_rounds, args) end) == want and
+      outcome.(fn -> KernelsEM.__defk_elixir__(:hmac_sha256_rounds, args) end) == want
+  end
+  |> Enum.all?()
+
+agree = vectors_ok and random_ok and chain_ok and hmac_ok and negative_ok
 
 unless agree,
   do:
-    raise("agreement failed: vectors #{inspect(vectors)}, random #{random_ok}, chain #{chain_ok}")
+    raise(
+      "agreement failed: vectors #{inspect(vectors)}, random #{random_ok}, chain #{chain_ok}, hmac #{hmac_ok}, negative nonce #{negative_ok}"
+    )
 
 IO.puts(
-  "agreement: 4 FIPS 180-4 vectors (0, 3, 56, 112 bytes), 431 random messages of 0..300 bytes vs :crypto, chains n = -1..3 and 1000 from 4 seeds vs :crypto and Elixir mode, HMAC rounds over 5 keys x 4 clients x 4 nonce ranges vs :crypto.mac and Elixir mode: ok"
+  "agreement: 4 FIPS 180-4 vectors (0, 3, 56, 112 bytes), 431 random messages of 0..300 bytes vs :crypto, chains n = -1..3 and 1000 from 4 seeds vs :crypto and Elixir mode, HMAC rounds over 5 keys x 4 clients x 4 nonce ranges vs :crypto.mac and Elixir mode, negative nonces raise ArgumentError in the kernel and Elixir mode: ok"
 )
 
 # ---------------------------------------------------------------- timing

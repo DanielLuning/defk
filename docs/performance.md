@@ -2423,6 +2423,39 @@ says the same thing without the dummy alloc.
   and its Elixir-mode check.
 - **Status:** measured, provisional.
 
+### 6.36 An `alloc(u8, -1)` guard outside any loop still costs ~80 ns per call; a raising guard costs nothing
+
+6.35 found the dummy alloc's cost inside a loop. In `examples/hash_chain.exs`
+the HMAC kernel `hmac_sha256_rounds` checked for a negative nonce once per
+call, before its rounds, with `_ = alloc(u8, if(first < 0 and n > 0, do: -1,
+else: 0))`; it now says `if first < 0 and n > 0, do: raise(ArgumentError,
+"negative nonce")`.
+
+- **Numbers:** the report shows the same bounds checks dropped and kept
+  before and after (93 and 20) and the same loop and alloc notes; the only
+  changed note is the guard's own `if` (a statement branch now, an
+  if-convertible value before). The C differs only in the guard: no `v_if`
+  frame slot and no `defk_alloc_u8(ctx, v_if)` call; the checked arithmetic
+  and the bounds checks are the same. Per call, best of 15 over 20k calls,
+  interleaved, five rounds, run twice with the order swapped: 0 nonces
+  1.37-1.48 us before, 1.31-1.38 us after (0.92-0.98x); 1 nonce 1.82-1.89 us
+  before, 1.78-1.82 us after (0.95-0.99x); 10 nonces 0.98-0.99x; 100
+  nonces 1.00-1.05x (noise). About 60-110 ns per call.
+- **What it means:** outside a loop the dummy alloc is still a zero-length
+  owned binary per call. Here it was the call's ninth alloc (the inlined
+  `sha256` makes four), one past the eight owned slots the table holds
+  before it grows, so it also cost a table regrow per call; that is likely
+  why it costs more than the ~35 ns of 6.35. It shows only when a call does
+  little work; at the realistic size (1M nonces) it is nothing. A raising
+  guard compiles to a branch and a call that is never taken.
+- **Conditions:** M-series Mac, load 3.6-4.6 on 12 cores (another job's
+  timing runs); provisional.
+- **Source:** `defk-9p6.35`; agreement: the example's negative-nonce check
+  (`ArgumentError` "negative nonce" from the kernel and from Elixir mode,
+  where both said "alloc/2: negative length -1" before; no digests for
+  n <= 0) and its HMAC rounds against `:crypto.mac` and Elixir mode.
+- **Status:** measured, provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
