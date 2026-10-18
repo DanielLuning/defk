@@ -513,10 +513,13 @@ defmodule Defk.LinearFactsTest do
           fits?(ops) do
         size_v = env[{:len, :out}]
 
-        assert iv in 0..(size_v - 1)//1,
-               "out[#{Macro.to_string(idx)}] is unchecked, but for length(a) = " <>
-                 "#{env[{:len, :a}]}, length(b) = #{env[{:len, :b}]}, x = #{env.x}, i = #{i} " <>
-                 "it is #{iv}, outside 0..#{size_v - 1} (#{shown(shape)})"
+        if iv not in 0..(size_v - 1)//1 do
+          flunk(
+            "out[#{Macro.to_string(idx)}] is unchecked, but for length(a) = " <>
+              "#{env[{:len, :a}]}, length(b) = #{env[{:len, :b}]}, x = #{env.x}, i = #{i} " <>
+              "it is #{iv}, outside 0..#{size_v - 1} (#{shown(shape)})"
+          )
+        end
       end
     end
   end
@@ -535,18 +538,22 @@ defmodule Defk.LinearFactsTest do
 
     # nothing checked: no arithmetic the kernel reaches overflows
     if not (c =~ @checked) do
-      for {pre, _loop} <- runs(shape) do
-        assert fits?(pre), "#{shown(shape)} has no overflow check, but overflows before its loop"
+      for {pre, _loop} <- runs(shape), not fits?(pre) do
+        flunk("#{shown(shape)} has no overflow check, but overflows before its loop")
       end
     end
 
     # the index's arithmetic unchecked: it never overflows where it runs
     if not (store =~ @checked) do
-      for {_pre, loop} <- runs(shape), loop != nil, {env, i, _iv, ops} <- ends(loop, idx) do
-        assert fits?(ops),
-               "#{Macro.to_string(idx)} has no overflow check, but overflows for length(a) = " <>
-                 "#{env[{:len, :a}]}, length(b) = #{env[{:len, :b}]}, x = #{env.x}, i = #{i} " <>
-                 "(#{shown(shape)})"
+      for {_pre, loop} <- runs(shape),
+          loop != nil,
+          {env, i, _iv, ops} <- ends(loop, idx),
+          not fits?(ops) do
+        flunk(
+          "#{Macro.to_string(idx)} has no overflow check, but overflows for length(a) = " <>
+            "#{env[{:len, :a}]}, length(b) = #{env[{:len, :b}]}, x = #{env.x}, i = #{i} " <>
+            "(#{shown(shape)})"
+        )
       end
     end
   end
