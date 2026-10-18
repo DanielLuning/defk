@@ -695,6 +695,25 @@ what it adds.
    product's overflow check. Done when both n7k variants and the
    `pcm_mix` sum loop are check-free; measure `cosine_topk.exs` with a
    runtime `dim` and `pcm_mix.exs` (record in `docs/performance.md`).
+   *Landed as `defk-pvt` (2026-10-18). A product is the monomial
+   `{:mul, x, y}`, `x` the newer factor; it ranks with `x`, before `x`
+   alone, so each replacement still leads to older monomials. A value's
+   exact form is the operands' multiplied while of degree 2
+   (`Facts.form_mul/2`). Product facts live on the newer factor's binding
+   (`mubs`, `mlbs`: bounds on the binding times an older atom): the `div`
+   rule puts `q * d <= x` there (`Facts.div_by_facts/2`, `x >= 0`; with
+   `d >= 0` also `0 <= q <= x`, as a zero divisor raises), and a condition
+   whose newest monomial is a product narrows it there. The prover's
+   candidates for a product are its own bounds, then the newer factor's
+   bounds (its exact form and stated constants included) times the older
+   factor when that one's constant sign is known, a degree-2 bound of the
+   newer factor left out. One rule changed: outside every loop a condition
+   also narrows from checked operands, since no flagged strip runs there
+   and a failed check raises, so the guard `length(m) == n * dim` (a
+   checked product) states the shape. `pcm_mix`'s `j * m` keeps its
+   overflow check (the outer body does not know `m >= 0`); the bounds
+   checks go. Soundness: `test/product_facts_test.exs`; cost and
+   measurements: `docs/performance.md` 6.36.*
 5. **Later, only if wanted:** `rem` bounds, scalar accumulator invariants
    (assume, check each new value, retry), `case` guards. Not needed by the
    four tickets.

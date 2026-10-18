@@ -1375,8 +1375,11 @@ names each kept bounds check and the fact that would drop it. See
 - **Status:** provisional. Since facts from conditions (`defk-b38`, 6.34),
   `defk-9za`'s rolling difference and `defk-siy`'s second loop
   (`acc[i - m]` after `if m < 0, do: raise(...)`) are check-free
-  (`test/condition_facts_test.exs`). Still open: `defk-n7k` and
-  `pcm_mix`'s `bufs[j * m + i]` (products of two variables).
+  (`test/condition_facts_test.exs`). Since products of two variables
+  (`defk-pvt`, 6.36), `defk-n7k`'s `m[r * dim + j]` and `pcm_mix`'s
+  `bufs[j * m + i]` are check-free too: the cosine top-k with a runtime
+  `dim` went from 27-28 to 25-26 ms (the literal stays faster, 20-21 ms),
+  and `pcm_mix`'s kernel lost 15-30%.
 
 <!-- defk-example skip: kernel-subset code (alloc, indexing, the kernel builtins), not plain Elixir; the kernels are checked where they are examples -->
 ```elixir
@@ -1385,6 +1388,8 @@ n = min(length(a), length(b))
 for i <- 0..(n - 1)//1, reduce: 0.0, do: (acc -> acc + a[i] * b[i])
 table[band(h, 255)]                 # into a 256-element alloc or attribute
 @dim 384                            # literal stride: m[r * @dim + j]
+n = div(length(m), dim)             # a runtime stride: m[r * dim + j] for
+for r <- 0..(n - 1)//1, j <- 0..(dim - 1)//1  # rows of dim, and r * dim unchecked
 out = alloc(i16, n)                 # len(out) == n: out[i] for i <- 0..(n - 1)//1
 base = max(j * m, 0)                # a block offset: bufs[base + i], and base + i
 for i <- 0..(min(length(sums), length(bufs) - base) - 1)//1  # with no overflow check
@@ -1393,8 +1398,8 @@ x = max(x, 0)                       # an offset argument: a[x + i]
 for i <- 0..(length(a) - x - 1)//1
 # kept
 a[i + 1]                            # nothing proves i + 1 < length(a)
-bufs[j * m + i]                     # j * m: a product of two variables
-acc[i - m]                          # i <- m..: nothing proves m >= 0 (a guard, later)
+m[(y * w + x) * ch + c]             # a product of three variables
+acc[i - m]                          # i <- m..: nothing proves m >= 0 (add a raising guard)
 ```
 
 ### 6.3 Flat loops run in strips with one safepoint each
@@ -2390,6 +2395,59 @@ says the same thing without the dummy alloc.
 - **Source:** `defk-9p6.34`; agreement: the codecs example's bad-input
   check (all `ArgumentError`, as `Base.decode64!` and the Elixir base58)
   and its Elixir-mode check.
+- **Status:** measured, provisional.
+
+### 6.36 Products of two variables drop 4% of the bounds checks for ~2% more compiler time
+
+- **Numbers:** over the 106 files of `mix dump_c` (the new test file left
+  out), the bounds-checked accesses in the generated C went from 3,392 to
+  3,256 call sites, the overflow checks from 6,011 to 5,957, the
+  range-limit tests from 725 to 722; no file gained a check. By module:
+  `AllocUnzeroedTest` 176 -> 98, `ImageOps.Kernels` 32 -> 24 (and 26
+  overflow checks), `Blur.Kernels` 28 -> 24, `PCM.Kernels` 8 -> 4 (the
+  sum loop; the 4 left are in the rescale loop, a scalar accumulator's
+  range), `Matmul.Kernels` 4 -> 0, `GeoCrc` 4 -> 0; `Codecs.Kernels` and
+  `CaseInTest` lose one overflow check each (a `div` by a divisor known
+  positive in an `if` arm; a case guard's raising replay narrowing by a
+  checked operand). The acceptance kernels (`defk-n7k`'s score loop with
+  `n = div(length(m), dim)` and with a raising guard
+  `length(m) == n * dim`, and `pcm_mix`'s sum loop) have no bounds check,
+  and `r * dim` no overflow check.
+- **Run time:** cosine top-k, 100k x 384, eight partial sums, one call,
+  best and median of 15, three rounds each: with `dim = length(q)` 27.1-27.4
+  / 28.0 ms before, 25.1-26.2 / 25.7-27.0 ms after; the literal `@dim 384`
+  20.0-20.8 / 20.7-21.4 ms on both. The checks are gone but the literal is
+  still ~25% faster; the fast-path reports of the two kernels match
+  (same strips, same vectorisation verdicts), so the rest is presumably the
+  constant trip count (not profiled). `pcm_mix.exs`, two runs each,
+  interleaved: 10 ms chunks defk 0.350 / 0.362 -> 0.307 / 0.292 ms (Elixir
+  2.75 ms: 7.6-7.9x -> 9.2-9.5x); 1 s chunks 0.259 / 0.307 -> 0.213 /
+  0.212 ms (8.5-10.3x -> 12.2-12.4x); N = 16 at 10 ms 0.99 / 1.13 -> 0.77 /
+  0.88 ms. The sum loop still runs scalar: its i64 adds keep their overflow
+  checks (clang: "call instruction cannot be vectorized"). The verdicts
+  (good) do not change.
+- **Compiler time** (`Defk.Compiler.compile`, clang not included, three
+  rounds interleaved with main at `d06f3051`): 2,600 / 2,588 / 2,593 ms
+  against 2,634 / 2,722 / 2,558 ms, +1.7% on the means; without
+  `SatEx.Kernels` +0.9%. The first version cost +2.7% (+1.8% without
+  `SatEx.Kernels`): every prover step looked up an atom's facts twice in
+  the report's hint search and ranked one-term forms. With steps 1-3
+  (+2.4%, +4.6%, +5.0%) the chain is at about +14% of the compiler before
+  step 1, under the +15% ceiling of ADR-0007, with about 1% left.
+- **What it took:** a product is a monomial of two atoms; the `div` rule
+  with a variable divisor (`div(x, d) * d <= x` for `x >= 0`, and
+  `0 <= q <= x` when `d >= 0`); a product bounded by a bound of its newer
+  factor times the older one when that one's sign is known; conditions on
+  products. Outside every loop a condition now narrows from checked
+  operands too (no flagged strip runs there), which is what lets the guard
+  `length(m) == n * dim` state the shape.
+- **Conditions:** M-series Mac, load 2.7-4.6 on 12 cores (compiler time),
+  2.8-4.9 (run times); provisional.
+- **Source:** `defk-pvt`, `defk-n7k`; soundness:
+  `test/product_facts_test.exs` (generated row-stride, negative-stride and
+  quotient kernels; every dropped bounds and overflow check checked at the
+  first iteration where an operation or the index could change side), and
+  the whole suite under AddressSanitizer.
 - **Status:** measured, provisional.
 
 ---

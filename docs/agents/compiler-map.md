@@ -70,8 +70,9 @@ lowering declares as it emits; defk-ch4), not from the C text.
 - `lib/defk/facts.ex`: the range-facts lattice (one opaque value under
   `v.facts`; assert/derive in, `check`/`prove_i64`/`fits_i64?` with
   support out). ADR-0007's representation lives here; its soundness nets
-  are `test/facts_test.exs`, `test/scaled_facts_test.exs` and
-  `test/linear_facts_test.exs`.
+  are `test/facts_test.exs`, `test/scaled_facts_test.exs`,
+  `test/linear_facts_test.exs`, `test/condition_facts_test.exs` and
+  `test/product_facts_test.exs`.
 - `lib/defk/copies.ex`: the copy analysis — what counts as a read after a
   write, and the pure tracking state (writes log, buffer carrying, alias
   classes) the compiler keeps at `ctx.lowering.copies`.

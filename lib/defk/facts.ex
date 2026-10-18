@@ -7,18 +7,23 @@ defmodule Defk.Facts do
   # Representation:
   #   monomial - an atom of the symbolic bounds: {:len, c}, the length of the
   #              array in C variable c, or {:var, c}, the i64 in C variable
-  #              c. (A later step adds products of two atoms.) Each has a
-  #              rank, its binding's order: parameters first, then
-  #              fresh/2's counter.
-  #   form     - a polynomial over monomials with integer coefficients plus a
-  #              constant: %{k: integer, t: %{monomial => coefficient}}
+  #              c; or the product of two atoms, {:mul, x, y} with x ranked
+  #              at or above y. Each atom has a rank, its binding's order:
+  #              parameters first, then fresh/2's counter. A product ranks
+  #              with its newer factor x, above the plain atom x.
+  #   form     - a polynomial of degree at most 2 over monomials with
+  #              integer coefficients plus a constant:
+  #              %{k: integer, t: %{monomial => coefficient}}
   #   bound    - {q, form}: q * v <= form (an upper bound, in ubs) or
   #              q * v >= form (a lower bound, in lbs), q >= 1, the
   #              coefficients and q with no common divisor
   # An i64 value's facts: lo, hi (constants, nil = unknown), eq (the form it
   # is exactly, nil = none) and ubs, lbs. An array's facts: len_lo, a
   # constant lower bound on its length, and len_lbs, len_ubs, lower and upper
-  # bounds on its length. Every length is in 0..2^61 - 1
+  # bounds on its length. Either may also bound its products with older
+  # atoms: mubs, mlbs, lists of {y, bound}, a bound on the value (or the
+  # length) times atom y (`div(x, d) * d <= x`, `n * dim == length(m)`
+  # from a guard). Every length is in 0..2^61 - 1
   # (DEFK_ALLOC_MAX_BYTES, and the largest binary) and every i64 in
   # -2^63..2^63 - 1, so a bound over atoms also bounds a value by a constant
   # (lo_of/1, hi_of/1).
@@ -35,12 +40,23 @@ defmodule Defk.Facts do
   #
   # The prover (le?/4) decides `form <= 0` by replacing the newest monomial
   # by one of its bounds until a constant is left, within a step budget; an
-  # unproven query keeps the check. The facts of before map onto it one to
+  # unproven query keeps the check. A product's bounds are its own, then
+  # its newer factor's times the older one when that one's sign is known
+  # (product/4). The facts of before map onto it one to
   # one (`i <= length(a) + k` is {1, len(a) + k}; a scaled fact
   # `q * i <= p * length(a) + k` is {q, p * len(a) + k}).
   @moduledoc false
 
-  defstruct lo: nil, hi: nil, eq: nil, ubs: [], lbs: [], len_lo: nil, len_lbs: [], len_ubs: []
+  defstruct lo: nil,
+            hi: nil,
+            eq: nil,
+            ubs: [],
+            lbs: [],
+            len_lo: nil,
+            len_lbs: [],
+            len_ubs: [],
+            mubs: [],
+            mlbs: []
 
   @i64_min -0x8000000000000000
   @i64_max 0x7FFFFFFFFFFFFFFF
@@ -265,7 +281,7 @@ defmodule Defk.Facts do
   # {x, :lo | :hi, constant} when the rest of D is a constant, else
   # {x, :lb | :ub, {q, form}}
   def narrowing(%{t: t} = d) when map_size(t) > 0 do
-    {x, c} = Enum.max_by(t, fn {m, _} -> rank(m) end)
+    {x, c} = newest(t)
     rest = %{d | t: Map.delete(t, x)}
     const? = map_size(rest.t) == 0
 
@@ -279,8 +295,23 @@ defmodule Defk.Facts do
     end
   end
 
-  # the carrier (a binding of atom x) with the fact `kind`, `b` added; a
-  # narrowed bound comes first, as it is the one the branch is about
+  # the carrier (a binding of atom x, or of a product's newer factor) with
+  # the fact `kind`, `b` added; a narrowed bound comes first, as it is the
+  # one the branch is about
+  def narrow(carrier, {:mul, _, y}, kind, b) do
+    f = facts(carrier)
+
+    put(
+      carrier,
+      case kind do
+        :lo -> %{f | mlbs: cap([{y, {1, form_const(b)}} | f.mlbs])}
+        :hi -> %{f | mubs: cap([{y, {1, form_const(b)}} | f.mubs])}
+        :lb -> %{f | mlbs: cap([{y, b} | f.mlbs])}
+        :ub -> %{f | mubs: cap([{y, b} | f.mubs])}
+      end
+    )
+  end
+
   def narrow(carrier, {:var, _}, kind, b) do
     f = facts(carrier)
 
@@ -431,11 +462,9 @@ defmodule Defk.Facts do
          do: form,
          else: best
 
-    {x, c} = Enum.max_by(form.t, fn {m, _} -> rank(m) end)
+    {x, c} = newest(form.t)
     rest = %{form | t: Map.delete(form.t, x)}
-    fx = lookup.(x)
-    {lo, hi} = monomial_range(x, fx)
-    {lbs, ubs} = monomial_bounds(x, fx)
+    {lo, hi, lbs, ubs, fx} = mono(x, lookup)
     stated = if state == :tainted, do: :tainted, else: :ok
     by_limit = if stated_range?(x, fx, c), do: stated, else: :tainted
 
@@ -455,6 +484,7 @@ defmodule Defk.Facts do
   end
 
   # the constant bound of x in c's direction is a fact, not a limit
+  defp stated_range?({:mul, _, _}, _f, _c), do: false
   defp stated_range?({:var, _}, f, c), do: if(c > 0, do: f.hi, else: f.lo) != nil
   defp stated_range?({:len, _}, f, c), do: c < 0 and is_integer(f.len_lo) and f.len_lo > 0
 
@@ -523,18 +553,16 @@ defmodule Defk.Facts do
   defp le?(_form, _lookup, 0, _support), do: {false, 0}
 
   defp le?(form, lookup, budget, support) do
-    {x, c} = Enum.max_by(form.t, fn {m, _} -> rank(m) end)
+    {x, c} = newest(form.t)
     rest = %{form | t: Map.delete(form.t, x)}
-    fx = lookup.(x)
-    {lo, hi} = monomial_range(x, fx)
-    {lbs, ubs} = monomial_bounds(x, fx)
+    {lo, hi, lbs, ubs, _} = mono(x, lookup)
 
     candidates =
       if c > 0,
         do: Enum.map(ubs, &replace_upper(c, &1, rest)) ++ [constant(c, hi, rest)],
         else: Enum.map(lbs, &replace_lower(c, &1, rest)) ++ [constant(c, lo, rest)]
 
-    support = [support_of(x) | support]
+    support = support_of(x, support)
 
     Enum.reduce_while(candidates, {false, budget - 1}, fn
       nil, acc ->
@@ -568,6 +596,59 @@ defmodule Defk.Facts do
   defp constant(_c, nil, _rest), do: nil
   defp constant(c, b, rest), do: form_add(rest, form_const(c * b))
 
+  # a monomial's constant range and relative bounds, and an atom's facts:
+  # {lo, hi, lbs, ubs, facts or nil}
+  defp mono({:mul, y, z}, lookup), do: product(y, z, lookup.(y), lookup.(z))
+
+  defp mono({:len, _} = x, lookup) do
+    f = lookup.(x)
+    {max(f.len_lo || 0, 0), @len_max, f.len_lbs, f.len_ubs, f}
+  end
+
+  defp mono({:var, c} = x, lookup) do
+    f = lookup.(x)
+    exact = if f.eq != nil and f.eq != form_var(c), do: [{1, f.eq}], else: []
+    {f.lo || @i64_min, f.hi || @i64_max, exact ++ f.lbs, exact ++ f.ubs, f}
+  end
+
+  # A product y * z, y the newer factor: its own bounds (mubs and mlbs on
+  # y's binding) first; then, when z's sign is known from its constant
+  # bounds, y's bounds times z (q * y <= p and z >= 0 give q * y * z <=
+  # p * z; z <= 0 turns a lower bound of y into an upper one of the
+  # product), y's stated constant bounds among them. A bound of y of degree
+  # 2 would give degree 3 and is left out. The product's constant range is
+  # the factors' multiplied.
+  defp product(y, z, fy, fz) do
+    {zlo, zhi} = zr = monomial_range(z, fz)
+    yr = monomial_range(y, fy)
+    {ylbs, yubs} = monomial_bounds(y, fy)
+    {slo, shi} = stated(y, fy)
+    lows = ylbs ++ const_bound(slo)
+    highs = yubs ++ const_bound(shi)
+
+    {lbs, ubs} =
+      cond do
+        zlo >= 0 -> {times(lows, z), times(highs, z)}
+        zhi <= 0 -> {times(highs, z), times(lows, z)}
+        true -> {[], []}
+      end
+
+    {lo, hi} = mul_bounds(yr, zr)
+    {lo, hi, for({^z, b} <- fy.mlbs, do: b) ++ lbs, for({^z, b} <- fy.mubs, do: b) ++ ubs, nil}
+  end
+
+  # an atom's constant bounds that a fact states (not the type's limits),
+  # nil when none; a length is at least 0
+  defp stated({:len, _}, f), do: {max(f.len_lo || 0, 0), nil}
+  defp stated({:var, _}, f), do: {f.lo, f.hi}
+
+  defp const_bound(nil), do: []
+  defp const_bound(k), do: [{1, form_const(k)}]
+
+  # bounds {q, p} on y as bounds on y * z (the caller picks the direction)
+  defp times(bounds, z),
+    do: for({q, p} <- bounds, degree(p) <= 1, do: {q, form_mul(p, form_mono(z))})
+
   # a monomial's constant bounds: a length is always in 0..2^61 - 1, an i64
   # in -2^63..2^63 - 1
   defp monomial_range({:len, _}, f), do: {max(f.len_lo || 0, 0), @len_max}
@@ -582,12 +663,25 @@ defmodule Defk.Facts do
     {exact ++ f.lbs, exact ++ f.ubs}
   end
 
-  defp support_of({_, c}), do: c
+  # the C variables of a monomial, on the support so far
+  defp support_of({:mul, {_, a}, {_, b}}, support), do: [a, b | support]
+  defp support_of({_, c}, support), do: [c | support]
 
   # the newest monomial is replaced first: parameters are the oldest, then
-  # the bindings in fresh/2's order (their C names carry its counter)
-  defp rank({_, "p_" <> _ = c}), do: {0, c}
-  defp rank({_, c}), do: counter(c, byte_size(c), 0, 1)
+  # the bindings in fresh/2's order (their C names carry its counter); a
+  # product ranks with its newer factor, before that factor alone, then by
+  # its older factor
+  # the newest monomial of a form's terms and its coefficient (one term
+  # needs no ranking)
+  defp newest(t) when map_size(t) == 1, do: hd(Map.to_list(t))
+  defp newest(t), do: Enum.max_by(t, fn {m, _} -> rank(m) end)
+
+  defp rank({:mul, x, y}), do: {atom_rank(x), 1, atom_rank(y)}
+  defp rank({_, "p_" <> _ = c}), do: {{0, c}, 0, 0}
+  defp rank({_, c}), do: {counter(c, byte_size(c), 0, 1), 0, 0}
+
+  defp atom_rank({_, "p_" <> _ = c}), do: {0, c}
+  defp atom_rank({_, c}), do: counter(c, byte_size(c), 0, 1)
 
   # the number after the last "_" of c, read from the end: {1, n}, or
   # {0, c} for a name without one
@@ -767,9 +861,9 @@ defmodule Defk.Facts do
   end
 
   # a product: lo..hi from the operands' (nil when one is unbounded), and
-  # for a constant k >= 1 times v, v's facts scaled by k; times a constant,
-  # the exact form scaled (a product of two atoms has none: degree 2 is a
-  # later step)
+  # for a constant k >= 1 times v, v's facts scaled by k; the exact form is
+  # the operands' multiplied while it stays of degree 2 (`r * dim`,
+  # `(n - 1) * m`), none beyond
   def mul_facts(a, b) do
     {fa, fb} = {facts(a), facts(b)}
 
@@ -790,7 +884,7 @@ defmodule Defk.Facts do
       case {const(a), const(b)} do
         {k, _} when is_integer(k) -> (e = eq(b)) && form_scale(e, k)
         {_, k} when is_integer(k) -> (e = eq(a)) && form_scale(e, k)
-        _ -> nil
+        _ -> both(eq(a), eq(b), &form_mul/2)
       end
 
     %{f | eq: eq}
@@ -837,6 +931,34 @@ defmodule Defk.Facts do
         end),
       ubs: ubs
     }
+  end
+
+  # div(x, d) for a divisor that is one atom (a variable, a length), x >= 0
+  # proven: the quotient q has q * d <= x for every d other than 0 (for
+  # d < 0, q rounds towards zero and q * d = floor(x / |d|) * |d|), a bound
+  # on the product q * d, which ranks with q. When d >= 0 is proven, d >= 1
+  # where div returns (a zero divisor raises), so also 0 <= q <= x. The
+  # caller leaves out a case guard, whose zero divisor flags and computes on.
+  def div_by_facts(x, d) do
+    fx = facts(x)
+    lo = lo_of_f(fx)
+
+    with true <- is_integer(lo) and lo >= 0,
+         %{k: 0, t: t} when map_size(t) == 1 <- eq(d),
+         [{{kind, _} = z, 1}] when kind in [:var, :len] <- Map.to_list(t) do
+      tops = cap(exact_bound(x) ++ fx.ubs ++ const_bound(fx.hi))
+      d_lo = lo_of(d)
+      pos? = is_integer(d_lo) and d_lo >= 0
+
+      %__MODULE__{
+        mubs: Enum.map(tops, &{z, &1}),
+        lo: if(pos?, do: 0),
+        hi: if(pos?, do: hi_of_f(fx)),
+        ubs: if(pos?, do: tops, else: [])
+      }
+    else
+      _ -> %__MODULE__{}
+    end
   end
 
   # min(a, b) is at most each operand (their exact forms included) and at
@@ -955,6 +1077,36 @@ defmodule Defk.Facts do
 
   def form_sub(a, b), do: form_add(a, form_scale(b, -1))
 
+  defp form_mono(m), do: %{k: 0, t: %{m => 1}}
+
+  # a form's degree: 2 with a product, 1 with an atom, 0 for a constant
+  def degree(%{t: t}) do
+    Enum.reduce_while(t, 0, fn
+      {{:mul, _, _}, _}, _ -> {:halt, 2}
+      _, _ -> {:cont, 1}
+    end)
+  end
+
+  # the product of two forms, or nil when it would be of degree 3 or more
+  def form_mul(%{t: ta} = a, b) when map_size(ta) == 0, do: form_scale(b, a.k)
+  def form_mul(a, %{t: tb} = b) when map_size(tb) == 0, do: form_scale(a, b.k)
+
+  def form_mul(a, b) do
+    if degree(a) + degree(b) <= 2 do
+      cross =
+        for {x, cx} <- a.t, {y, cy} <- b.t, reduce: form_const(0) do
+          acc -> form_add(acc, %{k: 0, t: %{mul_mono(x, y) => cx * cy}})
+        end
+
+      form_add(form_scale(%{a | k: 0}, b.k), form_scale(%{b | k: 0}, a.k))
+      |> form_add(cross)
+      |> form_add(form_const(a.k * b.k))
+    end
+  end
+
+  # the product of two atoms, its newer factor first
+  defp mul_mono(x, y), do: if(atom_rank(x) >= atom_rank(y), do: {:mul, x, y}, else: {:mul, y, x})
+
   def form_scale(form, 1), do: form
   def form_scale(_form, 0), do: form_const(0)
   def form_scale(%{k: k, t: t}, c), do: %{k: k * c, t: Map.new(t, fn {m, x} -> {m, x * c} end)}
@@ -976,6 +1128,7 @@ defmodule Defk.Facts do
 
   defp default_range({:len, _}), do: {0, @len_max}
   defp default_range({:var, _}), do: {@i64_min, @i64_max}
+  defp default_range({:mul, x, y}), do: mul_bounds(default_range(x), default_range(y))
 
   # a bound in normal form: q and the coefficients with no common divisor
   # (the constant rounded down for an upper bound, up for a lower one)

@@ -62,8 +62,11 @@ Replace the fact model with one representation:
   own overflow check); facts are lexically scoped and mention only older
   atoms; an arm that used its own condition to drop a check is never a
   select; a condition narrows only from operands computed without a check
-  that a flagged strip could run on past. The proof's support is visible to
-  the flagged-strip classifier (`fixed_indices?/3`).
+  that a flagged strip could run on past (outside every loop no strip
+  runs and a failed check raises, so there a checked operand is exact:
+  step 4 lets a guard such as `length(m) != n * dim` narrow by its checked
+  product). The proof's support is visible to the flagged-strip classifier
+  (`fixed_indices?/3`); a product contributes both factors.
 - **Cost:** a bounded search per query; estimated 1-2% of the compiler's
   own time on the test suite, about 10% if every query exhausted its budget
   (provisional, from a prototype prover; clang not included). **Ceiling**
@@ -72,7 +75,12 @@ Replace the fact model with one representation:
   and examples, clang not included), measured against the compiler before
   step 1. Each step reports its cost and the running total in
   `docs/performance.md`; a step that would pass the ceiling cuts repeated
-  work first, then asks the maintainer.
+  work first, then asks the maintainer. Measured so far (provisional,
+  loaded machine): step 1 +2.4%, step 2 +4.6%, step 3 +5.0%, step 4
+  (products, `defk-pvt`) +1.7% (+0.9% without `SatEx.Kernels`) after
+  cutting a second fact lookup per step and the ranking of one-term forms;
+  the chain is at about +14%, under the ceiling, with about 1% left
+  (`docs/performance.md` 6.36).
 - **Raising guards become the way to state facts about arguments** in a
   kernel, which the language docs would describe.
 - **Out of scope:** degree 3 and nested products, facts across loop

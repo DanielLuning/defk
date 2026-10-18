@@ -77,6 +77,13 @@
   it: `nothing proves i - w < length(x) (it would follow from w >= 0)`. An
   `if` value whose arm relies on its condition to drop a check is a branch,
   not a select. Results are unchanged.
+- Faster: a row-major index with a runtime row length, `m[r * dim + j]`,
+  keeps no bounds check when the row count comes from
+  `n = div(length(m), dim)` or a raising guard states the shape
+  (`if length(m) != n * dim, do: raise(...)`), and the product `r * dim`
+  loses its overflow check where the same facts bound it. A kernel that
+  used a literal row length (`@dim 384`) only to drop these checks no
+  longer needs it. Results are unchanged.
 - Faster: a call that allocates (an `alloc/2` result, a bitstring
   accumulator, a copy) no longer allocates and frees a table for its owned
   buffers; the first four slots live in the call's frame. A one-buffer call
