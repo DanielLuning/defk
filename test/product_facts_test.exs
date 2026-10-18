@@ -107,22 +107,17 @@ defmodule Defk.ProductFactsTest do
   use ExUnit.Case, async: true
   use Defk.Properties
 
-  import Defk.TestKit, only: [kernel_c: 2, bounds_check_free?: 2]
+  import Defk.TestKit,
+    only: [bounds_check_free?: 2, eval_ops: 2, fits_i64?: 1, kernel_c: 2, kept_bounds: 2]
 
   alias Defk.ProductFactsTest.K
 
+  @i64_min -(2 ** 63)
+  @i64_max 2 ** 63 - 1
   @len_max 2 ** 61 - 1
-  @i64_min -0x8000000000000000
-  @i64_max 0x7FFFFFFFFFFFFFFF
 
-  defp agrees(fun, args),
-    do: Defk.Test.assert_agrees(K, fun, args, forced_yields: true)
-
-  defp notes(kernel, topic) do
-    for {{^kernel, _}, _, {^topic, verdict, text}} <- K.__defk_report__(), do: {verdict, text}
-  end
-
-  defp kept(kernel), do: for({:kept, text} <- notes(kernel, :bounds), do: text)
+  defp agrees(fun, args), do: Defk.Test.assert_agrees(K, fun, args, forced_yields: true)
+  defp kept(kernel), do: kept_bounds(K, kernel)
 
   defp f32s(xs), do: G.pack(:f32, Enum.map(xs, &(&1 * 1.0)))
   defp f64s(xs), do: G.pack(:f64, Enum.map(xs, &(&1 * 1.0)))
@@ -147,7 +142,7 @@ defmodule Defk.ProductFactsTest do
     end
 
     test "the inner loop's indices stay fixed: its strip is flagged" do
-      assert [{:flagged, _}] = notes(:scores, :nonfinite)
+      assert [{:flagged, _}] = Defk.TestKit.notes(K, :scores, :nonfinite)
     end
 
     test "the shape from a raising guard, length(m) == n * dim" do
@@ -518,58 +513,10 @@ defmodule Defk.ProductFactsTest do
     })
   end
 
-  # the value of an expression and the results of its arithmetic, each of
-  # which must fit in i64 or the kernel raises there; booleans
-  # short-circuit; a zero divisor throws
-  defp ev({:length, _, [{name, _, _}]}, env), do: {Map.fetch!(env, {:len, name}), []}
-
-  defp ev({name, _, ctx}, env) when is_atom(name) and is_atom(ctx),
-    do: {Map.fetch!(env, name), []}
-
-  defp ev(k, _env) when is_integer(k) or is_boolean(k), do: {k, []}
-
-  defp ev({:-, _, [a]}, env) do
-    {x, o} = ev(a, env)
-    {-x, o ++ [-x]}
-  end
-
-  defp ev({:not, _, [a]}, env) do
-    {x, o} = ev(a, env)
-    {not x, o}
-  end
-
-  defp ev({op, _, [a, b]}, env) when op in [:and, :or] do
-    {x, ox} = ev(a, env)
-
-    cond do
-      not fits?(ox) -> {false, ox}
-      op == :and and not x -> {false, ox}
-      op == :or and x -> {true, ox}
-      true -> (fn {y, oy} -> {y, ox ++ oy} end).(ev(b, env))
-    end
-  end
-
-  defp ev({op, _, [a, b]}, env) do
-    {{x, ox}, {y, oy}} = {ev(a, env), ev(b, env)}
-
-    case op do
-      :+ -> {x + y, ox ++ oy ++ [x + y]}
-      :- -> {x - y, ox ++ oy ++ [x - y]}
-      :* -> {x * y, ox ++ oy ++ [x * y]}
-      :div when y == 0 -> throw(:raise)
-      :div -> {div(x, y), ox ++ oy ++ [div(x, y)]}
-      :min -> {min(x, y), ox ++ oy}
-      :max -> {max(x, y), ox ++ oy}
-      :< -> {x < y, ox ++ oy}
-      :<= -> {x <= y, ox ++ oy}
-      :== -> {x == y, ox ++ oy}
-      :!= -> {x != y, ox ++ oy}
-      :>= -> {x >= y, ox ++ oy}
-      :> -> {x > y, ox ++ oy}
-    end
-  end
-
-  defp fits?(ops), do: Enum.all?(ops, &(&1 >= @i64_min and &1 <= @i64_max))
+  # an expression's value and its arithmetic's results, which must fit in
+  # i64; a zero divisor throws :raise
+  defp ev(ast, env), do: eval_ops(ast, env)
+  defp fits?(ops), do: fits_i64?(ops)
 
   @lens_a [0, 1, 5, 6, 12, 2 ** 32, @len_max]
   @lens_b [0, 1, 3, 2 ** 31]
@@ -590,17 +537,15 @@ defmodule Defk.ProductFactsTest do
         do: setup
   end
 
-  defp vars_of(ast) do
-    {_, acc} =
-      Macro.prewalk(ast, MapSet.new(), fn
-        {name, _, ctx} = node, acc when is_atom(name) and is_atom(ctx) ->
-          {node, MapSet.put(acc, name)}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    acc
+  # the variable names in a list of ASTs
+  defp vars_of(asts) do
+    for ast <- asts, node <- Macro.prewalker(ast), reduce: MapSet.new() do
+      acc ->
+        case node do
+          {name, _, ctx} when is_atom(name) and is_atom(ctx) -> MapSet.put(acc, name)
+          _ -> acc
+        end
+    end
   end
 
   # the env after the prologue, with each loop's first and last counter

@@ -114,6 +114,79 @@ defmodule Defk.TestKit do
   def bounds_check_free?(mod, name),
     do: not (kernel_c(mod, name) =~ ~r/defk_(put|get)_[a-z0-9]+\(ctx/)
 
+  @doc "The fast-path notes of kernel `name` in `mod` on `topic`, as {verdict, text}."
+  def notes(mod, name, topic) do
+    for {{^name, _}, _, {^topic, verdict, text}} <- mod.__defk_report__(), do: {verdict, text}
+  end
+
+  @doc "The texts of kernel `name`'s kept bounds checks."
+  def kept_bounds(mod, name), do: for({:kept, text} <- notes(mod, name, :bounds), do: text)
+
+  # ------------------------------------------------ soundness properties --
+  # The range-fact soundness properties compile generated kernels and check
+  # each dropped check against the arithmetic, evaluated here.
+
+  @i64_min -0x8000000000000000
+  @i64_max 0x7FFFFFFFFFFFFFFF
+
+  @doc """
+  The value of a kernel expression's AST in `env` (variables by name,
+  `length(a)` as `{:len, :a}`) and the results of its arithmetic, each of
+  which must fit in i64 or the kernel raises there. `and`/`or`
+  short-circuit; a zero divisor throws `:raise`.
+  """
+  def eval_ops({:length, _, [{name, _, _}]}, env), do: {Map.fetch!(env, {:len, name}), []}
+
+  def eval_ops({name, _, ctx}, env) when is_atom(name) and is_atom(ctx),
+    do: {Map.fetch!(env, name), []}
+
+  def eval_ops(k, _env) when is_integer(k) or is_boolean(k), do: {k, []}
+
+  def eval_ops({:not, _, [a]}, env) do
+    {x, o} = eval_ops(a, env)
+    {not x, o}
+  end
+
+  def eval_ops({:-, _, [a]}, env) do
+    {x, o} = eval_ops(a, env)
+    {-x, o ++ [-x]}
+  end
+
+  def eval_ops({op, _, [a, b]}, env) when op in [:and, :or] do
+    {x, ox} = eval_ops(a, env)
+
+    cond do
+      not fits_i64?(ox) -> {false, ox}
+      op == :and and not x -> {false, ox}
+      op == :or and x -> {true, ox}
+      true -> (fn {y, oy} -> {y, ox ++ oy} end).(eval_ops(b, env))
+    end
+  end
+
+  def eval_ops({op, _, [a, b]}, env) do
+    {{x, ox}, {y, oy}} = {eval_ops(a, env), eval_ops(b, env)}
+    {v, own?} = eval_op(op, x, y)
+    {v, if(own?, do: ox ++ oy ++ [v], else: ox ++ oy)}
+  end
+
+  # an operation's value, and whether it is arithmetic that must fit
+  defp eval_op(:+, x, y), do: {x + y, true}
+  defp eval_op(:-, x, y), do: {x - y, true}
+  defp eval_op(:*, x, y), do: {x * y, true}
+  defp eval_op(:div, _x, 0), do: throw(:raise)
+  defp eval_op(:div, x, y), do: {div(x, y), true}
+  defp eval_op(:min, x, y), do: {min(x, y), false}
+  defp eval_op(:max, x, y), do: {max(x, y), false}
+  defp eval_op(:<, x, y), do: {x < y, false}
+  defp eval_op(:<=, x, y), do: {x <= y, false}
+  defp eval_op(:==, x, y), do: {x == y, false}
+  defp eval_op(:!=, x, y), do: {x != y, false}
+  defp eval_op(:>=, x, y), do: {x >= y, false}
+  defp eval_op(:>, x, y), do: {x > y, false}
+
+  @doc "Every value in `ops` fits in i64."
+  def fits_i64?(ops), do: Enum.all?(ops, &(&1 >= @i64_min and &1 <= @i64_max))
+
   # ------------------------------------------------------------- yielding --
 
   @doc """
