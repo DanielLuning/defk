@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-b38"
   ],
@@ -12,8 +12,8 @@
   ],
   "parent": "defk-9p6",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "codecs: test whether decode64 and decode58 should use raising guards instead of alloc(u8, -1)",
   "type": "task",
-  "updated_at": "2026-10-17T18:16:42Z"
+  "updated_at": "2026-10-18T17:33:06Z"
 }
