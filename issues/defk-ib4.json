@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-18T17:46:53Z",
@@ -9,8 +9,8 @@
     "ready-for-agent"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "report: unzeroed-alloc note names the use line, not the loop's line, for a kernel from a location: :keep macro",
   "type": "bug",
-  "updated_at": "2026-10-18T19:59:48Z"
+  "updated_at": "2026-10-18T20:00:19Z"
 }
