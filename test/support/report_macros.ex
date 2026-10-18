@@ -18,6 +18,20 @@ defmodule Defk.ReportMacros do
     end
   end
 
+  # the alloc here, the loop that fills it from the caller's file
+  defmacro filler_keep(name, loop) do
+    # the caller's variables, which the loop names
+    [a, k, out] = Enum.map([:a, :k, :out], &Macro.var(&1, nil))
+
+    quote location: :keep do
+      defk unquote(name)(unquote(a) :: [f64], unquote(k) :: f64) :: [f64] do
+        unquote(out) = alloc(f64, length(unquote(a)))
+        unquote(loop)
+        unquote(out)
+      end
+    end
+  end
+
   defmacro scaler(name) do
     quote do
       defk unquote(name)(a :: [f64], k :: f64) :: [f64] do
