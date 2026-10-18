@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "PR #37 https://github.com/DanielLuning/defk/pull/37",
+      "timestamp": "2026-10-18T20:33:48Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Flaky tests: strip_copies kill-mid-copy timing and a linear_facts property timeout",
   "type": "bug",
-  "updated_at": "2026-10-18T20:00:28Z"
+  "updated_at": "2026-10-18T20:33:48Z"
 }
