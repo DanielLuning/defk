@@ -6,11 +6,11 @@
   "description": "In examples/codecs.exs the kernels come from a quote location: :keep block in Codecs.Source, used by Codecs.Kernels at line 448 (before PR #35). Defk.Report's {:alloc, :unzeroed} note for decode16's out (line 239) says 'not zeroed: the loop on line 448 writes every element first', and decode58's out (line 352) says the same; the loops are at lines 242 and 415. The fact's own line is right (in the macro's file); only the line number inside the text comes from the use site. Expected: the loop's line in the macro's source (or {file, line} when another file, as Defk.Report's moduledoc describes for notes). Reproduce: Codecs.Kernels.__defk_report__() and filter :alloc facts.",
   "id": "defk-ib4",
   "labels": [
-    "needs-triage"
+    "ready-for-agent"
   ],
   "priority": 2,
   "status": "open",
   "title": "report: unzeroed-alloc note names the use line, not the loop's line, for a kernel from a location: :keep macro",
   "type": "bug",
-  "updated_at": "2026-10-18T17:46:59Z"
+  "updated_at": "2026-10-18T19:59:48Z"
 }
