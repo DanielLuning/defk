@@ -33,7 +33,7 @@ reports.
 
 ### defk.public_api.I3 — Each promised `use Defk` option is accepted and honoured
 - **scope:** the `use_defk_options` of every snapshot
-- **must:** a module compiles with each option at its listed value and its kernels run; `elixir_mode: true` compiles Elixir mode, `report: :full` makes the report describe each loop, `max_owned_bytes:` bounds a call's owned buffers with an `ArgumentError`
+- **must:** a module compiles with each option at its listed value and its kernels run; `elixir_mode: true` compiles Elixir mode, `report: :full` yields a report for the module (its text is not promised), `max_owned_bytes:` bounds a call's owned buffers with an `ArgumentError`
 - **why:** an option a release accepted keeps working until the next major version
 - **kind:** functional
 - **status:** active

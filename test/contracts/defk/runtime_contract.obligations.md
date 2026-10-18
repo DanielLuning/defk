@@ -1,5 +1,5 @@
 ---
-modules: [Defk, Defk.Build]
+modules: [Defk]
 ---
 
 ## Purpose

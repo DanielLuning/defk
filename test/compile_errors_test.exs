@@ -16,12 +16,17 @@ defmodule Defk.CompileErrorsTest do
     do: refute(what =~ ~r/not in the kernel subset|not supported yet/)
 
   describe "the registry's text" do
-    # The contract test checks that each example is rejected with its code;
-    # here, the message it gets: the kind in words, the public reader agreeing
-    # with the test's own, and no ticket id
-    test "each example's message says its kind, and diagnostics/1 reads it" do
-      for %{kind: kind, example: example} = e <- Defk.Errors.entries(),
-          kind != :retired and is_binary(example) do
+    # The contract test compiles every example and checks its code; here, the
+    # message a rejection gets: the kind in words, the public reader agreeing
+    # with the test's own, and no ticket id. The wording comes from the
+    # kind, so one example per kind is enough.
+    test "a rejection's message says its kind, and diagnostics/1 reads it" do
+      for kind <- [:error, :subset, :planned],
+          %{example: example} = e <-
+            Enum.take(
+              Enum.filter(Defk.Errors.entries(), &(&1.kind == kind and is_binary(&1[:example]))),
+              1
+            ) do
         msg = compile(__MODULE__, example, key: {e.code, :message})
         assert [%{code: code, message: what}] = Defk.Errors.diagnostics(msg), msg
         assert code == e.code

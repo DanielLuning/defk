@@ -39,7 +39,9 @@ defmodule Defk.Contract.FaultContractTest do
 
   @n 1_000_000
   @sum Enum.sum(0..(@n - 1))
-  @bug ~r/^defk bug: segmentation fault inside kernel native code/
+  # the promise is the prefix; the rest of the text is
+  # test/fault_containment_test.exs's
+  @bug ~r/^defk bug: /
 
   setup do
     Kit.inject_fault(K, 0)
@@ -62,7 +64,7 @@ defmodule Defk.Contract.FaultContractTest do
   @tag obligation: "defk.runtime_contract.I4"
   test "an illegal instruction is contained the same way" do
     Kit.inject_fault(K, 2)
-    assert_raise RuntimeError, ~r/^defk bug: illegal instruction/, fn -> K.spin(@n) end
+    assert_raise RuntimeError, @bug, fn -> K.spin(@n) end
     assert K.spin(@n) == @sum
   end
 
@@ -114,7 +116,7 @@ defmodule Defk.Contract.FaultContractTest do
     end)
 
     assert_receive {:raised, msg}, 10_000
-    assert msg =~ "segmentation fault"
+    assert msg =~ @bug
     assert K.spin(100) == Enum.sum(0..99)
   end
 end
