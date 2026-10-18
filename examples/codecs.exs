@@ -32,13 +32,17 @@
 # Bad input raises ArgumentError, as Base.decode64! does: each decoder ORs
 # every table value it reads (255 for a byte outside the alphabet) into an
 # accumulator and tests it after the loop; a length that is not a multiple
-# of 4 (base64) or 2 (hex) fails before the loop. decode16 raises with a
-# raising guard (`if c, do: raise ...`, the way docs/language.md
-# recommends); decode64 and base58 were written before kernels had `raise`
-# and still take alloc(u8, -1) ("alloc/2: negative length -1"). base58
-# checks once per string. Rewriting decode16 changed no check: the report
-# shows the same 5 bounds checks dropped and none kept before and after
-# (the guards leave no fact its loop needs), and its two dummy allocs went.
+# of 4 (base64) or 2 (hex) fails before the loop. base58 checks once per
+# string. Every decoder raises with a raising guard (`if c, do: raise ...`,
+# the way docs/language.md recommends). They were written before kernels
+# had `raise` and took alloc(u8, -1) ("alloc/2: negative length -1")
+# instead. The rewrite changed no check: the report shows the same bounds
+# checks dropped and kept before and after (decode16 5 and 0, decode64 18
+# and 6, decode58 6 and 9), the same loop notes, and the same overflow
+# checks in the C. Only the dummy allocs went: decode58 had one inside its
+# per-string loop, a zeroed alloc and an owned buffer for each string, and
+# its 10k batch decodes about 21% faster without it (1.30 ms, not 1.66 ms,
+# interleaved in one later run than the Measured block below; provisional).
 #
 # Elixir baselines (optimised; every variant is timed in the run, and the
 # fastest per direction is the baseline):
@@ -164,13 +168,13 @@ defmodule Codecs.Source do
       end
 
       # Returns {buffer, length}: the length is 3 per quad less the padding.
-      # Bad input raises ArgumentError through a negative alloc length: a
-      # length that is not a multiple of 4 at once, a byte outside the
-      # alphabet (255 in the table, so the OR of all sextets exceeds 63)
-      # after the loop. '=' is only padding in the last quad.
+      # Bad input raises ArgumentError (both raising guards): a length that
+      # is not a multiple of 4 at once, a byte outside the alphabet (255 in
+      # the table, so the OR of all sextets exceeds 63) after the loop. '='
+      # is only padding in the last quad.
       defk decode64(s :: [u8]) :: {[u8], i64} do
         n = length(s)
-        _ = alloc(u8, if(rem(n, 4) == 0, do: 0, else: -1))
+        if rem(n, 4) != 0, do: raise(ArgumentError, "incorrect padding")
         quads = div(n, 4)
         out = alloc(u8, 3 * quads)
 
@@ -211,7 +215,7 @@ defmodule Codecs.Source do
           end
 
         bad = bor(bad, tail)
-        _ = alloc(u8, if(bad < 64, do: 0, else: -1))
+        if bad >= 64, do: raise(ArgumentError, "non-alphabet character")
         {out, 3 * quads - pad}
       end
 
@@ -337,8 +341,8 @@ defmodule Codecs.Source do
       # the longest string's length (a character gives at most one byte), its
       # length to lens[k]. Limbs of base 2^32, low limb first, five
       # characters (one multiply by up to 58^5) per step. A byte outside the
-      # alphabet raises ArgumentError at the end of its string (a negative
-      # alloc length).
+      # alphabet raises ArgumentError at the end of its string (a raising
+      # guard).
       defk decode58(chars :: [u8], offs :: [i64]) :: {[u8], [i64]} do
         count = length(offs) - 1
 
@@ -399,7 +403,7 @@ defmodule Codecs.Source do
                 {nl1, bad}
             end
 
-          _ = alloc(u8, if(bad < 64, do: 0, else: -1))
+          if bad >= 64, do: raise(ArgumentError, "non-alphabet character")
 
           nb =
             Enum.reduce_while(0..(4 * nl - 1)//1, 4 * nl, fn _, m ->

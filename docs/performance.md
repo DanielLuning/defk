@@ -2364,6 +2364,34 @@ the verdict they claim. Two gave a better one than on macOS:
   AddressSanitizer.
 - **Status:** measured, provisional.
 
+### 6.35 A raising guard costs nothing; the `alloc(u8, -1)` guard costs an alloc per pass in a loop
+
+Before kernels had `raise`, a check took
+`_ = alloc(u8, if(c, do: 0, else: -1))`: a negative length raises
+`ArgumentError`. A raising guard (`if c, do: raise(ArgumentError, ...)`)
+says the same thing without the dummy alloc.
+
+- **Numbers:** in `examples/codecs.exs`, `decode64` (two guards, outside
+  its loop) and the base58 `decode58` (one guard per string, inside its
+  per-string loop) were rewritten. The report shows the same bounds checks
+  dropped and kept before and after (`decode64` 18 and 6, `decode58` 6 and
+  9) and the same loop notes; the C has the same overflow, get and put
+  calls, and three `defk_alloc_u8` calls fewer. `decode58` also loses its
+  per-iteration owned buffer. Best of 15, interleaved, five rounds, run
+  twice with the order swapped: `decode64` on 1 MB 239-264 us before and
+  after (within 3%); `decode58` on 10k 32-byte keys 1.64-1.71 ms before,
+  1.29-1.34 ms after (0.78-0.80x), about 35 ns per string: the zeroed
+  alloc and owned-buffer slot of 6.25, once per pass.
+- **What it means:** the guard in a loop was the cost, not the check.
+  A raise inside the strip-mined loop did not change how it is lowered
+  (same strips, same per-iteration safepoints). `decode16` was rewritten
+  in 6.34 with the same result for its checks.
+- **Conditions:** M-series Mac, load 2.0-3.3 on 12 cores; provisional.
+- **Source:** `defk-9p6.34`; agreement: the codecs example's bad-input
+  check (all `ArgumentError`, as `Base.decode64!` and the Elixir base58)
+  and its Elixir-mode check.
+- **Status:** measured, provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
