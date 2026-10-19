@@ -11,9 +11,15 @@
   "id": "defk-x3a.5",
   "labels": [],
   "parent": "defk-x3a",
+  "comments": [
+    {
+      "text": "PR #52 opened: https://github.com/DanielLuning/defk/pull/52. mix dump_c byte-identical for 107 modules; mix ci green (2261 passed). Statics (static_u8, emit_statics, c_bytes) placed by their callers, not under rejections: a static array is a lowering.",
+      "timestamp": "2026-10-19T15:15:34Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Rejection and recovery under one divider; construct raisers beside their constructs",
   "type": "task",
-  "updated_at": "2026-10-19T15:05:38Z"
+  "updated_at": "2026-10-19T15:15:34Z"
 }
