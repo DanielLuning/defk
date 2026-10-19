@@ -156,12 +156,15 @@ defmodule Defk.WordLoadsTest do
   end
 
   test "a provable i + w <= len drops the check" do
-    src = Proven.__defk_c_source__()
-    refute src =~ ~r/defk_u(64|32|16)_(le|be)\(ctx/
-    refute src =~ "defk_get_u8("
-    assert src =~ "defk_u64_le_at("
+    for name <- ~w(windows words halves lookup)a do
+      assert [_ | _] = bounds = notes(Proven, name, :bounds)
+      assert Enum.all?(bounds, &match?({:dropped, _}, &1)), "#{name}"
+    end
 
-    assert Short.__defk_c_source__() =~ "defk_u64_le(ctx"
+    # the dropped check's form: the unchecked load at the offset
+    assert Proven.__defk_c_source__() =~ "defk_u64_le_at("
+
+    assert [{:kept, _} | _] = notes(Short, :windows, :bounds)
 
     for n <- [0, 1, 7, 8, 9, 16, 17, 100] do
       bytes = :crypto.strong_rand_bytes(n)

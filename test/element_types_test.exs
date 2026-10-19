@@ -361,11 +361,14 @@ defmodule Defk.ElementTypesTest do
   end
 
   test "the clamp's range facts drop the i16 write check" do
-    c = File.read!(String.replace_suffix(Mix.__defk_lib__(), ".so", ".c"))
-    refute c =~ "defk_to_i16("
-    refute c =~ "defk_put_i16("
-    refute c =~ "defk_get_i16("
-    assert c =~ "(int16_t)"
+    # the store's range check and every access's bounds check are dropped
+    checks = notes(Mix, :mix, :check)
+    assert {:dropped, "out[i]: no i16 range check, the value fits"} in checks
+    refute Enum.any?(checks, &match?({:kept, _}, &1))
+    assert [_ | _] = bounds = notes(Mix, :mix, :bounds)
+    assert Enum.all?(bounds, &match?({:dropped, _}, &1))
+    # the dropped check's form: a plain narrowing cast
+    assert Mix.__defk_c_source__() =~ "(int16_t)"
   end
 
   test "an unknown element type lists the supported set" do
