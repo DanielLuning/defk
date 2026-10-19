@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T07:12:36Z",
+  "description": "dump_c writes the C before Defk.Build.build! (lib/defk.ex:475) but still runs cc on every kernel. Add a C-only mode that skips cc (the module must still load or be skipped cleanly; on_load needs care). Add a selection (--only test files / examples). Write docs/agents/runs.md, linked from AGENTS.md: refactor that must keep C -\u003e C-only dump_c; change in one compiler area -\u003e unit tests + the affected examples' check only; no bench run unless asked; known-poor rows never re-measured unless asked. Update the compiler-time method (interleaved dump_c rounds) to use the C-only mode.",
+  "id": "defk-ded.1",
+  "labels": [],
+  "parent": "defk-ded",
+  "priority": 2,
+  "status": "open",
+  "title": "dump_c without cc, --only selection, and the agent rule for which run fits which change",
+  "type": "task",
+  "updated_at": "2026-10-19T07:12:36Z"
+}
