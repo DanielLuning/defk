@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T13:01:30Z",
+  "description": "Split from candidate 5 in the review. safepoint_saves (compiler.ex L6090-6125) parses /* defk:in N */ markers out of the emitted C, and Defk.Report.full parses /* defk:loop */ (report.ex L337-360). Deepen the same way as the strip record (defk-ch4): the lowering declares a row when it emits the marker, the emitter and the report read rows. Crosses emitting and resume logic, so it is its own ticket after the guard-flags ticket. Gate: mix dump_c byte-identical; resume_test (4 C greps may move to rows), report_test.",
+  "id": "defk-x3a.10",
+  "labels": [],
+  "parent": "defk-x3a",
+  "priority": 3,
+  "status": "open",
+  "title": "Safepoint markers: rows instead of /* defk:in N */ comments parsed back from the C",
+  "type": "task",
+  "updated_at": "2026-10-19T13:01:30Z"
+}
