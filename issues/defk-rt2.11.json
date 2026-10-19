@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-rt2.7"
+  ],
   "blocks": [],
   "created": "2026-10-19T18:42:43Z",
   "description": "ADR-0008 drew the line at builtins: typing shared, semantics twice. Beyond builtins and heads, Elixir mode re-derives the type of every node: `expr/2` (elixir_mode.ex ~L390-561, 32 clauses returning `{quoted, type}`), `coerce/3`, `settle_accs/3` + `note_u64_mix/3` (a hand copy of the compiler's u64 accumulator fixpoint, `u64_candidates/3` ~L4935), `body_type/3`, `trial/1` look-aheads at 4 sites; `State` holds `leaf_types`, `u64_cands`, `u64_hits` for typing alone. The ADR's reasoning (typing gains nothing from independence) applies to this remainder. Also vestigial: `definitions/3` sets `Ctx.set(:file, ...)` \"so err! reads it\", but nothing on Elixir mode's path reads the ctx.\n\nThis is a spike (settled 2026-10-19), not an implementation:\n- Measure what `lower_kernel` can export as a node-to-type map (keyed by node meta or a typed AST), at what cost, given that the compiler's typing is interleaved with lowering.\n- Deliverable: a comment on this ticket with the findings. If the seam exists, create an implementation child of the epic. If not, close with the finding and record in an ADR note (extend ADR-0008) that the remainder of typing stays twice, so the next review does not re-propose it.\n- Either way, drop the dead `Ctx.set(:file)` write in a small PR.\n\nSemantics stay written twice (ADR-0008 confirmed, not reopened). Last in the epic.",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Spike: can the compiler hand Elixir mode its node types, so Elixir mode only emits?",
   "type": "task",
-  "updated_at": "2026-10-19T18:42:43Z"
+  "updated_at": "2026-10-19T18:42:46Z"
 }
