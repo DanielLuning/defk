@@ -433,19 +433,16 @@ defmodule Defk.ElixirMode do
   defp expr({:case, m, [subject, [do: clauses]]}, env),
     do: case_form(subject, clauses, :value, env, m)
 
-  defp expr(
-         {{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m,
-          [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}]},
-         env
-       ),
-       do: reduce_while(src, init, x, acc, body, env, m)
+  # the Enum forms' shapes are Defk.Forms'; the compiler accepted them
+  defp expr({{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m, args}, env) do
+    {:ok, src, init, x, acc, body} = Defk.Forms.reduce_while(args)
+    reduce_while(src, init, x, acc, body, env, m)
+  end
 
-  defp expr(
-         {{:., _, [{:__aliases__, _, [:Enum]}, f]} = dot, m,
-          [src, {:fn, fm, [{:->, am, [[x], pred]}]}]},
-         env
-       )
+  defp expr({{:., _, [{:__aliases__, _, [:Enum]}, f]} = dot, m, args}, env)
        when f in [:all?, :any?] do
+    {:ok, src, x, pred, {fm, am}} = Defk.Forms.predicate(args)
+
     {_, writes} =
       trial(fn ->
         {_, _, xt} = gen_source(src, env)
@@ -839,8 +836,8 @@ defmodule Defk.ElixirMode do
   end
 
   defp case_arms(clauses, s, st, mode, env, m) do
-    Enum.reduce_while(clauses, {[], MapSet.new()}, fn {:->, _, [[head], body]}, {arms, seen} ->
-      {pat, guard} = case_clause_head(head)
+    Enum.reduce_while(clauses, {[], MapSet.new()}, fn clause, {arms, seen} ->
+      {pat, guard, body, _} = Defk.Forms.case_clause(clause, &raise_form!/4)
       {test, benv, prefix} = case_pattern(pat, s, st, env)
       gq = guard && guard_expr(Defk.GuardIn.lower(guard), guard_env(pat, s, st, env))
 
@@ -880,9 +877,6 @@ defmodule Defk.ElixirMode do
         quote do: raise(CaseClauseError, term: unquote(s))
     end
   end
-
-  defp case_clause_head({:when, _, [pat, guard]}), do: {pat, guard}
-  defp case_clause_head(pat), do: {pat, nil}
 
   # The completed arm and whether it always matches; the last is what decides
   # whether the reducer stops early with an exhaustive set.
@@ -1104,15 +1098,8 @@ defmodule Defk.ElixirMode do
 
   # ----------------------------------------------------------------- loops --
 
-  defp parse_for(args) do
-    {kws, quals} = Enum.split_with(args, &(is_list(&1) and Keyword.keyword?(&1)))
-    opts = Enum.concat(kws)
-
-    case Keyword.fetch(opts, :reduce) do
-      {:ok, init} -> {quals, {:reduce, init}, Keyword.fetch!(opts, :do)}
-      :error -> {quals, nil, Keyword.fetch!(opts, :do)}
-    end
-  end
+  # the for's shape (Defk.Forms.for/3); the compiler accepted it
+  defp parse_for(args), do: Defk.Forms.for(args, nil, &raise_form!/4)
 
   # {pre, enumerable, element type}
   defp gen_source({:.., _, [a, b]}, env) do

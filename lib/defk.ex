@@ -411,7 +411,7 @@ defmodule Defk do
     kernels =
       raw_kernels
       |> Defk.Deprecations.rename_builtins(env.file)
-      |> Enum.map(&(&1 |> Defk.Attributes.inline() |> Defk.EnumForms.desugar()))
+      |> Enum.map(&(&1 |> Defk.Attributes.inline() |> Defk.Forms.desugar()))
       |> Defk.Clauses.merge()
 
     # Elixir mode: compiled in :test, wherever it is the configured mode, and

@@ -472,10 +472,10 @@ defmodule Defk.Compiler do
   # the same compile (the first one along the way, as in any expression).
   # Unpiping is exact, so none of them follows from the pipe's rejection.
   # Enum.reduce/3 and Enum.find/3 in it take the forms the compiler knows
-  # (Defk.EnumForms), as they do outside a pipe.
+  # (Defk.Forms), as they do outside a pipe.
   defp recover_pipe(node, env) do
     try do
-      node |> Defk.Errors.Rewrites.unpipe() |> Defk.EnumForms.desugar() |> lower_expr(env)
+      node |> Defk.Errors.Rewrites.unpipe() |> Defk.Forms.desugar() |> lower_expr(env)
     catch
       {:defk_reject, d} -> record(d)
       :defk_poison -> :ok
@@ -1906,17 +1906,17 @@ defmodule Defk.Compiler do
   defp lower_node({:case, _, _} = node, _env), do: case_form!(node)
 
   defp lower_node({{:., _, [{:__aliases__, _, [:Enum]}, :reduce_while]}, m, args} = node, env) do
-    case args do
-      [src, init, {:fn, _, [{:->, _, [[x, acc], body]}]}] ->
+    case Defk.Forms.reduce_while(args) do
+      {:ok, src, init, x, acc, body} ->
         lower_reduce_while(src, init, x, acc, body, env, m, node)
 
-      _ ->
+      :error ->
         fn_argument!(node, "Enum.reduce_while/3", [:x, :acc])
     end
   end
 
   # Enum.reduce/3 and Enum.find/3 with a literal fn were rewritten before
-  # compiling (Defk.EnumForms); what is left takes some other function
+  # compiling (Defk.Forms); what is left takes some other function
   defp lower_node({{:., _, [{:__aliases__, _, [:Enum]}, :reduce]}, _, [_, _, _]} = node, _env),
     do: fn_argument!(node, "Enum.reduce/3", [:x, :acc])
 
@@ -1927,9 +1927,9 @@ defmodule Defk.Compiler do
   defp lower_node({{:., _, [{:__aliases__, _, [:Enum]}, f]}, m, args} = node, env)
        when f in [:all?, :any?] do
     {src, x, pred} =
-      case args do
-        [src, {:fn, _, [{:->, _, [[x], pred]}]}] -> {src, x, pred}
-        _ -> fn_argument!(node, "Enum.#{f}/2", [:x])
+      case Defk.Forms.predicate(args) do
+        {:ok, src, x, pred, _metas} -> {src, x, pred}
+        :error -> fn_argument!(node, "Enum.#{f}/2", [:x])
       end
 
     # all?: halt with false at the first false; any?: halt with true at the first true
@@ -4106,51 +4106,15 @@ defmodule Defk.Compiler do
 
   # ---------------------------------------------------------------- loops --
 
-  # `node` is the whole for
+  # `node` is the whole for; its shape is Defk.Forms.for/3's, and a `for
+  # ..., into:` is lowered for its rejections before it is rejected
   defp parse_for(args, node, env) do
-    {kws, quals} = Enum.split_with(args, &(is_list(&1) and Keyword.keyword?(&1)))
-    opts = Enum.concat(kws)
+    case Defk.Forms.for(args, node, &reject!/4) do
+      {:into, quals, body, into} ->
+        for_collect!(node, quals, body, into, env, "for ..., into: is not in the kernel subset")
 
-    for k <- Keyword.keys(opts), k not in [:do, :reduce] do
-      if k == :into,
-        do:
-          for_collect!(
-            node,
-            quals,
-            opts[:do],
-            opts[:into],
-            env,
-            "for ..., into: is not in the kernel subset"
-          ),
-        else: err!(node, "for-option", "for ..., #{k}: is not in the kernel subset")
-    end
-
-    case quals do
-      [{:<-, _, _} | _] ->
-        :ok
-
-      [{:<<>>, _, [{:<-, _, [x, bin]}]} = gen | _] ->
-        err!(
-          gen,
-          "generator-pattern",
-          "the bitstring generator #{Macro.to_string(gen)} is not in the kernel subset",
-          hint: "walk the bytes as a [u8] array",
-          rewrite: "#{Macro.to_string(x)} <- #{Macro.to_string(bin)}"
-        )
-
-      _ ->
-        err!(node, "for-form", "this for has no generator")
-    end
-
-    body =
-      Keyword.get(opts, :do) ||
-        err!(node, "for-form", "this for has no do block",
-          hint: "write the loop body in a do block"
-        )
-
-    case Keyword.fetch(opts, :reduce) do
-      {:ok, init} -> {quals, {:reduce, init}, body}
-      :error -> {quals, nil, body}
+      parsed ->
+        parsed
     end
   end
 
@@ -5053,7 +5017,7 @@ defmodule Defk.Compiler do
     end)
   end
 
-  # Enum.find/3 (Defk.EnumForms): the element found and the default are one
+  # Enum.find/3 (Defk.Forms): the element found and the default are one
   # type, as no conversion keeps Elixir's result (an i64 element found under
   # a float default would come back as a float)
   defp find_types!(t, t, _at), do: :ok
@@ -5086,7 +5050,7 @@ defmodule Defk.Compiler do
     outs =
       Enum.zip_with([accs, results, items], fn [{name, _c, a}, r, item] ->
         if a[:u64_ref] && a.t == :i64 && r.t == :u64, do: throw({:defk_u64_acc, a.u64_ref, name})
-        name == Defk.EnumForms.find_default() && find_types!(r.t, a.t, item)
+        name == Defk.Forms.find_default() && find_types!(r.t, a.t, item)
         coerce!(r, a.t, item, "the new value of #{name}")
       end)
 
@@ -5269,7 +5233,7 @@ defmodule Defk.Compiler do
 
     {arms, exhaustive?} =
       Enum.reduce_while(clauses, {[], MapSet.new()}, fn clause, {arms, seen} ->
-        {pat, guard, body, cm} = case_clause_head(clause)
+        {pat, guard, body, cm} = Defk.Forms.case_clause(clause, &reject!/4)
         {test, rename} = case_pattern(pat, sv.t, subj, cm)
 
         guard =
@@ -5318,25 +5282,6 @@ defmodule Defk.Compiler do
 
       nil ->
         "defk_no_clause(ctx, #{if t == :bool, do: 1, else: 0}, #{c});\n"
-    end
-  end
-
-  # A case clause as {pattern, guard, body, meta}; a clause with several
-  # patterns is rejected (the compiler only commits to the subject once).
-  defp case_clause_head(clause) do
-    case clause do
-      {:->, cm, [[{:when, _, [pat, guard]}], body]} ->
-        {pat, guard, body, cm}
-
-      {:->, cm, [[pat], body]} ->
-        {pat, nil, body, cm}
-
-      {:->, _, [pats, _]} = cl ->
-        err!(
-          cl,
-          "case-pattern",
-          "a case clause with #{length(pats)} patterns is not in the kernel subset"
-        )
     end
   end
 
