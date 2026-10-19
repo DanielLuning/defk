@@ -28,14 +28,14 @@ One module, ordered by section dividers you can grep for
 | Divider | What it holds | Names worth knowing |
 |---|---|---|
 | entry | `compile/4`, per-kernel orchestration | `compile/4` |
-| rejections | recording and de-duplicating errors, poisoning | `err!/4`, `record/1`, `poison/2` |
+| rejections | recording and de-duplicating errors, poisoning; recovery inside a rejected `for`, reduce or pipe (each construct's own raiser sits beside the construct) | `err!/4`, `record/1`, `poison/2`, `recover_for/4`, `recover_reduce/5`, `recover_pipe/2` |
 | parsing | heads, types, options | |
 | kernels | lowering one kernel, return handling | `lower_kernel`, `coerce_return`, `emit_result` |
 | blocks / statements | statement lowering, bindings | `lower_block`, `lower_stmts` |
 | array values | ownership, value semantics; the copy analysis's rules and tracking state live in `Defk.Copies` | `owned`, `before_write`, `hoist` |
 | expressions | arithmetic, comparisons, overflow checks; operands in Elixir's order (`lower_expr/2` wraps every `lower_node/2` clause) | `i64_arith`, `lower_ops/3`, `in_order/3` |
 | calls | kernel-to-kernel inlining, builtins | (inline size: `Defk.InlineSize.check/3`) |
-| loops | `for`, generators, safepoints; recovery inside a rejected `for`, reduce or pipe | `lower_quals`, `for_collect!/6`, `recover_for/4`, `recover_reduce/5`, `recover_pipe/2` |
+| loops | `for`, generators, safepoints | `lower_quals`, `for_collect!/6`, `generator_pattern!/1` |
 | strip record | the storage shim over `Defk.Strip` (the record itself and the classifier live there) | `srec_rows/1`, `srec_arm/3` |
 | loop forms | the C of one loop: a safepoint every iteration, strips, flagged strips | `loop/6`, `strip_loop/5`, `flagged_loop/5`, `flag_strip/4` |
 | resume dispatch | re-entering loops through their headers after a yield | `in_loop/1`, `resume_dispatch/0`, `arrival_blocks/3` |
