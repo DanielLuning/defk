@@ -717,7 +717,8 @@ defmodule Defk.Compiler do
       inlining: [{k.name, k.arity}],
       ret: k.ret,
       ret_fors: returned_fors(k.body),
-      scope: Copies.scope(MapSet.new())
+      scope: Copies.scope(MapSet.new()),
+      sink: :raise
     }
 
     {stmts, val} = lower_block(k.body, env)
@@ -1705,8 +1706,9 @@ defmodule Defk.Compiler do
     do: asts |> Enum.map(&lower_expr(&1, env)) |> in_order(env, how)
 
   # [{stmts, value}] made to run in Elixir's order: {stmts, values}. Where
-  # errors set flags (a case guard, a speculated select: env.ovf) the order
-  # is the replay's, which is lowered without them.
+  # errors set flags (the error sink, env.sink, is a case guard's or a
+  # speculated select's) the order is the replay's, which is lowered without
+  # them.
   defp in_order(lowered, env, how) do
     flags? = flagged?(env)
 
@@ -2000,7 +2002,7 @@ defmodule Defk.Compiler do
         {s, Facts.assert(val("INT64_C(#{k})", :i64), lo: k, hi: k)}
 
       v.t == :i64 ->
-        c = "defk_neg_i64#{checked(env)}, #{v.c})"
+        c = "defk_neg_i64#{check(env, :ovf)}, #{v.c})"
         {s, guarded(Facts.put(val(c, :i64), Facts.neg_facts(v)), env)}
 
       true ->
@@ -2244,7 +2246,7 @@ defmodule Defk.Compiler do
       case pair || {op, va.t, vb.t} do
         {:u64, ua, ub} ->
           fun = %{+: "add", -: "sub", *: "mul"}[op]
-          val("defk_#{fun}_u64#{checked(env)}, #{ua.c}, #{ub.c})", :u64)
+          val("defk_#{fun}_u64#{check(env, :ovf)}, #{ua.c}, #{ub.c})", :u64)
 
         {:i64, va, vb} ->
           i64_arith(op, va, vb, node, env)
@@ -2257,7 +2259,7 @@ defmodule Defk.Compiler do
 
           c =
             guard_poison(fs, 2, env, fn [a, b] ->
-              "defk_#{fun}#{checked_float(env)}, #{a}, #{b})"
+              "defk_#{fun}#{check(env, :bad)}, #{a}, #{b})"
             end)
 
           val(c, :f64)
@@ -2294,8 +2296,8 @@ defmodule Defk.Compiler do
       note_overflow(node, :dropped)
       %{v | c: "(#{va.c} #{op} #{vb.c})"}
     else
-      note_overflow(node, :kept)
-      guarded(%{v | c: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"}, env)
+      note_overflow(node, :kept, env)
+      guarded(%{v | c: "defk_#{fun}_i64#{check(env, :ovf)}, #{va.c}, #{vb.c})"}, env)
     end
   end
 
@@ -2309,7 +2311,7 @@ defmodule Defk.Compiler do
     case {int_pair!(a, b, node), env} do
       # in a case guard: a zero divisor is flagged, unless the divisor
       # overflowed (guard_poison/4)
-      {{:i64, a, b}, %{case_guard: _}} when f == :div ->
+      {{:i64, a, b}, %{sink: :guard}} when f == :div ->
         bad = guard_flag(:bad)
         ovf = guard_flag(:ovf)
         srec_addr(bad)
@@ -2322,7 +2324,7 @@ defmodule Defk.Compiler do
 
         val(c, :i64)
 
-      {{:i64, a, b}, %{case_guard: _}} ->
+      {{:i64, a, b}, %{sink: :guard}} ->
         bad = guard_flag(:bad)
         srec_addr(bad)
 
@@ -2331,7 +2333,7 @@ defmodule Defk.Compiler do
           :i64
         )
 
-      {{:u64, a, b}, %{case_guard: _}} ->
+      {{:u64, a, b}, %{sink: :guard}} ->
         bad = guard_flag(:bad)
         srec_addr(bad)
 
@@ -2405,10 +2407,9 @@ defmodule Defk.Compiler do
   # a time, in Elixir's order, with the raising checks: it raises where Elixir
   # would, with the same error. One check per expression instead of
   # one per operation and read is most of the cost of matching Elixir in
-  # float loops. Inside a speculated select (env.ovf) and over any other
+  # float loops. Where errors set flags (env.sink) and over any other
   # operand, each operation is checked on its own (lower_arith).
-  defp float_tree(_node, %{case_guard: _}), do: nil
-  defp float_tree(_node, %{ovf: _}), do: nil
+  defp float_tree(_node, %{sink: sink}) when sink != :raise, do: nil
 
   defp float_tree(node, env) do
     {:op, fast, replay, r, divisors} = ftree(node, env)
@@ -2868,7 +2869,7 @@ defmodule Defk.Compiler do
     later = Enum.drop(later, -1)
 
     flagged = fn flag ->
-      fenv = Map.put(env, :ovf, flag)
+      fenv = Map.put(env, :sink, {:select, flag})
       conds = for {ca, _, _, _, _} <- later, do: elem(lower_cond(ca, fenv), 1)
       {conds, for({_, body, _, _, _} <- arms, do: parts(elem(lower_block(body, fenv), 1)))}
     end
@@ -2930,17 +2931,20 @@ defmodule Defk.Compiler do
     end)
   end
 
-  # the check's suffix and first argument: the flag it sets in a case guard
-  # or a speculated select, else ctx (it raises)
-  defp checked(%{case_guard: _}), do: flagged_check(guard_flag(:ovf))
-  defp checked(%{ovf: flag}), do: flagged_check(flag)
-  defp checked(_env), do: "(ctx"
+  # Where a failed check goes is the error sink at env.sink (CONTEXT.md):
+  # :raise, through ctx; {:select, flag}, a speculated select's one flag
+  # (select/4); or :guard, the case guard's flags (guard_expr/2, guard_flag/1).
+  # check/2 is a check's suffix and first argument for a failure of `kind`:
+  # :ovf, an i64 overflow; :bad, a float result that is not finite or a zero
+  # divisor, which is an Elixir error and fails a guard rather than
+  # overflowing it. A select's flag takes every kind. A kernel's env starts
+  # at :raise; the sink is lexical, so a select's arms and a guard return to
+  # the sink around them.
+  defp check(%{sink: :guard}, kind), do: flagged_check(guard_flag(kind))
+  defp check(%{sink: {:select, flag}}, _kind), do: flagged_check(flag)
+  defp check(_env, _kind), do: "(ctx"
 
-  # a float operation in a case guard flags a non-finite result as a failed
-  # guard (an Elixir error), not as an overflow
-  defp checked_float(%{case_guard: _}), do: flagged_check(guard_flag(:bad))
-  defp checked_float(env), do: checked(env)
-
+  # the flagged form's suffix, and the flag's strip row
   defp flagged_check(flag) do
     srec_addr(flag)
     "_s(&#{flag}"
@@ -3074,7 +3078,7 @@ defmodule Defk.Compiler do
         shift =
           if vn.t == :u64,
             do: "(#{vn.c} >= 64 ? UINT64_C(0) : #{c} << #{vn.c})",
-            else: "defk_wbsl#{checked(env)}, #{c}, #{vn.c})"
+            else: "defk_wbsl#{check(env, :ovf)}, #{c}, #{vn.c})"
 
         {[s, sn], shift}
 
@@ -3142,7 +3146,7 @@ defmodule Defk.Compiler do
         )
 
       _ ->
-        val("defk_#{f}_u64#{checked(env)}, #{a.c}, #{b.c})", :u64)
+        val("defk_#{f}_u64#{check(env, :ovf)}, #{a.c}, #{b.c})", :u64)
     end
   end
 
@@ -3160,7 +3164,7 @@ defmodule Defk.Compiler do
     c =
       if f == :bsr and Facts.nonneg?(b),
         do: "defk_bsr_nn(#{a.c}, #{b.c})",
-        else: "defk_#{f}_i64#{checked(env)}, #{a.c}, #{b.c})"
+        else: "defk_#{f}_i64#{check(env, :ovf)}, #{a.c}, #{b.c})"
 
     Facts.put(val(c, :i64), if(f == :bsr, do: Facts.bsr_facts(a, b), else: Facts.none()))
   end
@@ -3356,12 +3360,12 @@ defmodule Defk.Compiler do
   defp emit_builtin(f, [%{t: t} = a], _, _) when f in [:trunc, :round] and t in @ints, do: a
 
   defp emit_builtin(f, [%{t: :f64} = a], _, env) when f in [:trunc, :round],
-    do: val("defk_#{f}#{checked(env)}, #{a.c})", :i64)
+    do: val("defk_#{f}#{check(env, :ovf)}, #{a.c})", :i64)
 
   defp emit_builtin(:abs, [%{t: :u64} = a], _, _), do: a
 
   defp emit_builtin(:abs, [%{t: :i64} = a], _, env),
-    do: val("defk_abs_i64#{checked(env)}, #{a.c})", :i64)
+    do: val("defk_abs_i64#{check(env, :ovf)}, #{a.c})", :i64)
 
   defp emit_builtin(:abs, [%{t: :f64} = a], _, _),
     do: Map.put(val("fabs(#{a.c})", :f64), :nonneg, true)
@@ -3624,7 +3628,8 @@ defmodule Defk.Compiler do
       inlining: [key | env.inlining],
       ret: k.ret,
       ret_fors: returned_fors(k.body),
-      scope: Copies.inline_call(env.scope, node, env.vars)
+      scope: Copies.inline_call(env.scope, node, env.vars),
+      sink: :raise
     }
 
     params = for {p, {:arr, _}} <- k.params, do: {p, cenv.vars[p].id}
@@ -5361,21 +5366,27 @@ defmodule Defk.Compiler do
   # an `and` whose false fails the guard anyway (guard_false_pos/1), whose
   # right side then runs: its error fails the guard. A guard with no
   # operation that can fail lowers as written, with no flags.
-  # A case guard as a C condition. The guard is lowered in a guard scope
-  # (env.case_guard; the scope's record is the lowering's `guard`): an operation
-  # that can fail takes its flag from guard_flag/1, which makes the flag a
+  # A case guard as a C condition. The guard is lowered with the guard as
+  # its error sink (env.sink; the scope's record is the lowering's `guard`):
+  # an operation that can fail takes its flag from guard_flag/1, which makes the flag a
   # local on its first use and records the use, and every value lowered in
   # the scope carries the flags its C uses (lower_expr/2, `flags`), which is
   # what guard_short_circuit/5 and guard_poison/4 ask of an operand. When no
   # flag was used nothing can fail and that is the guard. Otherwise the
-  # flags are reset on every evaluation. Inside a speculated select (env.ovf)
-  # the select's own flag stands for `ovf`: an overflow replays the clauses
+  # flags are reset on every evaluation. Inside a speculated select (the sink
+  # around the guard) the select's own flag stands for `ovf`: an overflow replays the clauses
   # with a guard that raises; elsewhere it replays this guard.
   defp guard_expr(guard, env) do
     guard = guard_false_pos(guard)
-    outer = Map.get(env, :ovf)
+
+    outer =
+      case Map.get(env, :sink) do
+        {:select, flag} -> flag
+        _ -> nil
+      end
+
     low_put(:guard, %{bad: nil, ovf: outer, stop: nil, used: []})
-    {s, v} = lower_expr(guard, Map.put(env, :case_guard, true))
+    {s, v} = lower_expr(guard, Map.put(env, :sink, :guard))
     0 = IO.iodata_length(s)
     %{used: used, bad: bad, ovf: ovf, stop: stop} = low(:guard)
     low_put(:guard, nil)
@@ -5408,11 +5419,11 @@ defmodule Defk.Compiler do
     flag
   end
 
-  # the lowering is in a case guard
-  defp guard?(env), do: Map.has_key?(env, :case_guard)
+  # the lowering is in a case guard: the error sink is the guard's flags
+  defp guard?(env), do: Map.get(env, :sink) == :guard
 
   # the lowering's errors set flags: a case guard, or a speculated select
-  defp flagged?(env), do: guard?(env) or Map.has_key?(env, :ovf)
+  defp flagged?(env), do: Map.get(env, :sink, :raise) != :raise
 
   # the guard flags a value's C uses (in a guard scope; else none)
   defp flags(v), do: Map.get(v, :flags, [])
@@ -5437,7 +5448,7 @@ defmodule Defk.Compiler do
     "(#{resets}, #{g} = (#{c}), #{ok})"
   end
 
-  # `va cop vb`. In a case guard (env.case_guard) whose left side may overflow, an
+  # `va cop vb`. In a case guard (guard?/1) whose left side may overflow, an
   # overflowed left side does not decide which side runs (guard_expr): an
   # `and` whose false fails the guard runs its right side (an error there
   # fails the guard whatever the left side's exact value); any other sets
@@ -5472,7 +5483,7 @@ defmodule Defk.Compiler do
 
   defp guard_false_pos(other), do: other
 
-  # In a case guard (env.case_guard), the C of an operation `call` on the operands
+  # In a case guard (guard?/1), the C of an operation `call` on the operands
   # `vs` whose result depends on whether any of the `watched` (a suffix of
   # `vs`) was computed with an overflow: a divisor's zero, a float result's
   # finiteness. When one was, the operation is skipped (its result is
@@ -6457,14 +6468,25 @@ defmodule Defk.Compiler do
   defp note_overflow(node, :dropped),
     do: note(:check, node, :dropped, "#{src_text(node)}: no overflow check")
 
-  defp note_overflow(node, :kept),
-    do:
-      note(
-        :check,
-        node,
-        :kept,
-        "#{src_text(node)}: overflow check kept; nothing proves the result fits i64"
-      )
+  defp note_overflow(node, :kept, env) do
+    base = "#{src_text(node)}: overflow check kept; nothing proves the result fits i64"
+
+    case Map.get(env, :sink, :raise) do
+      :raise ->
+        note(:check, node, :kept, base)
+
+      sink ->
+        # the arm or guard was lowered with raising checks first (that C is
+        # its replay): the one note is the flagged lowering's
+        {kernel, _} = low(:report_kernel)
+        replay = {kernel, note_line(node), {:check, :kept, base}}
+        ctx_update(:report, &Enum.reject(&1, fn n -> n == replay end))
+        note(:check, node, :kept, base <> sink_text(sink))
+    end
+  end
+
+  defp sink_text({:select, _}), do: "; its failure sets the select's flag"
+  defp sink_text(:guard), do: "; its failure sets the guard's flag"
 
   # a store into an element type `e` narrower than the value's (lower_stmt/2):
   # its range check dropped, or kept; nil when the type needs none

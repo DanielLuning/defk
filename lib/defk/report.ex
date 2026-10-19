@@ -19,7 +19,9 @@ defmodule Defk.Report do
       overflow check) and each store into an element type narrower than the
       value's (its range check): dropped when the operands' facts prove the
       result fits, else kept (`"2 * i: no overflow check"`,
-      `"out[i]: u8 range check kept; nothing proves the value fits"`)
+      `"out[i]: u8 range check kept; nothing proves the value fits"`); a
+      kept overflow check inside a select or a case guard says that its
+      failure sets the select's or the guard's flag
     * `{:branch, :select | :branch, text}` for each `if`, `cond` and `case`,
       with why it is not a select
     * `{:loop, :per_iteration | :strips | :none, text}` for each loop: a

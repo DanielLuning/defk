@@ -79,7 +79,8 @@ is on the macro call line. `fact` is
 `{topic, verdict, text}`; `Defk.Report` lists the topics: `:kernel`,
 `:bounds`, `:check` (an i64 `+`, `-` or `*` with its overflow check dropped
 or kept, and a store into a narrower element type with its range check
-dropped or kept), `:branch`, `:loop`, `:nonfinite`, `:inline`, `:copy`, `:alloc`,
+dropped or kept; a kept check inside a select or a case guard says that its
+failure sets the select's or the guard's flag), `:branch`, `:loop`, `:nonfinite`, `:inline`, `:copy`, `:alloc`,
 `:owned` (an `alloc` or a copy inside a loop, which keeps a buffer per
 iteration until the kernel returns; the note for an `alloc` suggests hoisting
 it before the loop and clearing each pass) and `:vectorize`.
