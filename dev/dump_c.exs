@@ -21,6 +21,20 @@
 #     benches running (examples living in their own directory, like
 #     one_brc/, are not covered)
 #
+# Files named on the command line narrow both lists to those files:
+#
+#   DEFK_DUMP_C=tmp/c_main mix dump_c test/facts_test.exs examples/fft.exs
+#
+# lib, test/support and the kernels test_helper.exs loads (the catalog, the
+# fuzzy_search kernels) are always dumped. Pick the files whose kernels the
+# change touches; dump everything only for a change that reaches every
+# kernel (docs/agents/runs.md).
+#
+# No kernel is compiled by cc: the alias sets DEFK_NO_CC=1 unless it is set
+# (Defk.Build.library/3), as the gate needs only the C text. A library
+# already in the cache is still used. DEFK_NO_CC=0 builds every library, as
+# before.
+#
 # Two modules sharing a name overwrite one file; the last write wins on both
 # sides of a diff, so the gate stays sound — it just sees one of them.
 
@@ -31,8 +45,32 @@ out =
 
     :error ->
       IO.puts(:stderr, "DEFK_DUMP_C must name the output directory for the whole command:")
-      IO.puts(:stderr, "  DEFK_DUMP_C=tmp/c_main mix dump_c")
+      IO.puts(:stderr, "  DEFK_DUMP_C=tmp/c_main mix dump_c [file ...]")
       System.halt(2)
+  end
+
+all_tests = Enum.sort(Path.wildcard("test/**/*_test.exs"))
+
+all_examples =
+  Path.wildcard("examples/*.exs")
+  |> Enum.reject(&String.starts_with?(Path.basename(&1), "_"))
+  |> Enum.sort()
+
+{tests, examples} =
+  case Enum.map(System.argv(), &Path.relative_to_cwd/1) do
+    [] ->
+      {all_tests, all_examples}
+
+    files ->
+      case files -- (all_tests ++ all_examples) do
+        [] ->
+          {Enum.filter(all_tests, &(&1 in files)), Enum.filter(all_examples, &(&1 in files))}
+
+        unknown ->
+          IO.puts(:stderr, "not a test file or a top-level example: #{Enum.join(unknown, ", ")}")
+          IO.puts(:stderr, "  name files as test/<name>_test.exs or examples/<name>.exs")
+          System.halt(2)
+      end
   end
 
 # before the helper: ExUnit.start registers its run-at-exit hook only when
@@ -43,7 +81,7 @@ out =
 ExUnit.start(autorun: false)
 Code.require_file("test/test_helper.exs")
 
-for file <- Enum.sort(Path.wildcard("test/**/*_test.exs")), do: Code.require_file(file)
+for file <- tests, do: Code.require_file(file)
 
 # an example is Elixir modules followed by input setup and a bench; only the
 # modules matter here, and nothing outside a defmodule may feed one (an
@@ -58,14 +96,6 @@ defmodules = fn file ->
 
   for {:defmodule, _, _} = m <- forms, do: m
 end
-
-examples =
-  Path.wildcard("examples/*.exs")
-  |> Enum.reject(fn f ->
-    base = Path.basename(f)
-    String.starts_with?(base, "_")
-  end)
-  |> Enum.sort()
 
 # a module that does not `use Defk` contributes no C, so when it fails to
 # compile here (usually a dependency only the example's own Mix.install has,

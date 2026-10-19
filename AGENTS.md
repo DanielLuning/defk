@@ -68,6 +68,13 @@ Orientation before reading code: where each concern lives in the compiler,
 the runtime header and the tests, and how to navigate (AST tools don't parse
 Elixir; use grep and `mix xref`). See `docs/agents/compiler-map.md`.
 
+### Which run fits which change
+
+Run what the change touches: the area's unit tests, the generated C without
+`cc` (`mix dump_c`, about a minute for everything), then only the examples
+whose C changed. A measured result is measured again only when the owner or
+the ticket asks. See `docs/agents/runs.md`.
+
 ### Generated docs
 
 After changing the `Defk.Errors` registry, regenerate `docs/compile-errors.md` and parts of `docs/scope.md`. See `docs/agents/generated-docs.md`.

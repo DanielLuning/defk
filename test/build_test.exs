@@ -139,6 +139,31 @@ defmodule Defk.BuildTest do
       assert mod.__mix_recompile__?() == false
     end
 
+    test "DEFK_NO_CC compiles the module without cc and asks Mix to compile it again" do
+      restore_env_on_exit(["DEFK_NO_CC"])
+      # a compiler that does not exist: the test fails if cc runs
+      System.put_env("CC", Path.join(System.tmp_dir!(), "defk-no-such-cc"))
+      System.put_env("DEFK_NO_CC", "1")
+      mod = Module.concat(Defk.BuildTest, "NoCcMode#{System.unique_integer([:positive])}")
+
+      Code.compile_string("""
+      defmodule #{inspect(mod)} do
+        use Defk
+        defk f(x :: i64) :: i64, do: x + 1
+      end
+      """)
+
+      assert mod.__defk_lib__() == nil
+      assert mod.__defk_c_source__() =~ "ERL_NIF_INIT"
+      assert_raise ErlangError, fn -> mod.f(1) end
+      dir = Path.join(Mix.Project.build_path(), "defk")
+      assert Path.wildcard(Path.join(dir, "#{mod}-*.so")) == []
+
+      assert mod.__mix_recompile__?() == false
+      System.delete_env("DEFK_NO_CC")
+      assert mod.__mix_recompile__?()
+    end
+
     test "ERTS_INCLUDE_DIR overrides the include dir" do
       System.delete_env("ERTS_INCLUDE_DIR")
       default = Defk.Build.erts_include()
