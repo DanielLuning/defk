@@ -768,11 +768,11 @@ defmodule Defk.Facts do
       lo: joined(fs, & &1.lo, &min/2),
       hi: joined(fs, & &1.hi, &max/2),
       eq: if(Enum.all?(eqs, &(&1 == hd(eqs))), do: hd(eqs)),
-      lbs: common(rel, & &1.lbs, &min/2),
-      ubs: common(rel, & &1.ubs, &max/2),
+      lbs: common(rel, & &1.lbs, &min/2, &max/2),
+      ubs: common(rel, & &1.ubs, &max/2, &min/2),
       len_lo: joined(fs, & &1.len_lo, &min/2),
-      len_lbs: common(fs, & &1.len_lbs, &min/2),
-      len_ubs: common(fs, & &1.len_ubs, &max/2)
+      len_lbs: common(fs, & &1.len_lbs, &min/2, &max/2),
+      len_ubs: common(fs, & &1.len_ubs, &max/2, &min/2)
     })
   end
 
@@ -782,12 +782,20 @@ defmodule Defk.Facts do
     if Enum.all?(bounds, &is_integer/1), do: Enum.reduce(bounds, loosest)
   end
 
-  # the relative bounds whose form every arm has, each at its loosest constant
-  defp common(fs, get, loosest) do
+  # The relative bounds whose form every arm has, each at its loosest
+  # constant: one bound per shape. The derivations state a shape once
+  # (merge/3), but facts put on a carrier by hand may state it twice, and
+  # then the arm guarantees the tighter of the two, so each arm's list is
+  # reduced to one bound per shape first; without that, a shape stated
+  # twice in one arm came out twice in the join.
+  defp common(fs, get, loosest, tightest) do
     fs
-    |> Enum.map(get)
+    |> Enum.map(fn f -> f |> get.() |> one_per_shape(tightest) end)
     |> Enum.reduce(fn bs, acc -> intersect(acc, bs, loosest) end)
   end
+
+  # one bound per shape, at the tighter constant, in first-seen order
+  defp one_per_shape(bounds, tighter), do: merge([], bounds, tighter)
 
   # --------------------------------------------------------- derivations --
   # Each operation's exact form is the operands' combined, when both have
