@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-rt2.4"
   ],
@@ -12,8 +12,8 @@
   "labels": [],
   "parent": "defk-rt2",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "One element-access decision instead of three (store, load, word load)",
   "type": "task",
-  "updated_at": "2026-10-19T18:42:45Z"
+  "updated_at": "2026-10-19T20:06:05Z"
 }
