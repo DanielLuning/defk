@@ -127,20 +127,21 @@ defmodule Defk.Bench.Cache do
   Waits until `other_cpu/0` is at most `quiet_limit/0`, sampling every
   2 s, for at most `DEFK_BENCH_SETTLE_S` seconds (default 120): the
   machine settles after the example's own compile and whatever else ran.
-  Returns `{waited_s, cpu}`, `cpu` being the last sample.
+  Returns `{waited_s, cpu}`, `waited_s` in whole seconds (0 when the first
+  sample was quiet) and `cpu` the last sample.
   """
   @spec settle() :: {non_neg_integer(), float() | nil}
   def settle do
-    t0 = System.monotonic_time(:second)
-    settle(t0, t0 + trunc(env_float("DEFK_BENCH_SETTLE_S", 120.0)))
+    t0 = System.monotonic_time(:millisecond)
+    settle(t0, t0 + trunc(env_float("DEFK_BENCH_SETTLE_S", 120.0) * 1000))
   end
 
   defp settle(t0, deadline) do
     cpu = other_cpu()
-    now = System.monotonic_time(:second)
+    now = System.monotonic_time(:millisecond)
 
     if (is_number(cpu) and cpu <= quiet_limit()) or now >= deadline do
-      {now - t0, cpu}
+      {div(now - t0, 1000), cpu}
     else
       Process.sleep(2000)
       settle(t0, deadline)

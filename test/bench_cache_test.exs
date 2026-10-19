@@ -163,8 +163,9 @@ defmodule Defk.BenchCacheTest do
       other = Cache.other_cpu()
       assert other - own > busy / 2
     after
-      System.cmd("kill", [to_string(child)])
+      # close first: once the loop is killed the port may already be gone
       Port.close(port)
+      System.cmd("kill", [to_string(child)])
     end
   end
 
