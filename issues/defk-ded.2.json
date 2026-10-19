@@ -13,11 +13,15 @@
     {
       "text": "PR open (6f2e429a). mix ci green.",
       "timestamp": "2026-10-19T07:39:08Z"
+    },
+    {
+      "text": "PR #41",
+      "timestamp": "2026-10-19T07:39:18Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Stamp every measured result (version, commit, kernels' C hash) and let --snapshot update only the measured rows",
   "type": "task",
-  "updated_at": "2026-10-19T07:39:08Z"
+  "updated_at": "2026-10-19T07:39:18Z"
 }
