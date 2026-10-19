@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T18:42:41Z",
+  "description": "The same protocol (prove with `Facts.check`, record the strip row with `srec_proven`, choose checked or raw C, `note_bounds`) is written three times: store ~L1004-1018, load ~L1852-1882, word load ~L3286-3297, with three row kinds and note shapes. A fourth access kind would be a fourth copy. Narrow-store verdicts (`narrowed/2`, `int_stored/2`) are noted with `note_fit` but tests read them from C.\n\nSettled shape (grilling 2026-10-19):\n- `access(kind, a, i, w, env)` proves, records the strip row and notes the verdict; returns `{proven?, c}`; each site keeps only its C template.\n- The three note texts stay unchanged, so the report tests stay byte-identical.\n\nTests: element_types_test ~L365-368 and word_loads_test ~L160-162 read `notes(:bounds)` and the fit note instead of grepping `defk_to_i16(` / `defk_u64_le_at(`.\n\nGate: byte-identical `mix dump_c`; `mix ci`; PR per AGENTS.md. Compiler map: \"element types\" and \"statements\" rows.",
+  "id": "defk-rt2.5",
+  "labels": [],
+  "parent": "defk-rt2",
+  "priority": 3,
+  "status": "open",
+  "title": "One element-access decision instead of three (store, load, word load)",
+  "type": "task",
+  "updated_at": "2026-10-19T18:42:41Z"
+}
