@@ -79,6 +79,43 @@ defmodule Defk.Examples.Snapshot do
 
   defp by_name(snapshot), do: Map.new(snapshot["examples"], &{&1["name"], &1})
 
+  @doc """
+  Each row of `snapshot` that `digests` names (`Defk.Examples.c_digests/1`)
+  against its reports' stamps, in row order: `%{name:, status: :current |
+  :stale | :unstamped}`, and for a stamped row the kernel modules whose C
+  differs (`changed`, sorted; a module only one side has counts) and the
+  newest stamp's `measured_at` and `commit`. A report only: a stale row
+  stands until someone asks for it to be measured again.
+  """
+  def stale(snapshot, digests) do
+    for %{"name" => name, "results" => results} <- snapshot["examples"],
+        Map.has_key?(digests, name) do
+      stamps = Enum.map(results, & &1["stamp"])
+
+      if stamps == [] or nil in stamps do
+        %{name: name, status: :unstamped}
+      else
+        stamped = stamps |> Enum.map(& &1["c"]) |> Enum.reduce(%{}, &Map.merge(&2, &1))
+        now = digests[name]
+
+        changed =
+          for mod <- Enum.uniq(Map.keys(stamped) ++ Map.keys(now)),
+              stamped[mod] != now[mod],
+              do: mod
+
+        newest = Enum.max_by(stamps, & &1["measured_at"])
+
+        %{
+          name: name,
+          status: if(changed == [], do: :current, else: :stale),
+          changed: Enum.sort(changed),
+          measured_at: newest["measured_at"],
+          commit: newest["commit"]
+        }
+      end
+    end
+  end
+
   @doc "Writes the snapshot, one example per line so a diff shows which rows moved."
   def write(snapshot, file \\ path()) do
     {examples, meta} = Map.pop(snapshot, "examples")

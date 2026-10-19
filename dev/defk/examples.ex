@@ -128,6 +128,94 @@ defmodule Defk.Examples do
     end
   end
 
+  @doc """
+  Compiles the modules an example script defines, in this VM: only its
+  top-level `defmodule` forms, so no `Mix.install` and no bench runs.
+  Returns `{kernel_modules, skipped}`: the modules that `use Defk`, and the
+  names of the other modules that failed to compile (usually a dependency
+  only the example's own `Mix.install` has, like Crux in cdcl_sat.exs; they
+  hold no C). A kernel module that fails raises, as its C would be lost.
+  Nothing outside a `defmodule` may feed one: an example that needs
+  file-level setup for its modules breaks this loudly, which is the correct
+  outcome (fix the example).
+  """
+  @spec compile_modules(Path.t()) :: {[module()], [String.t()]}
+  def compile_modules(file) do
+    {kernels, skipped} =
+      for {:defmodule, _, [name | _]} = form <- top_level(file), reduce: {[], []} do
+        {kernels, skipped} ->
+          try do
+            {{:module, mod, _, _}, _} = Code.eval_quoted(form, [], file: file)
+            if kernel_module?(mod), do: {[mod | kernels], skipped}, else: {kernels, skipped}
+          rescue
+            e ->
+              if uses_defk?(form), do: reraise(e, __STACKTRACE__)
+              {kernels, [Macro.to_string(name) | skipped]}
+          end
+      end
+
+    {Enum.reverse(kernels), Enum.reverse(skipped)}
+  end
+
+  @doc """
+  The MD5 of the generated C of every kernel module an example defines,
+  with the scripts it `Code.require_file`s at top level (cdcl_sat_per_call
+  requires cdcl_sat): `%{name => %{"Mod" => hex}}`, the form of a stamp's
+  `c` (`Defk.Bench`). Compiled here without cc (`DEFK_NO_CC`); each script
+  compiles once.
+  """
+  @spec c_digests([String.t()], Path.t()) :: %{String.t() => %{String.t() => String.t()}}
+  def c_digests(names, dir \\ Path.join(root(), "examples")) do
+    scripts = Map.new(names, &{&1, with_required(Path.join(dir, "#{&1}.exs"))})
+    previous = System.get_env("DEFK_NO_CC")
+    System.put_env("DEFK_NO_CC", "1")
+
+    try do
+      per_file =
+        for file <- scripts |> Map.values() |> List.flatten() |> Enum.uniq(),
+            into: %{},
+            do: {file, file |> compile_modules() |> elem(0) |> Map.new(&{inspect(&1), c_md5(&1)})}
+
+      Map.new(scripts, fn {name, files} ->
+        {name, files |> Enum.map(&per_file[&1]) |> Enum.reduce(%{}, &Map.merge(&2, &1))}
+      end)
+    after
+      if previous,
+        do: System.put_env("DEFK_NO_CC", previous),
+        else: System.delete_env("DEFK_NO_CC")
+    end
+  end
+
+  # the scripts a script requires come first, as they load first
+  defp with_required(file) do
+    required =
+      for {{:., _, [{:__aliases__, _, [:Code]}, :require_file]}, _, [rel | _]} <- top_level(file),
+          is_binary(rel),
+          do: Path.expand(rel, Path.dirname(file))
+
+    Enum.flat_map(required, &with_required/1) ++ [file]
+  end
+
+  defp top_level(file) do
+    case Code.string_to_quoted!(File.read!(file), file: file) do
+      {:__block__, _, forms} -> forms
+      form -> [form]
+    end
+  end
+
+  defp kernel_module?(mod), do: function_exported?(mod, :__defk_c_source__, 0)
+
+  defp uses_defk?(form) do
+    form
+    |> Macro.prewalk(false, fn
+      {:use, _, [{:__aliases__, _, [:Defk]} | _]} = n, _ -> {n, true}
+      n, acc -> {n, acc}
+    end)
+    |> elem(1)
+  end
+
+  defp c_md5(mod), do: Base.encode16(:erlang.md5(mod.__defk_c_source__()), case: :lower)
+
   @doc "Runs the fuzzy_search app's own tests (`mix deps.get && mix test` in its directory)."
   @spec run_app_tests(pos_integer() | nil) :: outcome()
   def run_app_tests(timeout_s) do
