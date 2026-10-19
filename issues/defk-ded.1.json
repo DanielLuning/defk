@@ -7,9 +7,15 @@
   "id": "defk-ded.1",
   "labels": [],
   "parent": "defk-ded",
+  "comments": [
+    {
+      "text": "PR #40 open (cbfb5725): DEFK_NO_CC, dump_c file args, docs/agents/runs.md. mix ci green. Full no-cc dump 68 s cold.",
+      "timestamp": "2026-10-19T07:21:36Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "dump_c without cc, --only selection, and the agent rule for which run fits which change",
   "type": "task",
-  "updated_at": "2026-10-19T07:13:16Z"
+  "updated_at": "2026-10-19T07:21:36Z"
 }
