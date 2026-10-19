@@ -4,6 +4,7 @@
   "blocks": [
     "defk-x3a.4"
   ],
+  "closed_at": "2026-10-19T13:47:54Z",
   "created": "2026-10-19T13:01:27Z",
   "description": "Candidate 3, first compiler cut. compiler.ex L4335-4611 (strip record, srec_* names, field lowering.strip) and L4612-4875 (the flagged-strip classifier, regexes over emitted C, reads lowering.decls) become lib/defk/strip.ex, Defk.Strip, which owns the strip value kept at ctx.lowering.strip (same pattern as Defk.Copies at lowering.copies). Interface roughly: declare, arm, drop_frame, rows, classify(id, text, var, rows, types) :: map | nil. The public test hook __flag_strip_rows__ (L4610) disappears; strip_record_test calls Defk.Strip.classify at the interface. The divider 'the record classifier' is mislabelled: L4891-4944 (loop entry / resume dispatch) goes under loops, L4946-5349 (lower_reduce, with_acc_facts, u64_accs, assign_accs; owns acc_fix, nloops, nhalts, halted) gets a divider 'reduce accumulators', L5354-5433 (lower_tail, branch_chain) goes under case. Update docs/agents/compiler-map.md and the Ctx.Lowering comment. Gate: mix dump_c byte-identical (baseline from an untouched checkout; see memory on DEFK_HEADER_HASH noise). Run strip_record_test, the loop tests, then mix ci.",
   "id": "defk-x3a.3",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Defk.Strip: strip record and classifier in one module; a divider for reduce accumulators",
   "type": "task",
-  "updated_at": "2026-10-19T13:12:58Z"
+  "updated_at": "2026-10-19T13:47:54Z"
 }
