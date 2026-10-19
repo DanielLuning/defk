@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T13:01:27Z",
+  "description": "Candidate 1 of the 2026-10-19 review. Defk.Bench.report/1 stays in lib as the user harness (docs/guides/measuring.md documents it; examples load defk via Mix.install, which compiles lib only). Move measurement hygiene (settle/0, other_cpu/0, quiet?/1, quiet_limit/0) from Bench.Cache into Defk.Bench. Move the result cache (lookup/1, store/3, cpu_model/0, key parts, file format, DEFK_BENCH_CACHE_DIR / DEFK_BENCH_SCRIPT) to dev/defk/bench/cache.ex. mix defk.examples starts each child with elixir -r dev/defk/bench/cache.ex \u003cscript\u003e; Defk.Bench uses the cache only when Code.ensure_loaded?(Defk.Bench.Cache). DEFK_RESULT stays in Defk.Bench. Write ADR-0011 'The measurement harness ships; the scoreboard cache does not' (reason: guide + Mix.install; two adapters at the seam: none for a user, the cache for the catalog). Update bench_cache_test, scoreboard_doc_test, examples_task_test, docs/agents/runs.md, mix.exs ex_doc groups if needed. CHANGELOG entry (Defk.Bench is unstable public per ADR-0006). Deletion test: nothing in lib breaks without the adapter.",
+  "id": "defk-x3a.1",
+  "labels": [],
+  "parent": "defk-x3a",
+  "priority": 3,
+  "status": "open",
+  "title": "Bench: hygiene into Defk.Bench, result cache as the runner's adapter in dev/",
+  "type": "task",
+  "updated_at": "2026-10-19T13:01:27Z"
+}
