@@ -736,16 +736,36 @@ defmodule Defk.Compiler do
         match?({:arr, _}, t) and v.owned == false
       end)
 
+    stmts = [prologue, stmts, ret_stmts]
+    decls = Enum.reverse(low(:decls))
+
     Map.merge(k, %{
-      stmts: [prologue, stmts, ret_stmts],
+      stmts: stmts,
       ret_vals: ret_vals,
       ret_views: views,
-      decls: Enum.reverse(low(:decls)),
-      decl_loop: low(:decl_loop),
-      loops_c: low(:loops_c),
+      decls: decls,
+      loop_locals: loop_locals(stmts, decls),
       sp_count: low(:sp),
       sps: low(:sps)
     })
+  end
+
+  # The locals table the emitter spills from (safepoint_saves/2): each local
+  # whose every mention is in its own loop's C, with that loop (fresh/2 notes
+  # the innermost loop open where a local is bound, in_loop/1 the locals a
+  # loop's C mentions). A loop's C is one piece of the kernel's, so a local
+  # mentioned there as often as in the whole kernel is mentioned nowhere
+  # else.
+  defp loop_locals(stmts, decls) do
+    all = mentions(IO.iodata_to_binary(stmts))
+    loops = low(:loop_mentions)
+    decl_loop = low(:decl_loop)
+
+    for {c, _} <- decls,
+        in_loop = loops[decl_loop[c]],
+        in_loop[c] == all[c],
+        into: %{},
+        do: {c, decl_loop[c]}
   end
 
   # The collecting fors that are the kernel's value: its last expression, or
@@ -4610,7 +4630,7 @@ defmodule Defk.Compiler do
   # n * 256 + depth: each level matches only its own depth and
   # hands the next one on, so a missing case above leaves the depth behind
   # and nothing below matches. The last step jumps to the safepoint's arrival
-  # label, defk_a<n>, in front of its own loop (arrival_blocks/3): only
+  # label, defk_a<n>, in front of its own loop (arrival/2): only
   # arriving there clears the resume, so a jump to any other loop leaves it
   # pending, and the next yield or the return raises (defk_lost_resume).
   defp in_loop(fun) do
@@ -4620,9 +4640,34 @@ defmodule Defk.Compiler do
     low_put(:loops, [id | stack])
     res = fun.(id)
     low_put(:loops, stack)
-    # the loop's own C, for safepoint_saves/2
-    low_update(:loops_c, &Map.put(&1, id, res))
-    res
+    text = IO.iodata_to_binary(res)
+    # the locals the loop's own C mentions, for the kernel's locals table
+    # (loop_locals/4): the one scan of a loop's C
+    low_update(:loop_mentions, &Map.put(&1, id, mentions(text)))
+    arrival(id, text)
+  end
+
+  # how often each local is mentioned in a piece of C
+  defp mentions(text), do: ~r/\bv_\w+/ |> Regex.scan(text) |> Enum.frequencies_by(&hd/1)
+
+  # The arrival label of each safepoint of loop `id` (its innermost loop), in
+  # front of the loop's label, in a block only a goto enters: the normal
+  # path never runs it, and the loop itself does not change. A kernel that
+  # never yields keeps its dispatch behind DEFK_RESUMING (0), so the labels
+  # stay, with nothing to clear. Emitted as the loop closes, when its
+  # safepoints are known.
+  defp arrival(id, text) do
+    case for({n, path} <- low(:sps), List.last(path) == id, do: n) do
+      [] ->
+        text
+
+      ns ->
+        {{_, _}, yield?} = low(:report_kernel)
+        clear = if yield?, do: " defk_rs = F->resume = 0;", else: ""
+        arrive = Enum.map_join(Enum.sort(ns), " ", &"defk_a#{&1}:")
+        label = "defk_l#{id}:;\n"
+        String.replace(text, label, "if (0) { #{arrive};#{clear} }\n" <> label, global: false)
+    end
   end
 
   # Dispatch for the loops entered from here (the current loop body, or the
@@ -4648,26 +4693,6 @@ defmodule Defk.Compiler do
 
   # defk_rs while resuming safepoint n at dispatch depth `depth`
   defp rs(n, depth) when depth < 256, do: n * 256 + depth
-
-  # The arrival label of each safepoint, in front of its own loop's label, in
-  # a block only a goto enters: the normal path never runs it, and the loop
-  # itself does not change. A kernel that never yields keeps its dispatch
-  # behind DEFK_RESUMING (0), so the labels stay, with nothing to clear.
-  defp arrival_blocks(text, sps, yields?) do
-    clear = if yields?, do: " defk_rs = F->resume = 0;", else: ""
-    own = Enum.group_by(sps, fn {_, path} -> List.last(path) end, fn {n, _} -> n end)
-
-    Regex.replace(~r/defk_l(\d+):;\n/, text, fn label, id ->
-      case own[String.to_integer(id)] do
-        nil ->
-          label
-
-        ns ->
-          arrive = Enum.map_join(Enum.sort(ns), " ", &"defk_a#{&1}:")
-          "if (0) { #{arrive};#{clear} }\n" <> label
-      end
-    end)
-  end
 
   # ------------------------------------------------- reduce accumulators --
   # `for ... reduce:` and `Enum.reduce_while`: the accumulators' carrying,
@@ -5788,7 +5813,7 @@ defmodule Defk.Compiler do
 
     params = Enum.map(scalars, fn {p, _, _} -> "p_#{sanitize(p)}" end)
     yields? = yields?(k)
-    {stmts, saves} = safepoint_saves(k, params)
+    saves = safepoint_saves(k, params)
     # the frame holds what some safepoint spills
     framed = if yields?, do: Enum.uniq(Enum.flat_map(saves, &elem(&1, 1))), else: []
 
@@ -5807,7 +5832,7 @@ defmodule Defk.Compiler do
       resume_block(yields?, k, saves),
       decode_params(scalars),
       sp_macro(yields?, k, saves),
-      stmts,
+      k.stmts,
       "*result = #{emit_result(k)};\nreturn DEFK_DONE;\n",
       @undef_macros,
       if(yields?, do: Enum.map(saves, fn {n, _} -> "#undef DEFK_SAVE#{n}\n" end), else: []),
@@ -5832,39 +5857,18 @@ defmodule Defk.Compiler do
   # control is not inside an iteration of L, which is at L's own header and
   # anywhere outside L. Only a safepoint in a loop nested in L spills it;
   # the others leave it out, when every mention of it in the kernel's C is
-  # in L's own C (in_loop/1 records each loop's; a local mentioned outside
-  # is spilled everywhere, as before). A dead local in a spill list is not
-  # wrong, but it is read at the safepoint, so the C compiler keeps its
-  # value alive into it: a temporary of an inner loop becomes a value that
-  # loop carries out to the enclosing loop's safepoint. With Keccak's 25
-  # lanes that spilled half the state on every round.
+  # in L's own C (the lowering's locals table, loop_locals/2; a local
+  # mentioned outside is spilled everywhere, as before). A dead local in a
+  # spill list is not wrong, but it is read at the safepoint, so the C
+  # compiler keeps its value alive into it: a temporary of an inner loop
+  # becomes a value that loop carries out to the enclosing loop's safepoint.
+  # With Keccak's 25 lanes that spilled half the state on every round.
   defp safepoint_saves(k, params) do
-    text = IO.iodata_to_binary(k.stmts)
-    mentions = mentions(text)
-    in_loop = Map.new(k.loops_c, fn {id, c} -> {id, c |> IO.iodata_to_binary() |> mentions()} end)
-
-    # a loop's C is one piece of the kernel's, so a local mentioned there as
-    # often as in the whole kernel is mentioned nowhere else
-    inside? = fn c ->
-      case in_loop[k.decl_loop[c]] do
-        nil -> false
-        in_l -> in_l[c] == mentions[c]
-      end
+    for {n, path} <- Enum.sort(k.sps) do
+      open = MapSet.new(Enum.drop(path, -1))
+      {n, params ++ for({c, _} <- k.decls, not dead_at?(k.loop_locals, c, open), do: c)}
     end
-
-    local = for {c, _} <- k.decls, inside?.(c), into: %{}, do: {c, k.decl_loop[c]}
-
-    saves =
-      for {n, path} <- Enum.sort(k.sps) do
-        open = MapSet.new(Enum.drop(path, -1))
-        {n, params ++ for({c, _} <- k.decls, not dead_at?(local, c, open), do: c)}
-      end
-
-    {arrival_blocks(text, k.sps, yields?(k)), saves}
   end
-
-  # how often each local is mentioned in a piece of C
-  defp mentions(text), do: ~r/\bv_\w+/ |> Regex.scan(text) |> Enum.frequencies_by(&hd/1)
 
   # a local of a loop whose iterations do not enclose the safepoint
   defp dead_at?(local, c, open), do: Map.has_key?(local, c) and local[c] not in open

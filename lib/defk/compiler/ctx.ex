@@ -26,9 +26,9 @@ defmodule Defk.Compiler.Ctx do
     # fix sets (per with_acc_facts retry ref, once {:defk_acc_facts, ref}),
     # the operand bindings of the expression being lowered (lower_ops), the
     # case guard being lowered (guard_expr): its flags as C locals once
-    # used, nil outside a guard, and the C of each loop by its id
-    # (in_loop/1), which the emitter reads to find the locals of one loop
-    # (safepoint_saves/2)
+    # used, nil outside a guard, and how often each local is mentioned in
+    # each loop's C, by loop id (in_loop/1), from which the kernel's locals
+    # table is built as the lowering ends (loop_locals/2)
     @moduledoc false
 
     defstruct n: 0,
@@ -48,7 +48,7 @@ defmodule Defk.Compiler.Ctx do
               strip: %Defk.Strip{},
               operand_binds: [],
               guard: nil,
-              loops_c: %{}
+              loop_mentions: %{}
   end
 
   def new(file, module, lines), do: %__MODULE__{file: file, module: module, lines: lines}
