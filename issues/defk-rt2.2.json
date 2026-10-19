@@ -11,9 +11,15 @@
   "id": "defk-rt2.2",
   "labels": [],
   "parent": "defk-rt2",
+  "comments": [
+    {
+      "text": "PR #58: Defk.Copies.Scope at env.scope; C unchanged; mix ci green (2294 passed).",
+      "timestamp": "2026-10-19T19:07:50Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Defk.Copies owns the copy analysis's liveness scope (eight env keys become one)",
   "type": "task",
-  "updated_at": "2026-10-19T18:54:41Z"
+  "updated_at": "2026-10-19T19:07:50Z"
 }
