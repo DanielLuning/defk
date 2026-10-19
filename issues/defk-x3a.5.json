@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T13:01:28Z",
+  "description": "Candidate 7 (decided: one divider, no module; the machinery is a thin adapter over Errors.Diagnostics and reads ctx, so a module would have a wide interface). Move recover_for / recover_reduce / recover_pipe / recover_body (L6604-6689) and the ctx.statics handling up to the 'rejections' divider (L277-477) with attempt, probe, recover, poison, broken. Move the seven construct-specific raisers of 'more rejections' (attribute!, not_an_array!, cond_without_true!, case_form!, fn_argument!, for_collect!, generator_pattern!) next to the construct they serve. Move compare_c, compare_numeric_c, cop, mixed_cmp (L6735-6800) into expressions. fmt and sanitize (called from 9 and 5 sections) go under helpers. Delete the 'more rejections' divider. Update docs/agents/compiler-map.md (one rejections row that also names recovery). Gate: mix dump_c byte-identical; compile_errors_test, compile_rewrites_test, mix ci.",
+  "id": "defk-x3a.5",
+  "labels": [],
+  "parent": "defk-x3a",
+  "priority": 3,
+  "status": "open",
+  "title": "Rejection and recovery under one divider; construct raisers beside their constructs",
+  "type": "task",
+  "updated_at": "2026-10-19T13:01:28Z"
+}
