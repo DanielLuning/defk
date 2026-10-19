@@ -14,6 +14,12 @@
 
 ## Unreleased
 
+- Added (unstable, the fast-path report's facts): the `:check` topic. Each
+  i64 `+`, `-` and `*` notes whether its overflow check was dropped or
+  kept, and each store into an element type narrower than the value's
+  (`[u8]`, `[i16]`, `[i32]`, a u64 into `[i64]`, an i64 into `[u64]`)
+  whether its range check was. `Defk.Report.print/1` shows them with the
+  other notes.
 - Changed (unstable API): the result cache of `mix defk.examples --bench`
   (`Defk.Bench.Cache`) is no longer in the package. It is the catalog
   runner's adapter, kept in the repo's `dev/` and loaded into each

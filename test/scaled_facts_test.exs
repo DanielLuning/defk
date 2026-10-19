@@ -242,10 +242,20 @@ defmodule Defk.ScaledFactsTest do
   @i64_min -0x8000000000000000
   @i64_max 0x7FFFFFFFFFFFFFFF
 
-  defp kernel_c(name) do
-    [_, c] = String.split(K.__defk_c_source__(), "/* ---- #{name}/", parts: 2)
-    c |> String.split("/* ---- ", parts: 2) |> hd()
-  end
+  # The kept checks on `topic` (:bounds, or :check for the overflow and
+  # range checks), as their texts: of kernel `name` in K, or of every
+  # kernel in a compile's `report`. A dropped check is not in the C, so
+  # these are the fast-path report's facts, which say so at the access.
+  defp kept(name, topic) when is_atom(name),
+    do: for({{^name, _}, _, {^topic, :kept, text}} <- K.__defk_report__(), do: text)
+
+  defp kept(report, topic) when is_list(report),
+    do: for({_, _, {^topic, :kept, text}} <- report, do: text)
+
+  defp kept_overflow(name_or_report),
+    do: Enum.filter(kept(name_or_report, :check), &(&1 =~ "overflow"))
+
+  defp kept_range(name), do: Enum.filter(kept(name, :check), &(&1 =~ "range"))
 
   # [bytes, k]: k from just before the array to just past it
   def bytes_and_index do
@@ -263,17 +273,15 @@ defmodule Defk.ScaledFactsTest do
     end
 
     test "writes out[2 * i] and out[2 * i + 1] with no bounds check" do
-      refute kernel_c("encode16") =~ "defk_put_"
-      refute kernel_c("encode16") =~ "defk_get_"
+      assert kept(:encode16, :bounds) == []
     end
 
     test "computes 2 * i and 2 * i + 1 with no overflow check" do
-      refute kernel_c("encode16") =~ "defk_mul_i64"
-      refute kernel_c("encode16") =~ "defk_add_i64"
+      assert kept_overflow(:encode16) == []
     end
 
     test "stores a byte read from a binary attribute with no u8 range check" do
-      refute kernel_c("encode16") =~ "defk_to_u8"
+      assert kept_range(:encode16) == []
     end
   end
 
@@ -291,13 +299,11 @@ defmodule Defk.ScaledFactsTest do
     end
 
     test "reads s[2 * i], s[2 * i + 1] and writes out[i] with no bounds check" do
-      refute kernel_c("decode16") =~ "defk_put_"
-      refute kernel_c("decode16") =~ "defk_get_"
+      assert kept(:decode16, :bounds) == []
     end
 
     test "computes 2 * i and 2 * i + 1 with no overflow check" do
-      refute kernel_c("decode16") =~ "defk_mul_i64"
-      refute kernel_c("decode16") =~ "defk_add_i64"
+      assert kept_overflow(:decode16) == []
     end
   end
 
@@ -307,8 +313,7 @@ defmodule Defk.ScaledFactsTest do
       assert K.spread3(a) == G.pack(:i64, [5, 10, 0, -7, -14, 0, 9, 18, 0, 3])
       Defk.Test.assert_agrees(K, :spread3, [a])
       Defk.Test.assert_agrees(K, :spread3, [G.pack(:i64, [@i64_max])])
-      refute kernel_c("spread3") =~ "defk_put_"
-      refute kernel_c("spread3") =~ "defk_get_"
+      assert kept(:spread3, :bounds) == []
     end
 
     test "a quotient of a length keeps no bounds check" do
@@ -318,8 +323,7 @@ defmodule Defk.ScaledFactsTest do
         Defk.Test.assert_agrees(K, :evens, [a])
       end
 
-      refute kernel_c("evens") =~ "defk_put_"
-      refute kernel_c("evens") =~ "defk_get_"
+      assert kept(:evens, :bounds) == []
     end
   end
 
@@ -336,12 +340,12 @@ defmodule Defk.ScaledFactsTest do
         Defk.Test.assert_agrees(K, :spread2_pair, [a])
       end
 
-      refute kernel_c("spread2_acc") =~ "defk_put_"
-      refute kernel_c("spread2_pair") =~ "defk_put_"
+      assert kept(:spread2_acc, :bounds) == []
+      assert kept(:spread2_pair, :bounds) == []
     end
 
     test "a body that may give a shorter array keeps the check, and raises past the end" do
-      assert kernel_c("shrink_acc") =~ "defk_put_u8"
+      assert ["o[2 * i]" <> _] = kept(:shrink_acc, :bounds)
 
       a = "abcdef"
       assert K.shrink_acc(a, -1) == for(<<b <- a>>, into: <<>>, do: <<b, 0>>)
@@ -353,8 +357,8 @@ defmodule Defk.ScaledFactsTest do
     end
 
     test "a new value with the same fact keeps it only with an offset as large" do
-      assert kernel_c("regrow_short") =~ "defk_put_u8"
-      refute kernel_c("regrow_long") =~ "defk_put_"
+      assert ["o[2 * i]" <> _] = kept(:regrow_short, :bounds)
+      assert kept(:regrow_long, :bounds) == []
 
       for fun <- [:regrow_short, :regrow_long], a <- ["", "a", "abcd"] do
         Defk.Test.assert_agrees(K, fun, [a])
@@ -364,11 +368,11 @@ defmodule Defk.ScaledFactsTest do
     test "an if giving the accumulator or a new array keeps the fact both arms have" do
       # len(o) >= 2 * len(a) in one arm, >= 2 * len(a) + 1 in the other: the
       # value has it with offset 0, as large as assumed
-      refute kernel_c("regrow_if_long") =~ "defk_put_"
+      assert kept(:regrow_if_long, :bounds) == []
       # an offset below the assumed one in one arm loses it
-      assert kernel_c("regrow_if_short") =~ "defk_put_u8"
+      assert ["o[2 * i]" <> _] = kept(:regrow_if_short, :bounds)
       # arms with different keys share no fact
-      assert kernel_c("regrow_cond_mixed") =~ "defk_put_u8"
+      assert ["o[2 * i]" <> _] = kept(:regrow_cond_mixed, :bounds)
 
       a = "abcdef"
       spread = for <<b <- a>>, into: <<>>, do: <<b, 0>>
@@ -390,11 +394,11 @@ defmodule Defk.ScaledFactsTest do
 
   describe "the value of a branch" do
     test "an index from either of two in-range expressions keeps no bounds check" do
-      refute kernel_c("pick_next") =~ "defk_get_"
-      refute kernel_c("pick_pair") =~ "defk_get_"
-      refute kernel_c("pick_pair") =~ "defk_mul_i64"
+      assert kept(:pick_next, :bounds) == []
+      assert kept(:pick_pair, :bounds) == []
+      assert kept_overflow(:pick_pair) == []
       # i + 2 may be length(a): the check stays and raises
-      assert kernel_c("pick_past") =~ "defk_get_u8"
+      assert ["a[j]" <> _] = kept(:pick_past, :bounds)
 
       for a <- [<<>>, <<9>>, <<9, 1>>, <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9>>] do
         assert {:ok, _} = Defk.Test.assert_agrees(K, :pick_next, [a])
@@ -408,7 +412,7 @@ defmodule Defk.ScaledFactsTest do
     end
 
     test "a constant from a case keeps no overflow check on its product" do
-      refute kernel_c("small_case") =~ "defk_mul_i64"
+      assert kept_overflow(:small_case) == []
 
       for a <- [<<>>, <<0, 1, 2, 7>>] do
         assert {:ok, _} = Defk.Test.assert_agrees(K, :small_case, [a])
@@ -462,9 +466,10 @@ defmodule Defk.ScaledFactsTest do
     %{head: quote(do: f(a :: [u8]) :: [u8]), opts: [], body: body, line: 1}
   end
 
-  defp c_of(kernel) do
-    {c, _, _} = Defk.Compiler.compile(Defk.ScaledFactsTest.Probe, [kernel], nil)
-    c
+  # the fast-path report of one compiled kernel
+  defp report_of(kernel) do
+    {_, _, report} = Defk.Compiler.compile(Defk.ScaledFactsTest.Probe, [kernel], nil)
+    report
   end
 
   # an expression of x (an AST), and the values of its operations (the
@@ -599,7 +604,7 @@ defmodule Defk.ScaledFactsTest do
   end
 
   defp index_branch_sound({{size, size_v}, {last, last_v}, {i1, i1_v}, {i2, i2_v}}) do
-    if not (c_of(index_branch_kernel(size, last, i1, i2)) =~ "defk_put_u8") do
+    if kept(report_of(index_branch_kernel(size, last, i1, i2)), :bounds) == [] do
       # an arm whose arithmetic overflows raises when taken (the select
       # replays it with the checks), so only the fitting ones index
       for {idx, idx_v} <- [{i1, i1_v}, {i2, i2_v}],
@@ -641,7 +646,7 @@ defmodule Defk.ScaledFactsTest do
   end
 
   defp branch_bounds_sound({{s1, s1_v}, {s2, s2_v}, {last, last_v}, {idx, idx_v}}) do
-    if not (c_of(branch_kernel(s1, s2, last, idx)) =~ "defk_put_u8") do
+    if kept(report_of(branch_kernel(s1, s2, last, idx)), :bounds) == [] do
       for {size, size_v} <- [{s1, s1_v}, {s2, s2_v}],
           {l, n, k, ops} <- reached(size_v, last_v, idx_v, :a),
           fits?(ops) do
@@ -662,7 +667,7 @@ defmodule Defk.ScaledFactsTest do
   defp bounds_sound({{size, size_v}, {last, last_v}, {idx, idx_v}, base}) do
     # an index past i64 raises in its checked arithmetic (and the overflow
     # property covers an unchecked one)
-    if not (c_of(kernel(size, last, idx)) =~ "defk_put_u8") do
+    if kept(report_of(kernel(size, last, idx)), :bounds) == [] do
       for {l, n, k, ops} <- reached(size_v, last_v, idx_v, base), fits?(ops) do
         assert List.last(ops) in 0..(n - 1)//1,
                "out[#{Macro.to_string(idx)}] is unchecked, but for length(a) = #{l}, " <>
@@ -672,18 +677,19 @@ defmodule Defk.ScaledFactsTest do
   end
 
   defp overflow_sound({{size, size_v}, {last, last_v}, {idx, idx_v}, base}) do
-    c = c_of(kernel(size, last, idx))
+    overflow = kept_overflow(report_of(kernel(size, last, idx)))
 
     # none checked: the length expressions never overflow
-    if not (c =~ ~r/defk_(mul|add)_i64\(/) do
+    if overflow == [] do
       for l <- @lengths, n = List.last(size_v.(l)), n in 0..@len_max//1 do
         assert fits?(size_v.(l)) and fits?(last_v.(if base == :a, do: l, else: n)),
                "#{shown(size, last)} has no overflow check, but overflows for length(a) = #{l}"
       end
     end
 
-    # the index's multiply and add unchecked: they never overflow
-    if not (c =~ ~r/defk_(mul|add)_i64\(ctx, [^;]*v_i_\d+/) do
+    # the index's multiply and add (the operations on i) unchecked: they
+    # never overflow
+    if not Enum.any?(overflow, &(&1 =~ ~r/\bi\b/)) do
       for {l, _n, k, ops} <- reached(size_v, last_v, idx_v, base) do
         assert fits?(ops),
                "#{Macro.to_string(idx)} has no overflow check, but overflows for " <>

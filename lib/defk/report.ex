@@ -15,6 +15,11 @@ defmodule Defk.Report do
       (`"a[i + 1]: bounds check kept; nothing proves i + 1 < length(a)"`).
       A range copy (`copy/5`, `copy_back/4`) keeps one check for its whole
       range
+    * `{:check, :dropped | :kept, text}` for each i64 `+`, `-` and `*` (its
+      overflow check) and each store into an element type narrower than the
+      value's (its range check): dropped when the operands' facts prove the
+      result fits, else kept (`"2 * i: no overflow check"`,
+      `"out[i]: u8 range check kept; nothing proves the value fits"`)
     * `{:branch, :select | :branch, text}` for each `if`, `cond` and `case`,
       with why it is not a select
     * `{:loop, :per_iteration | :strips | :none, text}` for each loop: a
@@ -74,9 +79,10 @@ defmodule Defk.Report do
       ...> end
       iex> for {{:dot, 2}, _line, {topic, verdict, _text}} <- MyApp.Dot.__defk_report__(),
       ...>   do: {topic, verdict}
-      [kernel: :yield, loop: :strips, nonfinite: :flagged, bounds: :dropped, bounds: :dropped]
+      [kernel: :yield, check: :dropped, loop: :strips, nonfinite: :flagged, bounds: :dropped, bounds: :dropped]
 
-  The loop runs in strips with one safepoint each, its float checks are
+  The range's `n - 1` needs no overflow check (a length is below 2^61), the
+  loop runs in strips with one safepoint each, its float checks are
   flagged, and both array reads lost their bounds checks, because `i` stays
   below `length(a)` and `length(b)`. `Defk.Report.print(MyApp.Dot)` shows the
   same notes beside the source lines. When a kernel is slower than you

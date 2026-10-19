@@ -990,7 +990,7 @@ defmodule Defk.Compiler do
     {:arr, e} = a.t
     stored = "value stored in [#{e}]"
 
-    vc =
+    {fit, vc} =
       if v.t in @ints and wide(e) != :f64,
         do: int_stored(v, e),
         else: narrowed(coerce!(v, wide(e), rhs, stored), e)
@@ -1015,6 +1015,7 @@ defmodule Defk.Compiler do
       end
 
     note_bounds(target, 1, proven, {a, i, env})
+    note_fit(target, fit, e)
     {[sa, si, sv, sc, store], env}
   end
 
@@ -2266,7 +2267,7 @@ defmodule Defk.Compiler do
           val("defk_#{fun}_u64#{checked(env)}, #{ua.c}, #{ub.c})", :u64)
 
         {:i64, va, vb} ->
-          i64_arith(op, va, vb, env)
+          i64_arith(op, va, vb, node, env)
 
         # a float result that is inf or NaN raises, as in Elixir
         _ ->
@@ -2289,8 +2290,8 @@ defmodule Defk.Compiler do
   # operands' facts keep every result inside i64 (their constant bounds, or
   # the prover on the result's relative bounds and exact form). A case
   # guard's check flags and computes on (checked/1), so its result is not
-  # exact.
-  defp i64_arith(op, va, vb, env) do
+  # exact. The decision is noted (note_overflow/2); `node` is the operation.
+  defp i64_arith(op, va, vb, node, env) do
     {fun, facts, {lo, hi}} =
       case op do
         :+ ->
@@ -2309,9 +2310,13 @@ defmodule Defk.Compiler do
 
     v = Facts.put(val(nil, :i64), facts)
 
-    if Facts.prove_i64(lo, hi) or Facts.fits_i64?(v, env),
-      do: %{v | c: "(#{va.c} #{op} #{vb.c})"},
-      else: guarded(%{v | c: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"}, env)
+    if Facts.prove_i64(lo, hi) or Facts.fits_i64?(v, env) do
+      note_overflow(node, :dropped)
+      %{v | c: "(#{va.c} #{op} #{vb.c})"}
+    else
+      note_overflow(node, :kept)
+      guarded(%{v | c: "defk_#{fun}_i64#{checked(env)}, #{va.c}, #{vb.c})"}, env)
+    end
   end
 
   # a value from a check that a case guard flags and computes past has no
@@ -2791,14 +2796,19 @@ defmodule Defk.Compiler do
   # value of the arm taken; `node` is the if, cond or case
   # `relies`: the first arm that relies on its condition (relies_on_condition/3)
   defp lower_branch(arms, ts, tmps, env, node, {ref, relies}) do
-    sel = relies == nil and select?(arms)
+    why =
+      if relies,
+        do: {:no, "arm #{relies + 1} relies on its condition to drop a check"},
+        else: select_check(arms)
 
     # a select's arms run inline in the assigned statement; a chain assigns
     # each arm's value to the temporaries inside that arm's block
-    if sel, do: srec_drop_frame(ref), else: record_arm_assigns(arms, tmps, ref)
+    if why == :ok, do: srec_drop_frame(ref), else: record_arm_assigns(arms, tmps, ref)
 
-    code = if(sel, do: select(arms, ts, tmps, env), else: chain(arms, tmps))
-    note_branch(node, arms, code, tmps, relies)
+    {verdict, code} =
+      if why == :ok, do: select(arms, ts, tmps, env), else: {why, chain(arms, tmps)}
+
+    note_branch(node, verdict)
     code
   end
 
@@ -2828,24 +2838,52 @@ defmodule Defk.Compiler do
   # it is evaluated once as written and may call kernels. A tuple value gets
   # one select per element over the same condition temporaries.
   # (A `case` with no catch-all ends in a :nomatch arm and is never a select.)
-  defp select?([{_, _, {_, _}, _, _} | later] = arms) do
-    case Enum.split(later, -1) do
-      {later, [{_, _, :else, _, _}]} ->
-        Enum.all?(arms, fn {_, body, _, sb, _} ->
-          IO.iodata_length(sb) == 0 and speculate?(body)
-        end) and
-          Enum.all?(later, fn
-            {c, _, {sc, _}, _, _} -> IO.iodata_length(sc) == 0 and speculate?(c)
-            _ -> false
-          end)
+  # :ok, or {:no, why} with the first condition that fails, as the report
+  # says it (note_branch/2).
+  defp select_check([{_, _, :else, _, _}]), do: {:no, "it has one arm"}
 
-      _ ->
-        false
+  defp select_check(arms) do
+    {[first | later], [last]} = Enum.split(arms, -1)
+    arm = fn i -> if i == length(arms) - 1, do: "the last arm", else: "arm #{i + 1}" end
+
+    stmts = Enum.find_index(arms, fn {_, _, _, sb, _} -> sb && IO.iodata_length(sb) > 0 end)
+    impure = Enum.find_index(arms, fn {_, body, _, _, _} -> not speculate?(body) end)
+
+    later_cond =
+      Enum.find_index(later, fn
+        {c, _, {sc, _}, _, _} -> IO.iodata_length(sc) > 0 or not speculate?(c)
+        _ -> false
+      end)
+
+    cond do
+      match?({_, _, :nomatch, _, _}, last) ->
+        {:no, "a case with no catch-all clause raises CaseClauseError when none matches"}
+
+      stmts ->
+        {:no,
+         "#{arm.(stmts)} has statements before its value (a binding, a loop, an inlined call)"}
+
+      impure ->
+        {:no,
+         "#{arm.(impure)} may raise or call a kernel, so it cannot be computed when not taken"}
+
+      later_cond ->
+        {:no, "condition #{later_cond + 2} may raise or has statements"}
+
+      # a shape the conditions above do not name (an arm with no condition
+      # before the last)
+      not match?({_, _, {_, _}, _, _}, first) or not match?({_, _, :else, _, _}, last) or
+          not Enum.all?(later, &match?({_, _, {_, _}, _, _}, &1)) ->
+        {:no, "the select heuristic declined it"}
+
+      true ->
+        :ok
     end
   end
 
-  defp select?(_arms), do: false
+  defp select?(arms), do: select_check(arms) == :ok
 
+  # {:plain | :select, code}: the plain chain when nothing can raise
   defp select([{_, _, {sc, c}, _, _} | later] = arms, ts, tmps, env) do
     later = Enum.drop(later, -1)
 
@@ -2860,7 +2898,7 @@ defmodule Defk.Compiler do
 
     if flagged.("_") == {plain_conds, plain_bodies} do
       # nothing can raise: clang if-converts the plain branches itself
-      chain(arms, tmps)
+      {:plain, chain(arms, tmps)}
     else
       ovf = fresh("ovf", :bool)
       {fconds, fbodies} = flagged.(ovf)
@@ -2870,7 +2908,7 @@ defmodule Defk.Compiler do
 
       replay = fn body -> Enum.map_join(body, " ", &"(void)(#{&1});") end
 
-      [
+      code = [
         sc,
         "#{cv} = #{c};\n#{ovf} = 0;\n",
         Enum.zip_with(cvs, fconds, &"#{&1} = #{&2};\n"),
@@ -2892,6 +2930,8 @@ defmodule Defk.Compiler do
         ),
         "{ #{replay.(List.last(plain_bodies))} }\n}\n"
       ]
+
+      {:select, code}
     end
   end
 
@@ -5754,33 +5794,35 @@ defmodule Defk.Compiler do
 
   defp elem_val(c, e), do: val(c, wide(e))
 
-  # the C value stored into [e], from v of type wide(e)
-  defp narrowed(v, :f32), do: "defk_to_f32(ctx, #{v.c})"
+  # The C value stored into [e], from v of type wide(e), with its range
+  # check :dropped (the value's facts prove it fits) or :kept; nil for a
+  # type that needs none (an f32 store converts, it has no range to miss).
+  defp narrowed(v, :f32), do: {nil, "defk_to_f32(ctx, #{v.c})"}
 
   defp narrowed(v, e) when is_map_key(@int_range, e) do
     {lo, hi} = @int_range[e]
 
     if is_integer(Facts.lo(v)) and is_integer(Facts.hi(v)) and Facts.lo(v) >= lo and
          Facts.hi(v) <= hi,
-       do: "((#{ctype_elem(e)})#{v.c})",
-       else: "defk_to_#{e}(ctx, #{v.c})"
+       do: {:dropped, "((#{ctype_elem(e)})#{v.c})"},
+       else: {:kept, "defk_to_#{e}(ctx, #{v.c})"}
   end
 
-  defp narrowed(v, _e), do: v.c
+  defp narrowed(v, _e), do: {nil, v.c}
 
-  # The C value stored into an integer [e] from an integer v: a
-  # value that doesn't fit raises ArgumentError, as a [u8] write of 300
-  # does. A u64 above 2^63 - 1 saturates before a narrow check, which then
-  # fails.
-  defp int_stored(%{t: :u64} = v, :u64), do: v.c
+  # The C value stored into an integer [e] from an integer v, as
+  # narrowed/2: a value that doesn't fit raises ArgumentError, as a [u8]
+  # write of 300 does. A u64 above 2^63 - 1 saturates before a narrow
+  # check, which then fails.
+  defp int_stored(%{t: :u64} = v, :u64), do: {nil, v.c}
 
   defp int_stored(%{t: :i64} = v, :u64),
-    do: if(Facts.nonneg?(v), do: v.c, else: "defk_to_u64(ctx, #{v.c})")
+    do: if(Facts.nonneg?(v), do: {:dropped, v.c}, else: {:kept, "defk_to_u64(ctx, #{v.c})"})
 
   defp int_stored(%{t: :u64} = v, :i64) do
     if is_integer(Facts.hi(v)) and Facts.hi(v) <= @max_i64,
-      do: "((int64_t)#{v.c})",
-      else: "defk_to_i64_elem(ctx, #{v.c})"
+      do: {:dropped, "((int64_t)#{v.c})"},
+      else: {:kept, "defk_to_i64_elem(ctx, #{v.c})"}
   end
 
   defp int_stored(%{t: :u64} = v, e), do: narrowed(%{v | c: "defk_u64_sat(#{v.c})", t: :i64}, e)
@@ -6456,24 +6498,16 @@ defmodule Defk.Compiler do
 
   defp src_text(ast), do: Macro.to_string(ast)
 
-  # an if/cond/case value: lower_branch/6's choice, and why not a select
-  defp note_branch(node, arms, code, tmps, relies) do
+  # an if/cond/case value: lower_branch/6's choice, as it decided it
+  # (select_check/1, select/4): {:no, why}, :plain or :select
+  defp note_branch(node, verdict) do
     name = elem(node, 0)
 
-    cond do
-      not select?(arms) ->
-        note(:branch, node, :branch, "#{name}: a branch; not a select: #{why_not_select(arms)}")
+    case verdict do
+      {:no, why} ->
+        note(:branch, node, :branch, "#{name}: a branch; not a select: #{why}")
 
-      relies != nil ->
-        note(
-          :branch,
-          node,
-          :branch,
-          "#{name}: a branch; not a select: arm #{relies + 1} relies on its condition to drop a check"
-        )
-
-      # select/4 found nothing that can raise and gave the plain chain
-      code == chain(arms, tmps) ->
+      :plain ->
         note(
           :branch,
           node,
@@ -6481,7 +6515,7 @@ defmodule Defk.Compiler do
           "#{name}: a plain branch, no arm can raise; clang may if-convert it"
         )
 
-      true ->
+      :select ->
         note(
           :branch,
           node,
@@ -6491,40 +6525,34 @@ defmodule Defk.Compiler do
     end
   end
 
-  # select?/1's conditions in its order, as a reason; a rule it gains that
-  # these do not name is reported as the heuristic's
-  defp why_not_select([{_, _, :else, _, _}]), do: "it has one arm"
+  # an i64 + - * (i64_arith/5): its overflow check dropped, or kept
+  defp note_overflow(node, :dropped),
+    do: note(:check, node, :dropped, "#{src_text(node)}: no overflow check")
 
-  defp why_not_select(arms) do
-    {[_ | later], [last]} = Enum.split(arms, -1)
-    arm = fn i -> if i == length(arms) - 1, do: "the last arm", else: "arm #{i + 1}" end
+  defp note_overflow(node, :kept),
+    do:
+      note(
+        :check,
+        node,
+        :kept,
+        "#{src_text(node)}: overflow check kept; nothing proves the result fits i64"
+      )
 
-    stmts = Enum.find_index(arms, fn {_, _, _, sb, _} -> sb && IO.iodata_length(sb) > 0 end)
-    impure = Enum.find_index(arms, fn {_, body, _, _, _} -> not speculate?(body) end)
+  # a store into an element type `e` narrower than the value's (lower_stmt/2):
+  # its range check dropped, or kept; nil when the type needs none
+  defp note_fit(_target, nil, _e), do: :ok
 
-    later_cond =
-      Enum.find_index(later, fn
-        {c, _, {sc, _}, _, _} -> IO.iodata_length(sc) > 0 or not speculate?(c)
-        _ -> false
-      end)
+  defp note_fit(target, :dropped, e),
+    do: note(:check, target, :dropped, "#{src_text(target)}: no #{e} range check, the value fits")
 
-    cond do
-      match?({_, _, :nomatch, _, _}, last) ->
-        "a case with no catch-all clause raises CaseClauseError when none matches"
-
-      stmts ->
-        "#{arm.(stmts)} has statements before its value (a binding, a loop, an inlined call)"
-
-      impure ->
-        "#{arm.(impure)} may raise or call a kernel, so it cannot be computed when not taken"
-
-      later_cond ->
-        "condition #{later_cond + 2} may raise or has statements"
-
-      true ->
-        "the select heuristic declined it"
-    end
-  end
+  defp note_fit(target, :kept, e),
+    do:
+      note(
+        :check,
+        target,
+        :kept,
+        "#{src_text(target)}: #{e} range check kept; nothing proves the value fits"
+      )
 
   # an if/cond/case that is a statement or a reduce_while tail
   defp note_branch_stmt(node, what),
