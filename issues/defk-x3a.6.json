@@ -4,6 +4,7 @@
     "defk-x3a.5"
   ],
   "blocks": [
+    "defk-x3a.10",
     "defk-x3a.7"
   ],
   "created": "2026-10-19T13:01:28Z",
@@ -15,5 +16,5 @@
   "status": "open",
   "title": "Case guards and may_raise?: facts on the value, no sentinel strings in the C",
   "type": "task",
-  "updated_at": "2026-10-19T13:01:31Z"
+  "updated_at": "2026-10-19T13:01:32Z"
 }
