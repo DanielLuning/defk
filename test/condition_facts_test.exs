@@ -142,7 +142,8 @@ defmodule Defk.ConditionFactsTest do
   use ExUnit.Case, async: true
   use Defk.Properties
 
-  import Defk.TestKit, only: [kernel_c: 2, bounds_check_free?: 2]
+  import Defk.TestKit,
+    only: [kernel_c: 2, bounds_check_free?: 2, kept_bounds: 2, eval_ops: 2, fits_i64?: 1]
 
   alias Defk.ConditionFactsTest.K
 
@@ -153,11 +154,8 @@ defmodule Defk.ConditionFactsTest do
   defp agrees(fun, args),
     do: Defk.Test.assert_agrees(K, fun, args, forced_yields: true)
 
-  defp notes(kernel, topic) do
-    for {{^kernel, _}, _, {^topic, verdict, text}} <- K.__defk_report__(), do: {verdict, text}
-  end
-
-  defp kept(kernel), do: for({:kept, text} <- notes(kernel, :bounds), do: text)
+  defp notes(kernel, topic), do: Defk.TestKit.notes(K, kernel, topic)
+  defp kept(kernel), do: kept_bounds(K, kernel)
 
   defp f64s(xs), do: G.pack(:f64, Enum.map(xs, &(&1 * 1.0)))
 
@@ -613,50 +611,9 @@ defmodule Defk.ConditionFactsTest do
   end
 
   # the value of an expression and the results of its arithmetic, each of
-  # which must fit in i64 or the kernel raises there; booleans
-  # short-circuit
-  defp ev({:length, _, [{name, _, _}]}, env), do: {Map.fetch!(env, {:len, name}), []}
-
-  defp ev({name, _, ctx}, env) when is_atom(name) and is_atom(ctx),
-    do: {Map.fetch!(env, name), []}
-
-  defp ev(k, _env) when is_integer(k) or is_boolean(k), do: {k, []}
-
-  defp ev({:not, _, [a]}, env) do
-    {x, o} = ev(a, env)
-    {not x, o}
-  end
-
-  defp ev({op, _, [a, b]}, env) when op in [:and, :or] do
-    {x, ox} = ev(a, env)
-
-    cond do
-      not fits?(ox) -> {false, ox}
-      op == :and and not x -> {false, ox}
-      op == :or and x -> {true, ox}
-      true -> (fn {y, oy} -> {y, ox ++ oy} end).(ev(b, env))
-    end
-  end
-
-  defp ev({op, _, [a, b]}, env) do
-    {{x, ox}, {y, oy}} = {ev(a, env), ev(b, env)}
-
-    case op do
-      :+ -> {x + y, ox ++ oy ++ [x + y]}
-      :- -> {x - y, ox ++ oy ++ [x - y]}
-      :* -> {x * y, ox ++ oy ++ [x * y]}
-      :min -> {min(x, y), ox ++ oy}
-      :max -> {max(x, y), ox ++ oy}
-      :< -> {x < y, ox ++ oy}
-      :<= -> {x <= y, ox ++ oy}
-      :== -> {x == y, ox ++ oy}
-      :>= -> {x >= y, ox ++ oy}
-      :> -> {x > y, ox ++ oy}
-      :!= -> {x != y, ox ++ oy}
-    end
-  end
-
-  defp fits?(ops), do: Enum.all?(ops, &(&1 >= @i64_min and &1 <= @i64_max))
+  # which must fit in i64 or the kernel raises there (Defk.TestKit.eval_ops/2)
+  defp ev(ast, env), do: eval_ops(ast, env)
+  defp fits?(ops), do: fits_i64?(ops)
 
   @lens [0, 1, 2, 3, 7, 2 ** 32, @len_max]
   @xs [@i64_min, -(2 ** 62), -7, -1, 0, 1, 2, 5, 2 ** 32, 2 ** 62, @i64_max]

@@ -1860,7 +1860,7 @@ defmodule Defk.Compiler do
   defp lower_node({op, _, [a, b]} = node, env)
        when op in [:==, :!=, :===, :!==, :<, :>, :<=, :>=] do
     lowered = [lower_expr(a, env), lower_expr(b, env)]
-    rel = relation(op, lowered)
+    rel = relation(op, lowered, env)
     {stmts, [va, vb]} = in_order(lowered, env, :comma)
     {stmts, Map.put(val(compare_c(op, va, vb, node), :bool), :rel, rel)}
   end
@@ -3045,9 +3045,13 @@ defmodule Defk.Compiler do
 
     k = Facts.const(b)
 
-    if f == :div and v.t == :i64 and is_integer(k) and k > 0,
-      do: Facts.put(v, Facts.div_facts_of(a, k)),
-      else: v
+    cond do
+      f != :div or v.t != :i64 -> v
+      is_integer(k) and k > 0 -> Facts.put(v, Facts.div_facts_of(a, k))
+      # a case guard's zero divisor flags and computes on
+      Map.has_key?(env, :bad) -> v
+      true -> Facts.put(v, Facts.div_by_facts(a, b))
+    end
   end
 
   defp emit_builtin(:float, [a], node, _),
@@ -5890,10 +5894,16 @@ defmodule Defk.Compiler do
   # A comparison's relation (Facts.relation/3), from i64 operands computed
   # without a check: a flagged strip computes on past a failed check, so a
   # condition on a checked value could narrow by a wrong one (ADR-0007).
+  # Outside every loop no strip runs, and a failed check raises (a case
+  # guard's flags and computes on), so there a checked operand is exact too:
+  # a raising guard `length(m) == n * dim` narrows by its checked product.
   # The operands are judged before in_order/3 may move one into a local.
-  defp relation(op, [{_, va}, {_, vb}]) do
-    if va.t == :i64 and vb.t == :i64 and check_free?(va) and check_free?(vb),
-      do: Facts.relation(op, va, vb)
+  defp relation(op, [{_, va}, {_, vb}], env) do
+    exact? =
+      (low(:loops) == [] and not Map.has_key?(env, :bad)) or
+        (check_free?(va) and check_free?(vb))
+
+    if va.t == :i64 and vb.t == :i64 and exact?, do: Facts.relation(op, va, vb)
   end
 
   # every check calls a runtime helper (defk_*), and every raise goes
@@ -5914,17 +5924,21 @@ defmodule Defk.Compiler do
     end)
   end
 
-  defp narrow_atom(env, {:var, c} = x, kind, b) do
+  # a product's fact goes on the binding of its newer factor
+  defp narrow_atom(env, {:mul, y, _} = x, kind, b), do: narrow_on(env, y, x, kind, b)
+  defp narrow_atom(env, x, kind, b), do: narrow_on(env, x, x, kind, b)
+
+  defp narrow_on(env, {:var, c}, x, kind, b) do
     atoms = env[:atoms] || %{}
     f = Facts.facts(Facts.narrow(%{facts: atoms[c] || Facts.none()}, x, kind, b))
 
-    Map.merge(env, %{atoms: Map.put(atoms, c, f), vars: narrow_vars(env.vars, x, kind, b)})
+    Map.merge(env, %{atoms: Map.put(atoms, c, f), vars: narrow_vars(env.vars, c, x, kind, b)})
   end
 
-  defp narrow_atom(env, {:len, _} = x, kind, b),
-    do: %{env | vars: narrow_vars(env.vars, x, kind, b)}
+  defp narrow_on(env, {:len, c}, x, kind, b),
+    do: %{env | vars: narrow_vars(env.vars, c, x, kind, b)}
 
-  defp narrow_vars(vars, {_, c} = x, kind, b) do
+  defp narrow_vars(vars, c, x, kind, b) do
     Map.new(vars, fn
       {n, %{c: ^c} = v} -> {n, Facts.narrow(v, x, kind, b)}
       kv -> kv
@@ -6973,6 +6987,11 @@ defmodule Defk.Compiler do
           _ -> "#{sum.(pos)} <= #{sum.(neg)}#{offset(-d.k)}"
         end
     end
+  end
+
+  defp atom_name({:mul, x, y}, env) do
+    {nx, ny} = {atom_name(x, env), atom_name(y, env)}
+    if nx && ny, do: "#{ny} * #{nx}"
   end
 
   defp atom_name({kind, c}, env) do

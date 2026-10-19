@@ -1217,18 +1217,27 @@ lengths, through:
 - loops that run: the body of `i <- 0..(n - 1)//1` runs only when
   `n >= 1`;
 - [raising guards](#preconditions-raising-guards): after
-  `if w < 1, do: raise(...)`, the rest of the block has `w >= 1`.
+  `if w < 1, do: raise(...)`, the rest of the block has `w >= 1`;
+- products of two variables: `r * dim` is known exactly, `div(x, d)` for
+  `x >= 0` times `d` is at most `x`, and a product is bounded through a
+  bound of one factor when the other's sign is known. So a row-major
+  `m[r * dim + j]` with `n = div(length(m), dim)`,
+  `r <- 0..(n - 1)//1` and `j <- 0..(dim - 1)//1` is in range, as it is
+  after a guard `if length(m) != n * dim, do: raise(...)`, and `r * dim`
+  needs no overflow check.
 
-It does not use products of two variables (`j * m`), a `!=` or an `or`
-that holds, or `case` guards yet: such an index keeps its check, and the
+It does not use products of three variables (`(y * w + x) * ch`), a `!=`
+or an `or` that holds, or `case` guards yet: such an index keeps its check, and the
 fast-path report says which half (`0 <= i` or `i < length(a)`) nothing
 proves, and, when one small fact would prove it, that fact:
 `nothing proves i - w < length(x) (it would follow from w >= 0)`. That
 is a hint, not a promise: another fact could also do.
 
-A condition narrows only from operands that are variables, literals,
-lengths, or arithmetic the compiler proved cannot overflow, so
-`if i + 1 < w` with a checked `i + 1` proves nothing about `i`. An `if`
+Inside a loop, a condition narrows only from operands that are variables,
+literals, lengths, or arithmetic the compiler proved cannot overflow, so
+`if i + 1 < w` with a checked `i + 1` proves nothing about `i`; outside
+every loop a checked operand counts too (a failed check raises there), so
+a guard may compare `n * dim`. An `if`
 value whose arm relies on its condition to drop a check is a branch,
 never a select (the fast-path report says so): a select computes every
 arm, also the one not taken.

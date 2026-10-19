@@ -54,10 +54,12 @@
 # arrays plus a count, and Elixir cuts them with binary_part (no copy). The
 # s16le and s32le kernels come from one quoted source through a macro.
 # Kernel notes (Defk.Report):
-#   - the sum loop keeps two bounds checks, so it runs scalar: a block
-#     offset bufs[j * m + i] with m = div(length(bufs), n) cannot be proven.
-#     It is ~70% of the kernel at 1 s chunks (0.2-0.29 ms of
-#     0.3-0.37 ms for 4 x 48k stereo frames, timed phase by phase);
+#   - the sum loop has no bounds check: bufs[base + i] with base = j * m and
+#     m = div(length(bufs), n) is proven through m * n <= length(bufs). It
+#     still runs scalar: its i64 adds keep their overflow checks (sums of
+#     arbitrary i64 samples). Proving it cut the kernel by 15-30%
+#     (docs/performance.md 6.37); before, the loop was ~70% of the kernel at
+#     1 s chunks (0.2-0.29 ms of 0.3-0.37 ms, timed phase by phase);
 #   - out = alloc(t, total) with total = length(held) + m: out[i] is proven
 #     only with the loop bound min(length(all), length(out));
 #   - the rescale loop inside the scan makes the scan take a safepoint per

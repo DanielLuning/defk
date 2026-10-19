@@ -135,9 +135,12 @@
 # rows), and that a 383-element query, a partial row and k = 0 raise.
 #
 # Kernel notes: @dim 384 is a literal, so m[r * 384 + 8 * j + c] needs no
-# bounds check (with dim = length(q) every access kept its check: 25 vs 20 ms
-# in one call); q is copied into a 384-element alloc for the same
-# reason. A strict f64 sum cannot be vectorised by clang, so the dot product
+# bounds check, and q is copied into a 384-element alloc for the same
+# reason. With dim = length(q) the accesses are proven too
+# (n = div(length(m), dim) bounds n * dim), but the literal is still faster
+# in one call, 20-21 vs 25-26 ms (was 27-28 ms while those accesses kept
+# their checks). The fast-path reports of the two match otherwise; the gap
+# is presumably the literal's constant trip count (not profiled). A strict f64 sum cannot be vectorised by clang, so the dot product
 # keeps eight partial sums; clang's SLP vectoriser then runs them as four
 # 2 x f64 NEON lanes (fcvtl f32->f64, fmul.2d, fadd.2d) with the non-finite
 # checks flagged once per strip. A dimension-major layout (an axpy into the
@@ -155,7 +158,8 @@ defmodule Cosine.Kernels do
   use Defk, elixir_mode: true
 
   # all-MiniLM-L6-v2 and friends: the dimension is fixed by the model, and a
-  # literal lets the compiler prove m[r * 384 + j] in bounds
+  # literal makes the inner loop's trip count a constant (faster than
+  # dim = length(q), see the kernel notes above)
   @dim 384
 
   # The k rows of m (row-major, @dim f32 per row, stored unit length) with the
