@@ -15,11 +15,15 @@
     {
       "text": "Finding: a raises?/copy? field derived in val/3 is unsound. A value's C is wrapped after construction at 13 sites (as_u64/1, with_binds/2, the u64/i64 conversions, the checked arithmetic), so a field set at construction goes stale; and 102 lines emit raising C, so declaring it at the emitters (option a) is the x3a.6 risk again. Delivered instead: the one home for each text rule. may_raise?/1 is the ctx rule and check_free?/1 now asks it; the copy form is copy_expr/2, read back only by copy_parts/1 (assign_copy, note_copy), where loop_owned built it and two sites parsed it. The six base constructions go through val/3; the value doc lists every optional key and its setter. select_test and tuple_branch_test read the :branch notes for the decision and keep one C-form check each.",
       "timestamp": "2026-10-19T19:40:19Z"
+    },
+    {
+      "text": "PR #59; C unchanged; mix ci green (2294 passed).",
+      "timestamp": "2026-10-19T19:44:21Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "A lowered value declares raises? and copy?; val/3 is the one constructor",
   "type": "task",
-  "updated_at": "2026-10-19T19:40:19Z"
+  "updated_at": "2026-10-19T19:44:21Z"
 }
