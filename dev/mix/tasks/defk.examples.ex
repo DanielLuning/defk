@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Defk.Examples do
       mix defk.examples --list
       mix defk.examples --bench --only geo_nearest   # timed, verdict checked
       mix defk.examples --bench --only geo_nearest --snapshot   # and store that row
+      mix defk.examples --stale              # rows whose kernels' C changed since measured
 
   **Check-only (default).** Every example runs in its own `elixir` process
   with `DEFK_CHECK_ONLY=1`, so `Defk.Bench.report/1` compiles the kernels and
@@ -40,6 +41,14 @@ defmodule Mix.Tasks.Defk.Examples do
   must come from the same machine. That file is the one source of the
   catalog's numbers; `mix defk.examples.tables` rewrites the README tables
   from it. It is written only when every example behaves as claimed.
+
+  **`--stale`** reports the rows of examples/scoreboard.json whose kernels'
+  C changed since they were measured: it compiles each example's kernel
+  modules in this VM without cc (`DEFK_NO_CC`; no check, no timing, nothing
+  written) and compares the MD5 of each module's C with the stamps. A
+  report only: it never measures. The C holds the kernels' line numbers, so
+  an edit that moves a kernel's lines counts as a change. `--only` narrows
+  it to those rows.
 
   **Result cache.** `--bench` reuses a stored result when nothing the
   measurement depends on changed: the kernel modules' `.beam` files, the C
@@ -72,6 +81,8 @@ defmodule Mix.Tasks.Defk.Examples do
       reused row is marked with the date it was measured) and store the run
       in examples/scoreboard.json: all of it with `--all`, those rows with
       `--only`
+    * `--stale` - list the stored rows whose kernels' C changed since they
+      were measured; measures nothing
     * `--timeout SECONDS` - kill an example (or the app's tests) that runs longer;
       the default is no limit
   """
@@ -89,6 +100,7 @@ defmodule Mix.Tasks.Defk.Examples do
     bench: :boolean,
     snapshot: :boolean,
     fresh: :boolean,
+    stale: :boolean,
     timeout: :integer
   ]
 
@@ -132,17 +144,59 @@ defmodule Mix.Tasks.Defk.Examples do
         {:error,
          "--snapshot with --all replaces the scoreboard, with --only replaces those rows: pick one"}
 
+      opts[:stale] && (opts[:bench] || opts[:list] || opts[:all]) ->
+        {:error, "--stale only reports: it takes --only and nothing else"}
+
       true ->
         :ok
     end
   end
 
   defp go({examples, app?}, opts) do
-    if opts[:list] do
-      list(examples, app?)
-    else
-      execute(examples, app?, opts)
+    cond do
+      opts[:list] -> list(examples, app?)
+      opts[:stale] -> stale(opts[:only] && examples)
+      true -> execute(examples, app?, opts)
     end
+  end
+
+  # `names` nil: every row of the stored scoreboard
+  defp stale(names) do
+    snapshot =
+      case Snapshot.read() do
+        {:ok, snapshot} -> snapshot
+        {:error, reason} -> Mix.raise("--stale reads the stored scoreboard: #{reason}")
+      end
+
+    rows = Enum.map(snapshot["examples"], & &1["name"])
+    names = if names, do: Enum.filter(names, &(&1 in rows)), else: rows
+
+    IO.puts(
+      "mix defk.examples --stale: #{length(names)} row(s), their kernels compiled here without cc"
+    )
+
+    report = Snapshot.stale(snapshot, Examples.c_digests(names))
+
+    for r <- report, r.status != :current do
+      case r do
+        %{status: :unstamped} ->
+          IO.puts("  #{r.name}  no stamp")
+
+        %{status: :stale} ->
+          IO.puts(
+            "  #{r.name}  measured #{String.slice(r.measured_at, 0, 10)} at #{r.commit || "?"}; " <>
+              "C changed: #{Enum.join(r.changed, ", ")}"
+          )
+      end
+    end
+
+    counts = Enum.frequencies_by(report, & &1.status)
+
+    IO.puts(
+      "#{counts[:stale] || 0} stale, #{counts[:current] || 0} current, " <>
+        "#{counts[:unstamped] || 0} without a stamp. A report only: a row is measured again " <>
+        "when someone asks (mix defk.examples --bench --only <name> --snapshot)."
+    )
   end
 
   defp list(examples, app?) do

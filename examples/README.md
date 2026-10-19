@@ -307,6 +307,7 @@ mix defk.examples --timeout 600            # kill an example that runs longer th
 mix defk.examples --bench --only fft [--snapshot]  # timed, verdict checked; --snapshot stores that row
 mix defk.examples --bench --all [--snapshot]       # the whole catalog (`--bench --all --snapshot` is the old run_all.exs)
 mix defk.examples --bench --only fft --fresh       # the same, but measure every report (no cached results)
+mix defk.examples --stale                          # stored rows whose kernels' C changed since measured (measures nothing)
 ```
 
 **Check-only (the default).** Each example runs in its own `elixir` process with `DEFK_CHECK_ONLY=1`. In that mode `Defk.Bench.report/1` runs the example's `:check` (defk against Elixir) and returns: no timed runs, no Elixir baseline, no `:native`, `:sweep` or `:responsiveness`, no verdict. So the answer ("it compiles and agrees") does not depend on the machine's load, and the sanitizer build mode (`DEFK_SANITIZE`) is allowed, because nothing is timed. The `DEFK_RESULT` line then has `"check_only": true` and `"verdict": null` (the map `report/1` returns claims the expected verdict, so the scripts' own verdict assertions after it pass); every `DEFK_RESULT` line of a script counts, not just the first. An example passes when its process exits 0 and every check is `true` (or `skipped`, which the summary lists with its reason). `out_of_scope_word_count` passes when its expected compile error is raised (the script fails if the kernel compiles). The scripts need no change for this mode.

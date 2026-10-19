@@ -112,4 +112,50 @@ defmodule Defk.ExamplesTaskTest do
 
     assert [%{"example" => "a"}, %{"example" => "b"}] = Examples.parse_results(out)
   end
+
+  describe "the C of an example's kernels (--stale)" do
+    @describetag :tmp_dir
+
+    test "compiled without cc, with the scripts it requires, each once", %{tmp_dir: dir} do
+      restore_env_on_exit(["DEFK_NO_CC"])
+      System.delete_env("DEFK_NO_CC")
+      n = System.unique_integer([:positive])
+      [a, b] = for m <- ["A", "B"], do: Module.concat(Defk.ExamplesTaskTest, "Stale#{m}#{n}")
+
+      File.write!(Path.join(dir, "b.exs"), """
+      defmodule #{inspect(b)} do
+        use Defk
+        defk f(x :: i64) :: i64, do: x + 1
+      end
+
+      # a module that needs the example's own Mix.install: skipped, no C
+      defmodule #{inspect(b)}.Needs do
+        @dep NoSuchDep.value()
+      end
+      """)
+
+      File.write!(Path.join(dir, "a.exs"), """
+      Code.require_file("b.exs", __DIR__)
+
+      defmodule #{inspect(a)} do
+        use Defk
+        defk g(x :: i64) :: i64, do: x * 2
+      end
+
+      IO.puts("the bench runs here")
+      """)
+
+      {{digests, err}, out} =
+        with_io(fn -> with_io(:stderr, fn -> Examples.c_digests(["a", "b"], dir) end) end)
+
+      refute out =~ "the bench runs here"
+
+      md5 = &Base.encode16(:erlang.md5(&1.__defk_c_source__()), case: :lower)
+      assert digests["a"] == %{inspect(a) => md5.(a), inspect(b) => md5.(b)}
+      assert digests["b"] == %{inspect(b) => md5.(b)}
+      refute err =~ "redefining"
+      assert System.get_env("DEFK_NO_CC") == nil
+      assert a.__defk_lib__() == nil
+    end
+  end
 end

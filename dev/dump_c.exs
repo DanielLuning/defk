@@ -83,47 +83,11 @@ Code.require_file("test/test_helper.exs")
 
 for file <- tests, do: Code.require_file(file)
 
-# an example is Elixir modules followed by input setup and a bench; only the
-# modules matter here, and nothing outside a defmodule may feed one (an
-# example that needs file-level setup for its modules breaks this gate
-# loudly, which is the correct outcome: fix the example or this script)
-defmodules = fn file ->
-  forms =
-    case Code.string_to_quoted!(File.read!(file), file: file) do
-      {:__block__, _, forms} -> forms
-      form -> [form]
-    end
-
-  for {:defmodule, _, _} = m <- forms, do: m
-end
-
-# a module that does not `use Defk` contributes no C, so when it fails to
-# compile here (usually a dependency only the example's own Mix.install has,
-# like Crux in cdcl_sat.exs) it is skipped and named; a kernel module that
-# fails stays a hard error, because the dump would silently lose its C
-kernel? = fn m ->
-  m
-  |> Macro.prewalk(false, fn
-    {:use, _, [{:__aliases__, _, [:Defk]} | _]} = n, _ -> {n, true}
-    n, acc -> {n, acc}
-  end)
-  |> elem(1)
-end
-
-skipped =
-  for file <- examples, {:defmodule, _, [name | _]} = m <- defmodules.(file), reduce: [] do
-    skipped ->
-      try do
-        Code.eval_quoted(m, [], file: file)
-        skipped
-      rescue
-        e ->
-          if kernel?.(m), do: reraise(e, __STACKTRACE__)
-          [{file, Macro.to_string(name)} | skipped]
-      end
-  end
-
-for {file, name} <- Enum.reverse(skipped),
+# an example's modules only, without its Mix.install and bench
+# (Defk.Examples.compile_modules/1); a module that does not `use Defk` and
+# fails to compile has no C, and is named
+for file <- examples,
+    name <- file |> Defk.Examples.compile_modules() |> elem(1),
     do: IO.puts("skipped #{name} (#{file}): no C, compile failed outside the mix project")
 
 dumped = out |> Path.join("*.c") |> Path.wildcard() |> length()

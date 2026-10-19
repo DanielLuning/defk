@@ -50,6 +50,12 @@ measurement of one example, run `mix defk.examples --bench --only <name>
 `examples/scoreboard.json` and keeps the others with their stamps. `--bench`
 refuses to run without `--only` or `--all`.
 
+`mix defk.examples --stale` lists the stored rows whose kernels' C changed
+since they were measured, with the date and commit of each measurement. It
+compiles the kernels without `cc` and measures nothing; the list is for the
+owner to choose from, not a queue to run. The C holds the kernels' line
+numbers, so an edit that only moves a kernel's lines shows up too.
+
 Before a run of more than a few minutes, say how long it takes and how many
 cores it uses.
 

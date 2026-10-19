@@ -286,6 +286,49 @@ defmodule Defk.ScoreboardDocTest do
       assert run["commit"] == Defk.Examples.commit()
     end
 
+    test "stale compares each row's stamps with the current C" do
+      stamp = fn at, c -> %{"stamp" => %{"measured_at" => at, "commit" => "abc", "c" => c}} end
+
+      s = %{
+        "examples" => [
+          %{"name" => "same", "results" => [stamp.("2026-10-01T00:00:00Z", %{"S.K" => "1"})]},
+          %{
+            "name" => "moved",
+            "results" => [
+              stamp.("2026-10-01T00:00:00Z", %{"M.K" => "1", "M.Gone" => "2"}),
+              stamp.("2026-10-03T00:00:00Z", %{"M.K" => "1"})
+            ]
+          },
+          %{"name" => "old", "results" => [%{"speedup" => 1.0}]},
+          %{"name" => "not_asked", "results" => [stamp.("2026-10-01T00:00:00Z", %{})]}
+        ]
+      }
+
+      digests = %{
+        "same" => %{"S.K" => "1"},
+        "moved" => %{"M.K" => "9", "M.New" => "3"},
+        "old" => %{}
+      }
+
+      assert Snapshot.stale(s, digests) == [
+               %{
+                 name: "same",
+                 status: :current,
+                 changed: [],
+                 measured_at: "2026-10-01T00:00:00Z",
+                 commit: "abc"
+               },
+               %{
+                 name: "moved",
+                 status: :stale,
+                 changed: ["M.Gone", "M.K", "M.New"],
+                 measured_at: "2026-10-03T00:00:00Z",
+                 commit: "abc"
+               },
+               %{name: "old", status: :unstamped}
+             ]
+    end
+
     test "merge replaces the measured rows and keeps the others" do
       row = fn name, speedup, at ->
         %{
@@ -326,6 +369,10 @@ defmodule Defk.ScoreboardDocTest do
       assert {:error, "--bench measures only what you name" <> _} = Task.validate(bench: true)
       assert {:error, "--snapshot needs --bench"} = Task.validate(snapshot: true, all: true)
       assert {:error, "--fresh needs --bench"} = Task.validate(fresh: true)
+      assert Task.validate(stale: true, only: "fft") == :ok
+
+      assert {:error, "--stale only reports" <> _} =
+               Task.validate(stale: true, bench: true, all: true)
 
       assert {:error, "--snapshot with --all replaces" <> _} =
                Task.validate(bench: true, all: true, only: "fft", snapshot: true)
