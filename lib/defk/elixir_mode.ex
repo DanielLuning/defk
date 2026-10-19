@@ -58,6 +58,8 @@ defmodule Defk.ElixirMode do
   alias Defk.ElixirMode.Ops, warn: false
 
   @pdict :defk_mode
+  # the translation's compile-time state (one struct; see "translation state")
+  @state :defk_em
   @math1 Defk.Builtins.math1()
   @bitwise Defk.Builtins.bitwise()
   @bitwise_names Defk.Builtins.bitwise() ++ Defk.Builtins.bitwise_ops()
@@ -145,10 +147,22 @@ defmodule Defk.ElixirMode do
   @doc false
   # Quoted definitions: `__defk_elixir__/2` and one private function per kernel.
   def definitions(raw_kernels, sigs, file) do
+    # the compiler's ctx keeps the file for the rejections this translation
+    # raises (err! reads it); the translation's own state is `@state`, gone
+    # when this returns
     Defk.Compiler.Ctx.set(:file, file)
-    by_key = Map.new(sigs, &{{&1.name, &1.arity}, &1})
-    kernels = Enum.zip_with(raw_kernels, sigs, fn raw, sig -> kernel(raw.body, sig, by_key) end)
 
+    try do
+      by_key = Map.new(sigs, &{{&1.name, &1.arity}, &1})
+
+      Enum.zip_with(raw_kernels, sigs, fn raw, sig -> kernel(raw.body, sig, by_key) end)
+      |> definitions_of(sigs)
+    after
+      Process.delete(@state)
+    end
+  end
+
+  defp definitions_of(kernels, sigs) do
     entries =
       for sig <- sigs, not Defk.Bitstring.helper?(sig) do
         vs = Defk.Args.vars(sig.params)
@@ -185,11 +199,28 @@ defmodule Defk.ElixirMode do
   @doc false
   def fun_name(name), do: :"__defk_elixir_#{name}__"
 
+  # ---------------------------------------------------- translation state --
+  # What one kernel's translation changes, in one process-dictionary key
+  # holding one struct (as the compiler's :defk_ctx): the binding counter,
+  # the writes log (write tracking), the leaf types a reduce_while look
+  # ahead collects, and the u64 candidates and hits of settle_accs/3. Fresh
+  # per kernel, deleted when definitions/3 returns. The `env` map (vars,
+  # sigs) is threaded explicitly; this is the rest.
+
+  defmodule State do
+    @moduledoc false
+    defstruct n: 0, writes: [], leaf_types: nil, u64_cands: [], u64_hits: []
+  end
+
+  defp state, do: Process.get(@state)
+  defp state_put(st), do: Process.put(@state, st)
+  defp state_get(key), do: Map.fetch!(state(), key)
+  defp state_set(key, value), do: state_put(Map.put(state(), key, value))
+
   # --------------------------------------------------------------- kernels --
 
   defp kernel(body, sig, sigs) do
-    Process.put(:defk_em_n, 0)
-    Process.put(:defk_em_writes, [])
+    state_put(%State{})
     vars = Map.new(sig.params, fn {p, t} -> {p, %{t: t, id: fresh_id()}} end)
     env = %{vars: vars, sigs: sigs}
     {stmts, last, t} = block_parts(body, env)
@@ -1250,16 +1281,19 @@ defmodule Defk.ElixirMode do
         acc =
           settle_accs(acc_parts(acc_pat_ast, it), init_ast, fn acc ->
             fenv = put_accs(bind_gen(x, xt, env), acc)
-            outer = Process.put(:defk_em_leaf_types, [])
+            outer = state_get(:leaf_types)
+            state_set(:leaf_types, [])
 
             record = fn _tag, v_ast, lenv ->
               {_, vt} = expr(v_ast, lenv)
-              Process.put(:defk_em_leaf_types, [vt | Process.get(:defk_em_leaf_types)])
+              state_set(:leaf_types, [vt | state_get(:leaf_types)])
               nil
             end
 
             trial(fn -> tail(body, fenv, record) end)
-            Process.put(:defk_em_leaf_types, outer) || []
+            types = state_get(:leaf_types)
+            state_set(:leaf_types, outer)
+            types || []
           end)
 
         fenv = bind_gen(x, xt, env)
@@ -1324,13 +1358,13 @@ defmodule Defk.ElixirMode do
     else
       # during the look ahead, an operation mixing one of `lits` with a u64
       # records it (note_u64_mix/3), as the kernel's u64_mix! retries
-      {cands, hits} = {Process.get(:defk_em_u64_cands, []), Process.get(:defk_em_u64_hits, [])}
-      Process.put(:defk_em_u64_cands, cands ++ lits)
-      Process.put(:defk_em_u64_hits, [])
+      %{u64_cands: cands, u64_hits: hits} = state()
+      state_set(:u64_cands, cands ++ lits)
+      state_set(:u64_hits, [])
       news = Enum.map(new_ts.(acc), fn t -> with {:tuple, ts} <- t, do: ts end)
-      mixed = Process.get(:defk_em_u64_hits)
-      Process.put(:defk_em_u64_cands, cands)
-      Process.put(:defk_em_u64_hits, hits ++ (mixed -- lits))
+      mixed = state_get(:u64_hits)
+      state_set(:u64_cands, cands)
+      state_set(:u64_hits, hits ++ (mixed -- lits))
 
       acc2 =
         acc
@@ -1350,13 +1384,13 @@ defmodule Defk.ElixirMode do
   # operands `asts` of types `ts`: an i64 accumulator variable that may
   # become a u64 (settle_accs/3) meeting a u64 is recorded
   defp note_u64_mix(asts, ts, env) do
-    cands = Process.get(:defk_em_u64_cands, [])
+    cands = state_get(:u64_cands)
 
     if :u64 in ts and cands != [] do
       for {{name, _, ctx}, :i64} <- Enum.zip(asts, ts),
           is_atom(name) and is_atom(ctx) and name in cands and
             Map.get(env.vars, name, %{})[:acc] == true do
-        Process.put(:defk_em_u64_hits, [name | Process.get(:defk_em_u64_hits)])
+        state_set(:u64_hits, [name | state_get(:u64_hits)])
       end
     end
 
@@ -1435,30 +1469,29 @@ defmodule Defk.ElixirMode do
   # the one visible where the construct starts.
 
   defp fresh_id do
-    n = Process.get(:defk_em_n) + 1
-    Process.put(:defk_em_n, n)
+    n = state_get(:n) + 1
+    state_set(:n, n)
     n
   end
 
   defp put_var(env, name, t), do: %{env | vars: Map.put(env.vars, name, %{t: t, id: fresh_id()})}
 
-  defp record_write(name, id),
-    do: Process.put(:defk_em_writes, [{name, id} | Process.get(:defk_em_writes)])
+  defp record_write(name, id), do: state_set(:writes, [{name, id} | state_get(:writes)])
 
   defp scoped(fun) do
-    outer = Process.get(:defk_em_writes)
-    Process.put(:defk_em_writes, [])
+    outer = state_get(:writes)
+    state_set(:writes, [])
     res = fun.()
-    inner = Process.get(:defk_em_writes)
-    Process.put(:defk_em_writes, inner ++ outer)
+    inner = state_get(:writes)
+    state_set(:writes, inner ++ outer)
     {res, inner}
   end
 
   # like scoped/1, but the writes are forgotten (a look ahead)
   defp trial(fun) do
-    outer = Process.get(:defk_em_writes)
+    outer = state_get(:writes)
     {res, inner} = scoped(fun)
-    Process.put(:defk_em_writes, outer)
+    state_set(:writes, outer)
     {res, inner}
   end
 

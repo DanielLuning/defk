@@ -96,8 +96,13 @@ of rows the lowering declares as it emits; defk-ch4), not from the C text.
   test is `test/strip_record_test.exs`.
 - `lib/defk/compiler/ctx.ex`: the ctx struct itself.
 - `lib/defk/clauses.ex`: multi-clause heads and patterns.
-- `lib/defk/elixir_mode.ex`: the Elixir compilation of kernels (tests only);
-  `lib/defk/elixir_mode/guard.ex` evaluates a case guard that can fail.
+- `lib/defk/elixir_mode.ex`: the Elixir compilation of kernels (tests only).
+  Its translation state (binding counter, writes log, look-ahead leaf
+  types, u64 candidates and hits) is one process-dictionary key, `:defk_em`,
+  holding one `Defk.ElixirMode.State`, fresh per kernel and deleted when
+  `definitions/3` returns; the `env` map (vars, sigs) is threaded
+  explicitly. `lib/defk/elixir_mode/guard.ex` evaluates a case guard that
+  can fail.
 - `lib/defk/inline_size.ex`: the code-size warning (defk-6ag).
 - `lib/defk/bench.ex`: measurement (`report/1`, `settle/0`) and the quiet
   test (`wait_quiet/0`, `other_cpu/0`, `quiet?/1`); rules in
