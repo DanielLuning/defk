@@ -71,6 +71,23 @@ defmodule Defk.BenchCacheTest do
     assert r.cache == "reused"
   end
 
+  test "a measured result carries its stamp, and a reused one keeps it" do
+    restore_env_on_exit(["DEFK_BENCH_COMMIT"])
+    System.put_env("DEFK_BENCH_COMMIT", "abc1234")
+    first = run([opts()])
+    assert [%{"stamp" => stamp}] = first.json
+    assert %{"commit" => "abc1234", "defk" => vsn, "measured_at" => at, "c" => c} = stamp
+    assert vsn == to_string(Application.spec(:defk, :vsn))
+    assert {:ok, _, _} = DateTime.from_iso8601(at)
+
+    assert c["Examples.Kernels"] ==
+             Base.encode16(:erlang.md5(Examples.Kernels.__defk_c_source__()), case: :lower)
+
+    System.put_env("DEFK_BENCH_COMMIT", "def5678")
+    again = run([opts()])
+    assert [%{"cache" => "reused", "stamp" => ^stamp}] = again.json
+  end
+
   test "a reused result whose check now fails is reported as incorrect" do
     run([opts()])
     again = run([opts(fn -> false end)])
@@ -93,7 +110,7 @@ defmodule Defk.BenchCacheTest do
       Cache.read(cache)
       |> Map.update!("t", fn e -> %{e | key: "old", parts: %{e.parts | build: "old"}} end)
 
-    File.write!(cache, :erlang.term_to_binary(%{version: 1, entries: entries}))
+    File.write!(cache, :erlang.term_to_binary(%{version: 2, entries: entries}))
     again = run([opts()])
     assert again.timed > 0
     assert again.out =~ "changed: build"

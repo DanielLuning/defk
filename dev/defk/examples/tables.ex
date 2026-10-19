@@ -97,6 +97,10 @@ defmodule Defk.Examples.Tables do
   # ---- examples/README.md ---------------------------------------------
 
   defp scoreboard(snapshot, rows, index, text) do
+    runs = Map.new(snapshot["examples"], &{&1["name"], &1["run"]})
+    newest = newest_run(snapshot)
+    loaded = loaded(snapshot)
+
     {measured, problems} =
       rows
       |> Enum.filter(fn {name, _} -> Map.has_key?(text.examples, name) end)
@@ -107,7 +111,7 @@ defmodule Defk.Examples.Tables do
 
         cells = [
           mark(r["verdict"]),
-          "[`#{name}`](#{name}.exs)" <> reused(r),
+          "[`#{name}`](#{name}.exs)" <> note(r, runs[name], newest, loaded),
           t.job,
           speedup_cell(r),
           native,
@@ -144,23 +148,82 @@ defmodule Defk.Examples.Tables do
     {block, problems}
   end
 
+  # One run: its conditions. Several (rows replaced with --snapshot --only):
+  # the span and the newest run's conditions; each older row says when.
   defp conditions(s) do
-    "Measured on #{date(s)} at commit `#{s["commit"]}` on #{s["machine"]} " <>
-      "(#{s["logical_cores"]} logical cores), OTP #{s["otp"]}, Elixir #{s["elixir"]}: " <>
-      "`#{s["command"]}`; 1-minute load average #{load(s["load_before"])} before the run " <>
-      "and #{load(s["load_after"])} after." <>
-      if(s["quiet"], do: "", else: " **Not a quiet machine: every number is provisional.**")
+    machine = "#{s["machine"]} (#{s["logical_cores"]} logical cores)"
+    n = newest_run(s)
+
+    newest =
+      "OTP #{n["otp"]}, Elixir #{n["elixir"]}: `#{n["command"]}`; 1-minute load average " <>
+        "#{load(n["load_before"])} before the run and #{load(n["load_after"])} after."
+
+    head =
+      case runs(s) do
+        [_] ->
+          "Measured on #{day(n)} at commit `#{n["commit"]}` on #{machine}, " <> newest
+
+        runs ->
+          "Measured on #{machine} in #{length(runs)} runs, #{span(s)}. The newest at commit " <>
+            "`#{n["commit"]}`, " <>
+            newest <> " A row from an earlier run says when it was measured, and at which commit."
+      end
+
+    head <>
+      case loaded(s) do
+        :none -> ""
+        :all -> " **Not a quiet machine: every number is provisional.**"
+        :some -> " **A row from a loaded run says provisional.**"
+      end
   end
 
-  defp date(s), do: String.slice(s["measured_at"], 0, 10)
+  defp runs(s), do: s["examples"] |> Enum.map(& &1["run"]) |> Enum.uniq()
+
+  defp newest_run(s), do: s |> runs() |> Enum.max_by(& &1["measured_at"])
+
+  defp span(s) do
+    case s |> runs() |> Enum.map(&day/1) |> Enum.uniq() |> Enum.sort() do
+      [d] -> "on #{d}"
+      days -> "from #{hd(days)} to #{List.last(days)}"
+    end
+  end
+
+  # whether the runs behind the rows were quiet
+  defp loaded(s) do
+    case s |> runs() |> Enum.map(& &1["quiet"]) |> Enum.uniq() do
+      [true] -> :none
+      [false] -> :all
+      _ -> :some
+    end
+  end
+
+  defp day(%{"measured_at" => at}), do: String.slice(at, 0, 10)
 
   defp load(nil), do: "unknown"
   defp load(x), do: to_string(x)
 
-  defp reused(%{"cache" => "reused", "measured_at" => at}),
-    do: " (reused, measured #{String.slice(at, 0, 10)})"
+  # A row not measured in the newest run (an older run's row, or a result
+  # the cache reused) says when it was measured and at which commit, from
+  # its report's stamp; a row from a loaded run among quiet ones says
+  # provisional.
+  defp note(r, run, newest, loaded) do
+    earlier? = run != newest or r["cache"] == "reused"
 
-  defp reused(_), do: ""
+    parts =
+      if(earlier?, do: ["measured " <> measured(r, run)], else: []) ++
+        if loaded == :some and not run["quiet"], do: ["provisional"], else: []
+
+    if parts == [], do: "", else: " (" <> Enum.join(parts, ", ") <> ")"
+  end
+
+  defp measured(%{"stamp" => %{"measured_at" => at} = stamp}, _run),
+    do: String.slice(at, 0, 10) <> at_commit(stamp["commit"])
+
+  defp measured(%{"cache" => "reused", "measured_at" => at}, _run), do: String.slice(at, 0, 10)
+  defp measured(_r, run), do: day(run) <> at_commit(run["commit"])
+
+  defp at_commit(nil), do: ""
+  defp at_commit(commit), do: " at `#{commit}`"
 
   defp speedup_cell(%{"speedup" => s, "verdict" => "good"}) when is_number(s),
     do: "**#{times(s)}**"
@@ -180,7 +243,7 @@ defmodule Defk.Examples.Tables do
 
     block =
       "Speedups over an optimised Elixir baseline, measured end to end on " <>
-        "#{snapshot["machine"]} on #{date(snapshot)} (one machine, so measure your own job). " <>
+        "#{snapshot["machine"]} #{span(snapshot)} (one machine, so measure your own job). " <>
         "✅ defk helps; 🟡 and ❌ use Elixir.\n\n| | The job | defk vs best Elixir |\n|---|---|---|\n" <>
         Enum.join(lines, "\n") <> "\n"
 

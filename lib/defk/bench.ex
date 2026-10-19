@@ -49,6 +49,12 @@ defmodule Defk.Bench do
   date in `measured_at`. Run directly (`elixir examples/x.exs`), it always
   measures.
 
+  **Stamp.** A measured result carries `stamp`: defk's version (`defk`), the
+  commit the runner measured (`commit`, `null` when run directly), the time
+  (`measured_at`) and the MD5 of each loaded kernel module's generated C
+  (`c`, module name to hex digest). A reused result keeps the stamp of its
+  measurement.
+
   A `good` verdict only counts once the Elixir side is `baseline: :optimized`.
   Until then the runner shows it as provisional.
 
@@ -147,7 +153,7 @@ defmodule Defk.Bench do
 
     case Cache.lookup(Keyword.fetch!(opts, :name)) do
       :off ->
-        result = measure(opts)
+        result = opts |> measure() |> stamp()
         print(result)
         result
 
@@ -156,13 +162,35 @@ defmodule Defk.Bench do
 
       {:miss, slot, changed} ->
         load = Cache.load_average()
-        result = measure(opts)
+        result = opts |> measure() |> stamp()
         {stored, loads} = Cache.store(slot, result, load)
         result = Map.put(result, :cache, if(stored == :stored, do: "stored", else: "not_stored"))
         print(result, miss_line(stored, loads, changed))
         result
     end
   end
+
+  # What measured the result, stored with it so a reused result keeps it:
+  # defk's version, the commit (`DEFK_BENCH_COMMIT`, set by the examples
+  # runner; nil when run directly), the time, and the MD5 of each loaded
+  # kernel module's C source, which tells later whether the C changed.
+  defp stamp(result) do
+    c =
+      for {mod, _} <- :code.all_loaded(),
+          function_exported?(mod, :__defk_c_source__, 0),
+          into: %{},
+          do: {inspect(mod), Base.encode16(:erlang.md5(mod.__defk_c_source__()), case: :lower)}
+
+    Map.put(result, :stamp, %{
+      defk: defk_version(Application.spec(:defk, :vsn)),
+      commit: System.get_env("DEFK_BENCH_COMMIT"),
+      measured_at: DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
+      c: c
+    })
+  end
+
+  defp defk_version(nil), do: nil
+  defp defk_version(vsn), do: to_string(vsn)
 
   defp reuse(opts, cached, entry) do
     date = entry.measured_at |> DateTime.to_date() |> Date.to_iso8601()

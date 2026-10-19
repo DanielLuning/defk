@@ -70,8 +70,10 @@ comments and is generated; nothing else in either file is.
 
 - The numbers come from `examples/scoreboard.json`, which
   `mix defk.examples --bench --all --snapshot --fresh` writes after a run in
-  which every example behaved as claimed. Run it on a quiet machine: the
-  file records the load before and after, and a loaded run is marked
+  which every example behaved as claimed; `--bench --only a,b --snapshot`
+  replaces only those rows. Measure only what the owner or the ticket asks
+  for (`docs/agents/runs.md`). Run it on a quiet machine: each row records
+  its run's load before and after, and a row from a loaded run is marked
   provisional in the tables.
 - The text around the numbers (each row's job, the native comparison, the
   one-line note, the summary's groups) is in `examples/_tables.exs`. A

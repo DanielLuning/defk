@@ -158,7 +158,7 @@ defmodule Defk.BenchTest do
     assert Enum.sort(Map.keys(json)) ==
              Enum.sort(
                ~w(baseline correct defk_ms defk_spread_ms elixir_ms elixir_spread_ms example) ++
-                 ~w(expected reason speedup verdict)
+                 ~w(expected reason speedup stamp verdict)
              )
 
     assert r.verdict in [:good, :marginal, :poor]

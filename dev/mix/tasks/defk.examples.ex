@@ -15,6 +15,7 @@ defmodule Mix.Tasks.Defk.Examples do
       mix defk.examples --only lz4_snappy_decode,keccak
       mix defk.examples --list
       mix defk.examples --bench --only geo_nearest   # timed, verdict checked
+      mix defk.examples --bench --only geo_nearest --snapshot   # and store that row
 
   **Check-only (default).** Every example runs in its own `elixir` process
   with `DEFK_CHECK_ONLY=1`, so `Defk.Bench.report/1` compiles the kernels and
@@ -27,14 +28,18 @@ defmodule Mix.Tasks.Defk.Examples do
   **`--bench`** is the old `examples/run_all.exs`: examples run one at a time
   with their timings, the measured verdict must be the one each example
   claims, and a scoreboard is printed. Timings under load are meaningless:
-  run it on a quiet machine.
+  run it on a quiet machine. It measures only what you name: `--only` or
+  `--all`. A stored result stands until someone asks for it to be measured
+  again (docs/agents/runs.md).
 
-  **`--snapshot`** (with `--bench --all`, no `--only`) also prints the
-  markdown table and stores the run in examples/scoreboard.json: every
-  example's `DEFK_RESULT` lines, the commit, the machine and the load before
-  and after. That file is the one source of the catalog's numbers;
-  `mix defk.examples.tables` rewrites the README tables from it. It is
-  written only when every example behaves as claimed.
+  **`--snapshot`** (with `--bench`) also prints the markdown table and
+  stores the run in examples/scoreboard.json: each example's `DEFK_RESULT`
+  lines with their stamps (commit, defk version, time, the C's MD5), and the
+  run's commit and load before and after. With `--all` it replaces the file;
+  with `--only` it replaces those examples' rows and keeps the others, which
+  must come from the same machine. That file is the one source of the
+  catalog's numbers; `mix defk.examples.tables` rewrites the README tables
+  from it. It is written only when every example behaves as claimed.
 
   **Result cache.** `--bench` reuses a stored result when nothing the
   measurement depends on changed: the kernel modules' `.beam` files, the C
@@ -61,11 +66,12 @@ defmodule Mix.Tasks.Defk.Examples do
       tests); any example, in `mix test` or not
     * `--all` - also the examples `mix test` covers
     * `--list` - print the selection and stop
-    * `--bench` - timed run with the verdict check
+    * `--bench` - timed run with the verdict check; needs `--only` or `--all`
     * `--fresh` - with `--bench`, measure every example, reuse nothing
-    * `--snapshot` - with `--bench --all`, also print the markdown table (a
+    * `--snapshot` - with `--bench`, also print the markdown table (a
       reused row is marked with the date it was measured) and store the run
-      in examples/scoreboard.json
+      in examples/scoreboard.json: all of it with `--all`, those rows with
+      `--only`
     * `--timeout SECONDS` - kill an example (or the app's tests) that runs longer;
       the default is no limit
   """
@@ -90,18 +96,44 @@ defmodule Mix.Tasks.Defk.Examples do
   def run(args) do
     {opts, rest} = OptionParser.parse!(args, strict: @switches)
     rest == [] || Mix.raise("unexpected arguments: #{Enum.join(rest, " ")}")
-    opts[:snapshot] && !opts[:bench] && Mix.raise("--snapshot needs --bench")
 
-    opts[:snapshot] && (!opts[:all] || opts[:only]) &&
-      Mix.raise("--snapshot stores the whole scoreboard: it needs --all and no --only")
-
-    opts[:fresh] && !opts[:bench] && Mix.raise("--fresh needs --bench")
+    case validate(opts) do
+      :ok -> :ok
+      {:error, message} -> Mix.raise(message)
+    end
 
     only = opts[:only] && String.split(opts[:only], ",", trim: true)
 
     case Examples.select(only, opts[:all] || false) do
       {:ok, selection} -> go(selection, opts)
       {:error, message} -> Mix.raise(message)
+    end
+  end
+
+  @doc false
+  # A timed run is always asked for by name: `--bench` needs `--only` (these
+  # examples) or `--all` (the whole catalog), never the default selection.
+  # `--snapshot --all` replaces the stored scoreboard; `--snapshot --only`
+  # replaces those rows (Snapshot.merge/2).
+  def validate(opts) do
+    cond do
+      opts[:snapshot] && !opts[:bench] ->
+        {:error, "--snapshot needs --bench"}
+
+      opts[:fresh] && !opts[:bench] ->
+        {:error, "--fresh needs --bench"}
+
+      opts[:bench] && !(opts[:only] || opts[:all]) ->
+        {:error,
+         "--bench measures only what you name: --only a,b for those examples, " <>
+           "--all for the whole catalog"}
+
+      opts[:snapshot] && opts[:only] && opts[:all] ->
+        {:error,
+         "--snapshot with --all replaces the scoreboard, with --only replaces those rows: pick one"}
+
+      true ->
+        :ok
     end
   end
 
@@ -205,16 +237,33 @@ defmodule Mix.Tasks.Defk.Examples do
 
   # every example behaved as claimed (a failure raised above)
   defp store_snapshot(outcomes, opts) do
+    selection = if opts[:all], do: "--all", else: "--only #{opts[:only]}"
+
     command =
-      "mix defk.examples --bench --all --snapshot" <> if(opts[:fresh], do: " --fresh", else: "")
+      "mix defk.examples --bench #{selection} --snapshot" <>
+        if(opts[:fresh], do: " --fresh", else: "")
 
     loads = {opts[:load_before], Cache.load_average()}
-    snapshot = Snapshot.build(outcomes, loads, command)
+    new = Snapshot.build(outcomes, loads, command)
+
+    snapshot =
+      if opts[:all] do
+        new
+      else
+        with {:ok, old} <- Snapshot.read(),
+             {:ok, merged} <- Snapshot.merge(old, new) do
+          merged
+        else
+          {:error, reason} ->
+            Mix.raise("--snapshot --only replaces rows of the stored scoreboard: #{reason}")
+        end
+      end
+
     Snapshot.write(snapshot)
 
     IO.puts(
-      "stored #{Path.relative_to_cwd(Snapshot.path())}" <>
-        if(snapshot["quiet"],
+      "stored #{length(new["examples"])} row(s) in #{Path.relative_to_cwd(Snapshot.path())}" <>
+        if(Cache.quiet?(loads),
           do: "",
           else: " (NOT a quiet machine: the tables will say provisional)"
         ) <>
