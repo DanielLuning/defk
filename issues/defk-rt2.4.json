@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-rt2.3"
   ],
@@ -12,8 +12,8 @@
   "labels": [],
   "parent": "defk-rt2",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "One error sink: where a failed check goes is one value in env",
   "type": "task",
-  "updated_at": "2026-10-19T18:42:44Z"
+  "updated_at": "2026-10-19T19:51:13Z"
 }
