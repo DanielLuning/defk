@@ -34,7 +34,12 @@ One module, ordered by section dividers you can grep for
 | array values | ownership, value semantics; the copy analysis's rules and tracking state live in `Defk.Copies` | `owned`, `before_write`, `hoist` |
 | expressions | arithmetic, comparisons, overflow checks; operands in Elixir's order (`lower_expr/2` wraps every `lower_node/2` clause) | `i64_arith`, `lower_ops/3`, `in_order/3` |
 | calls | kernel-to-kernel inlining, builtins | (inline size: `Defk.InlineSize.check/3`) |
-| loops | `for`, reduce accumulators, safepoints; recovery inside a rejected `for`, reduce or pipe | `lower_quals`, `with_acc_facts/2`, `for_collect!/6`, `recover_for/4`, `recover_reduce/5`, `recover_pipe/2` |
+| loops | `for`, generators, safepoints; recovery inside a rejected `for`, reduce or pipe | `lower_quals`, `for_collect!/6`, `recover_for/4`, `recover_reduce/5`, `recover_pipe/2` |
+| strip record | the storage shim over `Defk.Strip` (the record itself and the classifier live there) | `srec_rows/1`, `srec_arm/3` |
+| loop forms | the C of one loop: a safepoint every iteration, strips, flagged strips | `loop/6`, `strip_loop/5`, `flagged_loop/5`, `flag_strip/4` |
+| resume dispatch | re-entering loops through their headers after a yield | `in_loop/1`, `resume_dispatch/0`, `arrival_blocks/3` |
+| reduce accumulators | `for ... reduce:` and `reduce_while`: carrying, facts across trips, halts | `lower_reduce`, `with_acc_facts/2`, `u64_accs/2` |
+| tails and branches | a `reduce_while` body's tail, if/else chains | `lower_tail/3`, `branch_chain/3` |
 | case | clause dispatch (multi-clause kernels) | |
 | range facts | `Defk.Facts` holds ADR-0007's representation: forms over atoms (array lengths and i64 bindings), values' exact forms (`eq`), bounds `{q, form}`, one prover with a step budget; this file states facts through the module's sources (`len_value`, `len_from`, `len_like`, `between`, `bound`, the derivations), keeps i64 bindings' facts by C variable in `env.atoms` (`put_var/3`), and asks the proofs with the env as scope | `Facts.check`, `Facts.fits_i64?`, `range_limit` |
 | element types | narrow loads/stores | |
@@ -46,8 +51,8 @@ The compiler's state is one process-dictionary key, `:defk_ctx`, holding a
 ...) plus a `lowering` sub-struct replaced wholesale per kernel in
 `lower_kernel`. Probing and backtracking (`probe/1`, `with_acc_facts/2`,
 `u64_accs/2`) snapshot and restore that one value. The flagged-strip
-classifier decides from the strip record (`lowering.strip`, rows the
-lowering declares as it emits; defk-ch4), not from the C text.
+classifier decides from the strip record (`lowering.strip`, a `Defk.Strip`
+of rows the lowering declares as it emits; defk-ch4), not from the C text.
 
 ## The other modules
 
@@ -76,6 +81,11 @@ lowering declares as it emits; defk-ch4), not from the C text.
 - `lib/defk/copies.ex`: the copy analysis — what counts as a read after a
   write, and the pure tracking state (writes log, buffer carrying, alias
   classes) the compiler keeps at `ctx.lowering.copies`.
+- `lib/defk/strip.ex`: the strip record (pure: rows in, rows out; the
+  compiler keeps it at `ctx.lowering.strip`) and the flagged-strip
+  classifier (`classify/5`: body text, rows and C declarations in, the
+  flagged form or nil out; `unflagged_reason/3` for the report). Its unit
+  test is `test/strip_record_test.exs`.
 - `lib/defk/compiler/ctx.ex`: the ctx struct itself.
 - `lib/defk/clauses.ex`: multi-clause heads and patterns.
 - `lib/defk/elixir_mode.ex`: the Elixir compilation of kernels (tests only).
