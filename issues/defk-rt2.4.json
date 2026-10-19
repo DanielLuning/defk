@@ -6,6 +6,7 @@
   "blocks": [
     "defk-rt2.5"
   ],
+  "closed_at": "2026-10-19T20:06:00Z",
   "created": "2026-10-19T18:42:40Z",
   "description": "\"Where does this operation's failure go\" (raise through ctx, a speculated select's flag, a guard's bad/ovf/stop flag, a strip's deferred check) is answered from three state homes and a C suffix: `env.case_guard` and `env.ovf` (`checked/1` ~L2956, `checked_float/1`, `guarded/2` ~L2325, `guard?/flagged?` ~L5422), `low(:guard)` (`guard_expr`), and `_s(\u0026` which `Defk.Strip.classify` recognises later by token scan. Every arithmetic emitter must pick the right one of `checked`/`checked_float`/`guarded`.\n\nSettled shape (grilling 2026-10-19):\n- env carries `sink: :raise | {:select, flag} | {:guard, scope}`.\n- One function `check(sink, kind)` with `kind` in `:ovf | :bad | :stop` returns the C prefix and declares the strip row; `checked/1`, `checked_float/1`, `flagged_check/1` and `guarded/2` become its clauses.\n- `guard_expr`, `select` and the strips construct sinks. The sink replaces `env.ovf` and `env.case_guard` as the only marker: `guard?/1` and `flagged?/1` read the sink.\n- CONTEXT.md gains the term \"Error sink\" (where a kernel's failed check goes: a raise, a select's flag, a guard's flag, a strip's deferred test). docs/agents/compiler-map.md: the \"case\" and \"expressions\" rows.\n- Adjacent to x3a.6 (guard flags as locals): that settled the storage, this is the dispatch.\n\nTests: case_guard_errors_test ~L562-678, bitwise_test ~L239-241, early_exit_test ~L384 grep `_s(\u0026`/`_g(\u0026` (about 12 lines); a sink's decision is observable as a `:check` note.\n\nGate: byte-identical `mix dump_c`; `mix ci`; PR per AGENTS.md.",
   "id": "defk-rt2.4",
@@ -18,8 +19,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "One error sink: where a failed check goes is one value in env",
   "type": "task",
-  "updated_at": "2026-10-19T20:02:05Z"
+  "updated_at": "2026-10-19T20:06:00Z"
 }
