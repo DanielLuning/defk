@@ -2,13 +2,14 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-19T13:49:54Z",
   "created": "2026-10-19T13:40:11Z",
   "description": "Seen 2026-10-19 on the GitHub Linux check of PR #48 (a change that does not touch the compiler), and reproduced on untouched main f1fdfe29: mix test test/facts_test.exs:350 --seed 627594. The property 'join holds of every arm's value, and keeps what every arm has' (test/facts_test.exs:350, assertion at line 374) fails after 67 runs: for three i64 values whose relative lower bounds are [{1, k: 0}], [{1, k: 0}] and [{1, k: 0}, {1, k: -1}], Facts.join returns lbs [{1, k: 0}, {1, k: -1}] where the test expects the common set [{1, k: 0}]. The extra bound {1, k: -1} is implied by {1, k: 0} (v \u003e= a + 0 implies v \u003e= a - 1), so the join is sound but not minimal: either join should drop a bound another bound of the same atom implies (likely, ADR-0007 representation in lib/defk/facts.ex), or same_bounds? in the test should compare up to implication. Decide which, fix, and run the facts soundness nets (facts_test, scaled_facts_test, linear_facts_test, condition_facts_test, product_facts_test) plus mix dump_c byte-identical if join changes. Seed-dependent: the default CI seed passes, so this is a latent failure, not a regression of PR #48.",
   "id": "defk-r7h",
   "labels": [],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Facts.join keeps a redundant lower bound: property 'join holds of every arm's value' fails with seed 627594",
   "type": "bug",
-  "updated_at": "2026-10-19T13:41:50Z"
+  "updated_at": "2026-10-19T13:49:54Z"
 }
