@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T18:42:42Z",
+  "description": "`Defk.Bench` writes the `DEFK_RESULT` map twice (`check_only/1` ~L290 and `print/2` ~L685, bench.ex); dev/ reads it by 31 distinct string keys across examples.ex (`parse_results/1`, `judge/5`, `verdict_of/3`), scoreboard.ex (18 key reads), snapshot.ex, tables.ex and the defk.examples task. The verdict order and marks are written twice (`Scoreboard.verdict_rank/verdict_mark` ~L173-183, `Tables.rank/mark` ~L343-353); the bands are a third place (Bench ~L109-113). Following \"run one example and record its verdict\" opens seven files, which are the hot files of the last 80 commits.\n\nSettled shape (grilling 2026-10-19):\n- `Defk.Examples.Result`, a struct at dev/defk/examples/result.ex: `decode/1` (the JSON line in), `reused?/1`, `quiet?/1`, `provisional?/1`, `rank/1`, `mark/1`, and the fields the scoreboard reads. Scoreboard, snapshot, tables and the task call predicates instead of indexing keys.\n- `Defk.Bench` keeps the verdict bands (it decides the verdict, ADR-0011) and writes the line from one function.\n- ADR-0011 stands: the line stays in Bench, the cache in dev.\n\nTests: rank and mark get one test; scoreboard_doc_test and examples_task_test exercise the record. Gate: `mix ci`; PR per AGENTS.md; no example is re-measured.",
+  "id": "defk-rt2.9",
+  "labels": [],
+  "parent": "defk-rt2",
+  "priority": 3,
+  "status": "open",
+  "title": "Defk.Examples.Result: the example result is one record, not thirty string keys",
+  "type": "task",
+  "updated_at": "2026-10-19T18:42:42Z"
+}
