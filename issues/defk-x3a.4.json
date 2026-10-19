@@ -3,7 +3,9 @@
   "blocked_by": [
     "defk-x3a.3"
   ],
-  "blocks": [],
+  "blocks": [
+    "defk-x3a.5"
+  ],
   "created": "2026-10-19T13:01:28Z",
   "description": "Candidate 4. compiler.ex L3640-3912: 34 private functions (unzeroed_allocs, unzeroed_by, writes_all, strided_all?, nested_all?, nest_levels, row_major?, permutation?, zero_based_to, binds? ...) with zero uses of ctx, lowering, env or err!, one caller at L861 (lower_block_env, blocks). Move them to lib/defk/alloc_zeroing.ex, Defk.AllocZeroing, with one public function unzeroed_allocs(stmts) :: [{var, line}] (the shape of Copies.live_after). New test/alloc_zeroing_test.exs: AST in, decision out, no cc; alloc_unzeroed_test keeps one C-level check per family. Add the CONTEXT.md term 'Unzeroed allocation' (text agreed: an alloc whose every element a kernel writes before any read, recognised from the loop shape (strided, nested, row-major, permuted or zero-based writes), so the runtime skips the zero fill; a wrong recognition is a divergence; the fast-path report names each one; avoid: uninitialised buffer, lazy alloc). Update docs/agents/compiler-map.md. Gate: mix dump_c byte-identical.",
   "id": "defk-x3a.4",
