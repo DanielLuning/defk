@@ -84,6 +84,10 @@ _Avoid_: fallback, interpreter, pure mode
 The Elixir functions `defk` adds to a module beside its kernels: the NIF loader for the library's placement, the `@on_load` chain, the native stubs, the Elixir mode dispatch, the bitstring decode wrappers and the specs. It is plumbing a kernel's caller never sees.
 _Avoid_: loader (alone), glue
 
+**Unzeroed allocation**:
+An `alloc` whose every element a kernel writes before any read, recognised from the loop shape (strided, nested, row-major, permuted or zero-based writes), so the runtime skips the zero fill. A wrong recognition is a divergence; the fast-path report names each one.
+_Avoid_: uninitialised buffer, lazy alloc
+
 ## Measurement
 
 **Target workload**:

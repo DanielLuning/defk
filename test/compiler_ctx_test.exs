@@ -57,7 +57,7 @@ defmodule Defk.CompilerCtxTest do
     {_c, sigs, _report} = Defk.Compiler.compile(Defk.CompilerCtxTest.E, [kernel], nil)
     defs = Defk.ElixirMode.definitions([kernel], sigs, "ctx_test.ex")
 
-    assert is_list(defs) and defs != []
+    assert match?([_ | _], defs)
     assert defk_keys() == [:defk_ctx]
   end
 end
