@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-rt2.5"
   ],
@@ -12,8 +12,8 @@
   "labels": [],
   "parent": "defk-rt2",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "The emitter reads its liveness from a locals table, not from regex over the kernel's C",
   "type": "task",
-  "updated_at": "2026-10-19T18:42:45Z"
+  "updated_at": "2026-10-19T20:15:47Z"
 }
