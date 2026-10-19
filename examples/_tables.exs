@@ -23,7 +23,9 @@
   examples: %{
     "argon2" => %{
       job: "Argon2id at argon2_elixir's defaults",
-      native: "lane for lane {native:argon2_one_lane} of the reference C",
+      # argon2_one_lane's Elixir side is argon2_elixir, the reference C: its
+      # speedup is the native comparison
+      native: "lane for lane {speedup:argon2_one_lane} of the reference C",
       line: "the C runs its four lanes on threads; the kernel runs them in sequence"
     },
     "batched_levenshtein" => %{

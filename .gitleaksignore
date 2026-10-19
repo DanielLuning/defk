@@ -2,3 +2,8 @@
 # examples/hashes.exs: sip_key is a fixed SipHash test key, not a credential.
 9ca06cc823479ac99b6a02bc5b530c7d0dfb1aa2:examples/hashes.exs:generic-api-key:741
 examples/hashes.exs:generic-api-key:866
+# examples/scoreboard.json: the sort_u64_keys row's stamp holds the MD5 of the
+# Keys.Kernels module's generated C ("Keys.Kernels":"<md5>"), not a credential.
+# The fingerprint is the row's line; a scoreboard with rows added above it
+# moves the line.
+examples/scoreboard.json:generic-api-key:34
