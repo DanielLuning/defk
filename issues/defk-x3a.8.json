@@ -9,9 +9,15 @@
   "id": "defk-x3a.8",
   "labels": [],
   "parent": "defk-x3a",
+  "comments": [
+    {
+      "text": "PR #49 open: https://github.com/DanielLuning/defk/pull/49. mix ci green (2230 passed); new invariant test in compiler_ctx_test. Ticket stays in progress until the owner merges; then bw close, bw sync, remove ../defk-x3a.8; x3a.9 (Defk.Forms) starts from the merged main.",
+      "timestamp": "2026-10-19T13:37:34Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Elixir mode: one :defk_em key holding one struct",
   "type": "task",
-  "updated_at": "2026-10-19T13:30:44Z"
+  "updated_at": "2026-10-19T13:37:34Z"
 }
