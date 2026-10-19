@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-19T09:20:55Z",
@@ -7,8 +7,8 @@
   "id": "defk-9p7",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "First stored scoreboard: quiet mix defk.examples --bench --all --snapshot",
   "type": "task",
-  "updated_at": "2026-10-19T09:20:55Z"
+  "updated_at": "2026-10-19T09:21:01Z"
 }
