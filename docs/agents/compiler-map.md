@@ -94,6 +94,12 @@ of rows the lowering declares as it emits; defk-ch4), not from the C text.
   classifier (`classify/5`: body text, rows and C declarations in, the
   flagged form or nil out; `unflagged_reason/3` for the report). Its unit
   test is `test/strip_record_test.exs`.
+- `lib/defk/alloc_zeroing.ex`: the unzeroed-allocation recogniser
+  (CONTEXT.md), pure: a block's statements in, the same statements out
+  with each `alloc` the next loop writes in full marked `:defk_unzeroed`
+  (`mark/1`); the compiler's "alloc zeroing" section emits from the mark.
+  Its unit test is `test/alloc_zeroing_test.exs`; `alloc_unzeroed_test`
+  keeps the generated C and the agreement side.
 - `lib/defk/compiler/ctx.ex`: the ctx struct itself.
 - `lib/defk/clauses.ex`: multi-clause heads and patterns.
 - `lib/defk/elixir_mode.ex`: the Elixir compilation of kernels (tests only).
