@@ -61,24 +61,38 @@ defmodule Defk.ScoreboardDocTest do
       Map.merge(%{"example" => name, "verdict" => verdict, "speedup" => speedup}, extra)
     end
 
-    defp snapshot(examples, extra \\ %{}) do
-      Map.merge(
-        %{
-          "measured_at" => "2026-10-20T08:00:00Z",
-          "commit" => "abc1234",
-          "command" => "mix defk.examples --bench --all --snapshot --fresh",
-          "machine" => "Test CPU",
-          "logical_cores" => 12,
-          "otp" => "29.0.3",
-          "elixir" => "1.20.2",
-          "load_before" => 1.5,
-          "load_after" => 2.0,
-          "quiet" => true,
-          "examples" =>
-            for({name, results} <- examples, do: %{"name" => name, "results" => results})
-        },
-        extra
-      )
+    @run %{
+      "measured_at" => "2026-10-20T08:00:00Z",
+      "commit" => "abc1234",
+      "command" => "mix defk.examples --bench --all --snapshot --fresh",
+      "otp" => "29.0.3",
+      "elixir" => "1.20.2",
+      "load_before" => 1.5,
+      "load_after" => 2.0,
+      "quiet" => true
+    }
+
+    # `run` changes every row's run; a `{name, results, run}` row has its own
+    defp snapshot(examples, run \\ %{}) do
+      %{
+        "version" => 2,
+        "machine" => "Test CPU",
+        "logical_cores" => 12,
+        "examples" =>
+          for e <- examples do
+            {name, results, own} =
+              case e do
+                {name, results} -> {name, results, %{}}
+                {_, _, _} -> e
+              end
+
+            %{
+              "name" => name,
+              "results" => results,
+              "run" => @run |> Map.merge(run) |> Map.merge(own)
+            }
+          end
+      }
     end
 
     @text %{
@@ -177,7 +191,42 @@ defmodule Defk.ScoreboardDocTest do
 
       assert {:ok, %{"scoreboard" => board}} = Tables.render(s, @text)
       assert board =~ "**Not a quiet machine: every number is provisional.**"
-      assert board =~ "[`meh`](meh.exs) (reused, measured 2026-10-01)"
+      assert board =~ "[`meh`](meh.exs) (measured 2026-10-01) |"
+      assert board =~ "[`slow`](slow.exs) |"
+    end
+
+    test "rows from several runs: the span, the newest run, and each older row's stamp" do
+      older = %{
+        "measured_at" => "2026-10-02T09:00:00Z",
+        "commit" => "0ld0001",
+        "quiet" => false
+      }
+
+      stamped =
+        report("meh", "marginal", 1.04, %{
+          "stamp" => %{"measured_at" => "2026-10-02T08:59:00Z", "commit" => "0ld0001"}
+        })
+
+      reused =
+        report("slow", "poor", 0.5, %{
+          "crossover" => nil,
+          "cache" => "reused",
+          "measured_at" => "2026-10-05T00:00:00Z",
+          "stamp" => %{"measured_at" => "2026-10-05T00:00:00Z", "commit" => "c0ffee1"}
+        })
+
+      s = snapshot([{"meh", [stamped], older}, {"slow", [reused]}, {"fast", good()}])
+      assert {:ok, %{"scoreboard" => board, "summary" => summary}} = Tables.render(s, @text)
+
+      assert board =~
+               "Measured on Test CPU (12 logical cores) in 2 runs, from 2026-10-02 to 2026-10-20. " <>
+                 "The newest at commit `abc1234`, OTP 29.0.3"
+
+      assert board =~ "**A row from a loaded run says provisional.**"
+      assert board =~ "[`meh`](meh.exs) (measured 2026-10-02 at `0ld0001`, provisional) |"
+      assert board =~ "[`slow`](slow.exs) (measured 2026-10-05 at `c0ffee1`) |"
+      assert board =~ "[`fast`](fast.exs) |"
+      assert summary =~ "on Test CPU from 2026-10-02 to 2026-10-20 (one machine"
     end
 
     test "every problem is listed, not just the first" do
@@ -230,9 +279,56 @@ defmodule Defk.ScoreboardDocTest do
       assert {:ok, ^s} = Snapshot.read(file)
 
       assert File.read!(file) =~
-               ~s(\n    {"name":"fast","results":[{"example":"fast","speedup":2.5}],"status":"ok"}\n)
+               ~s(\n    {"name":"fast","results":[{"example":"fast","speedup":2.5}],"run":{)
 
-      assert s["quiet"] == 1.5 <= Defk.Bench.Cache.quiet_limit()
+      assert [%{"run" => run}] = s["examples"]
+      assert run["quiet"] == 1.5 <= Defk.Bench.Cache.quiet_limit()
+      assert run["commit"] == Defk.Examples.commit()
+    end
+
+    test "merge replaces the measured rows and keeps the others" do
+      row = fn name, speedup, at ->
+        %{
+          "name" => name,
+          "results" => [%{"speedup" => speedup}],
+          "run" => %{"measured_at" => at}
+        }
+      end
+
+      file = fn rows ->
+        %{"version" => 2, "machine" => "M", "logical_cores" => 12, "examples" => rows}
+      end
+
+      old = file.([row.("a", 1.0, "old"), row.("b", 2.0, "old")])
+      new = file.([row.("b", 3.0, "new"), row.("c", 4.0, "new")])
+
+      assert {:ok, merged} = Snapshot.merge(old, new)
+
+      assert merged["examples"] == [
+               row.("a", 1.0, "old"),
+               row.("b", 3.0, "new"),
+               row.("c", 4.0, "new")
+             ]
+
+      assert {:error, reason} = Snapshot.merge(old, %{new | "machine" => "Other"})
+      assert reason =~ "measured on M (12 logical cores), this run on Other"
+    end
+  end
+
+  describe "mix defk.examples options" do
+    alias Mix.Tasks.Defk.Examples, as: Task
+
+    test "a timed run names what it measures; --snapshot stores all or those rows" do
+      assert Task.validate([]) == :ok
+      assert Task.validate(bench: true, only: "fft") == :ok
+      assert Task.validate(bench: true, all: true, snapshot: true) == :ok
+      assert Task.validate(bench: true, only: "fft", snapshot: true) == :ok
+      assert {:error, "--bench measures only what you name" <> _} = Task.validate(bench: true)
+      assert {:error, "--snapshot needs --bench"} = Task.validate(snapshot: true, all: true)
+      assert {:error, "--fresh needs --bench"} = Task.validate(fresh: true)
+
+      assert {:error, "--snapshot with --all replaces" <> _} =
+               Task.validate(bench: true, all: true, only: "fft", snapshot: true)
     end
   end
 end

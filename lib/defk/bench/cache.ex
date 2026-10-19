@@ -34,7 +34,9 @@ defmodule Defk.Bench.Cache do
   # and after the measurement must be at most `quiet_limit/0`. A loaded run
   # is never stored, so the next run measures again.
 
-  @version 1
+  # 2: a stored result carries its stamp (Defk.Bench); a version-1 file is
+  # read as empty
+  @version 2
 
   @type slot :: %{
           file: String.t(),

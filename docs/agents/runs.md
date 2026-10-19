@@ -43,6 +43,13 @@ one. Never sweep the catalog with `--bench`, `--all` or `--fresh` unless
 asked. The examples we know are poor fits (the ❌ and 🟡 rows of
 `examples/README.md`) are never measured again unless asked.
 
+Each measured result carries a stamp (`Defk.Bench`): the commit, defk's
+version, the time and the MD5 of each kernel module's C. To store a new
+measurement of one example, run `mix defk.examples --bench --only <name>
+--snapshot` on a quiet machine: it replaces that row of
+`examples/scoreboard.json` and keeps the others with their stamps. `--bench`
+refuses to run without `--only` or `--all`.
+
 Before a run of more than a few minutes, say how long it takes and how many
 cores it uses.
 

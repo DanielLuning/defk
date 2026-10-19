@@ -99,17 +99,33 @@ defmodule Defk.Examples do
       {~c"DEFK_CHECK_ONLY", ~c"1"},
       {~c"DEFK_BENCH_CACHE_DIR", false},
       {~c"DEFK_BENCH_SCRIPT", false},
-      {~c"DEFK_BENCH_FRESH", false}
+      {~c"DEFK_BENCH_FRESH", false},
+      {~c"DEFK_BENCH_COMMIT", false}
     ]
   end
 
+  # DEFK_BENCH_COMMIT goes into each measured result's stamp (Defk.Bench)
   defp mode_env(:bench, file, fresh?) do
     [
       {~c"DEFK_CHECK_ONLY", false},
       {~c"DEFK_BENCH_CACHE_DIR", String.to_charlist(bench_cache_dir())},
       {~c"DEFK_BENCH_SCRIPT", String.to_charlist(file)},
-      {~c"DEFK_BENCH_FRESH", if(fresh?, do: ~c"1", else: false)}
+      {~c"DEFK_BENCH_FRESH", if(fresh?, do: ~c"1", else: false)},
+      {~c"DEFK_BENCH_COMMIT", String.to_charlist(commit())}
     ]
+  end
+
+  @doc "The checked-out commit, with \"-dirty\" when the tree has changes; \"unknown\" outside git."
+  @spec commit() :: String.t()
+  def commit do
+    with {sha, 0} <-
+           System.cmd("git", ["rev-parse", "--short", "HEAD"], cd: root(), stderr_to_stdout: true),
+         {status, 0} <-
+           System.cmd("git", ["status", "--porcelain"], cd: root(), stderr_to_stdout: true) do
+      String.trim(sha) <> if(String.trim(status) == "", do: "", else: "-dirty")
+    else
+      _ -> "unknown"
+    end
   end
 
   @doc "Runs the fuzzy_search app's own tests (`mix deps.get && mix test` in its directory)."
