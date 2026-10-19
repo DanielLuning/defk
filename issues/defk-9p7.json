@@ -1,6 +1,8 @@
 {
   "assignee": "Daniel Lüning",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-059"
+  ],
   "blocks": [],
   "created": "2026-10-19T09:20:55Z",
   "description": "Owner asked 2026-10-19. Run on main (clean) when on AC power and 1-min load \u003c= 3.0; then mix defk.examples.tables, check the README tables, and deliver examples/scoreboard.json + the generated tables in a PR.",
@@ -16,5 +18,5 @@
   "status": "in_progress",
   "title": "First stored scoreboard: quiet mix defk.examples --bench --all --snapshot",
   "type": "task",
-  "updated_at": "2026-10-19T10:22:09Z"
+  "updated_at": "2026-10-19T11:00:29Z"
 }

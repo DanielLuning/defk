@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "defk-9p7"
+  ],
   "created": "2026-10-19T11:00:20Z",
   "description": "Owner 2026-10-19: the full snapshot run produced the load it then refused (load 2.40 before, 4.26 after; all 57 reports not quiet). The runner is sequential, so no example overlaps another; the load comes from (a) the 1-min load average lagging a minute or more after the example's own cc compile and the previous report, (b) the measured process's own threads counted in the after-load, (c) macOS load counting more than CPU use (idle laptop: load 1.74, all processes 0.47 cores).\n\nPlan:\n1. Quiet test on other processes' CPU, not the load average: sum ps %cpu over every process outside the bench's own tree (the example process, its children, the mix runner). Limit DEFK_BENCH_QUIET_CPU, default 1.0 core (to be checked by a probe).\n2. Settle before each measured report (Defk.Bench, cache miss): poll every 2 s until other-CPU is quiet for several samples in a row, max wait (about 120 s), then measure; print the wait. A report that never settles is measured and marked not quiet, as now.\n3. Quiet after: other-CPU after the measurement, same test.\n4. The snapshot row's quiet = all its reports were quiet; the run line records other-CPU, not the whole-run load average.\n5. Probe first: one --bench --only run, log both signals per report, then pick the limit.\n\nBlocks defk-9p7 (the first stored scoreboard waits for this).",
   "id": "defk-059",
@@ -10,5 +12,5 @@
   "status": "open",
   "title": "Bench quiet test: settle before each report, count only other processes' CPU",
   "type": "bug",
-  "updated_at": "2026-10-19T11:00:20Z"
+  "updated_at": "2026-10-19T11:00:29Z"
 }
