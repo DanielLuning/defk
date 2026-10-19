@@ -363,7 +363,7 @@ defmodule Defk.FactsTest do
       ja = Facts.join(%{c: "v_if_1"}, arrs)
       for len <- [la, lb, lc], do: assert(len_holds?(ja, len, lens))
       assert Facts.len_lo(ja) == loosest(arrs, &Facts.len_lo/1, &min/2)
-      assert same_bounds?(Facts.len_lbs(ja), common(arrs, &Facts.len_lbs/1, &min/2))
+      assert same_bounds?(Facts.len_lbs(ja), common(arrs, &Facts.len_lbs/1, &min/2, &max/2))
 
       # numbers: the same for lo/hi and the relative bounds
       ints = [x, y, z]
@@ -371,11 +371,14 @@ defmodule Defk.FactsTest do
       for v <- [xv, yv, zv], do: assert(holds?(ji, v, lens))
       assert Facts.lo(ji) == loosest(ints, &Facts.lo/1, &min/2)
       assert Facts.hi(ji) == loosest(ints, &Facts.hi/1, &max/2)
-      assert same_bounds?(Facts.lbs(ji), common(ints, &Facts.lbs/1, &min/2))
-      assert same_bounds?(Facts.ubs(ji), common(ints, &Facts.ubs/1, &max/2))
+      assert same_bounds?(Facts.lbs(ji), common(ints, &Facts.lbs/1, &min/2, &max/2))
+      assert same_bounds?(Facts.ubs(ji), common(ints, &Facts.ubs/1, &max/2, &min/2))
 
-      # one arm: its own facts; no arm: none
-      assert Facts.facts(Facts.join(%{}, [x])) == Facts.facts(x)
+      # one arm: its own facts, each shape once; no arm: none
+      one = Facts.facts(Facts.join(%{}, [x]))
+      assert %{one | lbs: [], ubs: []} == %{Facts.facts(x) | lbs: [], ubs: []}
+      assert same_bounds?(one.lbs, common([x], &Facts.lbs/1, &min/2, &max/2))
+      assert same_bounds?(one.ubs, common([x], &Facts.ubs/1, &max/2, &min/2))
       assert Facts.facts(Facts.join(%{}, [a])) == Facts.facts(a)
       assert Facts.join(%{c: "x"}, []) == %{c: "x"}
     end
@@ -387,8 +390,10 @@ defmodule Defk.FactsTest do
     if Enum.all?(bounds, &is_integer/1), do: Enum.reduce(bounds, pick)
   end
 
-  # ... and each shape (q and terms) every arm has, at its loosest constant
-  defp common(arms, get, pick) do
+  # ... and each shape (q and terms) every arm has, at its loosest constant.
+  # A generated arm may state one shape twice (two bounds on the same
+  # terms); it then guarantees the tighter of the two.
+  defp common(arms, get, loosest, tightest) do
     shapes =
       arms
       |> Enum.map(&MapSet.new(get.(&1), fn {q, p} -> {q, p.t} end))
@@ -398,9 +403,9 @@ defmodule Defk.FactsTest do
       k =
         arms
         |> Enum.map(fn arm ->
-          Enum.find_value(get.(arm), fn {q1, p} -> (q1 == q and p.t == t) && p.k end)
+          for({q1, p} <- get.(arm), q1 == q and p.t == t, do: p.k) |> Enum.reduce(tightest)
         end)
-        |> Enum.reduce(pick)
+        |> Enum.reduce(loosest)
 
       {q, %{k: k, t: t}}
     end
