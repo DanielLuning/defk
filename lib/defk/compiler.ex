@@ -711,17 +711,14 @@ defmodule Defk.Compiler do
         {p, Map.merge(%{c: c, t: t, owned: false, var: c}, array_ids(t))}
       end)
 
-    env =
-      Map.merge(
-        %{
-          vars: vars,
-          sigs: sigs,
-          inlining: [{k.name, k.arity}],
-          ret: k.ret,
-          ret_fors: returned_fors(k.body)
-        },
-        scope(MapSet.new())
-      )
+    env = %{
+      vars: vars,
+      sigs: sigs,
+      inlining: [{k.name, k.arity}],
+      ret: k.ret,
+      ret_fors: returned_fors(k.body),
+      scope: Copies.scope(MapSet.new())
+    }
 
     {stmts, val} = lower_block(k.body, env)
     {ret_stmts, ret_vals} = coerce_return(val, k)
@@ -902,16 +899,8 @@ defmodule Defk.Compiler do
 
   # A nested plain block binds into the scope around it, as in Elixir: `env`
   # is the block's env at its end, `outer` the env the block is nested in.
-  # What the block bound is now bound in `outer`'s block, so it is at its depth.
-  defp leave(env, outer) do
-    vars =
-      Map.new(env.vars, fn
-        {n, %{depth: d} = b} when d == env.depth -> {n, %{b | depth: outer.depth}}
-        kv -> kv
-      end)
-
-    %{outer | vars: vars}
-  end
+  defp leave(env, outer),
+    do: %{outer | vars: Copies.leave_block(env.vars, env.scope, outer.scope)}
 
   # a nested block's value, and the env with its bindings; any other expression
   # binds nothing
@@ -1140,12 +1129,12 @@ defmodule Defk.Compiler do
         bind(var, empty_bits(), env, match)
 
       v[:bits0] ->
-        name in env.guard && array_rebind_in_loop!(var, match)
+        Copies.guarded?(env.scope, name) && array_rebind_in_loop!(var, match)
         {s, env} = bind_array(name, v, env)
         {s, put_in(env.vars[name][:bits0], true)}
 
       match?({:arr, _}, v.t) ->
-        name in env.guard && array_rebind_in_loop!(var, match)
+        Copies.guarded?(env.scope, name) && array_rebind_in_loop!(var, match)
         bind_array(name, v, env)
 
       true ->
@@ -1318,14 +1307,14 @@ defmodule Defk.Compiler do
   #
   # Liveness is per block, by name: a binding is live after a statement if
   # its name is read later in the block before being bound again (live_after/1),
-  # or it was live where the enclosing construct started (env.out). A
-  # construct's bindings that are read anywhere in its statement are live for
-  # its nested blocks (env.nest), which covers later iterations of a loop and
-  # the rest of the statement; this is conservative, so it may copy where
-  # Elixir would not need to. An arm of an if, cond or case leaves out what
-  # its other arms read (nested/2): they run instead of it, so a helper call
-  # in one arm that rebinds the array the other arm reads writes in place.
-  # Inside a callee, what the caller reads after the call is live.
+  # or it was live where the enclosing construct started. A construct's
+  # bindings that are read anywhere in its statement are live for its nested
+  # blocks, which covers later iterations of a loop and the rest of the
+  # statement; this is conservative, so it may copy where Elixir would not
+  # need to. An arm of an if, cond or case leaves out what its other arms
+  # read (Copies.nested/3): they run instead of it, so a helper call in one
+  # arm that rebinds the array the other arm reads writes in place. Inside a
+  # callee, what the caller reads after the call is live.
   #
   # Where copies go:
   #   * at a write `a[i] = v`: when a is an input array, or a binding that
@@ -1336,66 +1325,25 @@ defmodule Defk.Compiler do
   #   * before a loop over an array that its body writes (snapshot_writes/2)
   # A swap `{a, b} = {b, a}` or `b = a` copies no elements.
   #
-  # The env keys for this (scope/1):
-  #   out        - {id, buf} live after the current block
-  #   live       - {id, buf} live after the current statement
-  #   nest       - {id, buf} live for blocks nested in the current statement
-  #   live_names - the names read after the current statement in its block
-  #   stmt       - the current statement
-  #   guard      - array names a loop body must not bind again (read after it)
-  #   loop       - the innermost loop construct
-  #   depth      - block nesting, to check that an input array is copied in
-  #                the block it is bound in
+  # Where the lowering is for these decisions is the liveness scope at
+  # env.scope, a Defk.Copies.Scope: the lowering moves it as it enters a
+  # statement (enter/3), a nested block (nested/2), a loop (loop_env/2) or an
+  # inlined call (inline/4), and asks it before each write (before_write/3)
+  # and each hoist (hoist/3). The scope is lexical: a block's end restores
+  # the env, and so the scope, around it.
 
-  defp scope(outer) do
-    %{
-      out: outer,
-      nest: outer,
-      live: outer,
-      live_names: MapSet.new(),
-      stmt: nil,
-      guard: MapSet.new(),
-      loop: nil,
-      depth: 0
-    }
-  end
-
-  # the env of block `ast` nested in the statement `env` is at. An arm of an
-  # if, cond or case runs instead of its other arms, so what they read is not
-  # read after it, and the condition, subject and clause heads that chose it
-  # ran before it: its live set is what is read after the
-  # statement, and what the statement reads outside those. Any other nested
-  # block (a loop or fn body, run again) keeps env.nest.
-  defp nested(env, ast) do
-    out =
-      if Copies.arm?(env.stmt, ast),
-        do:
-          MapSet.union(
-            env.live,
-            pairs(env, Copies.reads_outside(Copies.taken(env.stmt, ast), ast))
-          ),
-        else: env.nest
-
-    %{env | out: out, depth: env.depth + 1}
-  end
+  defp nested(env, ast), do: %{env | scope: Copies.nested(env.scope, ast, env.vars)}
 
   # a parameter is bound in the kernel's body block (depth 1)
   defp array_ids({:arr, _}), do: %{id: make_ref(), buf: make_ref(), fin: false, depth: 1}
   defp array_ids(_t), do: %{}
 
-  # {id, buf} of the array bindings of `names` in env
-  defp pairs(env, names) do
-    for n <- names, %{buf: buf, id: id} <- [env.vars[n]], into: MapSet.new(), do: {id, buf}
-  end
-
   # Before statement `e` of a block, `live` the names read after it: copy
   # what its nested writes need (hoist/3), then note what is live.
   defp enter(e, live, env) do
-    names = MapSet.difference(live, Copies.binds(e))
+    names = Copies.live_names(e, live)
     {sh, env} = hoist(e, names, env)
-    live = MapSet.union(pairs(env, names), env.out)
-    nest = MapSet.union(live, pairs(env, Copies.reads(e)))
-    {sh, %{env | stmt: e, live: live, live_names: names, nest: nest}}
+    {sh, %{env | scope: Copies.enter_stmt(env.scope, e, names, env.vars)}}
   end
 
   # A variable bound outside the branches and loop bodies of `e` and written
@@ -1410,8 +1358,7 @@ defmodule Defk.Compiler do
     Enum.reduce(Copies.nested_writes(e), {[], env}, fn n, {acc, env} ->
       case env.vars do
         %{^n => %{buf: _} = b} ->
-          if not b.owned or
-               Copies.shared?(copies(), b, MapSet.union(pairs(env, seen), env.out)) do
+          if Copies.must_hoist?(copies(), env.scope, b, seen, env.vars) do
             note(
               :copy,
               e,
@@ -1533,15 +1480,13 @@ defmodule Defk.Compiler do
 
   # `arr[i] = v` with `arr`'s value `a`: {stmts, the array written, env}
   defp before_write(arr, a, env) do
-    if a.owned and not Copies.shared?(copies(), a, env.live) do
-      {[], a, env}
-    else
+    if Copies.must_copy?(copies(), env.scope, a) do
       case arr do
         {n, _, ctx} when is_atom(n) and is_atom(ctx) ->
           # an input array written in a nested block was copied before the
           # statement holding that block (hoist/3), so this new C local is
           # bound in the block the variable is
-          (a.owned or a[:depth] == env.depth) ||
+          (a.owned or a[:depth] == Copies.depth(env.scope)) ||
             raise "defk bug: input array #{n} written in a nested block was not copied first"
 
           {s, b} = copied(a, n)
@@ -1553,11 +1498,13 @@ defmodule Defk.Compiler do
           note(:copy, arr, :copied, "the array is copied before this write: #{copy_why(a)}")
           {s, b, env}
       end
+    else
+      {[], a, env}
     end
   end
 
   defp bind_array(name, v, env) do
-    {s, b} = array_binding(name, v, env.depth)
+    {s, b} = array_binding(name, v, Copies.depth(env.scope))
     {s, put_var(env, name, b)}
   end
 
@@ -1589,18 +1536,21 @@ defmodule Defk.Compiler do
     end
   end
 
-  # The env a loop's generators, filters and body are lowered in: what its
-  # statement reads stays live (for the next iteration), and the arrays read
-  # after the loop must not be bound again inside it.
-  defp loop_env(env, node) do
-    live = MapSet.new(env.live, &elem(&1, 0))
-    guard = for {n, %{id: id}} <- env.vars, id in live, into: env.guard, do: n
-    %{env | live: env.nest, guard: guard, loop: node}
-  end
+  # the env a loop's generators, filters and body are lowered in (Copies.loop/3)
+  defp loop_env(env, node), do: %{env | scope: Copies.loop(env.scope, node, env.vars)}
 
   # A generator walks array `a` while its loop writes a variable sharing a's
   # buffer: that variable is copied first (in place: it is owned).
-  defp snapshot_writes(%{owned: true, buf: buf}, %{loop: loop} = env) when loop != nil do
+  defp snapshot_writes(%{owned: true, buf: buf}, env) do
+    case Copies.loop_of(env.scope) do
+      nil -> {[], env}
+      loop -> snapshot_loop_writes(loop, buf, env)
+    end
+  end
+
+  defp snapshot_writes(_a, env), do: {[], env}
+
+  defp snapshot_loop_writes(loop, buf, env) do
     loop
     |> Copies.writes_in(MapSet.new())
     |> Enum.uniq()
@@ -1621,8 +1571,6 @@ defmodule Defk.Compiler do
       end
     end)
   end
-
-  defp snapshot_writes(_a, env), do: {[], env}
 
   # A callee that writes an array parameter must return it, or the write is
   # lost to the caller (valid Elixir that does nothing). The array returned
@@ -3628,31 +3576,25 @@ defmodule Defk.Compiler do
       end)
       |> Enum.unzip()
 
-    # the bindings the caller still reads after the call stay live in the callee
-    outer = MapSet.union(env.live, pairs(env, Copies.reads_outside(env.stmt, node)))
-
-    # scope/1 takes the empty set at both call sites (dialyzer treats a
-    # MapSet built by union as opaque and the literal as structural); the
-    # caller's live sets are merged in afterwards. The parameters' facts may
-    # name the caller's atoms, which stay in scope in the inlined body
-    # (env.atoms, see put_var/3).
+    # The parameters' facts may name the caller's atoms, which stay in scope
+    # in the inlined body (env.atoms, see put_var/3).
     atoms =
       for {_, %{t: :i64, c: c} = b} <- vars, into: env[:atoms] || %{}, do: {c, Facts.facts(b)}
 
-    # the callee's declared return type and returned fors: a rejected for in
+    # The callee's declared return type and returned fors: a rejected for in
     # the inlined body gets the hint the callee's own compile gives, since a
-    # caller lowered first records the rejection (one per code and position)
-    cenv =
-      %{
-        vars: Map.new(vars),
-        atoms: atoms,
-        sigs: env.sigs,
-        inlining: [key | env.inlining],
-        ret: k.ret,
-        ret_fors: returned_fors(k.body)
-      }
-      |> Map.merge(scope(MapSet.new()))
-      |> Map.merge(%{out: outer, nest: outer, live: outer})
+    # caller lowered first records the rejection (one per code and position).
+    # The bindings the caller still reads after the call stay live in the
+    # callee (Copies.inline_call/3).
+    cenv = %{
+      vars: Map.new(vars),
+      atoms: atoms,
+      sigs: env.sigs,
+      inlining: [key | env.inlining],
+      ret: k.ret,
+      ret_fors: returned_fors(k.body),
+      scope: Copies.inline_call(env.scope, node, env.vars)
+    }
 
     params = for {p, {:arr, _}} <- k.params, do: {p, cenv.vars[p].id}
 
@@ -3921,7 +3863,7 @@ defmodule Defk.Compiler do
   # the array a range copy writes: `a`'s buffer, or a copy of it when another
   # binding may see that buffer after the call or it is not the kernel's own
   defp range_dest(a, {name, _, args} = node, env) do
-    outer = MapSet.union(env.live, pairs(env, Copies.reads_outside(env.stmt, node)))
+    outer = Copies.live_around(env.scope, node, env.vars)
 
     if a.owned and not Copies.shared?(copies(), Map.put(a, :id, make_ref()), outer) do
       {[], a}
@@ -4750,7 +4692,18 @@ defmodule Defk.Compiler do
             inner = fn genv ->
               Process.put(entered, true)
               {sb, res} = lower_block(body, acc_env(accs, genv))
-              [sb, assign_accs(accs, res, last_expr(body), "the reduce body", genv.live, fix)]
+
+              [
+                sb,
+                assign_accs(
+                  accs,
+                  res,
+                  last_expr(body),
+                  "the reduce body",
+                  Copies.live(genv.scope),
+                  fix
+                )
+              ]
             end
 
             lower_quals(quals, lenv, inner)
@@ -4832,7 +4785,7 @@ defmodule Defk.Compiler do
       with_acc_facts(accs, fn accs, fix ->
         leaf = fn tag, v_ast, env ->
           {s, v} = lower_expr(v_ast, env)
-          assign = assign_accs(accs, v, v_ast, "{:#{tag}, acc}", lenv.live, fix)
+          assign = assign_accs(accs, v, v_ast, "{:#{tag}, acc}", Copies.live(lenv.scope), fix)
 
           if tag == :halt do
             low_update(:halted, &Map.put(&1, id, true))
@@ -4879,11 +4832,7 @@ defmodule Defk.Compiler do
         "the accumulator #{Macro.to_string(pat)} has #{length(pats)} element#{if match?([_], pats), do: "", else: "s"}, #{what} #{Macro.to_string(init_ast)} has #{length(inits)}"
       )
 
-    live =
-      MapSet.union(
-        env.live,
-        pairs(env, MapSet.union(loop_reads, Copies.reads_outside(env.stmt, node)))
-      )
+    live = Copies.live_around(env.scope, node, env.vars, loop_reads)
 
     {accs, _} =
       Enum.zip(pats, inits)
@@ -5014,8 +4963,8 @@ defmodule Defk.Compiler do
         # the outer variable it shadows)
         match?({:arr, _}, a.t) ->
           buf = carried(make_ref(), a[:buf])
-          b = Map.merge(a, %{c: c, id: make_ref(), buf: buf, depth: e.depth + 1})
-          %{put_var(e, name, b) | guard: MapSet.delete(e.guard, name)}
+          b = Map.merge(a, %{c: c, id: make_ref(), buf: buf, depth: Copies.depth(e.scope) + 1})
+          %{put_var(e, name, b) | scope: Copies.unguard(e.scope, name)}
 
         # an accumulator that may become a u64 is marked (u64_mix!/2)
         a[:u64_ref] ->

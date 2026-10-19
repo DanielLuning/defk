@@ -65,7 +65,7 @@ An `if` at the top of a kernel whose only arm raises (`if w < 1, do: raise Argum
 _Avoid_: assertion, precondition check, assume
 
 **Copy analysis**:
-How the compiler decides whether a kernel's array write reuses the buffer or copies it first: a write is in place when no other binding that may see that buffer is read later. It never changes a kernel's meaning, only where copies happen; the fast-path report names its decisions.
+How the compiler decides whether a kernel's array write reuses the buffer or copies it first: a write is in place when no other binding that may see that buffer is read later. "Later" is read from its liveness scope: the bindings live after the current statement and after its block, the innermost loop, and the block depth, which the lowering moves as it enters a statement, a branch, a loop or an inlined call. It never changes a kernel's meaning, only where copies happen; the fast-path report names its decisions.
 _Avoid_: copy-on-write (names a different mechanism), escape analysis
 
 **Range fact**:

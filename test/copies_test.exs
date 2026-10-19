@@ -176,4 +176,176 @@ defmodule Defk.CopiesTest do
       assert [{^id, ^buf, :w1}] = Copies.writes(st)
     end
   end
+
+  describe "the liveness scope (where the lowering is, asked before a write)" do
+    # bindings of two owned arrays; `b` shares `a`'s buffer, as `b = a` binds
+    defp bindings do
+      a = %{id: make_ref(), buf: make_ref(), owned: true, depth: 1}
+      b = %{id: make_ref(), buf: a.buf, owned: true, depth: 1}
+      %{a: a, b: b}
+    end
+
+    defp stmts({:__block__, _, es}), do: es
+
+    # the scope at statement `e` of the kernel's body block `es`
+    defp at(es, e, vars) do
+      body = Copies.nested(Copies.scope(MapSet.new()), {:__block__, [], es}, vars)
+      live = es |> Copies.live_after() |> Enum.at(Enum.find_index(es, &(&1 == e)))
+      Copies.enter_stmt(body, e, Copies.live_names(e, live), vars)
+    end
+
+    # the scope at the one statement of a nested block, `inner` its scope
+    defp in_block(inner, e, vars), do: Copies.enter_stmt(inner, e, MapSet.new(), vars)
+
+    test "a write copies when another binding of the buffer is read later" do
+      vars = bindings()
+
+      es =
+        stmts(
+          quote do:
+                  (
+                    b = a
+                    a[0] = 1
+                    b[0]
+                  )
+        )
+
+      [_, write, _] = es
+      assert Copies.must_copy?(Copies.new(), at(es, write, vars), vars.a)
+    end
+
+    test "a write is in place when nothing else reads the buffer later" do
+      vars = bindings()
+
+      es =
+        stmts(
+          quote do:
+                  (
+                    b = a
+                    a[0] = 1
+                    a[0]
+                  )
+        )
+
+      [_, write, _] = es
+      refute Copies.must_copy?(Copies.new(), at(es, write, vars), vars.a)
+    end
+
+    test "an input array always copies" do
+      vars = bindings()
+
+      es =
+        stmts(
+          quote do:
+                  (
+                    a[0] = 1
+                    a[0]
+                  )
+        )
+
+      assert Copies.must_copy?(Copies.new(), at(es, hd(es), vars), %{vars.a | owned: false})
+    end
+
+    test "an arm leaves out what its other arms read" do
+      vars = bindings()
+
+      es =
+        stmts(
+          quote do
+            b = a
+
+            if c do
+              a[0] = 1
+            else
+              b[0]
+            end
+          end
+        )
+
+      [_, {:if, _, [_, [do: arm, else: _]]} = stmt] = es
+      inner = Copies.nested(at(es, stmt, vars), arm, vars)
+      refute Copies.must_copy?(Copies.new(), in_block(inner, arm, vars), vars.a)
+    end
+
+    test "a loop body sees what its statement reads, for the next iteration" do
+      vars = bindings()
+
+      es =
+        stmts(
+          quote do
+            b = a
+
+            for _ <- 0..1 do
+              a[0] = b[0]
+            end
+          end
+        )
+
+      [_, {:for, _, [_, [do: body]]} = stmt] = es
+      inner = Copies.nested(at(es, stmt, vars), body, vars)
+      assert Copies.must_copy?(Copies.new(), in_block(inner, body, vars), vars.a)
+    end
+
+    test "a nested block is one deeper; leave_block/3 rebinds what it bound at the outer depth" do
+      vars = bindings()
+
+      es =
+        stmts(
+          quote do:
+                  (
+                    a[0] = 1
+                    a[0]
+                  )
+        )
+
+      outer = at(es, hd(es), vars)
+      inner = Copies.nested(outer, hd(es), vars)
+      assert Copies.depth(outer) == 1
+      assert Copies.depth(inner) == 2
+
+      bound = Map.put(vars, :c, %{vars.a | depth: Copies.depth(inner)})
+      left = Copies.leave_block(bound, inner, outer)
+      assert left.c.depth == Copies.depth(outer)
+      assert left.a.depth == 1
+    end
+
+    test "a loop guards the arrays read after it, until one is unguarded" do
+      vars = bindings()
+
+      es =
+        stmts(
+          quote do
+            for _ <- 0..1 do
+              b[0]
+            end
+
+            a[0]
+          end
+        )
+
+      scope = Copies.loop(at(es, hd(es), vars), hd(es), vars)
+      assert Copies.guarded?(scope, :a)
+      refute Copies.guarded?(scope, :b)
+      refute Copies.guarded?(Copies.unguard(scope, :a), :a)
+      assert Copies.loop_of(scope) == hd(es)
+    end
+
+    test "an inlined callee starts with what the caller reads after and beside the call" do
+      vars = bindings()
+
+      es =
+        stmts(
+          quote do:
+                  (
+                    x = f(a) + b[0]
+                    x
+                  )
+        )
+
+      [{:=, _, [_, {:+, _, [call, _]}]} = stmt, _] = es
+      callee = Copies.inline_call(at(es, stmt, vars), call, vars)
+      assert {vars.b.id, vars.b.buf} in Copies.live(callee)
+      refute {vars.a.id, vars.a.buf} in Copies.live(callee)
+    end
+  end
 end
