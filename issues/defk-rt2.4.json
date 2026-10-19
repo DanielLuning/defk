@@ -11,9 +11,15 @@
   "id": "defk-rt2.4",
   "labels": [],
   "parent": "defk-rt2",
+  "comments": [
+    {
+      "text": "PR #60: env.sink + check/2; guard flags stay in the ctx (x3a.6); kept :check notes name the sink; C unchanged; mix ci green (2294 passed).",
+      "timestamp": "2026-10-19T20:02:05Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "One error sink: where a failed check goes is one value in env",
   "type": "task",
-  "updated_at": "2026-10-19T19:51:13Z"
+  "updated_at": "2026-10-19T20:02:05Z"
 }
