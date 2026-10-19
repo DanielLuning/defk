@@ -4,6 +4,7 @@
     "defk-x3a.8"
   ],
   "blocks": [],
+  "closed_at": "2026-10-19T17:05:51Z",
   "created": "2026-10-19T13:01:29Z",
   "description": "Candidate 8, part two. Elixir mode re-parses the shape of three body forms the compiler already parses: parse_for (elixir_mode.ex L1076-1084 vs compiler.ex L4058-4104), case_clause_head (L853-854 vs L5522-5535), the Enum.reduce_while / all? / any? argument patterns (L395-445 vs L1805-1850). About 40 lines, but a new for option or clause shape must be matched in two files. Decided: widen Defk.EnumForms (63 lines, already a pre-both-modes rewrite) and rename it Defk.Forms: the shape of a body form before either mode reads it, returning {quals, reduce, body} / {pat, guard, body, meta} / the Enum form's parts, with rejections through a callback the way Defk.Raise.parse!/2 works. ADR-0008 boundary: shared parsing of shape only; what a form means stays written twice. Tests: a forms_test over ASTs; the existing enum_forms coverage moves with the rename. Update docs/agents/compiler-map.md. Gate: mix dump_c byte-identical.",
   "id": "defk-x3a.9",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Defk.Forms: body-form shapes parsed once for both modes",
   "type": "task",
-  "updated_at": "2026-10-19T17:02:33Z"
+  "updated_at": "2026-10-19T17:05:51Z"
 }
