@@ -14,6 +14,13 @@
 
 ## Unreleased
 
+- Changed (unstable API): the result cache of `mix defk.examples --bench`
+  (`Defk.Bench.Cache`) is no longer in the package. It is the catalog
+  runner's adapter, kept in the repo's `dev/` and loaded into each
+  example's process by the runner. `Defk.Bench.report/1` is unchanged and
+  measures every report when the adapter is absent, as `elixir
+  examples/x.exs` always did. The quiet test moved to `Defk.Bench`:
+  `wait_quiet/0`, `other_cpu/0`, `quiet?/1` and `quiet_limit/0`.
 - Added: `Enum.reduce/3` in kernels, the same fold as `for ..., reduce:`.
 - Added: `Enum.find/3` in kernels: the first element for which the `fn` is
   true, or the default. The default and the elements have one type.

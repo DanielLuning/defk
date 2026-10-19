@@ -298,7 +298,7 @@ reload of identical source maps to the same image. The compiler is the system
 `cc` or `$CC` (ADR-0002; around `build!/3` in lib/defk/build.ex).
 
 **Loading.** The stub module declares `@on_load :__defk_load__` and calls
-`:erlang.load_nif(lib, 0)` (`lib_defs` in lib/defk.ex); `Mod.__defk_lib__/0`
+`:erlang.load_nif(lib, 0)` (the generated module, lib/defk/generated.ex); `Mod.__defk_lib__/0`
 returns the path. A module of a Mix app gets a copy of the `.so` in its app's
 `ebin/` (`Defk.Build.placement!/3`) and resolves `lib` at load time through
 `:code.lib_dir(app)`, so the library ships in a `mix release` and survives

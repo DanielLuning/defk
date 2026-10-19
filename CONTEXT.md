@@ -80,6 +80,10 @@ _Avoid_: chunk, tile, block (of iterations)
 A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir, with the kernel subset's limits applied (a value that doesn't fit its type raises there too). It is never a fallback in production and never a baseline.
 _Avoid_: fallback, interpreter, pure mode
 
+**Generated module**:
+The Elixir functions `defk` adds to a module beside its kernels: the NIF loader for the library's placement, the `@on_load` chain, the native stubs, the Elixir mode dispatch, the bitstring decode wrappers and the specs. It is plumbing a kernel's caller never sees.
+_Avoid_: loader (alone), glue
+
 ## Measurement
 
 **Target workload**:
