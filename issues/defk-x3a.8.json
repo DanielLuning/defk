@@ -4,6 +4,7 @@
   "blocks": [
     "defk-x3a.9"
   ],
+  "closed_at": "2026-10-19T13:55:26Z",
   "created": "2026-10-19T13:01:29Z",
   "description": "Candidate 8, part one. lib/defk/elixir_mode.ex keeps five process-dictionary keys (:defk_em_n, :defk_em_writes, :defk_em_leaf_types, :defk_em_u64_cands, :defk_em_u64_hits; L191, L1253, L1327, L1437) with its own snapshot/restore discipline (scoped/trial/threaded, settle_accs/note_u64_mix) beside an explicitly threaded env map. Decided: one key :defk_em holding one struct (next_id, writes, leaf_types, u64_cands, u64_hits), same mechanism as the compiler's :defk_ctx (defk-euu), function signatures unchanged; snapshot and restore become get/put of one value. Keep the Ctx.set(:file, ...) call at L148: the compiler's err! reads it for rejections raised after compile/4. New invariant to test: after definitions/3 returns, no :defk_em_* key remains and :defk_em is reset. Note the compiler's env map (16 keys, 4 updated) stays a map: adding a struct adds names, not depth. Gate: elixir_mode_test, the agreement properties (test/support/properties.ex users), mix ci; mix dump_c is unaffected but run it.",
   "id": "defk-x3a.8",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Elixir mode: one :defk_em key holding one struct",
   "type": "task",
-  "updated_at": "2026-10-19T13:37:34Z"
+  "updated_at": "2026-10-19T13:55:26Z"
 }
