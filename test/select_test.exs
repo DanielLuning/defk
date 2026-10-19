@@ -169,6 +169,9 @@ defmodule Defk.SelectTest do
   end
 
   test "pure arithmetic arms compile to a select" do
+    assert [{:select, _}] = Defk.TestKit.notes(K, :square_unless, :branch)
+    assert [{:select, _}] = Defk.TestKit.notes(K, :cond_square, :branch)
+    # the select's form: the arms' checks are flagged, not raised
     c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
     assert c =~ "defk_add_i64_s(&"
   end
@@ -184,16 +187,15 @@ defmodule Defk.SelectTest do
     end
 
     test "a rem, div or float division arm compiles to a branch, not a select" do
-      for name <- ~w(rem_arm div_arm fdiv_arm cond_rem) do
-        c = body_of(name)
-        assert c =~ ~r/if \(/, name
-        refute c =~ "_s(&", name
-        refute c =~ ~r/= v_cond_\d+ \? /, name
+      for name <- ~w(rem_arm div_arm fdiv_arm cond_rem)a do
+        assert [{:branch, why}] = Defk.TestKit.notes(Defk.SelectTest.Cost, name, :branch)
+        assert why =~ "may raise or call a kernel", "#{name}"
+        assert body_of(name) =~ ~r/if \(/, "#{name}"
       end
     end
 
     test "an add arm still compiles to a select" do
-      assert cost_c() =~ ~r/defk_add_i64_s\(&/
+      assert [{:select, _}] = Defk.TestKit.notes(Defk.SelectTest.Cost, :add_arm, :branch)
     end
 
     test "the branches agree with Elixir, including a division by zero in the taken arm" do

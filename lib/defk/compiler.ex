@@ -708,7 +708,7 @@ defmodule Defk.Compiler do
     vars =
       Map.new(k.params, fn {p, t} ->
         c = "p_#{sanitize(p)}"
-        {p, Map.merge(%{c: c, t: t, owned: false, var: c}, array_ids(t))}
+        {p, Map.merge(val(c, t, c), array_ids(t))}
       end)
 
     env = %{
@@ -1139,7 +1139,7 @@ defmodule Defk.Compiler do
 
       true ->
         c = fresh(name, v.t)
-        b = %{c: c, t: v.t, owned: v[:owned] || false, var: c, facts: Facts.bound(v)}
+        b = Map.merge(val(c, v.t, c), %{owned: v[:owned] || false, facts: Facts.bound(v)})
         srec_assign(c, v.c)
         {"#{c} = #{v.c};\n", put_var(env, name, b)}
     end
@@ -1414,7 +1414,7 @@ defmodule Defk.Compiler do
   # The strip record sees the copy as one assignment either way.
   defp copy_stmts(dst, src, e) do
     {{_, _}, yield?} = low(:report_kernel)
-    srec_assign(dst, "defk_copy_#{e}(ctx, #{src})")
+    srec_assign(dst, copy_expr(e, src))
 
     if yield? do
       tmp = fresh("copy", {:arr, e})
@@ -1435,16 +1435,28 @@ defmodule Defk.Compiler do
         "#{dst} = #{tmp};\n"
       ]
     else
-      "#{dst} = defk_copy_#{e}(ctx, #{src});\n"
+      "#{dst} = #{copy_expr(e, src)};\n"
+    end
+  end
+
+  # The C of array `src` copied into a buffer the kernel owns, element type
+  # `e`: the one form a copy takes as a value's C (loop_owned/2), which
+  # copy_parts/1 reads back as {e, src}, or nil for any other C.
+  defp copy_expr(e, src), do: "defk_copy_#{e}(ctx, #{src})"
+
+  defp copy_parts(c) do
+    case Regex.run(~r/^defk_copy_(\w+)\(ctx, (.+)\)$/, c) do
+      [_, e, src] -> {Enum.find(@elems, &(Atom.to_string(&1) == e)), src}
+      nil -> nil
     end
   end
 
   # `dst = expr`, where expr may be a value-semantics copy (loop_owned/2
   # builds the C): a copy is emitted as copy_stmts/3 does
   defp assign_copy(dst, expr) do
-    case Regex.run(~r/^defk_copy_(\w+)\(ctx, (.+)\)$/, expr) do
-      [_, e, src] ->
-        copy_stmts(dst, src, Enum.find(@elems, &(Atom.to_string(&1) == e)))
+    case copy_parts(expr) do
+      {e, src} ->
+        copy_stmts(dst, src, e)
 
       nil ->
         srec_assign(dst, expr)
@@ -1526,7 +1538,7 @@ defmodule Defk.Compiler do
         c = fresh(name, v.t)
 
         b =
-          %{c: c, t: v.t, owned: v.owned, var: c, facts: Facts.facts(v)}
+          Map.merge(val(c, v.t, c), %{owned: v.owned, facts: Facts.facts(v)})
           |> Map.merge(ids)
 
         b = if v[:var], do: Facts.len_like(b, v), else: b
@@ -1634,6 +1646,25 @@ defmodule Defk.Compiler do
   # lower_expr(ast, env) :: {c_statements, value}
   # value :: %{c: c_expr, t: type, owned: bool, var: cname | nil}
   #        | %{t: {:tuple, ts}, elems: [value]}
+  #
+  # val/3 makes the base shape; a site adds what it knows, under these keys:
+  #   id, buf, fin, depth - an array binding's identity, its buffer, whether
+  #                         it is finished (no write follows) and the block
+  #                         it is bound in (array_ids/1, array_binding/3)
+  #   bits0               - an empty [u8] that may still become a bitstring
+  #                         accumulator's start (bits_init/2, branch_arr/3)
+  #   facts               - the range facts (Defk.Facts; the value's own)
+  #   flags               - the case-guard flags its C uses (guard_expr/2)
+  #   rel                 - the relation a comparison states (lower_test/2)
+  #   nonneg              - a float never below 0.0 (sqrt/1 needs no check)
+  #   pure_read           - a proven element read's unchecked C (checked
+  #                         reads of a select's arms, relies_on_condition/3)
+  #   u64_ref, acc        - an accumulator that may still become a u64
+  #                         (u64_accs/2, acc_env/2)
+  # What a value's C can do is asked of the C it has now, because a site may
+  # wrap it after construction (as_u64/1, with_binds/2, the conversions):
+  # may_raise?/1 (every raise goes through ctx) and check_free?/1; a copy's
+  # C is copy_expr/2 and is read back by copy_parts/1.
   #
   # Elixir evaluates the operands of an operation left to right, so the first
   # error is the leftmost one, and the C must agree. C orders
@@ -3156,7 +3187,7 @@ defmodule Defk.Compiler do
     {s, v} = lower_expr(n, env)
     v = coerce!(v, :i64, n, "alloc/2 length")
     {sz, c} = alloc_zeroed(e, v, {:alloc, m, args}, env)
-    arr = %{c: c, t: {:arr, e}, owned: true, var: nil, fin: true}
+    arr = Map.merge(val(c, {:arr, e}), %{owned: true, fin: true})
     {[s, sz], Facts.len_from(arr, v)}
   end
 
@@ -3571,7 +3602,7 @@ defmodule Defk.Compiler do
           c = fresh(p, t)
 
           srec_assign(c, v.c)
-          {"#{c} = #{v.c};\n", {p, %{c: c, t: t, owned: false, var: c, facts: Facts.bound(v)}}}
+          {"#{c} = #{v.c};\n", {p, Map.put(val(c, t, c), :facts, Facts.bound(v))}}
         end
       end)
       |> Enum.unzip()
@@ -4939,7 +4970,7 @@ defmodule Defk.Compiler do
   defp loop_owned(v, seen) do
     {:arr, e} = v.t
     copy? = not v.owned or Enum.any?(seen, &Copies.same_buf?(copies(), v[:buf], &1))
-    c = if copy?, do: "defk_copy_#{e}(ctx, #{v.c})", else: v.c
+    c = if copy?, do: copy_expr(e, v.c), else: v.c
     {c, if(v[:buf], do: MapSet.put(seen, v.buf), else: seen)}
   end
 
@@ -5186,7 +5217,7 @@ defmodule Defk.Compiler do
     name = :"defk case #{c}"
 
     env =
-      put_var(env, name, %{c: c, t: sv.t, owned: false, var: c, facts: Facts.bound(sv)})
+      put_var(env, name, Map.put(val(c, sv.t, c), :facts, Facts.bound(sv)))
 
     subj = {name, [], nil}
 
@@ -5618,8 +5649,8 @@ defmodule Defk.Compiler do
   end
 
   # every check calls a runtime helper (defk_*), and every raise goes
-  # through ctx
-  defp check_free?(%{c: c}), do: not (c =~ "ctx" or c =~ "defk_")
+  # through ctx (may_raise?/1)
+  defp check_free?(%{c: c} = v), do: not may_raise?(v) and not (c =~ "defk_")
 
   # `env` where relation `rel` is `true?` (Facts.holds/2): each fact on its
   # newest atom, in that atom's binding (env.atoms and the i64 binding for a
@@ -6491,6 +6522,6 @@ defmodule Defk.Compiler do
 
   # an array copied for value semantics; `c` is the C of the value used
   defp note_copy(c, at, what) do
-    if String.starts_with?(c, "defk_copy_"), do: note(:copy, at, :copied, what)
+    if copy_parts(c), do: note(:copy, at, :copied, what)
   end
 end
