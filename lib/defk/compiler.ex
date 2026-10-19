@@ -744,6 +744,7 @@ defmodule Defk.Compiler do
       ret_views: views,
       decls: Enum.reverse(low(:decls)),
       decl_loop: low(:decl_loop),
+      loops_c: low(:loops_c),
       sp_count: low(:sp),
       sps: low(:sps)
     })
@@ -4683,8 +4684,9 @@ defmodule Defk.Compiler do
     low_put(:loops, [id | stack])
     res = fun.(id)
     low_put(:loops, stack)
-    # the loop's extent in the C, for safepoint_saves/2 (removed there)
-    ["/* defk:in #{id} */\n", res, "/* defk:out #{id} */\n"]
+    # the loop's own C, for safepoint_saves/2
+    low_update(:loops_c, &Map.put(&1, id, res))
+    res
   end
 
   # Dispatch for the loops entered from here (the current loop body, or the
@@ -5887,35 +5889,24 @@ defmodule Defk.Compiler do
   # written before it is read in every iteration of L: it is dead wherever
   # control is not inside an iteration of L, which is at L's own header and
   # anywhere outside L. Only a safepoint in a loop nested in L spills it;
-  # the others leave it out, when every mention of it in the C is between
-  # L's in_loop/1 markers (a local mentioned outside is spilled everywhere,
-  # as before). A dead local in a spill list is not wrong, but it is read
-  # at the safepoint, so the C compiler keeps its value alive into it: a
-  # temporary of an inner loop becomes a value that loop carries out to
-  # the enclosing loop's safepoint. With Keccak's 25 lanes that spilled
-  # half the state on every round. The markers are removed.
+  # the others leave it out, when every mention of it in the kernel's C is
+  # in L's own C (in_loop/1 records each loop's; a local mentioned outside
+  # is spilled everywhere, as before). A dead local in a spill list is not
+  # wrong, but it is read at the safepoint, so the C compiler keeps its
+  # value alive into it: a temporary of an inner loop becomes a value that
+  # loop carries out to the enclosing loop's safepoint. With Keccak's 25
+  # lanes that spilled half the state on every round.
   defp safepoint_saves(k, params) do
     text = IO.iodata_to_binary(k.stmts)
-    marks = Regex.scan(~r{/\* defk:(in|out) (\d+) \*/\n}, text, return: :index)
+    mentions = mentions(text)
+    in_loop = Map.new(k.loops_c, fn {id, c} -> {id, c |> IO.iodata_to_binary() |> mentions()} end)
 
-    extent =
-      Enum.reduce(marks, %{}, fn [{at, len}, {ks, kl}, {is, il}], acc ->
-        id = String.to_integer(binary_part(text, is, il))
-
-        case binary_part(text, ks, kl) do
-          "in" -> Map.put(acc, id, {at + len, nil})
-          "out" -> Map.update!(acc, id, fn {from, nil} -> {from, at} end)
-        end
-      end)
-
-    mentions =
-      Regex.scan(~r/\bv_\w+/, text, return: :index)
-      |> Enum.group_by(fn [{at, len}] -> binary_part(text, at, len) end, fn [{at, _}] -> at end)
-
+    # a loop's C is one piece of the kernel's, so a local mentioned there as
+    # often as in the whole kernel is mentioned nowhere else
     inside? = fn c ->
-      case extent[k.decl_loop[c]] do
-        {from, to} -> Enum.all?(Map.get(mentions, c, []), &(&1 >= from and &1 < to))
+      case in_loop[k.decl_loop[c]] do
         nil -> false
+        in_l -> in_l[c] == mentions[c]
       end
     end
 
@@ -5927,9 +5918,11 @@ defmodule Defk.Compiler do
         {n, params ++ for({c, _} <- k.decls, not dead_at?(local, c, open), do: c)}
       end
 
-    text = String.replace(text, ~r{/\* defk:(in|out) \d+ \*/\n}, "")
     {arrival_blocks(text, k.sps, yields?(k)), saves}
   end
+
+  # how often each local is mentioned in a piece of C
+  defp mentions(text), do: ~r/\bv_\w+/ |> Regex.scan(text) |> Enum.frequencies_by(&hd/1)
 
   # a local of a loop whose iterations do not enclose the safepoint
   defp dead_at?(local, c, open), do: Map.has_key?(local, c) and local[c] not in open

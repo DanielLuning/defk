@@ -38,13 +38,13 @@ One module, ordered by section dividers you can grep for
 | loops | `for`, generators, safepoints | `lower_quals`, `for_collect!/6`, `generator_pattern!/1` |
 | strip record | the storage shim over `Defk.Strip` (the record itself and the classifier live there) | `srec_rows/1`, `srec_arm/3` |
 | loop forms | the C of one loop: a safepoint every iteration, strips, flagged strips | `loop/6`, `strip_loop/5`, `flagged_loop/5`, `flag_strip/4` |
-| resume dispatch | re-entering loops through their headers after a yield | `in_loop/1`, `resume_dispatch/0`, `arrival_blocks/3` |
+| resume dispatch | re-entering loops through their headers after a yield; each loop's own C is recorded as it closes, no marker in the C | `in_loop/1`, `resume_dispatch/0`, `arrival_blocks/3` |
 | reduce accumulators | `for ... reduce:` and `reduce_while`: carrying, facts across trips, halts | `lower_reduce`, `with_acc_facts/2`, `u64_accs/2` |
 | tails and branches | a `reduce_while` body's tail, if/else chains | `lower_tail/3`, `branch_chain/3` |
 | case | clause dispatch (multi-clause kernels); a case guard lowered in a guard scope whose flags are locals made on first use, and every value carries the flags its C uses | `case_arms`, `guard_expr/2`, `guard_flag/1`, `guard_poison/4` |
 | range facts | `Defk.Facts` holds ADR-0007's representation: forms over atoms (array lengths and i64 bindings), values' exact forms (`eq`), bounds `{q, form}`, one prover with a step budget; this file states facts through the module's sources (`len_value`, `len_from`, `len_like`, `between`, `bound`, the derivations), keeps i64 bindings' facts by C variable in `env.atoms` (`put_var/3`), and asks the proofs with the env as scope | `Facts.check`, `Facts.fits_i64?`, `range_limit` |
 | element types | narrow loads/stores | |
-| emitting | C text: entries, init, frames, resume | `emit_entry`, `resume_block/3`, `view_term/3` |
+| emitting | C text: entries, init, frames, resume; what each safepoint spills, from the locals of each loop (its recorded C) | `emit_entry`, `safepoint_saves/2`, `resume_block/3`, `view_term/3` |
 | report | fast-path notes, each made where the lowering decides (bounds, overflow and range checks, the branch verdict); one of `compile/4`'s results, never read back | `note/4`, `note_bounds/4`, `note_overflow/2`, `note_fit/3`, `note_branch/2` |
 
 The compiler's state is one process-dictionary key, `:defk_ctx`, holding a
