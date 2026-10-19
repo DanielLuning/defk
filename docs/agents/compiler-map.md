@@ -14,10 +14,11 @@ ast-bro without the Elixir adapter: fall back to grep and `mix xref`).
 `defk` (a macro in `lib/defk.ex`) collects each kernel's AST into module
 attributes; `__before_compile__` hands them to `Defk.Compiler.compile/4`,
 which type-checks and lowers every kernel to C, calls the C compiler through
-`Defk.Build`, and generates the Elixir functions that load and call the NIF
-(`lib_defs/1` in `lib/defk.ex`: `__defk_load__`, `__defk_lib__`, stats and
-test hooks). Compile errors are collected as diagnostics and raised in one
-`CompileError` by `Defk.Errors.compile_error/3`.
+`Defk.Build`, and quotes the generated module from `Defk.Generated.defs/1`:
+the Elixir functions that load and call the NIF (`__defk_load__`,
+`__defk_lib__`, the stubs and wrappers, stats and test hooks). Compile
+errors are collected as diagnostics and raised in one `CompileError` by
+`Defk.Errors.compile_error/3`.
 
 ## lib/defk/compiler.ex (~6,500 lines)
 
@@ -52,7 +53,14 @@ lowering declares as it emits; defk-ch4), not from the C text.
 ## The other modules
 
 - `lib/defk.ex`: the `defk` macro, options (`max_owned_bytes`, `yield`,
-  `adaptive_slice`), `@impl` handling, `lib_defs/1`.
+  `adaptive_slice`), `@impl` and `@doc` collection, and the pipeline of
+  one module's compile in `__before_compile__`.
+- `lib/defk/generated.ex`: the generated module (CONTEXT.md) behind one
+  function, `defs/1`: data in (signatures, placement, mode, hooks), one
+  quoted block out: the loader for each placement, the `@on_load` chain,
+  the stubs, the wrappers, the Elixir mode dispatch, the specs. Its unit
+  test is `test/generated_test.exs`; the loaded shapes stay covered end to
+  end.
 - `lib/defk/build.ex`: C compiler invocation, cache key, where the `.so`
   lives (`placement!/3`: app ebin vs absolute path), `mix_project?/0`, the
   sanitizer build mode (`sanitize/0`, `DEFK_SANITIZE`; its C side is
