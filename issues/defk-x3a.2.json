@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-19T13:52:53Z",
   "created": "2026-10-19T13:01:27Z",
   "description": "Candidate 2. lib/defk.ex L522-778: lib_defs (:none / {:path,_} / {:app,...}), load_def, take_on_load (@on_load chaining), kernel_defs, native_stubs, wrappers, dispatch_defs, corrupt_tags_def, recompile_def, spec move to Defk.Generated with one function defs/1 over one keyword (sigs, placement, mode, bits, hooks) returning quoted definitions. __before_compile__ keeps the pipeline (deprecations, attributes, EnumForms/Forms desugar, Clauses.merge, ElixirMode.setup!, Compiler.compile/4, Build.library/placement!, Report.full, quote). Tests: a new test/generated_test.exs asserts on Macro.to_string of the three placements, @on_load chaining, yield-hint arity, bitstring decode wrapping; no C compiler needed. Add the CONTEXT.md term 'Generated module' (text agreed in the review: the Elixir functions defk adds beside the kernels: NIF loader for the placement, the @on_load chain, native stubs, Elixir mode dispatch, bitstring decode wrappers, specs; plumbing a kernel's caller never sees; avoid: loader (alone), glue). Update docs/agents/compiler-map.md. No change to generated code: mix dump_c byte-identical and the generated module's function list unchanged (compare Module.definitions_in or __info__(:functions) on a test module).",
   "id": "defk-x3a.2",
@@ -14,8 +15,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Defk.Generated: the module generator behind one defs/1",
   "type": "task",
-  "updated_at": "2026-10-19T13:35:31Z"
+  "updated_at": "2026-10-19T13:52:53Z"
 }
