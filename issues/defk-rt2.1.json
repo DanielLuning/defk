@@ -9,9 +9,15 @@
   "id": "defk-rt2.1",
   "labels": [],
   "parent": "defk-rt2",
+  "comments": [
+    {
+      "text": "The hint is reachable (caller before callee in the module; one diagnostic per code and position). Fix and test in PR #57.",
+      "timestamp": "2026-10-19T18:51:06Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Inline env lacks the callee's ret and ret_fors: the for rewrite hint ignores the declared return type",
   "type": "bug",
-  "updated_at": "2026-10-19T18:43:52Z"
+  "updated_at": "2026-10-19T18:51:06Z"
 }
