@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T13:01:28Z",
+  "description": "Candidate 5. compiler.ex L5608-5870: guard_expr lowers with ovf/bad/stop set to sentinel strings (@guard_bad, @guard_ovf, @guard_stop), then reads them back with String.contains? (L5639, 5640, 5665, 5666, 5707, 5746) and splices locals with String.replace (L5672-5674). Deepen: the value map gains a flags field (%{bad: local | nil, ovf: ..., stop: ...}) filled where the lowering decides; guard_expr reads flags, never the C. Interface stays guard_expr/2 (called from lower_node L1855) plus guard_poison and guard_short_circuit. Also may_raise? (L1664, String.contains?(c, \"ctx\")) becomes a raises? boolean on the value set by the lowering. Tests: guard lowering from AST to {stmts, flags} with asserted flag sets; case_guard_errors_test and select_test stay end to end for agreement. Gate: byte-identical C required; allocate the fresh locals in the same order as today. If that proves impossible, the PR says so and attaches the dump_c diff. The safepoint markers (/* defk:in N */, safepoint_saves L6090-6125) are a separate ticket.",
+  "id": "defk-x3a.6",
+  "labels": [],
+  "parent": "defk-x3a",
+  "priority": 3,
+  "status": "open",
+  "title": "Case guards and may_raise?: facts on the value, no sentinel strings in the C",
+  "type": "task",
+  "updated_at": "2026-10-19T13:01:28Z"
+}
