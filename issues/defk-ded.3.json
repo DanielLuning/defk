@@ -9,9 +9,15 @@
   "id": "defk-ded.3",
   "labels": [],
   "parent": "defk-ded",
+  "comments": [
+    {
+      "text": "PR #42 open; mix ci green",
+      "timestamp": "2026-10-19T07:55:24Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Report stale measurements: rows whose kernels' C changed since their stamp",
   "type": "task",
-  "updated_at": "2026-10-19T07:47:59Z"
+  "updated_at": "2026-10-19T07:55:24Z"
 }
