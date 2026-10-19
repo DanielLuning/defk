@@ -40,8 +40,8 @@ Speedups over an optimised Elixir baseline, measured end to end on Apple M4 Pro 
 | ✅ | a bounded CDCL SAT solver on an authorisation job, 3.6× faster than picosat behind Crux | 11× |
 | ✅ | 1080p image resize, blur, YUV420 conversion and dithering on raw frames, bit-exact | 7.4–14× |
 | ✅ | rolling sensor statistics, HyperLogLog updates, PCM mixing with clip prevention, a byte histogram | 8.4–10× |
-| ✅ | base64, hex and base58 codecs (4.4× the fast64 NIF); Snappy and LZ4 block decode on untrusted input | 5.1–6.3× |
-| ✅ | sorting packed keys, nearest of 500k locations, Monte Carlo slot simulation with `:rand` bit for bit, Gorilla encoding | 2.1–6.1× |
+| ✅ | base64, hex and base58 codecs (4.2× the fast64 NIF); Snappy and LZ4 block decode on untrusted input | 5.1–6.1× |
+| ✅ | sorting packed keys, nearest of 500k locations, Monte Carlo slot simulation with `:rand` bit for bit, Gorilla encoding | 2.4–6.0× |
 | ✅ | a fuzzy-search web service, Myers bit-parallel on both sides: `/health` latency stays at Elixir's while a blocking NIF raises it | [its own measurement](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) |
 | 🟡 | a dictionary-wide Levenshtein batch over all schedulers: Myers bit-parallel in Elixir is close | 1.5× |
 | 🟡 | small WebSocket frames, UTF-8 validation, substring search: the BIFs are native already | 1.0–1.5× |
