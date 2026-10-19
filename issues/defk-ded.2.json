@@ -4,6 +4,7 @@
   "blocks": [
     "defk-ded.3"
   ],
+  "closed_at": "2026-10-19T07:47:50Z",
   "created": "2026-10-19T07:12:36Z",
   "description": "Each scoreboard.json row stores defk version, commit, the MD5 of its kernels' generated C (+ build inputs), date, machine, loads. --snapshot no longer needs --all: it merges the measured rows and keeps the others with their stamps. The generated tables show the stamp per row. Bench cache: a stamped row is reused by default; it is measured again only with --only \u003cname\u003e / --fresh (explicit request).",
   "id": "defk-ded.2",
@@ -20,8 +21,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Stamp every measured result (version, commit, kernels' C hash) and let --snapshot update only the measured rows",
   "type": "task",
-  "updated_at": "2026-10-19T07:39:18Z"
+  "updated_at": "2026-10-19T07:47:50Z"
 }
