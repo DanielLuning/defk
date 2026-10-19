@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-19T12:05:40Z",
   "created": "2026-10-19T11:53:50Z",
   "description": "Owner asked 2026-10-19. The first scoreboard (PR #44, run at 8fa900b7) has 4 rows that failed the quiet test after the measurement. Run mix defk.examples --bench --only codecs,gorilla_encode,monte_carlo_rtp,sort_u64_keys --snapshot, regenerate the tables, deliver in a PR.",
   "id": "defk-q58",
@@ -13,8 +14,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Re-measure the four provisional scoreboard rows (codecs, gorilla_encode, monte_carlo_rtp, sort_u64_keys)",
   "type": "task",
-  "updated_at": "2026-10-19T12:02:28Z"
+  "updated_at": "2026-10-19T12:05:40Z"
 }
