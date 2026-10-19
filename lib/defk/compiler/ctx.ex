@@ -22,7 +22,7 @@ defmodule Defk.Compiler.Ctx do
     # what one kernel's lowering changes, replaced wholesale per kernel:
     # fresh-name and loop counters, declarations, safepoints, halt labels
     # ({id => true}, once {:defk_halted, id} keys), the fast-path report's
-    # current kernel and loop, the strip record, the accumulator-carry
+    # current kernel and loop, the strip record (Defk.Strip), the accumulator-carry
     # fix sets (per with_acc_facts retry ref, once {:defk_acc_facts, ref}),
     # and the operand bindings of the expression being lowered (lower_ops)
     @moduledoc false
@@ -41,7 +41,7 @@ defmodule Defk.Compiler.Ctx do
               report_loop: nil,
               acc_fix: %{},
               copies: %Defk.Copies{},
-              strip: %{seq: 0, path: [], cond: false, rows: []},
+              strip: %Defk.Strip{},
               operand_binds: []
   end
 
