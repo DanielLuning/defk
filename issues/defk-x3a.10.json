@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-x3a.6"
   ],
@@ -10,8 +10,8 @@
   "labels": [],
   "parent": "defk-x3a",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Safepoint markers: rows instead of /* defk:in N */ comments parsed back from the C",
   "type": "task",
-  "updated_at": "2026-10-19T13:01:32Z"
+  "updated_at": "2026-10-19T16:38:09Z"
 }
