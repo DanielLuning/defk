@@ -81,8 +81,11 @@ lowering declares as it emits; defk-ch4), not from the C text.
 - `lib/defk/elixir_mode.ex`: the Elixir compilation of kernels (tests only);
   `lib/defk/elixir_mode/guard.ex` evaluates a case guard that can fail.
 - `lib/defk/inline_size.ex`: the code-size warning (defk-6ag).
-- `lib/defk/bench.ex`: measurement (`report/1`, `settle/0`); rules in
-  `examples/README.md` and AGENTS.md.
+- `lib/defk/bench.ex`: measurement (`report/1`, `settle/0`) and the quiet
+  test (`wait_quiet/0`, `other_cpu/0`, `quiet?/1`); rules in
+  `examples/README.md` and AGENTS.md. The result cache of `mix
+  defk.examples --bench` is the runner's adapter, `dev/defk/bench/cache.ex`,
+  loaded into each example's process with `elixir -r` (ADR-0011).
 - `lib/defk/report.ex`, `lib/defk/bits.ex`, `lib/defk/test.ex`
   (`assert_agrees`): user-facing helpers.
 - `lib/defk/deprecations.ex`: the deprecation table and the renames it

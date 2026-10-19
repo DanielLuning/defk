@@ -1,7 +1,9 @@
 defmodule Defk.BenchCacheTest do
-  # The --bench result cache (Defk.Bench.Cache), in-process:
-  # each "run" is a fresh process, like one example script under
-  # mix defk.examples, with the runner's environment variables set by hand.
+  # The --bench result cache (Defk.Bench.Cache, the runner's adapter in
+  # dev/, loaded here as every dev/ module is), in-process: each "run" is a
+  # fresh process, like one example script under mix defk.examples, with
+  # the runner's environment variables set by hand. The quiet test it
+  # stores by lives in Defk.Bench and is tested here too.
   # Examples.Kernels (test/support) is a loaded kernel module, so the key's
   # kernel part is not empty. A changed defk_runtime.h is the key's build
   # part (Defk.Build.cache_key/1, tested in build_test.exs); here a changed
@@ -134,15 +136,15 @@ defmodule Defk.BenchCacheTest do
     assert run([opts()]).timed > 0
   end
 
-  test "settle waits for the machine, at most DEFK_BENCH_SETTLE_S seconds" do
+  test "wait_quiet waits for the machine, at most DEFK_BENCH_SETTLE_S seconds" do
     System.put_env("DEFK_BENCH_QUIET_CPU", "-1")
     System.put_env("DEFK_BENCH_SETTLE_S", "2")
-    {us, {waited, cpu}} = :timer.tc(&Cache.settle/0)
+    {us, {waited, cpu}} = :timer.tc(&Defk.Bench.wait_quiet/0)
     assert waited >= 2 and us >= 2_000_000
     assert is_float(cpu)
 
     System.put_env("DEFK_BENCH_QUIET_CPU", "1.0e9")
-    assert {0, _} = Cache.settle()
+    assert {0, _} = Defk.Bench.wait_quiet()
   end
 
   test "other_cpu leaves out the bench's own processes" do
@@ -159,10 +161,10 @@ defmodule Defk.BenchCacheTest do
       busy = pct / 100
       assert busy > 0.5
 
-      own = Cache.other_cpu()
+      own = Defk.Bench.other_cpu()
       # the runner's tree: this OS process is outside a made-up runner's
       System.put_env("DEFK_BENCH_RUNNER_PID", "999999999")
-      other = Cache.other_cpu()
+      other = Defk.Bench.other_cpu()
       assert other - own > busy / 2
     after
       # close first: once the loop is killed the port may already be gone
