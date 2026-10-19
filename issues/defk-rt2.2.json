@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-rt2.1"
   ],
@@ -12,8 +12,8 @@
   "labels": [],
   "parent": "defk-rt2",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Defk.Copies owns the copy analysis's liveness scope (eight env keys become one)",
   "type": "task",
-  "updated_at": "2026-10-19T18:42:44Z"
+  "updated_at": "2026-10-19T18:54:41Z"
 }
