@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T18:42:39Z",
+  "description": "`returned_type/2` (compiler.ex, loops section) reads `env[:ret]` and `env[:ret_fors]` to pick the element type for a rejected `for`'s rewrite hint. The inline env built in `inline` (calls section, `cenv`) carries neither, so a `for` that is an inlined callee's value gets the body's own type, not the callee's declared element type.\n\nSteps:\n1. First check whether the hint is reachable: the callee is also compiled on its own and its rejection is reported there (`in_kernel`, `record/1` de-duplication). Write the test that tries to reach it.\n2. Pass `ret: k.ret, ret_fors: returned_fors(k.body)` in `cenv` either way.\n3. If the test cannot reach the hint, close with that finding on the ticket.\n\nGate: `mix ci`; `mix dump_c` byte-identical (an error hint is not C). PR per AGENTS.md.",
+  "id": "defk-rt2.1",
+  "labels": [],
+  "parent": "defk-rt2",
+  "priority": 3,
+  "status": "open",
+  "title": "Inline env lacks the callee's ret and ret_fors: the for rewrite hint ignores the declared return type",
+  "type": "bug",
+  "updated_at": "2026-10-19T18:42:39Z"
+}
