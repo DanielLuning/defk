@@ -11,9 +11,15 @@
   "id": "defk-x3a.4",
   "labels": [],
   "parent": "defk-x3a",
+  "comments": [
+    {
+      "text": "PR #51 open: https://github.com/DanielLuning/defk/pull/51. mix ci green (2261 passed), dump_c byte-identical against main cf9353df. Also fixes the type warning of the x3a.8 ctx test. Ticket stays in progress until the owner merges; then bw close, bw sync, remove ../defk-x3a.4.",
+      "timestamp": "2026-10-19T14:04:49Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Defk.AllocZeroing: the unzeroed-alloc recogniser behind unzeroed_allocs/1",
   "type": "task",
-  "updated_at": "2026-10-19T13:53:36Z"
+  "updated_at": "2026-10-19T14:04:49Z"
 }
