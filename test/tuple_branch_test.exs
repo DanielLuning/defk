@@ -188,23 +188,17 @@ defmodule Defk.TupleBranchTest do
   end
 
   test "pure arms compile to a select per element, the condition once" do
+    assert [{:select, _}] = notes(Select, :step, :branch)
+    # the select's form: one condition temporary, one ternary per element
     c = File.read!(String.replace_suffix(Select.__defk_lib__(), ".so", ".c"))
-    assert c =~ "defk_add_i64_s(&"
-    assert c =~ "defk_mul_i64_s(&"
-    # one condition temporary, one ternary per element
     assert [_] = Regex.scan(~r/^v_cond_\d+ = /m, c)
     assert [_, _] = Regex.scan(~r/= v_cond_\d+ \? /, c)
   end
 
   test "a tuple arm with a division is a branch, not a select per element" do
-    c = File.read!(String.replace_suffix(Select.__defk_lib__(), ".so", ".c"))
-
-    for name <- ~w(step_rem step_fdiv) do
-      [_, rest] = String.split(c, "/* ---- #{name}/", parts: 2)
-      body = rest |> String.split("/* ---- ", parts: 2) |> hd()
-      assert body =~ "if (p_c)", name
-      refute body =~ "_s(&", name
-      refute body =~ ~r/= v_cond_\d+ \? /, name
+    for name <- ~w(step_rem step_fdiv)a do
+      assert [{:branch, why}] = notes(Select, name, :branch)
+      assert why =~ "may raise or call a kernel", "#{name}"
     end
 
     assert Select.step_rem(false, 3, 15) == {3, 1}

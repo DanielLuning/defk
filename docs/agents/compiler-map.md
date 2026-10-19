@@ -32,8 +32,8 @@ One module, ordered by section dividers you can grep for
 | parsing | heads, types, options | |
 | kernels | lowering one kernel, return handling | `lower_kernel`, `coerce_return`, `emit_result` |
 | blocks / statements | statement lowering, bindings | `lower_block`, `lower_stmts` |
-| array values | ownership, value semantics; the copy analysis's rules, its liveness scope (`env.scope`, moved by `enter/3`, `nested/2`, `loop_env/2` and `inline/4`) and its tracking state live in `Defk.Copies` | `owned`, `before_write`, `hoist` |
-| expressions | arithmetic, comparisons, overflow checks (the decision is noted, `note_overflow/2`); operands in Elixir's order (`lower_expr/2` wraps every `lower_node/2` clause); an if/cond/case value's select decision with its reason (`select_check/1`) | `i64_arith`, `lower_ops/3`, `in_order/3`, `lower_branch/6` |
+| array values | ownership, value semantics; the copy analysis's rules, its liveness scope (`env.scope`, moved by `enter/3`, `nested/2`, `loop_env/2` and `inline/4`) and its tracking state live in `Defk.Copies`; a copy's C has one form, `copy_expr/2`, read back by `copy_parts/1` | `owned`, `before_write`, `hoist` |
+| expressions | the lowered value (its keys are listed at the section's head; `val/3` makes the base shape, what its C can do is asked of the C it has now: `may_raise?/1`, `check_free?/1`); arithmetic, comparisons, overflow checks (the decision is noted, `note_overflow/2`); operands in Elixir's order (`lower_expr/2` wraps every `lower_node/2` clause); an if/cond/case value's select decision with its reason (`select_check/1`) | `i64_arith`, `lower_ops/3`, `in_order/3`, `lower_branch/6` |
 | calls | kernel-to-kernel inlining, builtins | (inline size: `Defk.InlineSize.check/3`) |
 | loops | `for`, generators, safepoints | `lower_quals`, `for_collect!/6`, `generator_pattern!/1` |
 | strip record | the storage shim over `Defk.Strip` (the record itself and the classifier live there) | `srec_rows/1`, `srec_arm/3` |
