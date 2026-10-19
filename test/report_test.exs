@@ -66,6 +66,12 @@ defmodule Defk.ReportTest.K do
     a
   end
 
+  # an i64 into a [u8]: the store checks the range
+  defk clip(a :: [u8], v :: i64) :: [u8] do
+    a[0] = v
+    a
+  end
+
   # no float operation: nothing to flag
   defk spread(a :: [u8]) :: [u8] do
     out = alloc(u8, 2 * length(a))
@@ -171,9 +177,43 @@ defmodule Defk.ReportTest do
       assert at =~ "0 <= i"
       assert at =~ "i < length(a)"
 
-      assert [{:bounds, :kept, next}] = facts(K, {:next_sum, 1}, "acc + a[i + 1]")
+      assert [{:bounds, :kept, next}] =
+               for({:bounds, _, _} = f <- facts(K, {:next_sum, 1}, "acc + a[i + 1]"), do: f)
+
       assert next =~ "i + 1 < length(a)"
       refute next =~ "0 <="
+    end
+
+    test "an i64 + - * notes its overflow check, dropped or kept" do
+      checks = facts(K, {:next_sum, 1}, "acc + a[i + 1]")
+      assert {:check, :dropped, "i + 1: no overflow check"} in checks
+      assert [{:check, :kept, kept}] = for({:check, :kept, _} = f <- checks, do: f)
+      assert kept =~ "acc + a[i + 1]: overflow check kept"
+
+      assert [{:check, :dropped, "2 * length(a): no overflow check"}] =
+               for(
+                 {:check, _, _} = f <- facts(K, {:spread, 1}, "alloc(u8, 2 * length(a))"),
+                 do: f
+               )
+    end
+
+    test "a store into a narrower element type notes its range check, dropped or kept" do
+      # a byte read from a [u8] fits a [u8]
+      assert {:check, :dropped, "out[2 * j]: no u8 range check, the value fits"} in facts(
+               K,
+               {:spread, 1},
+               "out[2 * j] = a[j]"
+             )
+
+      assert [{:check, :kept, kept}] =
+               for({:check, :kept, _} = f <- facts(K, {:clip, 2}, "a[0] = v"), do: f)
+
+      assert kept =~ "a[0]: u8 range check kept"
+      # an [i64] store has no range to miss
+      refute Enum.any?(
+               facts(K, {:bump, 1}, "a[0] = a[0] + 1"),
+               &match?({:check, _, "a[0]:" <> _}, &1)
+             )
     end
 
     test "an if of pure arms is a select; a case with no catch-all is a branch, with why" do

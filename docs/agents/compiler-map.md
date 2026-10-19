@@ -33,7 +33,7 @@ One module, ordered by section dividers you can grep for
 | kernels | lowering one kernel, return handling | `lower_kernel`, `coerce_return`, `emit_result` |
 | blocks / statements | statement lowering, bindings | `lower_block`, `lower_stmts` |
 | array values | ownership, value semantics; the copy analysis's rules and tracking state live in `Defk.Copies` | `owned`, `before_write`, `hoist` |
-| expressions | arithmetic, comparisons, overflow checks; operands in Elixir's order (`lower_expr/2` wraps every `lower_node/2` clause) | `i64_arith`, `lower_ops/3`, `in_order/3` |
+| expressions | arithmetic, comparisons, overflow checks (the decision is noted, `note_overflow/2`); operands in Elixir's order (`lower_expr/2` wraps every `lower_node/2` clause); an if/cond/case value's select decision with its reason (`select_check/1`) | `i64_arith`, `lower_ops/3`, `in_order/3`, `lower_branch/6` |
 | calls | kernel-to-kernel inlining, builtins | (inline size: `Defk.InlineSize.check/3`) |
 | loops | `for`, generators, safepoints | `lower_quals`, `for_collect!/6`, `generator_pattern!/1` |
 | strip record | the storage shim over `Defk.Strip` (the record itself and the classifier live there) | `srec_rows/1`, `srec_arm/3` |
@@ -45,7 +45,7 @@ One module, ordered by section dividers you can grep for
 | range facts | `Defk.Facts` holds ADR-0007's representation: forms over atoms (array lengths and i64 bindings), values' exact forms (`eq`), bounds `{q, form}`, one prover with a step budget; this file states facts through the module's sources (`len_value`, `len_from`, `len_like`, `between`, `bound`, the derivations), keeps i64 bindings' facts by C variable in `env.atoms` (`put_var/3`), and asks the proofs with the env as scope | `Facts.check`, `Facts.fits_i64?`, `range_limit` |
 | element types | narrow loads/stores | |
 | emitting | C text: entries, init, frames, resume | `emit_entry`, `resume_block/3`, `view_term/3` |
-| report | fast-path notes; one of `compile/4`'s results | `note/4`, `note_bounds/4` |
+| report | fast-path notes, each made where the lowering decides (bounds, overflow and range checks, the branch verdict); one of `compile/4`'s results, never read back | `note/4`, `note_bounds/4`, `note_overflow/2`, `note_fit/3`, `note_branch/2` |
 
 The compiler's state is one process-dictionary key, `:defk_ctx`, holding a
 `Defk.Compiler.Ctx` (defk-euu): compile-wide fields (file, diags, report,

@@ -17,7 +17,8 @@ dot/2  test/support/examples.ex:18
   18 |   defk dot(a :: [f64], b :: [f64]) :: f64 do
   19 |     n = min(length(a), length(b))
   20 |
-  21 |     for i <- 0..(n - 1)//1, reduce: 0.0 do    # loop: strips of DEFK_STRIP trips, one safepoint per strip; flagged
+  21 |     for i <- 0..(n - 1)//1, reduce: 0.0 do    # n - 1: no overflow check
+     |                                               # loop: strips of DEFK_STRIP trips, one safepoint per strip; flagged
      |                                               # non-finite: float checks set a flag tested once per strip; a set flag replays the strip with raising checks
   22 |       acc -> acc + a[i] * b[i]                # a[i]: no bounds check
      |                                               # b[i]: no bounds check
@@ -30,8 +31,11 @@ A kept check names the fact the compiler could not prove:
 ```text
 next_sum/1  test/report_test.exs:16
   16 |   defk next_sum(a :: [i64]) :: i64 do
-  17 |     for i <- 0..(length(a) - 1)//1, reduce: 0 do  # loop: strips of DEFK_STRIP trips, one safepoint per strip
-  18 |       acc -> acc + a[i + 1]                       # a[i + 1]: bounds check kept; nothing proves i + 1 < length(a)
+  17 |     for i <- 0..(length(a) - 1)//1, reduce: 0 do  # length(a) - 1: no overflow check
+     |                                                   # loop: strips of DEFK_STRIP trips, one safepoint per strip
+  18 |       acc -> acc + a[i + 1]                       # i + 1: no overflow check
+     |                                                   # a[i + 1]: bounds check kept; nothing proves i + 1 < length(a)
+     |                                                   # acc + a[i + 1]: overflow check kept; nothing proves the result fits i64
   19 |     end
   20 |   end
 ```
@@ -73,7 +77,9 @@ that quotes with `location: :keep` has its notes on the macro's lines, as
 `{file, line}` when the macro is in another file; without `:keep`, every note
 is on the macro call line. `fact` is
 `{topic, verdict, text}`; `Defk.Report` lists the topics: `:kernel`,
-`:bounds`, `:branch`, `:loop`, `:nonfinite`, `:inline`, `:copy`, `:alloc`,
+`:bounds`, `:check` (an i64 `+`, `-` or `*` with its overflow check dropped
+or kept, and a store into a narrower element type with its range check
+dropped or kept), `:branch`, `:loop`, `:nonfinite`, `:inline`, `:copy`, `:alloc`,
 `:owned` (an `alloc` or a copy inside a loop, which keeps a buffer per
 iteration until the kernel returns; the note for an `alloc` suggests hoisting
 it before the loop and clearing each pass) and `:vectorize`.
