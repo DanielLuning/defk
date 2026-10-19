@@ -154,7 +154,9 @@ defmodule Defk.BenchCacheTest do
       # ps averages %cpu, so give the loop time to show
       Process.sleep(1500)
       {out, 0} = System.cmd("ps", ["-o", "%cpu=", "-p", to_string(child)])
-      busy = String.to_float(String.trim(String.replace(out, ",", "."))) / 100
+      # Linux ps prints "100" for a whole number, macOS "100.0"
+      {pct, _} = Float.parse(String.replace(String.trim(out), ",", "."))
+      busy = pct / 100
       assert busy > 0.5
 
       own = Cache.other_cpu()

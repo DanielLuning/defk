@@ -154,7 +154,8 @@ defmodule Defk.Bench.Cache do
   processes are left out: this OS process and its children, and under the
   examples runner (`DEFK_BENCH_RUNNER_PID`) the runner and everything it
   started. A finished process is gone from `ps`, so a compile or an example
-  that ended counts no more.
+  that ended counts no more. macOS `ps` gives recent use; Linux `ps` gives
+  each process's average over its life, which is coarser.
   """
   @spec other_cpu() :: float() | nil
   def other_cpu do
