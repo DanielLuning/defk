@@ -9,9 +9,15 @@
   "id": "defk-x3a.3",
   "labels": [],
   "parent": "defk-x3a",
+  "comments": [
+    {
+      "text": "PR #46 open: https://github.com/DanielLuning/defk/pull/46. mix ci green (2229 passed), dump_c byte-identical across 107 modules (only the path-hashed loop key differs). Ticket stays in progress until the owner merges; then bw close, bw sync, remove ../defk-x3a.3.",
+      "timestamp": "2026-10-19T13:12:58Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Defk.Strip: strip record and classifier in one module; a divider for reduce accumulators",
   "type": "task",
-  "updated_at": "2026-10-19T13:02:46Z"
+  "updated_at": "2026-10-19T13:12:58Z"
 }
