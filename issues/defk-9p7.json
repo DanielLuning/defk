@@ -6,9 +6,15 @@
   "description": "Owner asked 2026-10-19. Run on main (clean) when on AC power and 1-min load \u003c= 3.0; then mix defk.examples.tables, check the README tables, and deliver examples/scoreboard.json + the generated tables in a PR.",
   "id": "defk-9p7",
   "labels": [],
+  "comments": [
+    {
+      "text": "First full run 2026-10-19 11:49-12:21 at 7ae54c8a: 32/32 passed, 31/31 behave as claimed, but not quiet (load 2.40 before, 4.26 after; 5-min 7.18). All 57 reports above the 3.0 limit, so every row is provisional. Scoreboard kept untracked; no PR yet, waiting for the owner's decision.",
+      "timestamp": "2026-10-19T10:22:09Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "First stored scoreboard: quiet mix defk.examples --bench --all --snapshot",
   "type": "task",
-  "updated_at": "2026-10-19T09:21:01Z"
+  "updated_at": "2026-10-19T10:22:09Z"
 }
