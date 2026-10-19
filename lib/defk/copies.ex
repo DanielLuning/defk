@@ -231,4 +231,123 @@ defmodule Defk.Copies do
     do: reads(rest)
 
   def quals_reads(quals), do: reads(quals)
+
+  # ---------------------------------------------------- the liveness scope --
+  # Where the lowering is, for the copy decisions: the bindings live after
+  # the current statement and after its block, the statement itself, the
+  # innermost loop and the block depth. The compiler carries one scope in its
+  # env (`env.scope`), replaced as it enters a statement, a nested block, a
+  # loop or an inlined call; it is lexical, so a block's end restores the
+  # scope around it. The bindings themselves (`vars`: name -> %{id, buf, ..})
+  # stay the compiler's; a transition takes them where it resolves names to
+  # {id, buf} pairs.
+
+  defmodule Scope do
+    @moduledoc false
+    #   out        - {id, buf} live after the current block
+    #   live       - {id, buf} live after the current statement
+    #   nest       - {id, buf} live for blocks nested in the current statement
+    #   live_names - the names read after the current statement in its block
+    #   stmt       - the current statement
+    #   guard      - array names a loop body must not bind again (read after it)
+    #   loop       - the innermost loop construct
+    #   depth      - block nesting, to check that an input array is copied in
+    #                the block it is bound in
+    defstruct out: MapSet.new(),
+              live: MapSet.new(),
+              nest: MapSet.new(),
+              live_names: MapSet.new(),
+              stmt: nil,
+              guard: MapSet.new(),
+              loop: nil,
+              depth: 0
+  end
+
+  # The scope a kernel's body starts in: `outer` the {id, buf} live after the
+  # whole body (none for a kernel; an inlined call's caller still reads some).
+  def scope(outer), do: %Scope{out: outer, nest: outer, live: outer}
+
+  def depth(%Scope{depth: d}), do: d
+  def live(%Scope{live: l}), do: l
+  def loop_of(%Scope{loop: l}), do: l
+
+  # the loop around the scope reads array `name` after it: binding it again
+  # inside is a rebind of the outer variable
+  def guarded?(%Scope{guard: g}, name), do: name in g
+  def unguard(%Scope{} = s, name), do: %{s | guard: MapSet.delete(s.guard, name)}
+
+  # {id, buf} of the array bindings of `names` in `vars`
+  def pairs(vars, names) do
+    for n <- names, %{buf: buf, id: id} <- [vars[n]], into: MapSet.new(), do: {id, buf}
+  end
+
+  # the names read after statement `e` of its block, `live` the names read
+  # after it (live_after/1): what `e` binds is a new binding, not one of them
+  def live_names(e, live), do: MapSet.difference(live, binds(e))
+
+  # Entering statement `e`, `names` the names read after it (live_names/2),
+  # with `vars` the bindings after the copies hoisted before `e`: what is
+  # live after `e`, and for the blocks nested in it (which also see what `e`
+  # reads, as a later iteration or a later arm does).
+  def enter_stmt(%Scope{} = s, e, names, vars) do
+    live = MapSet.union(pairs(vars, names), s.out)
+    nest = MapSet.union(live, pairs(vars, reads(e)))
+    %{s | stmt: e, live: live, live_names: names, nest: nest}
+  end
+
+  # The scope of block `ast` nested in the statement `s` is at. An arm of an
+  # if, cond or case runs instead of its other arms, so what they read is not
+  # read after it, and the condition, subject and clause heads that chose it
+  # ran before it: its live set is what is read after the statement, and what
+  # the statement reads outside those. Any other nested block (a loop or fn
+  # body, run again) keeps what is live for nested blocks.
+  def nested(%Scope{} = s, ast, vars) do
+    out =
+      if arm?(s.stmt, ast),
+        do: MapSet.union(s.live, pairs(vars, reads_outside(taken(s.stmt, ast), ast))),
+        else: s.nest
+
+    %{s | out: out, depth: s.depth + 1}
+  end
+
+  # Leaving a nested plain block, which binds into the scope around it as in
+  # Elixir: `vars` the bindings at the block's end, now bound in the outer
+  # block and so at its depth.
+  def leave_block(vars, %Scope{depth: inner}, %Scope{depth: outer}) do
+    Map.new(vars, fn
+      {n, %{depth: ^inner} = b} -> {n, %{b | depth: outer}}
+      kv -> kv
+    end)
+  end
+
+  # The scope a loop's generators, filters and body are lowered in: what its
+  # statement reads stays live (for the next iteration), and the arrays read
+  # after the loop must not be bound again inside it.
+  def loop(%Scope{} = s, node, vars) do
+    live = MapSet.new(s.live, &elem(&1, 0))
+    guard = for {n, %{id: id}} <- vars, id in live, into: s.guard, do: n
+    %{s | live: s.nest, guard: guard, loop: node}
+  end
+
+  # {id, buf} live around `node`, a part of the current statement: what is
+  # live after the statement, what the statement reads outside `node`, and
+  # the names `more` (what a loop's generators read while it runs).
+  def live_around(%Scope{} = s, node, vars, more \\ MapSet.new()) do
+    MapSet.union(s.live, pairs(vars, MapSet.union(more, reads_outside(s.stmt, node))))
+  end
+
+  # the scope an inlined callee's body starts in: the bindings the caller
+  # still reads after the call `node` stay live in the callee
+  def inline_call(%Scope{} = s, node, vars), do: scope(live_around(s, node, vars))
+
+  # Array `a` is written: in place when it is owned and no other binding
+  # that may see its buffer is read later; else it is copied first.
+  def must_copy?(st, %Scope{live: live}, a), do: not a.owned or shared?(st, a, live)
+
+  # Binding `b` is bound outside the branches and loop bodies of the current
+  # statement and written in them: it is copied before the statement if it
+  # is an input array, or if another binding of its buffer is read in the
+  # statement (`seen`, names) or after its block.
+  def must_hoist?(st, %Scope{out: out}, b, seen, vars),
+    do: not b.owned or shared?(st, b, MapSet.union(pairs(vars, seen), out))
 end

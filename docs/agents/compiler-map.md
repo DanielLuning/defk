@@ -32,7 +32,7 @@ One module, ordered by section dividers you can grep for
 | parsing | heads, types, options | |
 | kernels | lowering one kernel, return handling | `lower_kernel`, `coerce_return`, `emit_result` |
 | blocks / statements | statement lowering, bindings | `lower_block`, `lower_stmts` |
-| array values | ownership, value semantics; the copy analysis's rules and tracking state live in `Defk.Copies` | `owned`, `before_write`, `hoist` |
+| array values | ownership, value semantics; the copy analysis's rules, its liveness scope (`env.scope`, moved by `enter/3`, `nested/2`, `loop_env/2` and `inline/4`) and its tracking state live in `Defk.Copies` | `owned`, `before_write`, `hoist` |
 | expressions | arithmetic, comparisons, overflow checks (the decision is noted, `note_overflow/2`); operands in Elixir's order (`lower_expr/2` wraps every `lower_node/2` clause); an if/cond/case value's select decision with its reason (`select_check/1`) | `i64_arith`, `lower_ops/3`, `in_order/3`, `lower_branch/6` |
 | calls | kernel-to-kernel inlining, builtins | (inline size: `Defk.InlineSize.check/3`) |
 | loops | `for`, generators, safepoints | `lower_quals`, `for_collect!/6`, `generator_pattern!/1` |
@@ -87,8 +87,14 @@ of rows the lowering declares as it emits; defk-ch4), not from the C text.
   `test/linear_facts_test.exs`, `test/condition_facts_test.exs` and
   `test/product_facts_test.exs`.
 - `lib/defk/copies.ex`: the copy analysis — what counts as a read after a
-  write, and the pure tracking state (writes log, buffer carrying, alias
-  classes) the compiler keeps at `ctx.lowering.copies`.
+  write; the liveness scope (`Defk.Copies.Scope`: what is live after the
+  statement and the block, the innermost loop, the depth), which the
+  compiler keeps at `env.scope` and moves through `enter_stmt/4`,
+  `nested/3`, `loop/3` and `inline_call/3`, and asks with `must_copy?/3`
+  and `must_hoist?/5`; and the pure tracking state (writes log, buffer
+  carrying, alias classes) the compiler keeps at `ctx.lowering.copies`.
+  Its unit test is `test/copies_test.exs`; the copies a kernel makes end
+  to end are `test/value_semantics_test.exs`.
 - `lib/defk/strip.ex`: the strip record (pure: rows in, rows out; the
   compiler keeps it at `ctx.lowering.strip`) and the flagged-strip
   classifier (`classify/5`: body text, rows and C declarations in, the
