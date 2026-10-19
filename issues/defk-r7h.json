@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-19T13:40:11Z",
@@ -7,8 +7,8 @@
   "id": "defk-r7h",
   "labels": [],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Facts.join keeps a redundant lower bound: property 'join holds of every arm's value' fails with seed 627594",
   "type": "bug",
-  "updated_at": "2026-10-19T13:40:11Z"
+  "updated_at": "2026-10-19T13:41:50Z"
 }
