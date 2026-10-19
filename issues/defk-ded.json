@@ -2,13 +2,14 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-19T09:20:40Z",
   "created": "2026-10-19T07:12:35Z",
   "description": "Owner 2026-10-19: sweeps that compile every kernel cost too much time, and known-poor examples get measured again for nothing. Rules: (a) a C-correctness check never needs cc or the whole catalog; (b) every measured result carries a stamp (defk version, commit, C hash of its kernels, date, machine); (c) a stamped result is measured again ONLY on explicit request (owner or a ticket that names the example). Tools report stale rows (C changed since the stamp); they never re-measure on their own. Children: C-only dump_c + agent rule doc; per-row stamp + partial snapshot; stale report.",
   "id": "defk-ded",
   "labels": [],
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "Selective kernel runs: compile and measure only what a change touches",
   "type": "epic",
-  "updated_at": "2026-10-19T07:12:35Z"
+  "updated_at": "2026-10-19T09:20:40Z"
 }
