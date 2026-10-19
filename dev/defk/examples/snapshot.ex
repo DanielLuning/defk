@@ -30,7 +30,7 @@ defmodule Defk.Examples.Snapshot do
       "command" => command,
       "otp" => otp_version(),
       "elixir" => System.version(),
-      "quiet_limit" => Cache.quiet_limit()
+      "quiet_limit" => Defk.Bench.quiet_limit()
     }
 
     %{

@@ -68,6 +68,12 @@ defmodule Defk.Examples do
   """
   def bench_cache_dir, do: Path.join(Mix.Project.build_path(), "defk_bench")
 
+  # The result cache is this runner's adapter to `Defk.Bench`, kept in dev/
+  # (never packaged); a bench run loads it into each example's process with
+  # `elixir -r` before the script's `Mix.install` brings defk. Without it,
+  # `Defk.Bench.report/1` measures every report.
+  @cache_adapter "dev/defk/bench/cache.ex"
+
   @doc """
   Runs one example in its own `elixir` process. `mode` is `:check` or `:bench`;
   `timeout_s` is `nil` for none. Prints a heartbeat every 30 s of silence.
@@ -84,10 +90,13 @@ defmodule Defk.Examples do
 
     # stdout and stderr stay apart: a stderr write (a Logger line, a VM
     # warning) must not land inside a DEFK_RESULT line
-    {secs, ran} =
-      timed(fn ->
-        shell(~s(exec elixir "$0" 2>"$1"), [file, err_file], env, root(), name, timeout_s)
-      end)
+    {script, argv} =
+      case mode do
+        :check -> {~s(exec elixir "$0" 2>"$1"), [file, err_file]}
+        :bench -> {~s(exec elixir -r "$2" "$0" 2>"$1"), [file, err_file, @cache_adapter]}
+      end
+
+    {secs, ran} = timed(fn -> shell(script, argv, env, root(), name, timeout_s) end)
 
     err = read_and_rm(err_file)
     judge(name, mode, ran, secs, err)
@@ -107,7 +116,7 @@ defmodule Defk.Examples do
 
   # DEFK_BENCH_COMMIT goes into each measured result's stamp (Defk.Bench);
   # with DEFK_BENCH_RUNNER_PID the quiet test leaves out this runner and
-  # everything it started (Defk.Bench.Cache.other_cpu/0)
+  # everything it started (Defk.Bench.other_cpu/0)
   defp mode_env(:bench, file, fresh?) do
     [
       {~c"DEFK_CHECK_ONLY", false},

@@ -282,7 +282,7 @@ defmodule Defk.ScoreboardDocTest do
                ~s(\n    {"name":"fast","quiet":false,"results":[{"example":"fast","speedup":2.5}],"run":{)
 
       assert [%{"run" => run}] = s["examples"]
-      assert run["quiet_limit"] == Defk.Bench.Cache.quiet_limit()
+      assert run["quiet_limit"] == Defk.Bench.quiet_limit()
       assert run["commit"] == Defk.Examples.commit()
     end
 

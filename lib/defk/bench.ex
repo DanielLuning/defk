@@ -46,11 +46,14 @@ defmodule Defk.Bench do
   kernels' `.beam` files, the C build inputs, the script, its dependencies,
   this module, the OTP and Elixir versions and the machine. It still runs
   the `:check`, and the `DEFK_RESULT` line says `"cache": "reused"` with the
-  date in `measured_at`. When the runner measures, `report/1` first waits
-  up to two minutes for the machine to settle, and it stores only a quiet
-  result: other processes used at most one core (`DEFK_BENCH_QUIET_CPU`)
-  before and after. Run directly (`elixir examples/x.exs`), it always
-  measures, without waiting.
+  date in `measured_at`. The cache is the runner's adapter, not part of
+  this library: the runner loads it from the repo into each example's
+  process, and without it `report/1` always measures. When the runner
+  measures, `report/1` first waits up to two minutes for the machine to
+  settle (`wait_quiet/0`), and it stores only a quiet result: other
+  processes used at most one core (`quiet_limit/0`, `DEFK_BENCH_QUIET_CPU`)
+  before and after (`quiet?/1`). Run directly (`elixir examples/x.exs`), it
+  always measures, without waiting.
 
   **Stamp.** A measured result carries `stamp`: defk's version (`defk`), the
   commit the runner measured (`commit`, `null` when run directly), the time
@@ -93,7 +96,13 @@ defmodule Defk.Bench do
   [README](https://github.com/DanielLuning/defk/blob/main/examples/README.md).
   """
 
-  alias Defk.Bench.Cache
+  # The result cache is the catalog runner's adapter, not part of the
+  # library: `Defk.Bench.Cache` lives in the repo's dev/ (never packaged)
+  # and `mix defk.examples` loads it into each example's process with
+  # `elixir -r`. Present, it decides reuse; absent (a user, `elixir
+  # examples/x.exs`), every report measures. Calls go through the module
+  # name, so the library compiles without it.
+  @cache Defk.Bench.Cache
 
   # Thresholds, and the tie band: a speedup within 5% below a threshold counts
   # as reaching it.
@@ -153,12 +162,12 @@ defmodule Defk.Bench do
     if check_only?(), do: check_only(opts), else: measure_or_reuse(opts)
   end
 
-  # The result cache (Defk.Bench.Cache): `:off` unless the
-  # examples runner turned it on. A reused result gets a fresh `:check`.
+  # The result cache: `:off` when the runner's adapter is not loaded or not
+  # turned on. A reused result gets a fresh `:check`.
   defp measure_or_reuse(opts) do
     refuse_sanitized!()
 
-    case Cache.lookup(Keyword.fetch!(opts, :name)) do
+    case cache_lookup(Keyword.fetch!(opts, :name)) do
       :off ->
         result = opts |> measure() |> stamp(nil)
         print(result)
@@ -170,23 +179,31 @@ defmodule Defk.Bench do
       {:miss, slot, changed} ->
         # the machine settles first: the example's own compile, the report
         # before and anything else that ran are done
-        {waited, before} = Cache.settle()
+        {waited, before} = wait_quiet()
         result = measure(opts)
-        cpus = {before, Cache.other_cpu()}
+        cpus = {before, other_cpu()}
 
         quiet = %{
-          quiet: Cache.quiet?(cpus),
+          quiet: quiet?(cpus),
           other_cpu: Tuple.to_list(cpus),
-          limit: Cache.quiet_limit(),
+          limit: quiet_limit(),
           waited_s: waited
         }
 
         result = stamp(result, quiet)
-        stored = Cache.store(slot, result, cpus)
+        stored = cache().store(slot, result, cpus)
         result = Map.put(result, :cache, if(stored == :stored, do: "stored", else: "not_stored"))
         print(result, miss_line(stored, quiet, changed))
         result
     end
+  end
+
+  # resolved at run time (Module.concat/1), so the compiler cannot see the
+  # module name and warns of nothing where the adapter is absent
+  defp cache, do: Module.concat([@cache])
+
+  defp cache_lookup(name) do
+    if Code.ensure_loaded?(cache()), do: cache().lookup(name), else: :off
   end
 
   # What measured the result, stored with it so a reused result keeps it:
@@ -511,6 +528,108 @@ defmodule Defk.Bench do
   end
 
   defp elem_fun(native), do: native |> native_parts() |> elem(0)
+
+  # ---- the quiet test: is the machine busy with something else? ----------
+
+  @doc """
+  The quiet test: both samples of `other_cpu/0`, before and after a
+  measurement, read and at most `quiet_limit/0`.
+  """
+  @spec quiet?({float() | nil, float() | nil}) :: boolean()
+  def quiet?({before, after_}),
+    do: is_number(before) and is_number(after_) and max(before, after_) <= quiet_limit()
+
+  @doc """
+  The most CPU, in cores, that other processes may use on a quiet machine:
+  `DEFK_BENCH_QUIET_CPU`, or 1.0. An idle laptop's desktop uses about half
+  a core.
+  """
+  @spec quiet_limit() :: float()
+  def quiet_limit, do: env_float("DEFK_BENCH_QUIET_CPU", 1.0)
+
+  @doc """
+  Waits until `other_cpu/0` is at most `quiet_limit/0`, sampling every
+  2 s, for at most `DEFK_BENCH_SETTLE_S` seconds (default 120): the
+  machine settles after the example's own compile and whatever else ran.
+  Returns `{waited_s, cpu}`, `waited_s` in whole seconds (0 when the first
+  sample was quiet) and `cpu` the last sample.
+  """
+  @spec wait_quiet() :: {non_neg_integer(), float() | nil}
+  def wait_quiet do
+    t0 = System.monotonic_time(:millisecond)
+    wait_quiet(t0, t0 + trunc(env_float("DEFK_BENCH_SETTLE_S", 120.0) * 1000))
+  end
+
+  defp wait_quiet(t0, deadline) do
+    cpu = other_cpu()
+    now = System.monotonic_time(:millisecond)
+
+    if (is_number(cpu) and cpu <= quiet_limit()) or now >= deadline do
+      {div(now - t0, 1000), cpu}
+    else
+      Process.sleep(2000)
+      wait_quiet(t0, deadline)
+    end
+  end
+
+  @doc """
+  The CPU, in cores, that processes outside this bench use now (`ps`
+  `%cpu`, summed), or `nil` when `ps` cannot be read. The bench's own
+  processes are left out: this OS process and its children, and under the
+  examples runner (`DEFK_BENCH_RUNNER_PID`) the runner and everything it
+  started. A finished process is gone from `ps`, so a compile or an example
+  that ended counts no more. macOS `ps` gives recent use; Linux `ps` gives
+  each process's average over its life, which is coarser.
+  """
+  @spec other_cpu() :: float() | nil
+  def other_cpu do
+    case System.cmd("ps", ["-A", "-o", "pid=,ppid=,%cpu="], stderr_to_stdout: true) do
+      {out, 0} ->
+        procs =
+          for line <- String.split(out, "\n", trim: true),
+              [pid, ppid, cpu] <- [String.split(line)],
+              {cpu, _} <- [Float.parse(String.replace(cpu, ",", "."))],
+              do: {pid, ppid, cpu}
+
+        own = tree(procs, [System.get_env("DEFK_BENCH_RUNNER_PID") || System.pid()])
+
+        total =
+          for {pid, _, cpu} <- procs,
+              not Map.has_key?(own, pid),
+              reduce: 0.0,
+              do: (s -> s + cpu)
+
+        Float.round(total / 100, 2)
+
+      _ ->
+        nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  # `roots` and all their descendants, as the keys of a map
+  defp tree(procs, roots) do
+    children = Enum.group_by(procs, &elem(&1, 1), &elem(&1, 0))
+    descend(roots, children, %{})
+  end
+
+  defp descend([], _children, seen), do: seen
+
+  defp descend([pid | rest], children, seen) when is_map_key(seen, pid),
+    do: descend(rest, children, seen)
+
+  defp descend([pid | rest], children, seen),
+    do: descend(Map.get(children, pid, []) ++ rest, children, Map.put(seen, pid, true))
+
+  defp env_float(var, default) do
+    case Float.parse(System.get_env(var, "")) do
+      {value, ""} -> value
+      _ -> default
+    end
+  end
+
+  # ---- the heap state a timed run starts from --------------------------
 
   @doc false
   # The heap state every timed run starts from: no garbage, and the caller's
