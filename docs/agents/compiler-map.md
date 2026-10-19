@@ -43,7 +43,7 @@ One module, ordered by section dividers you can grep for
 | tails and branches | a `reduce_while` body's tail, if/else chains | `lower_tail/3`, `branch_chain/3` |
 | case | clause dispatch (multi-clause kernels); a case guard lowered with the guard as the error sink (`env.sink`), whose flags are locals made on first use, and every value carries the flags its C uses | `case_arms`, `guard_expr/2`, `guard_flag/1`, `guard_poison/4` |
 | range facts | `Defk.Facts` holds ADR-0007's representation: forms over atoms (array lengths and i64 bindings), values' exact forms (`eq`), bounds `{q, form}`, one prover with a step budget; this file states facts through the module's sources (`len_value`, `len_from`, `len_like`, `between`, `bound`, the derivations), keeps i64 bindings' facts by C variable in `env.atoms` (`put_var/3`), and asks the proofs with the env as scope | `Facts.check`, `Facts.fits_i64?`, `range_limit` |
-| element types | narrow loads/stores | |
+| element types | narrow loads/stores; the one element-access decision for a store, a load and a word load: prove it in bounds, record the strip row, note the verdict (`access/6`), the site keeps its C templates | `access/6`, `narrowed/2`, `int_stored/2` |
 | emitting | C text: entries, init, frames, resume; what each safepoint spills, from the locals of each loop (its recorded C) | `emit_entry`, `safepoint_saves/2`, `resume_block/3`, `view_term/3` |
 | report | fast-path notes, each made where the lowering decides (bounds, overflow and range checks, the branch verdict); one of `compile/4`'s results, never read back | `note/4`, `note_bounds/4`, `note_overflow/2`, `note_fit/3`, `note_branch/2` |
 

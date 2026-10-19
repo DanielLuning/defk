@@ -991,21 +991,15 @@ defmodule Defk.Compiler do
     {sc, a, env} = before_write(arr, a, env)
     a[:id] && copies_put(Copies.record_write(copies(), a.id, a[:buf], target))
 
-    proven = Facts.check(a, i, 1, env)
-
     store =
-      case proven do
-        {:proven, _} ->
-          srec_proven(:index, a, i, proven)
-          srec_elem_write(a.c, false)
-          "(#{a.c}).data[#{i.c}] = #{vc};\n"
-
-        {:unproven, _} ->
-          srec_elem_write(a.c, true)
-          "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
+      if access(:index, target, a, i, 1, env) do
+        srec_elem_write(a.c, false)
+        "(#{a.c}).data[#{i.c}] = #{vc};\n"
+      else
+        srec_elem_write(a.c, true)
+        "defk_put_#{e}(ctx, #{a.c}, #{i.c}, #{vc});\n"
       end
 
-    note_bounds(target, 1, proven, {a, i, env})
     note_fit(target, fit, e)
     {[sa, si, sv, sc, store], env}
   end
@@ -1830,15 +1824,14 @@ defmodule Defk.Compiler do
     i = coerce!(i, :i64, idx, "array index")
     {:arr, e} = a.t
     raw = widen("(#{a.c}).data[#{i.c}]", e)
-    proven = Facts.check(a, i, 1, env)
+    proven? = access(:index, node, a, i, 1, env)
 
     get =
       cond do
         # an f64 or f32 from an input array may hold inf or NaN bits: the read
         # raises; an alloc/2 array holds only what the kernel wrote
         # (fin), a copy of an input array still holds the input's bits
-        e in [:f64, :f32] and not a[:fin] and match?({:proven, _}, proven) ->
-          srec_proven(:index, a, i, proven)
+        e in [:f64, :f32] and not a[:fin] and proven? ->
           "defk_in_f64(ctx, #{raw}, #{i.c})"
 
         e == :f64 and not a[:fin] ->
@@ -1847,8 +1840,7 @@ defmodule Defk.Compiler do
         e == :f32 and not a[:fin] ->
           "defk_in_f64(ctx, (double)defk_get_f32(ctx, #{a.c}, #{i.c}), #{i.c})"
 
-        match?({:proven, _}, proven) ->
-          srec_proven(:index, a, i, proven)
+        proven? ->
           raw
 
         true ->
@@ -1859,8 +1851,7 @@ defmodule Defk.Compiler do
 
     # an in-range read cannot fail but by its inf/NaN check, which a float
     # expression may defer to its own check (float_tree)
-    v = if match?({:proven, _}, proven), do: Map.put(v, :pure_read, raw), else: v
-    note_bounds(node, 1, proven, {a, i, env})
+    v = if proven?, do: Map.put(v, :pure_read, raw), else: v
     {[sa, si], v}
   end
 
@@ -3266,18 +3257,11 @@ defmodule Defk.Compiler do
   # i + w <= length(bytes) is proven. u64 gives the i64 bit pattern.
   defp emit_builtin(f, [%{t: {:arr, :u8}} = a, %{t: :i64} = i], node, env) when f in @loads do
     w = Defk.Builtins.load_width(f)
-    proven = Facts.check(a, i, w, env)
-    note_bounds(node, w, proven, {a, i, env})
 
     c =
-      case proven do
-        {:proven, _} ->
-          srec_proven(:load, a, i, proven)
-          "defk_#{f}_at((#{a.c}).data + #{i.c})"
-
-        {:unproven, _} ->
-          "defk_#{f}(ctx, #{a.c}, #{i.c})"
-      end
+      if access(:load, node, a, i, w, env),
+        do: "defk_#{f}_at((#{a.c}).data + #{i.c})",
+        else: "defk_#{f}(ctx, #{a.c}, #{i.c})"
 
     v = val(c, :i64)
     if w < 8, do: Facts.assert(v, lo: 0, hi: Bitwise.bsl(1, 8 * w) - 1), else: v
@@ -5745,6 +5729,18 @@ defmodule Defk.Compiler do
   # The C value stored into [e], from v of type wide(e), with its range
   # check :dropped (the value's facts prove it fits) or :kept; nil for a
   # type that needs none (an f32 store converts, it has no range to miss).
+  # The one element-access decision, for a store and a load (`kind`
+  # :index, w = 1) and a word load (:load, w bytes): whether `a[i]`, or the
+  # w bytes at i, is proven in bounds (Facts.check/4). A proven access
+  # records its strip row (srec_proven/4); either verdict is noted
+  # (note_bounds/4). The site keeps its own C templates for the two forms.
+  defp access(kind, node, a, i, w, env) do
+    proven = Facts.check(a, i, w, env)
+    if match?({:proven, _}, proven), do: srec_proven(kind, a, i, proven)
+    note_bounds(node, w, proven, {a, i, env})
+    match?({:proven, _}, proven)
+  end
+
   defp narrowed(v, :f32), do: {nil, "defk_to_f32(ctx, #{v.c})"}
 
   defp narrowed(v, e) when is_map_key(@int_range, e) do
