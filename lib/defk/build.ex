@@ -51,11 +51,8 @@ defmodule Defk.Build do
   @sanitize_common ~w(-g -fno-omit-frame-pointer)
 
   def build!(module, src, file) do
-    dir = Path.join(build_root(), "defk")
-    File.mkdir_p!(dir)
-
     modes = sanitize()
-    base = Path.join(dir, "#{module}-#{cache_key(src)}#{sanitize_suffix(modes)}")
+    base = lib_base(module, src)
 
     unless File.exists?(base <> ".so") do
       File.write!(base <> ".c", src)
@@ -72,6 +69,30 @@ defmodule Defk.Build do
     end
 
     base
+  end
+
+  @doc false
+  # The library for `src`: `{:ok, base}` from build!/3, or `:no_cc` when
+  # `DEFK_NO_CC` is set and the cache has no library with this key. With
+  # `DEFK_NO_CC=1` the C is generated (and dumped, DEFK_DUMP_C) but never
+  # compiled: the byte-identical gate and the compiler-time rounds need only
+  # the C text. A library already in the cache is still used: it costs
+  # nothing.
+  @spec library(module(), binary(), String.t() | nil) :: {:ok, String.t()} | :no_cc
+  def library(module, src, file) do
+    if no_cc?() and not File.exists?(lib_base(module, src) <> ".so"),
+      do: :no_cc,
+      else: {:ok, build!(module, src, file)}
+  end
+
+  @doc false
+  @spec no_cc?() :: boolean()
+  def no_cc?, do: System.get_env("DEFK_NO_CC") in ["1", "true"]
+
+  defp lib_base(module, src) do
+    dir = Path.join(build_root(), "defk")
+    File.mkdir_p!(dir)
+    Path.join(dir, "#{module}-#{cache_key(src)}#{sanitize_suffix(sanitize())}")
   end
 
   @doc false

@@ -18,7 +18,7 @@ mix test                      # resumed kernels match yield: false, incl. a forc
                               # reloading a module while a kernel is suspended
 mix defk.examples            # every example outside mix test, check-only (not in mix ci); --bench for the scoreboard
 mix ci                        # what must be green before a merge
-DEFK_DUMP_C=<dir> mix dump_c  # the byte-identical gate for compiler refactors (dev/dump_c.exs)
+DEFK_DUMP_C=<dir> mix dump_c [file ...]  # the byte-identical gate for compiler refactors, no cc (dev/dump_c.exs)
 verify/fuzz/run.sh            # libFuzzer over the decoder kernels, outside the VM (verify/fuzz/README.md)
 verify/valgrind/run.sh        # the test suite under Valgrind memcheck, in a container (verify/valgrind/README.md)
 ```

@@ -474,14 +474,7 @@ defmodule Defk do
 
     if dump = System.get_env("DEFK_DUMP_C"), do: dump_c!(dump, env.module, c_src)
 
-    lib = Defk.Build.build!(env.module, c_src, env.file)
-
-    # the fast-path report: defk's own notes, and clang's vectorisation under
-    # `report: :full` (an extra compiler pass, Defk.Report.full/3)
-    report =
-      if Module.get_attribute(env.module, :defk_report) == :full,
-        do: Defk.Report.full(report, c_src, lib),
-        else: report
+    {report, lib_defs} = library(env, c_src, report)
 
     # a helper (a kernel taking a bitstring) is only inlined: no function
     sigs = Enum.reject(all_sigs, &Defk.Bitstring.helper?/1)
@@ -494,8 +487,6 @@ defmodule Defk do
     # The generated functions are `@doc false` (ADR-0006): the Defk moduledoc
     # ("Generated functions") describes them, with their stability.
     corrupt_tags = corrupt_tags_def(fault_hooks?)
-
-    lib_defs = lib_defs(Defk.Build.placement!(env.module, lib, env.file))
 
     load_def = load_def(Defk.take_on_load(env.module))
 
@@ -526,7 +517,9 @@ defmodule Defk do
   # compile: the build inputs read from the environment (the C compiler, the
   # include dir, the sanitizer mode) are baked in, so a change recompiles the
   # module. Raw values, so set-versus-unset counts; harmless outside Mix.
-  @build_env ["CC", "ERTS_INCLUDE_DIR", "DEFK_SANITIZE"]
+  # DEFK_NO_CC is one of them: a module compiled without its library
+  # compiles again, with it, as soon as the variable is unset.
+  @build_env ["CC", "ERTS_INCLUDE_DIR", "DEFK_SANITIZE", "DEFK_NO_CC"]
 
   defp recompile_def do
     baked = for var <- @build_env, do: {var, System.get_env(var)}
@@ -577,11 +570,42 @@ defmodule Defk do
     end
   end
 
+  # The module's library (Defk.Build.library/3) and the report that may read
+  # it: `{report, lib_defs}`.
+  defp library(env, c_src, report) do
+    case Defk.Build.library(env.module, c_src, env.file) do
+      {:ok, lib} ->
+        # the fast-path report: defk's own notes, and clang's vectorisation
+        # under `report: :full` (an extra compiler pass, Defk.Report.full/3)
+        report =
+          if Module.get_attribute(env.module, :defk_report) == :full,
+            do: Defk.Report.full(report, c_src, lib),
+            else: report
+
+        {report, lib_defs(Defk.Build.placement!(env.module, lib, env.file))}
+
+      :no_cc ->
+        {report, lib_defs(:none)}
+    end
+  end
+
   # __defk_load_nif__/0 and __defk_lib__/0 (Defk.Build.placement!/3). A Mix app's
   # module loads its library from beside its beams, wherever the app is at
   # load time (a release, a moved _build); anything else from the
   # absolute build path. Only :code and :filename at load time: the on_load
   # function may run before other applications' modules are loaded.
+  # DEFK_NO_CC with no cached library: the module loads without its NIFs, so
+  # a dump can load test files and examples; a kernel call raises
+  # (:erlang.nif_error from its stub).
+  defp lib_defs(:none) do
+    quote do
+      @doc false
+      def __defk_load_nif__, do: :ok
+      @doc false
+      def __defk_lib__, do: nil
+    end
+  end
+
   defp lib_defs({:path, base}) do
     quote do
       @doc false

@@ -185,6 +185,13 @@ defmodule Defk.MixProject do
   @md_link ~r/\]\(([^)\s]+)\)/
   @href ~r/href="([^"]+)"/
 
+  # `mix dump_c` needs only the C text: kernels compile without cc
+  # (DEFK_NO_CC, Defk.Build.library/3) unless the caller set the variable.
+  # The modules it compiles so compile again on the next plain compile.
+  defp no_cc(_args) do
+    if System.get_env("DEFK_NO_CC") in [nil, ""], do: System.put_env("DEFK_NO_CC", "1")
+  end
+
   defp docs_links(_args) do
     out = "doc"
 
@@ -249,8 +256,9 @@ defmodule Defk.MixProject do
   defp aliases() do
     [
       docs: ["docs", &docs_links/1],
-      # the byte-identical gate: DEFK_DUMP_C=<dir> mix dump_c
-      dump_c: ["compile --force", "run dev/dump_c.exs"],
+      # the byte-identical gate: DEFK_DUMP_C=<dir> mix dump_c [file ...]; no
+      # cc unless DEFK_NO_CC=0 (dev/dump_c.exs)
+      dump_c: [&no_cc/1, "compile --force", "run dev/dump_c.exs"],
       # the part of `ci` that can differ between machines and C compilers:
       # the release matrix runs it on the machines other than the one
       # that runs `ci` (ci/README.md)
