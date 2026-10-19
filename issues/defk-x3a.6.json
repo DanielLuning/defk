@@ -12,9 +12,15 @@
   "id": "defk-x3a.6",
   "labels": [],
   "parent": "defk-x3a",
+  "comments": [
+    {
+      "text": "PR #53 opened: https://github.com/DanielLuning/defk/pull/53. Guard flags are locals made on first use (guard_flag/1); values carry the flags their C uses (lower_expr). dump_c: 105/107 byte-identical; the two test modules differ by the numbering of guard temporaries only (diff in the PR). may_raise?/1 left as the ctx-text rule on purpose: a raises? boolean would need every raising C site and every composition to keep it in step, and a miss changes operand order silently. mix ci green: 2268 passed.",
+      "timestamp": "2026-10-19T15:35:19Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Case guards and may_raise?: facts on the value, no sentinel strings in the C",
   "type": "task",
-  "updated_at": "2026-10-19T15:19:02Z"
+  "updated_at": "2026-10-19T15:35:19Z"
 }
