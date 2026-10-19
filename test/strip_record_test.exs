@@ -5,14 +5,7 @@
 # compiling a kernel and grepping its C. The strip/yield end-to-end tests
 # keep covering the runtime contract (replay order, resumes, agreement).
 defmodule Defk.StripRecordTest do
-  use ExUnit.Case, async: false
-
-  # the classifier reads the kernel's C declarations for variable types,
-  # from the compiler's one ctx key
-  defp with_types(types) do
-    lowering = %Defk.Compiler.Ctx.Lowering{decls: types}
-    Process.put(:defk_ctx, %Defk.Compiler.Ctx{lowering: lowering})
-  end
+  use ExUnit.Case, async: true
 
   defp rows(specs) do
     specs
@@ -22,9 +15,9 @@ defmodule Defk.StripRecordTest do
     end)
   end
 
-  defp classify(text, rs, var \\ "v_i_0") do
-    Defk.Compiler.__flag_strip_rows__(7, text, var, rs)
-  end
+  # body text, the strip record's rows and the kernel's C declarations
+  # ({name, type}) in; the flagged form (or nil) out
+  defp classify(text, rs, types), do: Defk.Strip.classify(7, text, "v_i_0", rs, types)
 
   @read "defk_in_f64(ctx, (p_a).data[v_i_0], v_i_0)"
   @tree "({ double f_1 = (v_acc_2 + v_y_1); DEFK_FCHECK(DEFK_NONFIN(f_1)) { double f_0 = defk_fadd(ctx, v_acc_2, v_y_1);\n(void)f_0; defk_nonfinite_lost(ctx); } f_1; })"
@@ -59,8 +52,8 @@ defmodule Defk.StripRecordTest do
     ]
 
   test "a sticky accumulator: its check waits for the strip's end" do
-    with_types(base_types())
-    fl = classify(base_text(), base_rows())
+    types = base_types()
+    fl = classify(base_text(), base_rows(), types)
 
     assert fl.test == [" | DEFK_NONFIN(v_acc_2)"]
     assert IO.iodata_to_binary(fl.body) =~ "if (0)"
@@ -86,8 +79,8 @@ defmodule Defk.StripRecordTest do
     defp body(fl), do: IO.iodata_to_binary(fl.body)
 
     test "under a branch it keeps its own check: no end-of-strip test covers it" do
-      with_types(base_types())
-      fl = classify(base_text(), arm_rows([]))
+      types = base_types()
+      fl = classify(base_text(), arm_rows([]), types)
 
       assert fl.test == []
       assert body(fl) =~ "DEFK_FCHECK(DEFK_NONFIN(f_1))"
@@ -95,9 +88,9 @@ defmodule Defk.StripRecordTest do
     end
 
     test "written twice it is not sticky, and keeps its own check" do
-      with_types(base_types())
+      types = base_types()
       rs = base_rows() ++ rows([%{k: :assign, var: "v_acc_2", rhs: "0.0"}])
-      fl = classify(base_text() <> "v_acc_2 = 0.0;\n", rs)
+      fl = classify(base_text() <> "v_acc_2 = 0.0;\n", rs, types)
 
       assert fl.test == []
       assert body(fl) =~ "DEFK_FCHECK(DEFK_NONFIN(f_1))"
@@ -112,8 +105,8 @@ defmodule Defk.StripRecordTest do
       ]
 
       rs = arm_rows(extra)
-      with_types(base_types() ++ [{"v_z_5", "double"}])
-      fl = classify(base_text() <> "v_z_5 = #{later};\n", rs)
+      types = base_types() ++ [{"v_z_5", "double"}]
+      fl = classify(base_text() <> "v_z_5 = #{later};\n", rs, types)
 
       assert fl.test == []
       refute body(fl) =~ "DEFK_FCHECK(DEFK_NONFIN(f_1))"
@@ -122,33 +115,33 @@ defmodule Defk.StripRecordTest do
   end
 
   test "a float read whose inf reaches a later checked expression is read unchecked" do
-    with_types(base_types())
-    fl = classify(base_text(), base_rows())
+    types = base_types()
+    fl = classify(base_text(), base_rows(), types)
 
     assert IO.iodata_to_binary(fl.body) =~ "v_y_1 = defk_in_f64_later(ctx,"
   end
 
   test "the snapshot saves every local, in mention order" do
-    with_types(base_types())
-    fl = classify(base_text(), base_rows())
+    types = base_types()
+    fl = classify(base_text(), base_rows(), types)
 
     assert IO.iodata_to_binary(fl.snap) ==
              "defk_s7_0 = v_y_1;\ndefk_s7_1 = v_i_0;\ndefk_s7_2 = v_acc_2;\n"
   end
 
   test "ctx outside the flaggable checks keeps the strip raising" do
-    with_types(base_types())
+    types = base_types()
     text = base_text() <> "if (v_y_1 < 0.0) defk_fail(ctx, DEFK_E_ARG, \"neg\");\n"
-    assert classify(text, base_rows()) == nil
+    assert classify(text, base_rows(), types) == nil
   end
 
   test "an array read and written in the strip keeps it raising" do
-    with_types(base_types())
+    types = base_types()
     # the write adds its own mention of p_a beside the read's, so not every
     # mention is a write and the snapshot cannot restore the strip
     text = base_text() <> "defk_put_f64(ctx, p_a, v_i_0, v_y_1);\n"
     rs = base_rows() ++ rows([%{k: :elem_write, arr: "p_a", checked: true}])
-    assert classify(text, rs) == nil
+    assert classify(text, rs, types) == nil
   end
 
   describe "joined checks need fixed indices" do
@@ -166,13 +159,13 @@ defmodule Defk.StripRecordTest do
     defp joined_types, do: base_types() ++ [{"v_j_9", "int64_t"}]
 
     test "an index of the loop counter and unwritten values is fixed" do
-      with_types(joined_types())
-      assert %{joined: true} = classify(joined_text(), joined_rows("v_i_0"))
+      types = joined_types()
+      assert %{joined: true} = classify(joined_text(), joined_rows("v_i_0"), types)
     end
 
     test "an index naming a value the strip assigns through a checked helper is not" do
-      with_types(joined_types())
-      assert classify(joined_text(), joined_rows("v_j_9")) == nil
+      types = joined_types()
+      assert classify(joined_text(), joined_rows("v_j_9"), types) == nil
     end
 
     # a value the strip assigns once, unconditionally, from fixed values
@@ -186,13 +179,13 @@ defmodule Defk.StripRecordTest do
     end
 
     test "an index assigned in the strip from the loop counter by proven arithmetic is fixed" do
-      with_types(joined_types())
+      types = joined_types()
       rs = fixed_rows([{"v_j_9", "(v_i_0 + INT64_C(1))"}], "v_j_9")
-      assert %{joined: true} = classify(joined_text(), rs)
+      assert %{joined: true} = classify(joined_text(), rs, types)
     end
 
     test "through another fixed value too" do
-      with_types(joined_types() ++ [{"v_k_10", "int64_t"}])
+      types = joined_types() ++ [{"v_k_10", "int64_t"}]
 
       rs =
         fixed_rows(
@@ -200,17 +193,17 @@ defmodule Defk.StripRecordTest do
           "v_k_10"
         )
 
-      assert %{joined: true} = classify(joined_text(), rs)
+      assert %{joined: true} = classify(joined_text(), rs, types)
     end
 
     test "an index assigned from an array read is not" do
-      with_types(joined_types())
+      types = joined_types()
       rs = fixed_rows([{"v_j_9", "(p_a).data[v_i_0]"}], "v_j_9")
-      assert classify(joined_text(), rs) == nil
+      assert classify(joined_text(), rs, types) == nil
     end
 
     test "an index assigned from a value that can overflow under the flag is not" do
-      with_types(joined_types() ++ [{"v_k_10", "int64_t"}])
+      types = joined_types() ++ [{"v_k_10", "int64_t"}]
 
       rs =
         fixed_rows(
@@ -221,18 +214,18 @@ defmodule Defk.StripRecordTest do
           "v_j_9"
         )
 
-      assert classify(joined_text(), rs) == nil
+      assert classify(joined_text(), rs, types) == nil
     end
 
     test "an index assigned from a non-fixed helper, conditionally, twice or from itself is not" do
-      with_types(joined_types())
+      types = joined_types()
 
       for assigns <- [
             [{"v_j_9", "defk_div_i64(ctx, v_i_0, INT64_C(2))"}],
             [{"v_j_9", "(v_j_9 + INT64_C(1))"}],
             [{"v_j_9", "(v_i_0 + INT64_C(1))"}, {"v_j_9", "(v_i_0 + INT64_C(2))"}]
           ] do
-        assert classify(joined_text(), fixed_rows(assigns, "v_j_9")) == nil
+        assert classify(joined_text(), fixed_rows(assigns, "v_j_9"), types) == nil
       end
 
       conditional =
@@ -242,7 +235,7 @@ defmodule Defk.StripRecordTest do
             %{k: :access, access: :index, arr: "p_a", idx: "v_j_9", support: ["p_a"]}
           ])
 
-      assert classify(joined_text(), conditional) == nil
+      assert classify(joined_text(), conditional, types) == nil
 
       in_arm =
         base_rows() ++
@@ -251,11 +244,11 @@ defmodule Defk.StripRecordTest do
             %{k: :access, access: :index, arr: "p_a", idx: "v_j_9", support: ["p_a"]}
           ])
 
-      assert classify(joined_text(), in_arm) == nil
+      assert classify(joined_text(), in_arm, types) == nil
     end
 
     test "a word load's pointer form is never fixed" do
-      with_types(joined_types())
+      types = joined_types()
 
       rs =
         base_rows() ++
@@ -264,7 +257,7 @@ defmodule Defk.StripRecordTest do
             %{k: :access, access: :load, arr: "p_a", idx: "v_i_0", support: ["p_a"]}
           ])
 
-      assert classify(joined_text(), rs) == nil
+      assert classify(joined_text(), rs, types) == nil
     end
   end
 
@@ -288,8 +281,8 @@ defmodule Defk.StripRecordTest do
         "if (v_i_0 > 0) {\nv_y_1 = #{@read};\n} else {\nv_y_1 = 0.0;\n}\n" <>
           "v_c_3 = v_y_1;\nv_acc_2 = #{@tree};\nv_i_0 += 1;\n"
 
-      with_types(base_types() ++ [{"v_c_3", "double"}])
-      fl = classify(text, rs)
+      types = base_types() ++ [{"v_c_3", "double"}]
+      fl = classify(text, rs, types)
       assert IO.iodata_to_binary(fl.body) =~ "defk_in_f64_later"
     end
 
@@ -308,8 +301,8 @@ defmodule Defk.StripRecordTest do
         "v_y_1 = #{@read};\nv_y_1 = 0.0;\nv_c_3 = v_y_1;\n" <>
           "v_acc_2 = #{@tree};\nv_i_0 += 1;\n"
 
-      with_types(base_types() ++ [{"v_c_3", "double"}])
-      fl = classify(text, rs)
+      types = base_types() ++ [{"v_c_3", "double"}]
+      fl = classify(text, rs, types)
       refute IO.iodata_to_binary(fl.body) =~ "defk_in_f64_later"
     end
   end
