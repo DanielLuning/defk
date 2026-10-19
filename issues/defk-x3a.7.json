@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-x3a.6"
+  ],
   "blocks": [],
   "created": "2026-10-19T13:01:29Z",
   "description": "Candidate 6. The report has no topic for a dropped or kept i64 overflow check or element-type store-fit check, so test/scaled_facts_test.exs asserts 21 times on defk_put_ / defk_mul_i64 in the C, and 21 test files call __defk_c_source__. Also why_not_select (L7062-7093) re-derives the select decision by calling expressions' select?, chain and speculate?. Deepen: the lowering notes {:check, :dropped | :kept, what} where srec_proven / checked decide (overflow and store fit only; bounds stay under :bounds), and note_branch receives the reason from the decision site; report/0 only orders and renders. Interface stays note/4. New topic :check in Defk.Report types and print/1 (printed: the report explains measurements). Migrate scaled_facts_test's C asserts to report facts; tests of emitted structure (resume_test, alloc_unzeroed_test) keep __defk_c_source__. Update docs/fast-path-report.md (or the guide that lists topics). CHANGELOG entry (Report fact topics are unstable per ADR-0006). Gate: mix dump_c byte-identical (the report is not part of the C).",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Fast-path report: a :check topic recorded at the decision site; facts tests stop reading C",
   "type": "task",
-  "updated_at": "2026-10-19T13:01:29Z"
+  "updated_at": "2026-10-19T13:01:31Z"
 }
