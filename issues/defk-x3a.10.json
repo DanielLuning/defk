@@ -9,9 +9,15 @@
   "id": "defk-x3a.10",
   "labels": [],
   "parent": "defk-x3a",
+  "comments": [
+    {
+      "text": "PR #55 opened: https://github.com/DanielLuning/defk/pull/55. in_loop records each loop's C (lowering.loops_c); safepoint_saves compares mention counts, no /* defk:in */ markers. The /* defk:loop */ markers for clang's remarks stay: they name line ranges of the compiled file, which exist only there. resume_test's C greps kept (spill lists are emitted structure). dump_c byte-identical for all 108 modules; mix ci green: 2270 passed.",
+      "timestamp": "2026-10-19T16:46:49Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Safepoint markers: rows instead of /* defk:in N */ comments parsed back from the C",
   "type": "task",
-  "updated_at": "2026-10-19T16:38:09Z"
+  "updated_at": "2026-10-19T16:46:49Z"
 }
