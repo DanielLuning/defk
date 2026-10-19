@@ -3,7 +3,9 @@
   "blocked_by": [
     "defk-rt2.1"
   ],
-  "blocks": [],
+  "blocks": [
+    "defk-rt2.3"
+  ],
   "created": "2026-10-19T18:42:40Z",
   "description": "Eight of env's sixteen keys (out, nest, live, live_names, stmt, guard, loop, depth; `scope/1` compiler.ex ~L1352) are the copy analysis's liveness scope, rebuilt by hand at five sites with slightly different rules: `scope/1`, `nested/2`, `loop_env/2`, the inline env (`inline`, calls section) and `acc_env`. `Defk.Copies` today is 30 pure AST queries with no state; the transitions live in the compiler. Deletion test: deleting Copies moves 30 functions; the complexity is in the transitions.\n\nSettled shape (grilling 2026-10-19):\n- `Defk.Copies` grows to own the scope, as `Defk.Strip` owns record and classifier. Transitions: `enter_stmt/2`, `leave_block/2`, `nested_arm/2`, `loop/2`, `inline_call/3`; one question `must_copy?/2`. The 30 queries become its implementation (private where nothing else calls them).\n- env carries the scope under one key, `:scope`. The sequential state (writes log, alias classes) stays at `ctx.lowering.copies`; two homes for state, one module for the rules.\n- `before_write/3`, `hoist/3`, `range_dest`, alloc zeroing and range copies ask the scope instead of reading env keys.\n- CONTEXT.md: sharpen the \"Copy analysis\" entry to name its scope (no new term).\n- docs/agents/compiler-map.md: the \"array values\" row and the Copies bullet.\n\nTests: a unit test for `must_copy?` and the transitions (no C); value_semantics_test keeps counting `defk_copy_` as the end-to-end check, or reads the `:copy` report topic.\n\nGate: byte-identical `mix dump_c`; `mix ci`; PR per AGENTS.md.",
   "id": "defk-rt2.2",
@@ -13,5 +15,5 @@
   "status": "open",
   "title": "Defk.Copies owns the copy analysis's liveness scope (eight env keys become one)",
   "type": "task",
-  "updated_at": "2026-10-19T18:42:43Z"
+  "updated_at": "2026-10-19T18:42:44Z"
 }
