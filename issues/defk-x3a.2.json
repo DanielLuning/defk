@@ -7,9 +7,15 @@
   "id": "defk-x3a.2",
   "labels": [],
   "parent": "defk-x3a",
+  "comments": [
+    {
+      "text": "PR #48 open: https://github.com/DanielLuning/defk/pull/48. mix ci green on a clean rerun (2244 passed); 15 new tests in test/generated_test.exs; function list of Examples.Kernels identical to main. Ticket stays in progress until the owner merges; then bw close, bw sync, remove ../defk-x3a.2.",
+      "timestamp": "2026-10-19T13:35:31Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Defk.Generated: the module generator behind one defs/1",
   "type": "task",
-  "updated_at": "2026-10-19T13:24:52Z"
+  "updated_at": "2026-10-19T13:35:31Z"
 }
