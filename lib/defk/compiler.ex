@@ -283,7 +283,10 @@ defmodule Defk.Compiler do
   # an earlier one, the variables a rejected statement binds are poisoned (a
   # use of one abandons its statement silently), a call to a kernel whose head
   # was rejected is silent too, and a rejection already recorded at the same
-  # place (an inlined kernel repeats its callee's) is dropped.
+  # place (an inlined kernel repeats its callee's) is dropped. Recovery
+  # (recover_for/4, recover_reduce/5, recover_pipe/2) lowers what a rejected
+  # for, reduce or pipe contains, so their own rejections reach the same
+  # compile. The raiser of one construct lives beside that construct.
 
   # no_return(): err! always throws, which is how a rejection is recorded.
   @spec reject!(term(), term(), term(), keyword()) :: no_return()
@@ -421,6 +424,93 @@ defmodule Defk.Compiler do
   end
 
   defp poison(_e, env), do: env
+
+  # Recovery inside a rejected for: its generators, filters and body are
+  # lowered as if the for ran for effect, so their own rejections are recorded
+  # in the same compile. Nothing about the for's value is checked (the body's
+  # last expression is lowered as a statement, and a rejected statement poisons
+  # what it binds), and an abandoned statement stays silent, so a rejection
+  # that only follows from this one is not reported. Not done for
+  # `into:`, whose body is the element of another collection (`<<y::float-64>>`),
+  # not a statement, so what it rejects would be an artefact of the rejection.
+  defp recover_for(_node, _quals, nil, _env), do: :ok
+
+  defp recover_for(node, quals, body, env) do
+    entered = make_ref()
+
+    try do
+      lower_quals(quals, loop_env(env, node), fn env ->
+        Process.put(entered, true)
+        elem(lower_stmts(body, env), 0)
+      end)
+    catch
+      {:defk_reject, d} -> record(d)
+      :defk_poison -> :ok
+    end
+
+    # a generator or filter that was rejected (or reads a poisoned variable)
+    # never reached the body: lower it anyway (recover_body/3)
+    unless Process.delete(entered), do: recover_body(quals, body, loop_env(env, node))
+
+    :ok
+  end
+
+  # Recovery inside a `for ..., reduce:` whose init or a generator was
+  # rejected (or reads a poisoned variable) before the body ran, so the body
+  # was never lowered: it is lowered for effect with the accumulator
+  # poisoned (its init gave it no value), so its own rejections are recorded
+  # in the same compile. A body that did run has reported its own already.
+  defp recover_reduce(entered, quals, pat, body, lenv) do
+    unless Process.get(entered),
+      do: recover_body(quals, body, poison({:=, [], [pat, nil]}, lenv))
+
+    :ok
+  end
+
+  # Recovery inside a rejected pipe: the nested call it stands for is lowered
+  # as an expression, so the rejections of the calls in it are recorded in
+  # the same compile (the first one along the way, as in any expression).
+  # Unpiping is exact, so none of them follows from the pipe's rejection.
+  # Enum.reduce/3 and Enum.find/3 in it take the forms the compiler knows
+  # (Defk.EnumForms), as they do outside a pipe.
+  defp recover_pipe(node, env) do
+    try do
+      node |> Defk.Errors.Rewrites.unpipe() |> Defk.EnumForms.desugar() |> lower_expr(env)
+    catch
+      {:defk_reject, d} -> record(d)
+      :defk_poison -> :ok
+    end
+
+    :ok
+  end
+
+  # a loop body lowered for effect, with the generators' variables bound to
+  # what is certain (a range's i64), else poisoned; its rejections are
+  # recorded, and an abandoned statement stays silent
+  defp recover_body(quals, body, env) do
+    poisoned =
+      Enum.reduce(quals, env, fn
+        # a range generator's variable is an i64 whatever its bounds
+        {:<-, _, [{n, _, ctx}, {op, _, _}]}, env
+        when is_atom(n) and is_atom(ctx) and op in [:.., :..//] ->
+          put_var(env, n, val(fresh(n, :i64), :i64))
+
+        {:<-, _, [pat, _]}, env ->
+          poison({:=, [], [pat, nil]}, env)
+
+        _filter, env ->
+          env
+      end)
+
+    try do
+      lower_stmts(body, poisoned)
+    catch
+      {:defk_reject, d} -> record(d)
+      :defk_poison -> :ok
+    end
+
+    :ok
+  end
 
   defp positioned?({_, m, _}) when is_list(m), do: Keyword.has_key?(m, :line)
   defp positioned?(_), do: false
@@ -1995,6 +2085,163 @@ defmodule Defk.Compiler do
   defp lower_node(other, env),
     do: unsupported!(other, Defk.Errors.Rewrites.unsupported(other, &type_in(&1, env)), env)
 
+  # A module attribute whose value is not in the kernel subset: undefined
+  # where the kernel is defined, an integer outside i64 and u64, or a value that is
+  # not a number, a boolean or a binary.
+  @spec attribute!(term()) :: no_return()
+  defp attribute!({:@, _, [{name, _, _}]} = node) do
+    case Defk.Attributes.of(node) do
+      :undefined ->
+        err!(
+          node,
+          "undefined-attribute",
+          "@#{name} is not defined where this kernel is defined"
+        )
+
+      {:ok, n} when is_integer(n) ->
+        err!(node, "integer-literal", "@#{name} is #{n}, which does not fit in i64 or u64",
+          hint: "use a value that fits, or a float attribute and compute in f64"
+        )
+
+      {:ok, v} ->
+        err!(
+          node,
+          "attribute-value",
+          "@#{name} is #{Defk.Attributes.describe(v)}, which is not in the kernel subset",
+          attribute_fix(name, v)
+        )
+    end
+  end
+
+  # a list of bytes packs into a binary attribute, read as a [u8]
+  defp attribute_fix(name, v) when is_list(v) and v != [] do
+    if Enum.all?(v, &(is_integer(&1) and &1 in 0..255)) do
+      bin = inspect(:erlang.list_to_binary(v), binaries: :as_binaries, limit: :infinity)
+
+      [
+        hint:
+          "pack it into a binary attribute and index it as a [u8], or pass it as an array parameter",
+        rewrite: "@#{name} #{bin}"
+      ]
+    else
+      [hint: "pass it as an array parameter ([i64] or [f64])"]
+    end
+  end
+
+  defp attribute_fix(_name, _v), do: []
+
+  @spec not_an_array!(term(), term(), term()) :: no_return()
+  defp not_an_array!(node, arr, %{t: :bitstring}), do: bits_read!(node, arr)
+
+  defp not_an_array!(node, arr, a) do
+    err!(
+      node,
+      "not-an-array",
+      "#{Macro.to_string(node)} indexes #{Macro.to_string(arr)}, which is #{type_name(a)}, not an array"
+    )
+  end
+
+  # `fun` (e.g. "Enum.all?/2") called without a literal one-clause fn; `params`
+  # name the fn's parameters for the rewrite of a capture
+  @spec fn_argument!(term(), term(), term()) :: no_return()
+  defp fn_argument!({_, _, args}, fun, params) do
+    f = List.last(args)
+    vars = Enum.map(params, &{&1, [], nil})
+
+    rewrite =
+      case f do
+        {:&, _, [{:/, _, [{name, _, ctx}, n]}]}
+        when is_atom(name) and is_atom(ctx) and n == length(params) ->
+          [rewrite: Macro.to_string({:fn, [], [{:->, [], [vars, {name, [], vars}]}]})]
+
+        {:&, _, [body]} ->
+          body =
+            Macro.prewalk(body, fn
+              {:&, _, [i]} when is_integer(i) and i <= length(params) -> Enum.at(vars, i - 1)
+              other -> other
+            end)
+
+          [rewrite: Macro.to_string({:fn, [], [{:->, [], [vars, body]}]})]
+
+        _ ->
+          []
+      end
+
+    err!(
+      f,
+      "fn-argument",
+      "#{fun} with #{Macro.to_string(f)} is not in the kernel subset",
+      rewrite
+    )
+  end
+
+  # The C text comparing `va` OP `vb` by Elixir's semantics, or a rejection.
+  defp compare_c(op, va, vb, node) do
+    if numeric?(va) and numeric?(vb) do
+      compare_numeric_c(op, va, vb, node)
+    else
+      if va.t == :bool and vb.t == :bool and op in [:==, :!=, :===, :!==] do
+        "(#{va.c} #{cop(op)} #{vb.c})"
+      else
+        err!(
+          node,
+          "operand-type",
+          "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
+          why:
+            "defk compares numbers by value and booleans only for equality; " <>
+              "Elixir's term order between other values is not in the subset",
+          hint: "compare two numbers or two booleans"
+        )
+      end
+    end
+  end
+
+  # Numeric compare with exact-value semantics: i64 against f64 orders by
+  # value (cmp(a, b) OP 0, and cmp(f, i) = -cmp(i, f)), and === tells -0.0
+  # from 0.0 the way Erlang's =:= does.
+  defp compare_numeric_c(op, va, vb, node) do
+    cond do
+      # an integer is never === a float; an i64 and a u64 are both integers
+      op in [:===, :!==] and (va.t == :f64 or vb.t == :f64) and va.t != vb.t ->
+        if op == :===, do: "0", else: "1"
+
+      op in [:===, :!==] and va.t == :f64 and vb.t == :f64 ->
+        if op == :===,
+          do: "defk_feq_exact(#{va.c}, #{vb.c})",
+          else: "(!defk_feq_exact(#{va.c}, #{vb.c}))"
+
+      va.t == vb.t ->
+        "(#{va.c} #{cop(op)} #{vb.c})"
+
+      # i64 or u64 against f64, u64 against i64: exact values, as Erlang
+      # compares them (cmp(a, b) OP 0, and cmp(b, a) = -cmp(a, b))
+      cmp = mixed_cmp(va.t, vb.t) ->
+        "(defk_cmp_#{cmp}(#{va.c}, #{vb.c}) #{cop(op)} 0)"
+
+      cmp = mixed_cmp(vb.t, va.t) ->
+        "(0 #{cop(op)} defk_cmp_#{cmp}(#{vb.c}, #{va.c}))"
+
+      true ->
+        err!(
+          node,
+          "operand-type",
+          "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
+          why:
+            "defk compares numbers by value and booleans only for equality; " <>
+              "Elixir's term order between other values is not in the subset",
+          hint: "compare two numbers or two booleans"
+        )
+    end
+  end
+
+  defp cop(:===), do: "=="
+  defp cop(:!==), do: "!="
+  defp cop(op), do: Atom.to_string(op)
+
+  defp mixed_cmp(:i64, :f64), do: "i64_f64"
+  defp mixed_cmp(:u64, t) when t in [:i64, :f64], do: "u64_#{t}"
+  defp mixed_cmp(_, _), do: nil
+
   # + - * / one operation at a time: i64 checked for overflow, f64 for a
   # result that is inf or NaN; see float_tree for the common case
   defp lower_arith(op, a, b, node, env) do
@@ -2326,6 +2573,15 @@ defmodule Defk.Compiler do
   end
 
   defp clause_parts({:->, _, [[c], body]}), do: {c, body}
+
+  @spec cond_without_true!(term()) :: no_return()
+  defp cond_without_true!(node) do
+    err!(
+      node,
+      "cond-without-true",
+      "this cond is used as a value but has no `true ->` clause at the end"
+    )
+  end
 
   # The one type of the values of `node` (an if, cond or case named `name`),
   # or of element `pos` of the tuples they are (counted from 1).
@@ -3712,6 +3968,16 @@ defmodule Defk.Compiler do
     end
   end
 
+  # a read-only [u8] view over a static C array; its length is a known fact.
+  # The bytes are one `static const uint8_t` array per module, named by a hash
+  # of the contents, however often a use site is inlined.
+  defp static_u8(b) do
+    name = "defk_lit_" <> Base.encode16(binary_part(:crypto.hash(:sha256, b), 0, 8), case: :lower)
+    ctx_update(:statics, &Map.put(&1, name, b))
+    view = "((defk_arr_u8){(uint8_t *)#{name}, #{byte_size(b)}})"
+    Facts.assert(Map.merge(val(view, {:arr, :u8}), %{buf: make_ref()}), len_lo: byte_size(b))
+  end
+
   defp empty_bits, do: val("((defk_bits){0, 0})", :bitstring)
 
   # the names the current kernel appends to (Defk.Bitstring.accumulator_names/1)
@@ -3833,6 +4099,44 @@ defmodule Defk.Compiler do
     end
   end
 
+  # a for that would collect values (`into` is its into:, or nil): `what` says how
+  @spec for_collect!(term(), term(), term(), term(), term(), term()) :: no_return()
+  defp for_collect!(node, quals, body, into, env, what) do
+    if into == nil, do: recover_for(node, quals, body, env)
+
+    rewrite =
+      case quals do
+        [{:<-, _, [x, src]}] when body != nil ->
+          Defk.Errors.Rewrites.collect_rewrites(src, x, body, into, returned_type(node, env))
+
+        _ ->
+          nil
+      end
+
+    err!(node, "for-collect", what, checked_rewrite([rewrite: rewrite], env))
+  end
+
+  # The body's type function for a for's rewrite: the element type of the
+  # declared return type when the for is the kernel's value and the body's
+  # type fits it (the rewrite is still compiled), else the body's own type.
+  defp returned_type(node, env) do
+    elem =
+      case env[:ret] do
+        {:arr, e} -> if node in Map.get(env, :ret_fors, []), do: e
+        _ -> nil
+      end
+
+    fn probe ->
+      t = type_in(probe, env)
+      if elem != nil and fits_elem?(t, elem), do: elem, else: t
+    end
+  end
+
+  defp fits_elem?(t, elem) when t in [:i64, :u64], do: elem in [:i64, :u64, :u8, :i16, :i32]
+  defp fits_elem?(:f64, elem), do: elem in [:f64, :f32]
+  defp fits_elem?(t, t), do: true
+  defp fits_elem?(_, _), do: false
+
   # Nest generators/filters; `inner.(env)` emits the innermost body.
   defp lower_quals([], env, inner), do: inner.(env)
 
@@ -3854,6 +4158,26 @@ defmodule Defk.Compiler do
     {sc, c, rel} = lower_test(filter, env)
     inner = srec_arm(make_ref(), 0, fn -> lower_quals(rest, narrow(env, rel, true), inner) end)
     [sc, "if (#{c}) {\n", inner, "}\n"]
+  end
+
+  @spec generator_pattern!(term()) :: no_return()
+  defp generator_pattern!({:<-, _, [pat, src]} = gen) do
+    {opts, what} =
+      case {pat, src} do
+        {{x, i}, {{:., _, [{:__aliases__, _, [:Enum]}, :with_index]}, _, [arr]}} ->
+          a = Macro.to_string(arr)
+
+          {[
+             hint:
+               "walk the index and read #{Macro.to_string(x)} = #{a}[#{Macro.to_string(i)}] in the body",
+             rewrite: "#{Macro.to_string(i)} <- 0..(length(#{a}) - 1)//1"
+           ], "the generator #{Macro.to_string(gen)} is not in the kernel subset"}
+
+        _ ->
+          {[], "the generator pattern #{Macro.to_string(pat)} is not in the kernel subset"}
+      end
+
+    err!(gen, "generator-pattern", what, opts)
   end
 
   # `range` is the range expression
@@ -4441,6 +4765,9 @@ defmodule Defk.Compiler do
     end
   end
 
+  defp last_expr({:__block__, _, [_ | _] = es}), do: List.last(es)
+  defp last_expr(e), do: e
+
   # Enum.reduce_while(src, init, fn x, acc -> ... end) is the loop of
   # `for x <- src`, with the accumulator of `for ..., reduce: init`. Every tail
   # position of the fn body is a literal {:cont, acc} or {:halt, acc} (see
@@ -4859,6 +5186,11 @@ defmodule Defk.Compiler do
   # catch-all is not required. Clauses after one that always matches are
   # unreachable and dropped. Returns {stmts, arms, env with the subject bound}.
   # `node` is the case
+  @spec case_form!(term()) :: no_return()
+  defp case_form!(node) do
+    err!(node, "case-form", "this case has no do block of `pattern -> body` clauses")
+  end
+
   defp case_arms(subject, clauses, node, env) do
     (is_list(clauses) and Enum.all?(clauses, &match?({:->, _, [_, _]}, &1))) || case_form!(node)
     {ss, sv} = lower_expr(subject, env)
@@ -5796,6 +6128,28 @@ defmodule Defk.Compiler do
   defp to_term(c, {:arr, _}), do: "defk_make_arr(env, ctx, (#{c}).data)"
   defp to_term(c, :bitstring), do: "defk_make_bits(env, ctx, #{c})"
 
+  # The declarations of the static arrays `body` uses (a speculative lowering
+  # may have registered others), in name order, ahead of every function.
+  defp emit_statics(body) do
+    for {name, b} <- Enum.sort(ctx(:statics)), String.contains?(body, name) do
+      "static const uint8_t #{name}[] =\n#{c_bytes(b)};\n\n"
+    end
+  end
+
+  # The bytes of `b` as a C string literal of octal escapes, 64 bytes a line.
+  defp c_bytes(""), do: ~s("")
+
+  defp c_bytes(b) do
+    b
+    |> :binary.bin_to_list()
+    |> Enum.chunk_every(64)
+    |> Enum.map_join("\n", fn bytes ->
+      ~s(") <>
+        Enum.map_join(bytes, &("\\" <> String.pad_leading(Integer.to_string(&1, 8), 3, "0"))) <>
+        ~s(")
+    end)
+  end
+
   # -------------------------------------------------------------- helpers --
 
   defp val(c, t, var \\ nil), do: %{c: c, t: t, owned: false, var: var}
@@ -5861,359 +6215,6 @@ defmodule Defk.Compiler do
 
   defp type_name(%{elems: _, t: t}), do: "a tuple #{fmt(t)}"
   defp type_name(%{t: t}), do: fmt(t)
-
-  # ------------------------------------------------------ more rejections --
-
-  # a read-only [u8] view over a static C array; its length is a known fact.
-  # The bytes are one `static const uint8_t` array per module, named by a hash
-  # of the contents, however often a use site is inlined.
-  defp static_u8(b) do
-    name = "defk_lit_" <> Base.encode16(binary_part(:crypto.hash(:sha256, b), 0, 8), case: :lower)
-    ctx_update(:statics, &Map.put(&1, name, b))
-    view = "((defk_arr_u8){(uint8_t *)#{name}, #{byte_size(b)}})"
-    Facts.assert(Map.merge(val(view, {:arr, :u8}), %{buf: make_ref()}), len_lo: byte_size(b))
-  end
-
-  # The declarations of the static arrays `body` uses (a speculative lowering
-  # may have registered others), in name order, ahead of every function.
-  defp emit_statics(body) do
-    for {name, b} <- Enum.sort(ctx(:statics)), String.contains?(body, name) do
-      "static const uint8_t #{name}[] =\n#{c_bytes(b)};\n\n"
-    end
-  end
-
-  # The bytes of `b` as a C string literal of octal escapes, 64 bytes a line.
-  defp c_bytes(""), do: ~s("")
-
-  defp c_bytes(b) do
-    b
-    |> :binary.bin_to_list()
-    |> Enum.chunk_every(64)
-    |> Enum.map_join("\n", fn bytes ->
-      ~s(") <>
-        Enum.map_join(bytes, &("\\" <> String.pad_leading(Integer.to_string(&1, 8), 3, "0"))) <>
-        ~s(")
-    end)
-  end
-
-  # A module attribute whose value is not in the kernel subset: undefined
-  # where the kernel is defined, an integer outside i64 and u64, or a value that is
-  # not a number, a boolean or a binary.
-  @spec attribute!(term()) :: no_return()
-  defp attribute!({:@, _, [{name, _, _}]} = node) do
-    case Defk.Attributes.of(node) do
-      :undefined ->
-        err!(
-          node,
-          "undefined-attribute",
-          "@#{name} is not defined where this kernel is defined"
-        )
-
-      {:ok, n} when is_integer(n) ->
-        err!(node, "integer-literal", "@#{name} is #{n}, which does not fit in i64 or u64",
-          hint: "use a value that fits, or a float attribute and compute in f64"
-        )
-
-      {:ok, v} ->
-        err!(
-          node,
-          "attribute-value",
-          "@#{name} is #{Defk.Attributes.describe(v)}, which is not in the kernel subset",
-          attribute_fix(name, v)
-        )
-    end
-  end
-
-  # a list of bytes packs into a binary attribute, read as a [u8]
-  defp attribute_fix(name, v) when is_list(v) and v != [] do
-    if Enum.all?(v, &(is_integer(&1) and &1 in 0..255)) do
-      bin = inspect(:erlang.list_to_binary(v), binaries: :as_binaries, limit: :infinity)
-
-      [
-        hint:
-          "pack it into a binary attribute and index it as a [u8], or pass it as an array parameter",
-        rewrite: "@#{name} #{bin}"
-      ]
-    else
-      [hint: "pass it as an array parameter ([i64] or [f64])"]
-    end
-  end
-
-  defp attribute_fix(_name, _v), do: []
-
-  @spec not_an_array!(term(), term(), term()) :: no_return()
-  defp not_an_array!(node, arr, %{t: :bitstring}), do: bits_read!(node, arr)
-
-  defp not_an_array!(node, arr, a) do
-    err!(
-      node,
-      "not-an-array",
-      "#{Macro.to_string(node)} indexes #{Macro.to_string(arr)}, which is #{type_name(a)}, not an array"
-    )
-  end
-
-  @spec cond_without_true!(term()) :: no_return()
-  defp cond_without_true!(node) do
-    err!(
-      node,
-      "cond-without-true",
-      "this cond is used as a value but has no `true ->` clause at the end"
-    )
-  end
-
-  @spec case_form!(term()) :: no_return()
-  defp case_form!(node) do
-    err!(node, "case-form", "this case has no do block of `pattern -> body` clauses")
-  end
-
-  # `fun` (e.g. "Enum.all?/2") called without a literal one-clause fn; `params`
-  # name the fn's parameters for the rewrite of a capture
-  @spec fn_argument!(term(), term(), term()) :: no_return()
-  defp fn_argument!({_, _, args}, fun, params) do
-    f = List.last(args)
-    vars = Enum.map(params, &{&1, [], nil})
-
-    rewrite =
-      case f do
-        {:&, _, [{:/, _, [{name, _, ctx}, n]}]}
-        when is_atom(name) and is_atom(ctx) and n == length(params) ->
-          [rewrite: Macro.to_string({:fn, [], [{:->, [], [vars, {name, [], vars}]}]})]
-
-        {:&, _, [body]} ->
-          body =
-            Macro.prewalk(body, fn
-              {:&, _, [i]} when is_integer(i) and i <= length(params) -> Enum.at(vars, i - 1)
-              other -> other
-            end)
-
-          [rewrite: Macro.to_string({:fn, [], [{:->, [], [vars, body]}]})]
-
-        _ ->
-          []
-      end
-
-    err!(
-      f,
-      "fn-argument",
-      "#{fun} with #{Macro.to_string(f)} is not in the kernel subset",
-      rewrite
-    )
-  end
-
-  # a for that would collect values (`into` is its into:, or nil): `what` says how
-  @spec for_collect!(term(), term(), term(), term(), term(), term()) :: no_return()
-  defp for_collect!(node, quals, body, into, env, what) do
-    if into == nil, do: recover_for(node, quals, body, env)
-
-    rewrite =
-      case quals do
-        [{:<-, _, [x, src]}] when body != nil ->
-          Defk.Errors.Rewrites.collect_rewrites(src, x, body, into, returned_type(node, env))
-
-        _ ->
-          nil
-      end
-
-    err!(node, "for-collect", what, checked_rewrite([rewrite: rewrite], env))
-  end
-
-  # Recovery inside a rejected for: its generators, filters and body are
-  # lowered as if the for ran for effect, so their own rejections are recorded
-  # in the same compile. Nothing about the for's value is checked (the body's
-  # last expression is lowered as a statement, and a rejected statement poisons
-  # what it binds), and an abandoned statement stays silent, so a rejection
-  # that only follows from this one is not reported. Not done for
-  # `into:`, whose body is the element of another collection (`<<y::float-64>>`),
-  # not a statement, so what it rejects would be an artefact of the rejection.
-  defp recover_for(_node, _quals, nil, _env), do: :ok
-
-  defp recover_for(node, quals, body, env) do
-    entered = make_ref()
-
-    try do
-      lower_quals(quals, loop_env(env, node), fn env ->
-        Process.put(entered, true)
-        elem(lower_stmts(body, env), 0)
-      end)
-    catch
-      {:defk_reject, d} -> record(d)
-      :defk_poison -> :ok
-    end
-
-    # a generator or filter that was rejected (or reads a poisoned variable)
-    # never reached the body: lower it anyway (recover_body/3)
-    unless Process.delete(entered), do: recover_body(quals, body, loop_env(env, node))
-
-    :ok
-  end
-
-  # Recovery inside a `for ..., reduce:` whose init or a generator was
-  # rejected (or reads a poisoned variable) before the body ran, so the body
-  # was never lowered: it is lowered for effect with the accumulator
-  # poisoned (its init gave it no value), so its own rejections are recorded
-  # in the same compile. A body that did run has reported its own already.
-  defp recover_reduce(entered, quals, pat, body, lenv) do
-    unless Process.get(entered),
-      do: recover_body(quals, body, poison({:=, [], [pat, nil]}, lenv))
-
-    :ok
-  end
-
-  # Recovery inside a rejected pipe: the nested call it stands for is lowered
-  # as an expression, so the rejections of the calls in it are recorded in
-  # the same compile (the first one along the way, as in any expression).
-  # Unpiping is exact, so none of them follows from the pipe's rejection.
-  # Enum.reduce/3 and Enum.find/3 in it take the forms the compiler knows
-  # (Defk.EnumForms), as they do outside a pipe.
-  defp recover_pipe(node, env) do
-    try do
-      node |> Defk.Errors.Rewrites.unpipe() |> Defk.EnumForms.desugar() |> lower_expr(env)
-    catch
-      {:defk_reject, d} -> record(d)
-      :defk_poison -> :ok
-    end
-
-    :ok
-  end
-
-  # a loop body lowered for effect, with the generators' variables bound to
-  # what is certain (a range's i64), else poisoned; its rejections are
-  # recorded, and an abandoned statement stays silent
-  defp recover_body(quals, body, env) do
-    poisoned =
-      Enum.reduce(quals, env, fn
-        # a range generator's variable is an i64 whatever its bounds
-        {:<-, _, [{n, _, ctx}, {op, _, _}]}, env
-        when is_atom(n) and is_atom(ctx) and op in [:.., :..//] ->
-          put_var(env, n, val(fresh(n, :i64), :i64))
-
-        {:<-, _, [pat, _]}, env ->
-          poison({:=, [], [pat, nil]}, env)
-
-        _filter, env ->
-          env
-      end)
-
-    try do
-      lower_stmts(body, poisoned)
-    catch
-      {:defk_reject, d} -> record(d)
-      :defk_poison -> :ok
-    end
-
-    :ok
-  end
-
-  # The body's type function for a for's rewrite: the element type of the
-  # declared return type when the for is the kernel's value and the body's
-  # type fits it (the rewrite is still compiled), else the body's own type.
-  defp returned_type(node, env) do
-    elem =
-      case env[:ret] do
-        {:arr, e} -> if node in Map.get(env, :ret_fors, []), do: e
-        _ -> nil
-      end
-
-    fn probe ->
-      t = type_in(probe, env)
-      if elem != nil and fits_elem?(t, elem), do: elem, else: t
-    end
-  end
-
-  defp fits_elem?(t, elem) when t in [:i64, :u64], do: elem in [:i64, :u64, :u8, :i16, :i32]
-  defp fits_elem?(:f64, elem), do: elem in [:f64, :f32]
-  defp fits_elem?(t, t), do: true
-  defp fits_elem?(_, _), do: false
-
-  @spec generator_pattern!(term()) :: no_return()
-  defp generator_pattern!({:<-, _, [pat, src]} = gen) do
-    {opts, what} =
-      case {pat, src} do
-        {{x, i}, {{:., _, [{:__aliases__, _, [:Enum]}, :with_index]}, _, [arr]}} ->
-          a = Macro.to_string(arr)
-
-          {[
-             hint:
-               "walk the index and read #{Macro.to_string(x)} = #{a}[#{Macro.to_string(i)}] in the body",
-             rewrite: "#{Macro.to_string(i)} <- 0..(length(#{a}) - 1)//1"
-           ], "the generator #{Macro.to_string(gen)} is not in the kernel subset"}
-
-        _ ->
-          {[], "the generator pattern #{Macro.to_string(pat)} is not in the kernel subset"}
-      end
-
-    err!(gen, "generator-pattern", what, opts)
-  end
-
-  defp last_expr({:__block__, _, [_ | _] = es}), do: List.last(es)
-  defp last_expr(e), do: e
-
-  defp cop(:===), do: "=="
-  defp cop(:!==), do: "!="
-  defp cop(op), do: Atom.to_string(op)
-
-  # The C text comparing `va` OP `vb` by Elixir's semantics, or a rejection.
-  defp compare_c(op, va, vb, node) do
-    if numeric?(va) and numeric?(vb) do
-      compare_numeric_c(op, va, vb, node)
-    else
-      if va.t == :bool and vb.t == :bool and op in [:==, :!=, :===, :!==] do
-        "(#{va.c} #{cop(op)} #{vb.c})"
-      else
-        err!(
-          node,
-          "operand-type",
-          "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
-          why:
-            "defk compares numbers by value and booleans only for equality; " <>
-              "Elixir's term order between other values is not in the subset",
-          hint: "compare two numbers or two booleans"
-        )
-      end
-    end
-  end
-
-  # Numeric compare with exact-value semantics: i64 against f64 orders by
-  # value (cmp(a, b) OP 0, and cmp(f, i) = -cmp(i, f)), and === tells -0.0
-  # from 0.0 the way Erlang's =:= does.
-  defp compare_numeric_c(op, va, vb, node) do
-    cond do
-      # an integer is never === a float; an i64 and a u64 are both integers
-      op in [:===, :!==] and (va.t == :f64 or vb.t == :f64) and va.t != vb.t ->
-        if op == :===, do: "0", else: "1"
-
-      op in [:===, :!==] and va.t == :f64 and vb.t == :f64 ->
-        if op == :===,
-          do: "defk_feq_exact(#{va.c}, #{vb.c})",
-          else: "(!defk_feq_exact(#{va.c}, #{vb.c}))"
-
-      va.t == vb.t ->
-        "(#{va.c} #{cop(op)} #{vb.c})"
-
-      # i64 or u64 against f64, u64 against i64: exact values, as Erlang
-      # compares them (cmp(a, b) OP 0, and cmp(b, a) = -cmp(a, b))
-      cmp = mixed_cmp(va.t, vb.t) ->
-        "(defk_cmp_#{cmp}(#{va.c}, #{vb.c}) #{cop(op)} 0)"
-
-      cmp = mixed_cmp(vb.t, va.t) ->
-        "(0 #{cop(op)} defk_cmp_#{cmp}(#{vb.c}, #{va.c}))"
-
-      true ->
-        err!(
-          node,
-          "operand-type",
-          "#{Macro.to_string(node)} compares #{fmt(va.t)} with #{fmt(vb.t)}",
-          why:
-            "defk compares numbers by value and booleans only for equality; " <>
-              "Elixir's term order between other values is not in the subset",
-          hint: "compare two numbers or two booleans"
-        )
-    end
-  end
-
-  defp mixed_cmp(:i64, :f64), do: "i64_f64"
-  defp mixed_cmp(:u64, t) when t in [:i64, :f64], do: "u64_#{t}"
-  defp mixed_cmp(_, _), do: nil
 
   defp fmt({:arr, e}), do: "[#{e}]"
   defp fmt({:tuple, ts}), do: "{#{Enum.map_join(ts, ", ", &fmt/1)}}"
