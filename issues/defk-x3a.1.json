@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-19T13:01:27Z",
@@ -8,8 +8,8 @@
   "labels": [],
   "parent": "defk-x3a",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Bench: hygiene into Defk.Bench, result cache as the runner's adapter in dev/",
   "type": "task",
-  "updated_at": "2026-10-19T13:01:27Z"
+  "updated_at": "2026-10-19T13:13:40Z"
 }
