@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T18:42:39Z",
+  "description": "Second readability epic, from the architecture review of 2026-10-19 (after defk-x3a). Theme: state that one concept owns is spread across the compiler's env map, the ctx and the C text, so tests observe decisions by grepping C. Each child deepens one module at an existing seam.\n\nRules (settled in the review's grilling, 2026-10-19):\n- Compiler tickets land serially, in the dependency order, each gated by a byte-identical `mix dump_c` against an untouched main checkout (noise: the DEFK_HEADER_HASH line and the path-hashed `/* defk:loop */` key in Defk.ReportTest.Gen.c) and a green `mix ci`. If the C is not identical, the ticket is not done.\n- The tooling tickets (docs task, result record, header list) run in parallel at any time.\n- The facts-scope ticket waits for defk-pvt; the Elixir-mode typing ticket is a spike and goes last.\n- Every change through a PR (AGENTS.md); the owner merges.\n- Vocabulary: module, interface, depth, seam, adapter, leverage, locality (codebase-design skill). CONTEXT.md gains \"Error sink\"; the \"Copy analysis\" entry names its scope.\n\nReport: the review's HTML in the session scratchpad (architecture-review-20261019-1430.html); the numbers it quotes are in the children.",
+  "id": "defk-rt2",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Readable compiler II: state owned by its module",
+  "type": "epic",
+  "updated_at": "2026-10-19T18:42:39Z"
+}
