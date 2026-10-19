@@ -4,6 +4,7 @@
     "defk-ded.2"
   ],
   "blocks": [],
+  "closed_at": "2026-10-19T09:20:39Z",
   "created": "2026-10-19T07:12:36Z",
   "description": "mix defk.examples --stale: compile the kernels (no cc, no check, no timing), compare each row's stored C hash with the current one, list the stale rows and the version they were measured at. Report only: re-measuring stays an explicit --only request.",
   "id": "defk-ded.3",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Report stale measurements: rows whose kernels' C changed since their stamp",
   "type": "task",
-  "updated_at": "2026-10-19T07:55:24Z"
+  "updated_at": "2026-10-19T09:20:39Z"
 }
