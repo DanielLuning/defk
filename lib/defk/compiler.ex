@@ -3639,8 +3639,18 @@ defmodule Defk.Compiler do
     atoms =
       for {_, %{t: :i64, c: c} = b} <- vars, into: env[:atoms] || %{}, do: {c, Facts.facts(b)}
 
+    # the callee's declared return type and returned fors: a rejected for in
+    # the inlined body gets the hint the callee's own compile gives, since a
+    # caller lowered first records the rejection (one per code and position)
     cenv =
-      %{vars: Map.new(vars), atoms: atoms, sigs: env.sigs, inlining: [key | env.inlining]}
+      %{
+        vars: Map.new(vars),
+        atoms: atoms,
+        sigs: env.sigs,
+        inlining: [key | env.inlining],
+        ret: k.ret,
+        ret_fors: returned_fors(k.body)
+      }
       |> Map.merge(scope(MapSet.new()))
       |> Map.merge(%{out: outer, nest: outer, live: outer})
 

@@ -489,6 +489,18 @@ defmodule Defk.CompileErrorsTest do
       assert rewrite(msg) =~ "alloc(u8, length(a))"
     end
 
+    test "a returned for in a callee inlined by an earlier kernel allocs the callee's declared element type" do
+      # g is lowered first and inlines f: the rejection is recorded from the
+      # inlined copy, whose env must carry f's declared return type
+      src =
+        kernel("a :: [u8]", "[u8]", "f(a)", "g") <>
+          "\n\n" <> kernel("a :: [u8]", "[u8]", "for x <- a, do: x")
+
+      msg = reject(__MODULE__, src)
+      assert codes(msg) == ["for-collect"]
+      assert rewrite(msg) =~ "out = alloc(u8, length(a))"
+    end
+
     test "a returned for whose body does not fit the declared element keeps its own type" do
       msg = rejection("for x <- a, do: x * 0.5", "a :: [f64]", "[i64]")
       assert rewrite(msg) =~ "out = alloc(f64, length(a))"
