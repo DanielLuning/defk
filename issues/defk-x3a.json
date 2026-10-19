@@ -6,9 +6,15 @@
   "description": "From the /improve-codebase-architecture review of 2026-10-19 (grilling with the owner, all recommendations accepted). Goal: lib/ reads as the library and compiler.ex reads as sections with known interfaces. Cut only where a seam exists and let the new module own its ctx fields, as Defk.Facts and Defk.Copies did; never split by line count (expressions and calls are mutually recursive with the core and stay). Every compiler ticket passes the byte-identical mix dump_c gate (dump the baseline from an untouched checkout). Compiler tickets land serially: Strip -\u003e AllocZeroing -\u003e rejections divider -\u003e guard flags -\u003e :check topic. Bench adapter, Defk.Generated and the Elixir-mode tickets run in parallel with them. Settled during grilling, do not reopen: Bench harness stays in lib (the measuring guide and the Mix.install examples need it), the result cache is the dev adapter; Defk.Strip holds record and classifier; one divider for rejections, no module; Elixir mode state is one pdict key with one struct (defk-euu precedent); EnumForms becomes Defk.Forms. Delivery: one branch, one worktree, one PR per child.",
   "id": "defk-x3a",
   "labels": [],
+  "comments": [
+    {
+      "text": "All ten children merged on 2026-10-19 (PRs #46-#51, #52-#56). Deviations recorded on the children: may_raise? kept as the ctx-text rule (x3a.6); guard temporaries renumbered in two test modules only (x3a.6); the /* defk:loop */ remark markers stay (x3a.10); statics placed by their callers (x3a.5). main at 1b9e9886.",
+      "timestamp": "2026-10-19T17:06:04Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Readable compiler: deep modules at existing seams",
   "type": "epic",
-  "updated_at": "2026-10-19T13:01:26Z"
+  "updated_at": "2026-10-19T17:06:04Z"
 }
