@@ -9,9 +9,15 @@
   "id": "defk-x3a.7",
   "labels": [],
   "parent": "defk-x3a",
+  "comments": [
+    {
+      "text": "PR #54 opened: https://github.com/DanielLuning/defk/pull/54. :check topic noted at i64_arith and the element store; select reason from select_check/1 at the decision site, why_not_select gone. scaled_facts_test reads the report, not the C. dump_c byte-identical except the test modules whose source changed. mix ci green: 2270 passed.",
+      "timestamp": "2026-10-19T16:19:42Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Fast-path report: a :check topic recorded at the decision site; facts tests stop reading C",
   "type": "task",
-  "updated_at": "2026-10-19T16:05:02Z"
+  "updated_at": "2026-10-19T16:19:42Z"
 }
