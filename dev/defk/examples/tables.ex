@@ -98,6 +98,7 @@ defmodule Defk.Examples.Tables do
 
   defp scoreboard(snapshot, rows, index, text) do
     runs = Map.new(snapshot["examples"], &{&1["name"], &1["run"]})
+    quiet = Map.new(snapshot["examples"], &{&1["name"], &1["quiet"]})
     newest = newest_run(snapshot)
     loaded = loaded(snapshot)
 
@@ -111,7 +112,8 @@ defmodule Defk.Examples.Tables do
 
         cells = [
           mark(r["verdict"]),
-          "[`#{name}`](#{name}.exs)" <> note(r, runs[name], newest, loaded),
+          "[`#{name}`](#{name}.exs)" <>
+            note(r, runs[name], newest, loaded == :some and quiet[name] != true),
           t.job,
           speedup_cell(r),
           native,
@@ -155,8 +157,8 @@ defmodule Defk.Examples.Tables do
     n = newest_run(s)
 
     newest =
-      "OTP #{n["otp"]}, Elixir #{n["elixir"]}: `#{n["command"]}`; 1-minute load average " <>
-        "#{load(n["load_before"])} before the run and #{load(n["load_after"])} after."
+      "OTP #{n["otp"]}, Elixir #{n["elixir"]}: `#{n["command"]}`. A quiet measurement: " <>
+        "other processes used at most #{n["quiet_limit"]} cores before and after it."
 
     head =
       case runs(s) do
@@ -172,8 +174,8 @@ defmodule Defk.Examples.Tables do
     head <>
       case loaded(s) do
         :none -> ""
-        :all -> " **Not a quiet machine: every number is provisional.**"
-        :some -> " **A row from a loaded run says provisional.**"
+        :all -> " **No row was measured quietly: every number is provisional.**"
+        :some -> " **A row not measured quietly says provisional.**"
       end
   end
 
@@ -188,9 +190,9 @@ defmodule Defk.Examples.Tables do
     end
   end
 
-  # whether the runs behind the rows were quiet
+  # whether the rows were measured quietly
   defp loaded(s) do
-    case s |> runs() |> Enum.map(& &1["quiet"]) |> Enum.uniq() do
+    case s["examples"] |> Enum.map(&(&1["quiet"] == true)) |> Enum.uniq() do
       [true] -> :none
       [false] -> :all
       _ -> :some
@@ -199,19 +201,16 @@ defmodule Defk.Examples.Tables do
 
   defp day(%{"measured_at" => at}), do: String.slice(at, 0, 10)
 
-  defp load(nil), do: "unknown"
-  defp load(x), do: to_string(x)
-
   # A row not measured in the newest run (an older run's row, or a result
   # the cache reused) says when it was measured and at which commit, from
-  # its report's stamp; a row from a loaded run among quiet ones says
+  # its report's stamp; a row not measured quietly among quiet ones says
   # provisional.
-  defp note(r, run, newest, loaded) do
+  defp note(r, run, newest, provisional?) do
     earlier? = run != newest or r["cache"] == "reused"
 
     parts =
       if(earlier?, do: ["measured " <> measured(r, run)], else: []) ++
-        if loaded == :some and not run["quiet"], do: ["provisional"], else: []
+        if provisional?, do: ["provisional"], else: []
 
     if parts == [], do: "", else: " (" <> Enum.join(parts, ", ") <> ")"
   end

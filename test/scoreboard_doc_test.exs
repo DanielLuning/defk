@@ -67,15 +67,14 @@ defmodule Defk.ScoreboardDocTest do
       "command" => "mix defk.examples --bench --all --snapshot --fresh",
       "otp" => "29.0.3",
       "elixir" => "1.20.2",
-      "load_before" => 1.5,
-      "load_after" => 2.0,
-      "quiet" => true
+      "quiet_limit" => 1.0
     }
 
-    # `run` changes every row's run; a `{name, results, run}` row has its own
-    defp snapshot(examples, run \\ %{}) do
+    # `quiet` is every row's; a `{name, results, own}` row has its own run
+    # fields, and its own quiet when `own` has "quiet"
+    defp snapshot(examples, quiet \\ true) do
       %{
-        "version" => 2,
+        "version" => 3,
         "machine" => "Test CPU",
         "logical_cores" => 12,
         "examples" =>
@@ -89,7 +88,8 @@ defmodule Defk.ScoreboardDocTest do
             %{
               "name" => name,
               "results" => results,
-              "run" => @run |> Map.merge(run) |> Map.merge(own)
+              "quiet" => Map.get(own, "quiet", quiet),
+              "run" => Map.merge(@run, Map.delete(own, "quiet"))
             }
           end
       }
@@ -132,7 +132,7 @@ defmodule Defk.ScoreboardDocTest do
 
       assert board ==
                """
-               Measured on 2026-10-20 at commit `abc1234` on Test CPU (12 logical cores), OTP 29.0.3, Elixir 1.20.2: `mix defk.examples --bench --all --snapshot --fresh`; 1-minute load average 1.5 before the run and 2.0 after.
+               Measured on 2026-10-20 at commit `abc1234` on Test CPU (12 logical cores), OTP 29.0.3, Elixir 1.20.2: `mix defk.examples --bench --all --snapshot --fresh`. A quiet measurement: other processes used at most 1.0 cores before and after it.
 
                | | Example | The job | defk vs best Elixir | vs the package's NIF | In one line |
                |---|---|---|---|---|---|
@@ -172,7 +172,7 @@ defmodule Defk.ScoreboardDocTest do
       assert summary =~ "| ✅ | all | 8.6–209× |"
     end
 
-    test "a loaded run says its numbers are provisional, and a reused row says when it was measured" do
+    test "rows not measured quietly are provisional, and a reused row says when it was measured" do
       reused =
         report("meh", "marginal", 1.04, %{
           "cache" => "reused",
@@ -186,11 +186,11 @@ defmodule Defk.ScoreboardDocTest do
             {"slow", [report("slow", "poor", 0.5, %{"crossover" => nil})]},
             {"fast", good()}
           ],
-          %{"quiet" => false}
+          false
         )
 
       assert {:ok, %{"scoreboard" => board}} = Tables.render(s, @text)
-      assert board =~ "**Not a quiet machine: every number is provisional.**"
+      assert board =~ "**No row was measured quietly: every number is provisional.**"
       assert board =~ "[`meh`](meh.exs) (measured 2026-10-01) |"
       assert board =~ "[`slow`](slow.exs) |"
     end
@@ -222,7 +222,7 @@ defmodule Defk.ScoreboardDocTest do
                "Measured on Test CPU (12 logical cores) in 2 runs, from 2026-10-02 to 2026-10-20. " <>
                  "The newest at commit `abc1234`, OTP 29.0.3"
 
-      assert board =~ "**A row from a loaded run says provisional.**"
+      assert board =~ "**A row not measured quietly says provisional.**"
       assert board =~ "[`meh`](meh.exs) (measured 2026-10-02 at `0ld0001`, provisional) |"
       assert board =~ "[`slow`](slow.exs) (measured 2026-10-05 at `c0ffee1`) |"
       assert board =~ "[`fast`](fast.exs) |"
@@ -272,18 +272,26 @@ defmodule Defk.ScoreboardDocTest do
     @tag :tmp_dir
     test "round-trips, one example per line", %{tmp_dir: dir} do
       outcome = %{name: "fast", status: :ok, results: [%{"example" => "fast", "speedup" => 2.5}]}
-      s = Snapshot.build([outcome], {1.0, 1.5}, "mix defk.examples --bench --all --snapshot")
+      s = Snapshot.build([outcome], "mix defk.examples --bench --all --snapshot")
       file = Path.join(dir, "scoreboard.json")
       Snapshot.write(s, file)
 
       assert {:ok, ^s} = Snapshot.read(file)
 
       assert File.read!(file) =~
-               ~s(\n    {"name":"fast","results":[{"example":"fast","speedup":2.5}],"run":{)
+               ~s(\n    {"name":"fast","quiet":false,"results":[{"example":"fast","speedup":2.5}],"run":{)
 
       assert [%{"run" => run}] = s["examples"]
-      assert run["quiet"] == 1.5 <= Defk.Bench.Cache.quiet_limit()
+      assert run["quiet_limit"] == Defk.Bench.Cache.quiet_limit()
       assert run["commit"] == Defk.Examples.commit()
+    end
+
+    test "a row is quiet when every report passed the quiet test" do
+      quiet = fn q -> %{"stamp" => %{"quiet" => %{"quiet" => q}}} end
+      assert Snapshot.quiet?([quiet.(true), quiet.(true)])
+      refute Snapshot.quiet?([quiet.(true), quiet.(false)])
+      # measured directly, without the runner's quiet test
+      refute Snapshot.quiet?([%{"stamp" => %{"quiet" => nil}}])
     end
 
     test "stale compares each row's stamps with the current C" do
@@ -339,7 +347,7 @@ defmodule Defk.ScoreboardDocTest do
       end
 
       file = fn rows ->
-        %{"version" => 2, "machine" => "M", "logical_cores" => 12, "examples" => rows}
+        %{"version" => 3, "machine" => "M", "logical_cores" => 12, "examples" => rows}
       end
 
       old = file.([row.("a", 1.0, "old"), row.("b", 2.0, "old")])
