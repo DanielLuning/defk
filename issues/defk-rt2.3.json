@@ -3,7 +3,9 @@
   "blocked_by": [
     "defk-rt2.2"
   ],
-  "blocks": [],
+  "blocks": [
+    "defk-rt2.4"
+  ],
   "created": "2026-10-19T18:42:40Z",
   "description": "A lowered value is an open map: documented with 4 fields (compiler.ex ~L1687), 17 keys in practice, built by `val/3` plus 21 literal `%{c: ...}` constructions. Two of its properties are substring tests on the C string, written twice each: \"can this C raise\" (`may_raise?` ~L1767 and `check_free?` ~L5663, `c` contains \"ctx\") and \"is this C a copy\" (`Regex.run ~r/^defk_copy_/` ~L1498 and `String.starts_with?(c, \"defk_copy_\")` ~L6535).\n\nThis reopens the x3a.6 decision to keep `may_raise?` as a text rule; the owner agreed on 2026-10-19 with this shape:\n- `val/3` derives `raises?` and `copy?` from the C once, so the text rule has one home and stays total; the 21 literal constructions go through `val/3`.\n- Readers (`may_raise?`, `check_free?`, the two copy sites, `same_c?` where it only asks these) read the fields.\n- Second step, only if the ticket finds that every raising site already goes through a few emitters (`checked/1`, `flagged_check/1`, the ctx-taking builtins): those emitters set `raises?` and the derivation becomes an assertion.\n- `pure_read` stays as it is (a different question).\n\nTests: select_test ~L173-191 and tuple_branch_test ~L192-207 grep `_s(\u0026` and `v_cond_ ?` (8 lines) although `:branch` is a report topic; point them at `notes/3` where the decision is the subject.\n\nGate: byte-identical `mix dump_c`; `mix ci`; PR per AGENTS.md. Update the value doc comment and the compiler map's \"expressions\" row.",
   "id": "defk-rt2.3",
