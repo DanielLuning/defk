@@ -1,0 +1,14 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-19T09:20:55Z",
+  "description": "Owner asked 2026-10-19. Run on main (clean) when on AC power and 1-min load \u003c= 3.0; then mix defk.examples.tables, check the README tables, and deliver examples/scoreboard.json + the generated tables in a PR.",
+  "id": "defk-9p7",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "First stored scoreboard: quiet mix defk.examples --bench --all --snapshot",
+  "type": "task",
+  "updated_at": "2026-10-19T09:20:55Z"
+}
