@@ -102,6 +102,12 @@ of rows the lowering declares as it emits; defk-ch4), not from the C text.
   keeps the generated C and the agreement side.
 - `lib/defk/compiler/ctx.ex`: the ctx struct itself.
 - `lib/defk/clauses.ex`: multi-clause heads and patterns.
+- `lib/defk/forms.ex`: the shape of a body form, parsed once for both modes
+  (a `for`'s qualifiers, options and body; a case clause's pattern, guard
+  and body; the parts of `Enum.reduce_while`/`all?`/`any?`), with the
+  rejections through a callback; also the rewrite of `Enum.reduce/3` and
+  `Enum.find/3` into those forms before either mode sees the body. What a
+  form means stays written in each mode (ADR-0008).
 - `lib/defk/elixir_mode.ex`: the Elixir compilation of kernels (tests only).
   Its translation state (binding counter, writes log, look-ahead leaf
   types, u64 candidates and hits) is one process-dictionary key, `:defk_em`,

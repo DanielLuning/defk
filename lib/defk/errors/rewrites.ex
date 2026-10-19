@@ -350,7 +350,7 @@ defmodule Defk.Errors.Rewrites do
      hint: "walk the index with i <- 0..(length(#{a}) - 1)//1 and read #{a}[i]"}
   end
 
-  # Enum.reduce/3 and Enum.find/3 are supported (Defk.EnumForms); the
+  # Enum.reduce/3 and Enum.find/3 are supported (Defk.Forms); the
   # compiler rejects them with another function than a literal fn itself
   defp call_rejection("Enum", :reduce, [_, _] = args, _node),
     do: {"enum-reduce", "Enum.reduce/#{length(args)} is not in the kernel subset", []}
