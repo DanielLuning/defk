@@ -9,9 +9,15 @@
   "id": "defk-x3a.9",
   "labels": [],
   "parent": "defk-x3a",
+  "comments": [
+    {
+      "text": "PR #56 opened: https://github.com/DanielLuning/defk/pull/56. Defk.EnumForms -\u003e Defk.Forms: for/3, case_clause/2, reduce_while/1, predicate/1 parse the shapes once; rejections through a callback (compiler \u0026reject!/4, Elixir mode raise_form!/4); codes validated at compile time. test/forms_test.exs (15 tests). dump_c byte-identical for all 108 modules; mix ci green: 2285 passed.",
+      "timestamp": "2026-10-19T17:02:33Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Defk.Forms: body-form shapes parsed once for both modes",
   "type": "task",
-  "updated_at": "2026-10-19T16:50:03Z"
+  "updated_at": "2026-10-19T17:02:33Z"
 }
