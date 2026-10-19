@@ -1694,16 +1694,25 @@ defmodule Defk.Compiler do
   # raise is bound to a local when an operand right of it can raise too: by a
   # statement when one right of it has statements, else by the comma operator
   # in front of the C of the expression being lowered (lower_expr/2 adds it).
+  # In a case guard (guard_expr/2) the value also carries the guard flags
+  # its C uses: those used while it was lowered.
   defp lower_expr(ast, env) do
     outer = low(:operand_binds)
     low_put(:operand_binds, [])
+    used = if guard?(env), do: low(:guard).used
 
     try do
       {s, v} = lower_node(ast, env)
+      v = if used, do: Map.put(v, :flags, flags_since(used)), else: v
       {s, with_binds(v, low(:operand_binds))}
     after
       low_put(:operand_binds, outer)
     end
+  end
+
+  defp flags_since(used) do
+    now = low(:guard).used
+    now |> Enum.take(length(now) - length(used)) |> Enum.uniq()
   end
 
   defp with_binds(v, []), do: v
@@ -1718,7 +1727,7 @@ defmodule Defk.Compiler do
   # errors set flags (a case guard, a speculated select: env.ovf) the order
   # is the replay's, which is lowered without them.
   defp in_order(lowered, env, how) do
-    flags? = Map.has_key?(env, :ovf)
+    flags? = flagged?(env)
 
     {ordered, _, binds} =
       List.foldr(lowered, {[], false, []}, fn {s, v}, {acc, right, binds} ->
@@ -1963,7 +1972,7 @@ defmodule Defk.Compiler do
     {sa, va} = lower_expr(a, env)
     # the right side of an `and` runs only when the left holds; in a case
     # guard an overflowed left side may run it anyway (guard_short_circuit/5)
-    benv = if and? and not Map.has_key?(env, :bad), do: narrow(env, va[:rel], true), else: env
+    benv = if and? and not guard?(env), do: narrow(env, va[:rel], true), else: env
     {sb, vb} = srec_arm(ref, 0, fn -> lower_expr(b, benv) end)
     bool!(va, a, op)
     bool!(vb, b, op)
@@ -2262,7 +2271,8 @@ defmodule Defk.Compiler do
         # a float result that is inf or NaN raises, as in Elixir
         _ ->
           fun = Map.get(@float_ops, op, "fdiv")
-          fs = [val(to_f(va), :f64), val(to_f(vb), :f64)]
+          # the converted operands keep the guard flags they use
+          fs = for v <- [va, vb], do: Map.merge(val(to_f(v), :f64), Map.take(v, [:flags]))
 
           c =
             guard_poison(fs, 2, env, fn [a, b] ->
@@ -2306,8 +2316,7 @@ defmodule Defk.Compiler do
 
   # a value from a check that a case guard flags and computes past has no
   # exact form
-  defp guarded(v, %{ovf: _}), do: Facts.inexact(v)
-  defp guarded(v, _env), do: v
+  defp guarded(v, env), do: if(flagged?(env), do: Facts.inexact(v), else: v)
 
   # div or rem of two integers, checked for a zero divisor (and i64 div for
   # overflow)
@@ -2315,7 +2324,9 @@ defmodule Defk.Compiler do
     case {int_pair!(a, b, node), env} do
       # in a case guard: a zero divisor is flagged, unless the divisor
       # overflowed (guard_poison/4)
-      {{:i64, a, b}, %{bad: bad, ovf: ovf}} when f == :div ->
+      {{:i64, a, b}, %{case_guard: _}} when f == :div ->
+        bad = guard_flag(:bad)
+        ovf = guard_flag(:ovf)
         srec_addr(bad)
         srec_addr(ovf)
 
@@ -2326,7 +2337,8 @@ defmodule Defk.Compiler do
 
         val(c, :i64)
 
-      {{:i64, a, b}, %{bad: bad}} ->
+      {{:i64, a, b}, %{case_guard: _}} ->
+        bad = guard_flag(:bad)
         srec_addr(bad)
 
         val(
@@ -2334,7 +2346,8 @@ defmodule Defk.Compiler do
           :i64
         )
 
-      {{:u64, a, b}, %{bad: bad}} ->
+      {{:u64, a, b}, %{case_guard: _}} ->
+        bad = guard_flag(:bad)
         srec_addr(bad)
 
         val(
@@ -2409,6 +2422,7 @@ defmodule Defk.Compiler do
   # one per operation and read is most of the cost of matching Elixir in
   # float loops. Inside a speculated select (env.ovf) and over any other
   # operand, each operation is checked on its own (lower_arith).
+  defp float_tree(_node, %{case_guard: _}), do: nil
   defp float_tree(_node, %{ovf: _}), do: nil
 
   defp float_tree(node, env) do
@@ -2896,21 +2910,21 @@ defmodule Defk.Compiler do
     end)
   end
 
-  defp checked(%{ovf: flag}) do
-    srec_addr(flag)
-    "_s(&#{flag}"
-  end
-
+  # the check's suffix and first argument: the flag it sets in a case guard
+  # or a speculated select, else ctx (it raises)
+  defp checked(%{case_guard: _}), do: flagged_check(guard_flag(:ovf))
+  defp checked(%{ovf: flag}), do: flagged_check(flag)
   defp checked(_env), do: "(ctx"
 
   # a float operation in a case guard flags a non-finite result as a failed
   # guard (an Elixir error), not as an overflow
-  defp checked_float(%{bad: flag}) do
+  defp checked_float(%{case_guard: _}), do: flagged_check(guard_flag(:bad))
+  defp checked_float(env), do: checked(env)
+
+  defp flagged_check(flag) do
     srec_addr(flag)
     "_s(&#{flag}"
   end
-
-  defp checked_float(env), do: checked(env)
 
   # pure expressions that can only fail by i64 overflow or a non-finite float
   # result: safe to evaluate untaken, with the failure flagged. Only cheap
@@ -3307,7 +3321,7 @@ defmodule Defk.Compiler do
       f != :div or v.t != :i64 -> v
       is_integer(k) and k > 0 -> Facts.put(v, Facts.div_facts_of(a, k))
       # a case guard's zero divisor flags and computes on
-      Map.has_key?(env, :bad) -> v
+      guard?(env) -> v
       true -> Facts.put(v, Facts.div_by_facts(a, b))
     end
   end
@@ -5370,59 +5384,61 @@ defmodule Defk.Compiler do
   # an `and` whose false fails the guard anyway (guard_false_pos/1), whose
   # right side then runs: its error fails the guard. A guard with no
   # operation that can fail lowers as written, with no flags.
-  # A case guard as a C condition. Lowered once with placeholder flags: when
-  # no flag appears nothing can fail and that is the guard. Otherwise the
-  # flags are real locals, reset on every evaluation. Inside a speculated
-  # select (env.ovf) an overflow sets the select's own flag, which replays the
-  # clauses with a guard that raises; elsewhere it replays this guard.
-  @guard_bad "defk guard bad"
-  @guard_ovf "defk guard ovf"
-  @guard_stop "defk guard stop"
-
+  # A case guard as a C condition. The guard is lowered in a guard scope
+  # (env.case_guard; the scope's record is the lowering's `guard`): an operation
+  # that can fail takes its flag from guard_flag/1, which makes the flag a
+  # local on its first use and records the use, and every value lowered in
+  # the scope carries the flags its C uses (lower_expr/2, `flags`), which is
+  # what guard_short_circuit/5 and guard_poison/4 ask of an operand. When no
+  # flag was used nothing can fail and that is the guard. Otherwise the
+  # flags are reset on every evaluation. Inside a speculated select (env.ovf)
+  # the select's own flag stands for `ovf`: an overflow replays the clauses
+  # with a guard that raises; elsewhere it replays this guard.
   defp guard_expr(guard, env) do
     guard = guard_false_pos(guard)
-    gv = Map.merge(env, %{ovf: @guard_ovf, bad: @guard_bad, stop: @guard_stop})
-    {s, v} = lower_expr(guard, gv)
-    0 = IO.iodata_length(s)
-    bad? = String.contains?(v.c, "&" <> @guard_bad)
-    ovf? = String.contains?(v.c, "&" <> @guard_ovf)
     outer = Map.get(env, :ovf)
-    {c, bad, ovf, stop} = guard_flags(v.c, ovf?, outer)
+    low_put(:guard, %{bad: nil, ovf: outer, stop: nil, used: []})
+    {s, v} = lower_expr(guard, Map.put(env, :case_guard, true))
+    0 = IO.iodata_length(s)
+    %{used: used, bad: bad, ovf: ovf, stop: stop} = low(:guard)
+    low_put(:guard, nil)
 
     cond do
-      not (bad? or ovf?) ->
+      used == [] ->
         {[], v}
 
-      outer != nil and bad == false ->
-        {[], val(c, :bool)}
+      outer != nil and bad == nil ->
+        {[], val(v.c, :bool)}
 
       # the select replays with a raising guard when its flag is set, so
       # only an error matters here
       outer != nil ->
         g = fresh("guard", :bool)
-        {[], val("(#{bad} = 0, #{g} = (#{c}), !#{bad} && #{g})", :bool)}
+        {[], val("(#{bad} = 0, #{g} = (#{v.c}), !#{bad} && #{g})", :bool)}
 
       true ->
-        {[], val(guard_decide(guard, env, c, bad, ovf? && ovf, stop), :bool)}
+        {[], val(guard_decide(guard, env, v.c, bad, ovf, stop), :bool)}
     end
   end
 
-  # The guard's C with its placeholder flags made locals (`bad`, `stop`) or
-  # the outer select's flag (`ovf`), each false when it cannot be set
-  defp guard_flags(c, ovf?, outer) do
-    stop? = String.contains?(c, @guard_stop)
-    bad = (String.contains?(c, "&" <> @guard_bad) or stop?) && fresh("gbad", :bool)
-    ovf = if ovf? and outer == nil, do: fresh("govf", :bool), else: outer
-    stop = stop? && fresh("gstop", :bool)
-
-    c =
-      c
-      |> String.replace(@guard_bad, bad || "")
-      |> String.replace(@guard_ovf, ovf || "")
-      |> String.replace(@guard_stop, stop || "")
-
-    {c, bad, ovf, stop}
+  # The guard scope's flag `which` (:bad, :ovf or :stop) as a C local, made
+  # on its first use, and the use recorded; inside a speculated select the
+  # select's flag is `ovf`. Only called in a guard scope (guard?/1).
+  defp guard_flag(which) do
+    scope = low(:guard)
+    flag = scope[which] || fresh("g#{which}", :bool)
+    low_put(:guard, %{scope | which => flag, used: [which | scope.used]})
+    flag
   end
+
+  # the lowering is in a case guard
+  defp guard?(env), do: Map.has_key?(env, :case_guard)
+
+  # the lowering's errors set flags: a case guard, or a speculated select
+  defp flagged?(env), do: guard?(env) or Map.has_key?(env, :ovf)
+
+  # the guard flags a value's C uses (in a guard scope; else none)
+  defp flags(v), do: Map.get(v, :flags, [])
 
   # The guard `c` with its flags (each a local, or false when it cannot be
   # set) decided: an error (not after a `stop`) fails it, else an overflow
@@ -5444,15 +5460,14 @@ defmodule Defk.Compiler do
     "(#{resets}, #{g} = (#{c}), #{ok})"
   end
 
-  # `va cop vb`. In a case guard (env.bad) whose left side may overflow, an
+  # `va cop vb`. In a case guard (env.case_guard) whose left side may overflow, an
   # overflowed left side does not decide which side runs (guard_expr): an
   # `and` whose false fails the guard runs its right side (an error there
   # fails the guard whatever the left side's exact value); any other sets
   # `stop` unless an error came first, and the guard raises the overflow.
   defp guard_short_circuit(va, vb, cop, m, env) do
-    ovf = Map.has_key?(env, :bad) && env.ovf
-
-    if ovf && String.contains?(va.c, "&" <> ovf) do
+    if guard?(env) and :ovf in flags(va) do
+      ovf = guard_flag(:ovf)
       l = fresh("gl", :bool)
       saved = fresh("gsave", :bool)
       poisoned = fresh("gpoison", :bool)
@@ -5463,7 +5478,9 @@ defmodule Defk.Compiler do
       if cop == "&&" and m[:defk_false_pos] do
         left <> "(#{l} || #{poisoned}) && #{vb.c})"
       else
-        left <> "#{poisoned} ? ((#{env.bad} || (#{env.stop} = 1)), 0) : (#{l} #{cop} #{vb.c}))"
+        bad = guard_flag(:bad)
+        stop = guard_flag(:stop)
+        left <> "#{poisoned} ? ((#{bad} || (#{stop} = 1)), 0) : (#{l} #{cop} #{vb.c}))"
       end
     else
       "(#{va.c} #{cop} #{vb.c})"
@@ -5478,7 +5495,7 @@ defmodule Defk.Compiler do
 
   defp guard_false_pos(other), do: other
 
-  # In a case guard (env.bad), the C of an operation `call` on the operands
+  # In a case guard (env.case_guard), the C of an operation `call` on the operands
   # `vs` whose result depends on whether any of the `watched` (a suffix of
   # `vs`) was computed with an overflow: a divisor's zero, a float result's
   # finiteness. When one was, the operation is skipped (its result is
@@ -5489,9 +5506,9 @@ defmodule Defk.Compiler do
   # watched operands, the operation as written.
   defp guard_poison(vs, watched, env, call) do
     {pre, post} = Enum.split(vs, length(vs) - watched)
-    ovf = Map.has_key?(env, :bad) && env.ovf
 
-    if ovf && Enum.any?(post, &String.contains?(&1.c, "&" <> ovf)) do
+    if guard?(env) and Enum.any?(post, &(:ovf in flags(&1))) do
+      ovf = guard_flag(:ovf)
       tmps = Enum.map(vs, &fresh("gop", &1.t))
       {tpre, tpost} = Enum.split(tmps, length(pre))
       saved = fresh("gsave", :bool)
@@ -5648,7 +5665,7 @@ defmodule Defk.Compiler do
   # The operands are judged before in_order/3 may move one into a local.
   defp relation(op, [{_, va}, {_, vb}], env) do
     exact? =
-      (low(:loops) == [] and not Map.has_key?(env, :bad)) or
+      (low(:loops) == [] and not guard?(env)) or
         (check_free?(va) and check_free?(vb))
 
     if va.t == :i64 and vb.t == :i64 and exact?, do: Facts.relation(op, va, vb)

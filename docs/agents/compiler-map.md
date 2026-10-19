@@ -41,7 +41,7 @@ One module, ordered by section dividers you can grep for
 | resume dispatch | re-entering loops through their headers after a yield | `in_loop/1`, `resume_dispatch/0`, `arrival_blocks/3` |
 | reduce accumulators | `for ... reduce:` and `reduce_while`: carrying, facts across trips, halts | `lower_reduce`, `with_acc_facts/2`, `u64_accs/2` |
 | tails and branches | a `reduce_while` body's tail, if/else chains | `lower_tail/3`, `branch_chain/3` |
-| case | clause dispatch (multi-clause kernels) | |
+| case | clause dispatch (multi-clause kernels); a case guard lowered in a guard scope whose flags are locals made on first use, and every value carries the flags its C uses | `case_arms`, `guard_expr/2`, `guard_flag/1`, `guard_poison/4` |
 | range facts | `Defk.Facts` holds ADR-0007's representation: forms over atoms (array lengths and i64 bindings), values' exact forms (`eq`), bounds `{q, form}`, one prover with a step budget; this file states facts through the module's sources (`len_value`, `len_from`, `len_like`, `between`, `bound`, the derivations), keeps i64 bindings' facts by C variable in `env.atoms` (`put_var/3`), and asks the proofs with the env as scope | `Facts.check`, `Facts.fits_i64?`, `range_limit` |
 | element types | narrow loads/stores | |
 | emitting | C text: entries, init, frames, resume | `emit_entry`, `resume_block/3`, `view_term/3` |
