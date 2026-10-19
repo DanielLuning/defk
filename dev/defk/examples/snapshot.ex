@@ -5,35 +5,32 @@ defmodule Defk.Examples.Snapshot do
   # every example; `--bench --only a,b --snapshot` replaces the rows of a and
   # b and keeps the others. Each row keeps the conditions of the run that
   # measured it (`run`), and each report its stamp (Defk.Bench): a row
-  # stands until someone asks for it to be measured again.
+  # stands until someone asks for it to be measured again. A row is `quiet`
+  # when every report in it passed the quiet test (its stamp's `quiet`).
   # `Defk.Examples.Tables` renders the README tables from it. The file is
   # generated: never edit it by hand, measure again.
 
   alias Defk.Bench.Cache
 
-  # 2: the run's conditions moved from the file into each row
-  @version 2
+  # 3: quiet is per row, from the reports' stamps; the run keeps the limit,
+  # not the load average
+  @version 3
 
   @doc "Where the stored scoreboard lives."
   def path, do: Path.join(Defk.Examples.root(), "examples/scoreboard.json")
 
   @doc """
   The snapshot map for a finished bench run: `outcomes` as the examples
-  runner returns them, `loads` the 1-minute load average before and after
-  the run, `command` the command line that made it.
+  runner returns them, `command` the command line that made it.
   """
-  def build(outcomes, loads, command) do
-    {before, after_} = loads
-
+  def build(outcomes, command) do
     run = %{
       "measured_at" => DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
       "commit" => Defk.Examples.commit(),
       "command" => command,
       "otp" => otp_version(),
       "elixir" => System.version(),
-      "load_before" => before,
-      "load_after" => after_,
-      "quiet" => Cache.quiet?(loads)
+      "quiet_limit" => Cache.quiet_limit()
     }
 
     %{
@@ -47,11 +44,15 @@ defmodule Defk.Examples.Snapshot do
             "name" => o.name,
             "status" => to_string(o.status),
             "results" => o.results,
+            "quiet" => quiet?(o.results),
             "run" => run
           }
         )
     }
   end
+
+  @doc "Whether every report of a row passed the quiet test."
+  def quiet?(results), do: Enum.all?(results, &(get_in(&1, ["stamp", "quiet", "quiet"]) == true))
 
   @doc """
   `{:ok, snapshot}`: `old` with the rows of `new` in place of its rows of

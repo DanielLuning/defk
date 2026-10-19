@@ -100,18 +100,22 @@ defmodule Defk.Examples do
       {~c"DEFK_BENCH_CACHE_DIR", false},
       {~c"DEFK_BENCH_SCRIPT", false},
       {~c"DEFK_BENCH_FRESH", false},
-      {~c"DEFK_BENCH_COMMIT", false}
+      {~c"DEFK_BENCH_COMMIT", false},
+      {~c"DEFK_BENCH_RUNNER_PID", false}
     ]
   end
 
-  # DEFK_BENCH_COMMIT goes into each measured result's stamp (Defk.Bench)
+  # DEFK_BENCH_COMMIT goes into each measured result's stamp (Defk.Bench);
+  # with DEFK_BENCH_RUNNER_PID the quiet test leaves out this runner and
+  # everything it started (Defk.Bench.Cache.other_cpu/0)
   defp mode_env(:bench, file, fresh?) do
     [
       {~c"DEFK_CHECK_ONLY", false},
       {~c"DEFK_BENCH_CACHE_DIR", String.to_charlist(bench_cache_dir())},
       {~c"DEFK_BENCH_SCRIPT", String.to_charlist(file)},
       {~c"DEFK_BENCH_FRESH", if(fresh?, do: ~c"1", else: false)},
-      {~c"DEFK_BENCH_COMMIT", String.to_charlist(commit())}
+      {~c"DEFK_BENCH_COMMIT", String.to_charlist(commit())},
+      {~c"DEFK_BENCH_RUNNER_PID", String.to_charlist(System.pid())}
     ]
   end
 

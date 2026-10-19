@@ -72,9 +72,10 @@ comments and is generated; nothing else in either file is.
   `mix defk.examples --bench --all --snapshot --fresh` writes after a run in
   which every example behaved as claimed; `--bench --only a,b --snapshot`
   replaces only those rows. Measure only what the owner or the ticket asks
-  for (`docs/agents/runs.md`). Run it on a quiet machine: each row records
-  its run's load before and after, and a row from a loaded run is marked
-  provisional in the tables.
+  for (`docs/agents/runs.md`). Run it on a quiet machine: before each
+  report the bench waits for other processes to use at most one core, each
+  report's stamp records that test, and a row with a report that failed it
+  is marked provisional in the tables.
 - The text around the numbers (each row's job, the native comparison, the
   one-line note, the summary's groups) is in `examples/_tables.exs`. A
   number a report measures is a placeholder there (`{speedup:crc16}`), never

@@ -30,13 +30,16 @@ defmodule Defk.Bench.Cache do
   #   * report: the report's name, and how many reports of that name the
   #     process made before it (a script may reuse a name).
   #
-  # Only quiet-machine results are stored: the 1-minute load average before
-  # and after the measurement must be at most `quiet_limit/0`. A loaded run
-  # is never stored, so the next run measures again.
+  # Only quiet-machine results are stored: the CPU that other processes use
+  # (`other_cpu/0`) before and after the measurement must be at most
+  # `quiet_limit/0`. A loaded run is never stored, so the next run measures
+  # again. Not the load average: it counts the bench's own work (the
+  # example's cc compile, the report before, the measured threads) and lags
+  # it by a minute or more, so a sequential run could never be quiet.
 
-  # 2: a stored result carries its stamp (Defk.Bench); a version-1 file is
-  # read as empty
-  @version 2
+  # 3: the stamp records the quiet test (Defk.Bench); an older file is read
+  # as empty
+  @version 3
 
   @type slot :: %{
           file: String.t(),
@@ -79,23 +82,19 @@ defmodule Defk.Bench.Cache do
   defp changed(old, new), do: for({k, v} <- new, Map.get(old, k) != v, do: k)
 
   @doc """
-  Stores `result` under `slot` when the machine was quiet before
-  (`load_before`) and after the measurement. Returns `{:stored, loads}` or
-  `{:not_stored, loads}`, `loads` being `{before, after}` (`nil` when the
-  load average could not be read, which never counts as quiet).
+  Stores `result` under `slot` when `cpus`, the other processes' CPU
+  `{before, after}` the measurement, passes `quiet?/1`. Returns `:stored`
+  or `:not_stored`.
   """
-  @spec store(slot(), map(), float() | nil) ::
-          {:stored | :not_stored, {float() | nil, float() | nil}}
-  def store(slot, result, load_before) do
-    loads = {load_before, load_average()}
-
-    if quiet?(loads) do
+  @spec store(slot(), map(), {float() | nil, float() | nil}) :: :stored | :not_stored
+  def store(slot, result, cpus) do
+    if quiet?(cpus) do
       entry = %{
         key: slot.key,
         parts: slot.parts,
         result: result,
         measured_at: DateTime.utc_now() |> DateTime.truncate(:second),
-        loads: loads
+        cpus: cpus
       }
 
       File.mkdir_p!(Path.dirname(slot.file))
@@ -105,41 +104,105 @@ defmodule Defk.Bench.Cache do
       tmp = slot.file <> ".tmp"
       File.write!(tmp, bin)
       File.rename!(tmp, slot.file)
-      {:stored, loads}
+      :stored
     else
-      {:not_stored, loads}
+      :not_stored
     end
   end
 
-  @doc "The quiet test: both loads read and at most `quiet_limit/0`."
+  @doc "The quiet test: both samples read and at most `quiet_limit/0`."
   @spec quiet?({float() | nil, float() | nil}) :: boolean()
   def quiet?({before, after_}),
     do: is_number(before) and is_number(after_) and max(before, after_) <= quiet_limit()
 
   @doc """
-  The highest 1-minute load average that counts as quiet:
-  `DEFK_BENCH_QUIET_LOAD`, or a quarter of the logical cores (3.0 on 12).
+  The most CPU, in cores, that other processes may use on a quiet machine:
+  `DEFK_BENCH_QUIET_CPU`, or 1.0. An idle laptop's desktop uses about half
+  a core.
   """
   @spec quiet_limit() :: float()
-  def quiet_limit do
-    case Float.parse(System.get_env("DEFK_BENCH_QUIET_LOAD", "")) do
-      {limit, ""} -> limit
-      _ -> :erlang.system_info(:logical_processors) / 4
+  def quiet_limit, do: env_float("DEFK_BENCH_QUIET_CPU", 1.0)
+
+  @doc """
+  Waits until `other_cpu/0` is at most `quiet_limit/0`, sampling every
+  2 s, for at most `DEFK_BENCH_SETTLE_S` seconds (default 120): the
+  machine settles after the example's own compile and whatever else ran.
+  Returns `{waited_s, cpu}`, `waited_s` in whole seconds (0 when the first
+  sample was quiet) and `cpu` the last sample.
+  """
+  @spec settle() :: {non_neg_integer(), float() | nil}
+  def settle do
+    t0 = System.monotonic_time(:millisecond)
+    settle(t0, t0 + trunc(env_float("DEFK_BENCH_SETTLE_S", 120.0) * 1000))
+  end
+
+  defp settle(t0, deadline) do
+    cpu = other_cpu()
+    now = System.monotonic_time(:millisecond)
+
+    if (is_number(cpu) and cpu <= quiet_limit()) or now >= deadline do
+      {div(now - t0, 1000), cpu}
+    else
+      Process.sleep(2000)
+      settle(t0, deadline)
     end
   end
 
-  @doc "The 1-minute load average from `uptime`, or `nil`."
-  @spec load_average() :: float() | nil
-  def load_average do
-    with {out, 0} <- System.cmd("uptime", [], stderr_to_stdout: true),
-         [_, load] <- Regex.run(~r/load averages?: ([0-9]+[.,][0-9]+)/, out),
-         {value, ""} <- Float.parse(String.replace(load, ",", ".")) do
-      value
-    else
-      _ -> nil
+  @doc """
+  The CPU, in cores, that processes outside this bench use now (`ps`
+  `%cpu`, summed), or `nil` when `ps` cannot be read. The bench's own
+  processes are left out: this OS process and its children, and under the
+  examples runner (`DEFK_BENCH_RUNNER_PID`) the runner and everything it
+  started. A finished process is gone from `ps`, so a compile or an example
+  that ended counts no more. macOS `ps` gives recent use; Linux `ps` gives
+  each process's average over its life, which is coarser.
+  """
+  @spec other_cpu() :: float() | nil
+  def other_cpu do
+    case System.cmd("ps", ["-A", "-o", "pid=,ppid=,%cpu="], stderr_to_stdout: true) do
+      {out, 0} ->
+        procs =
+          for line <- String.split(out, "\n", trim: true),
+              [pid, ppid, cpu] <- [String.split(line)],
+              {cpu, _} <- [Float.parse(String.replace(cpu, ",", "."))],
+              do: {pid, ppid, cpu}
+
+        own = tree(procs, [System.get_env("DEFK_BENCH_RUNNER_PID") || System.pid()])
+
+        total =
+          for {pid, _, cpu} <- procs,
+              not Map.has_key?(own, pid),
+              reduce: 0.0,
+              do: (s -> s + cpu)
+
+        Float.round(total / 100, 2)
+
+      _ ->
+        nil
     end
   rescue
     _ -> nil
+  end
+
+  # `roots` and all their descendants, as the keys of a map
+  defp tree(procs, roots) do
+    children = Enum.group_by(procs, &elem(&1, 1), &elem(&1, 0))
+    descend(roots, children, %{})
+  end
+
+  defp descend([], _children, seen), do: seen
+
+  defp descend([pid | rest], children, seen) when is_map_key(seen, pid),
+    do: descend(rest, children, seen)
+
+  defp descend([pid | rest], children, seen),
+    do: descend(Map.get(children, pid, []) ++ rest, children, Map.put(seen, pid, true))
+
+  defp env_float(var, default) do
+    case Float.parse(System.get_env(var, "")) do
+      {value, ""} -> value
+      _ -> default
+    end
   end
 
   @doc false

@@ -56,11 +56,14 @@ defmodule Mix.Tasks.Defk.Examples do
   script and the files it requires, its `Mix.install` dependencies,
   `Defk.Bench`, the OTP and Elixir versions and the machine. The example
   still runs, and its `:check` still runs (correctness is never cached);
-  only the timing is skipped. Only results measured on a quiet machine are
-  stored (the 1-minute load average before and after is at most a quarter of
-  the logical cores, or `DEFK_BENCH_QUIET_LOAD`), so a loaded run measures
-  again next time. The cache is `_build/<env>/defk_bench/`, one file per
-  example; `--fresh` measures everything (and stores the quiet results).
+  only the timing is skipped. Before each measurement the bench waits up to
+  two minutes (`DEFK_BENCH_SETTLE_S`) until processes outside this run use
+  at most one core (`DEFK_BENCH_QUIET_CPU`). Only results measured on a
+  quiet machine are stored (the same test before and after), so a loaded
+  run measures again next time. The run's own work never counts: an
+  example that ended is gone, and the runner and its children are left out.
+  The cache is `_build/<env>/defk_bench/`, one file per example; `--fresh`
+  measures everything (and stores the quiet results).
 
   Some compiles are long (argon2 more than 7 minutes, cdcl_sat about 5,
   keccak about 1, hash_chain about 26 s per copy). The task prints a line
@@ -89,7 +92,6 @@ defmodule Mix.Tasks.Defk.Examples do
 
   use Mix.Task
 
-  alias Defk.Bench.Cache
   alias Defk.Examples
   alias Defk.Examples.{Scoreboard, Snapshot}
 
@@ -214,7 +216,6 @@ defmodule Mix.Tasks.Defk.Examples do
     timeout = opts[:timeout]
     total = length(examples) + if(app?, do: 1, else: 0)
     t0 = System.monotonic_time(:second)
-    opts = Keyword.put(opts, :load_before, Cache.load_average())
 
     IO.puts("mix defk.examples (#{mode}): #{total} to run#{load_note()}")
     if mode == :bench, do: IO.puts(cache_note(opts[:fresh]))
@@ -297,8 +298,7 @@ defmodule Mix.Tasks.Defk.Examples do
       "mix defk.examples --bench #{selection} --snapshot" <>
         if(opts[:fresh], do: " --fresh", else: "")
 
-    loads = {opts[:load_before], Cache.load_average()}
-    new = Snapshot.build(outcomes, loads, command)
+    new = Snapshot.build(outcomes, command)
 
     snapshot =
       if opts[:all] do
@@ -315,15 +315,18 @@ defmodule Mix.Tasks.Defk.Examples do
 
     Snapshot.write(snapshot)
 
+    loaded = for r <- new["examples"], not r["quiet"], do: r["name"]
+
     IO.puts(
       "stored #{length(new["examples"])} row(s) in #{Path.relative_to_cwd(Snapshot.path())}" <>
-        if(Cache.quiet?(loads),
-          do: "",
-          else: " (NOT a quiet machine: the tables will say provisional)"
-        ) <>
-        "; run mix defk.examples.tables to rewrite the README tables"
+        loaded_note(loaded) <> "; run mix defk.examples.tables to rewrite the README tables"
     )
   end
+
+  defp loaded_note([]), do: ""
+
+  defp loaded_note(names),
+    do: " (NOT measured quietly, the tables will say provisional: #{Enum.join(names, ", ")})"
 
   defp load_note do
     with {out, 0} <- System.cmd("uptime", [], stderr_to_stdout: true),

@@ -46,13 +46,20 @@ defmodule Defk.Bench do
   kernels' `.beam` files, the C build inputs, the script, its dependencies,
   this module, the OTP and Elixir versions and the machine. It still runs
   the `:check`, and the `DEFK_RESULT` line says `"cache": "reused"` with the
-  date in `measured_at`. Run directly (`elixir examples/x.exs`), it always
-  measures.
+  date in `measured_at`. When the runner measures, `report/1` first waits
+  up to two minutes for the machine to settle, and it stores only a quiet
+  result: other processes used at most one core (`DEFK_BENCH_QUIET_CPU`)
+  before and after. Run directly (`elixir examples/x.exs`), it always
+  measures, without waiting.
 
   **Stamp.** A measured result carries `stamp`: defk's version (`defk`), the
   commit the runner measured (`commit`, `null` when run directly), the time
   (`measured_at`) and the MD5 of each loaded kernel module's generated C
-  (`c`, module name to hex digest). A reused result keeps the stamp of its
+  (`c`, module name to hex digest). Under the runner it also records the
+  quiet test (`quiet`, `null` when run directly): whether it passed, the
+  CPU in cores that other processes used before and after the measurement
+  (`other_cpu`), the `limit`, and how long the bench waited for the machine
+  to settle first (`waited_s`). A reused result keeps the stamp of its
   measurement.
 
   A `good` verdict only counts once the Elixir side is `baseline: :optimized`.
@@ -153,7 +160,7 @@ defmodule Defk.Bench do
 
     case Cache.lookup(Keyword.fetch!(opts, :name)) do
       :off ->
-        result = opts |> measure() |> stamp()
+        result = opts |> measure() |> stamp(nil)
         print(result)
         result
 
@@ -161,20 +168,35 @@ defmodule Defk.Bench do
         reuse(opts, cached, entry)
 
       {:miss, slot, changed} ->
-        load = Cache.load_average()
-        result = opts |> measure() |> stamp()
-        {stored, loads} = Cache.store(slot, result, load)
+        # the machine settles first: the example's own compile, the report
+        # before and anything else that ran are done
+        {waited, before} = Cache.settle()
+        result = measure(opts)
+        cpus = {before, Cache.other_cpu()}
+
+        quiet = %{
+          quiet: Cache.quiet?(cpus),
+          other_cpu: Tuple.to_list(cpus),
+          limit: Cache.quiet_limit(),
+          waited_s: waited
+        }
+
+        result = stamp(result, quiet)
+        stored = Cache.store(slot, result, cpus)
         result = Map.put(result, :cache, if(stored == :stored, do: "stored", else: "not_stored"))
-        print(result, miss_line(stored, loads, changed))
+        print(result, miss_line(stored, quiet, changed))
         result
     end
   end
 
   # What measured the result, stored with it so a reused result keeps it:
   # defk's version, the commit (`DEFK_BENCH_COMMIT`, set by the examples
-  # runner; nil when run directly), the time, and the MD5 of each loaded
-  # kernel module's C source, which tells later whether the C changed.
-  defp stamp(result) do
+  # runner; nil when run directly), the time, the MD5 of each loaded
+  # kernel module's C source, which tells later whether the C changed, and
+  # under the runner the quiet test (`quiet`: whether it passed, the other
+  # processes' CPU in cores before and after, the limit, and how long the
+  # bench waited for the machine to settle; nil when run directly).
+  defp stamp(result, quiet) do
     c =
       for {mod, _} <- :code.all_loaded(),
           function_exported?(mod, :__defk_c_source__, 0),
@@ -185,7 +207,8 @@ defmodule Defk.Bench do
       defk: defk_version(Application.spec(:defk, :vsn)),
       commit: System.get_env("DEFK_BENCH_COMMIT"),
       measured_at: DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
-      c: c
+      c: c,
+      quiet: quiet
     })
   end
 
@@ -204,26 +227,28 @@ defmodule Defk.Bench do
 
     print(
       result,
-      "  cache      REUSED, NOT MEASURED: inputs unchanged; numbers from #{date} (#{loads(entry.loads)})"
+      "  cache      REUSED, NOT MEASURED: inputs unchanged; numbers from #{date} (#{cpus(entry.cpus)})"
     )
 
     result
   end
 
-  defp miss_line(stored, loads, changed) do
+  defp miss_line(stored, quiet, changed) do
     why = if changed == [], do: "", else: ", changed: #{Enum.join(changed, ", ")}"
+    cpus = "#{cpus(List.to_tuple(quiet.other_cpu))}, after waiting #{quiet.waited_s} s"
 
     case stored do
       :stored ->
-        "  cache      measured#{why}; stored (#{loads(loads)})"
+        "  cache      measured#{why}; stored (#{cpus})"
 
       :not_stored ->
         "  cache      measured#{why}; not stored: not a quiet machine " <>
-          "(#{loads(loads)}, quiet is at most #{Cache.quiet_limit()})"
+          "(#{cpus}; quiet is at most #{quiet.limit})"
     end
   end
 
-  defp loads({before, after_}), do: "load #{before || "?"} before, #{after_ || "?"} after"
+  defp cpus({before, after_}),
+    do: "other processes #{before || "?"} cores before, #{after_ || "?"} after"
 
   # The `:check` alone, for check-only mode and a reused result: true when
   # there is no `:defk` side, `:skipped` for `check: :none`.

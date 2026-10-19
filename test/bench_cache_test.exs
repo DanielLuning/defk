@@ -13,7 +13,7 @@ defmodule Defk.BenchCacheTest do
 
   alias Defk.Bench.Cache
 
-  @vars ~w(DEFK_BENCH_CACHE_DIR DEFK_BENCH_SCRIPT DEFK_BENCH_FRESH DEFK_BENCH_QUIET_LOAD DEFK_CHECK_ONLY)
+  @vars ~w(DEFK_BENCH_CACHE_DIR DEFK_BENCH_SCRIPT DEFK_BENCH_FRESH DEFK_BENCH_QUIET_CPU DEFK_BENCH_SETTLE_S DEFK_BENCH_RUNNER_PID DEFK_CHECK_ONLY)
 
   @moduletag :tmp_dir
 
@@ -25,8 +25,8 @@ defmodule Defk.BenchCacheTest do
     File.write!(script, "# baseline v1\n")
     System.put_env("DEFK_BENCH_CACHE_DIR", Path.join(dir, "cache"))
     System.put_env("DEFK_BENCH_SCRIPT", script)
-    # quiet whatever the machine's load; the loaded case sets its own
-    System.put_env("DEFK_BENCH_QUIET_LOAD", "1.0e9")
+    # quiet whatever else runs; the loaded case sets its own
+    System.put_env("DEFK_BENCH_QUIET_CPU", "1.0e9")
     %{script: script, cache: Path.join(dir, "cache/ex.term")}
   end
 
@@ -83,6 +83,11 @@ defmodule Defk.BenchCacheTest do
     assert c["Examples.Kernels"] ==
              Base.encode16(:erlang.md5(Examples.Kernels.__defk_c_source__()), case: :lower)
 
+    assert %{"quiet" => true, "other_cpu" => [b, a], "limit" => 1.0e9, "waited_s" => 0} =
+             stamp["quiet"]
+
+    assert is_float(b) and is_float(a)
+
     System.put_env("DEFK_BENCH_COMMIT", "def5678")
     again = run([opts()])
     assert [%{"cache" => "reused", "stamp" => ^stamp}] = again.json
@@ -110,21 +115,60 @@ defmodule Defk.BenchCacheTest do
       Cache.read(cache)
       |> Map.update!("t", fn e -> %{e | key: "old", parts: %{e.parts | build: "old"}} end)
 
-    File.write!(cache, :erlang.term_to_binary(%{version: 2, entries: entries}))
+    File.write!(cache, :erlang.term_to_binary(%{version: 3, entries: entries}))
     again = run([opts()])
     assert again.timed > 0
     assert again.out =~ "changed: build"
   end
 
   test "a loaded run is not stored, so the next one measures again", %{cache: cache} do
-    System.put_env("DEFK_BENCH_QUIET_LOAD", "-1")
+    # never quiet, and no wait for it to settle
+    System.put_env("DEFK_BENCH_QUIET_CPU", "-1")
+    System.put_env("DEFK_BENCH_SETTLE_S", "0")
     first = run([opts()])
-    assert [%{"cache" => "not_stored"}] = first.json
+    assert [%{"cache" => "not_stored", "stamp" => %{"quiet" => %{"quiet" => false}}}] = first.json
     assert first.out =~ "not stored: not a quiet machine"
     refute File.exists?(cache)
 
-    System.put_env("DEFK_BENCH_QUIET_LOAD", "1.0e9")
+    System.put_env("DEFK_BENCH_QUIET_CPU", "1.0e9")
     assert run([opts()]).timed > 0
+  end
+
+  test "settle waits for the machine, at most DEFK_BENCH_SETTLE_S seconds" do
+    System.put_env("DEFK_BENCH_QUIET_CPU", "-1")
+    System.put_env("DEFK_BENCH_SETTLE_S", "2")
+    {us, {waited, cpu}} = :timer.tc(&Cache.settle/0)
+    assert waited >= 2 and us >= 2_000_000
+    assert is_float(cpu)
+
+    System.put_env("DEFK_BENCH_QUIET_CPU", "1.0e9")
+    assert {0, _} = Cache.settle()
+  end
+
+  test "other_cpu leaves out the bench's own processes" do
+    # a busy child of this OS process is the bench's own work
+    port = Port.open({:spawn_executable, "/bin/sh"}, args: ["-c", "while :; do :; done"])
+    {:os_pid, child} = Port.info(port, :os_pid)
+
+    try do
+      # ps averages %cpu, so give the loop time to show
+      Process.sleep(1500)
+      {out, 0} = System.cmd("ps", ["-o", "%cpu=", "-p", to_string(child)])
+      # Linux ps prints "100" for a whole number, macOS "100.0"
+      {pct, _} = Float.parse(String.replace(String.trim(out), ",", "."))
+      busy = pct / 100
+      assert busy > 0.5
+
+      own = Cache.other_cpu()
+      # the runner's tree: this OS process is outside a made-up runner's
+      System.put_env("DEFK_BENCH_RUNNER_PID", "999999999")
+      other = Cache.other_cpu()
+      assert other - own > busy / 2
+    after
+      # close first: once the loop is killed the port may already be gone
+      Port.close(port)
+      System.cmd("kill", [to_string(child)])
+    end
   end
 
   test "--fresh measures a stored report and stores it again" do
