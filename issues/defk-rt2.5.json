@@ -11,9 +11,15 @@
   "id": "defk-rt2.5",
   "labels": [],
   "parent": "defk-rt2",
+  "comments": [
+    {
+      "text": "PR #61: access/6; C and note texts unchanged; mix ci green (2294 passed).",
+      "timestamp": "2026-10-19T20:13:14Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "One element-access decision instead of three (store, load, word load)",
   "type": "task",
-  "updated_at": "2026-10-19T20:06:05Z"
+  "updated_at": "2026-10-19T20:13:14Z"
 }
