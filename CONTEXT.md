@@ -76,6 +76,10 @@ _Avoid_: bound (alone), constraint, invariant
 The trips a flat kernel loop runs between safepoints. A flagged strip defers its checks to one test at the strip's end so the body can vectorise; a failed test replays the strip from a snapshot with checking forms, raising where Elixir would.
 _Avoid_: chunk, tile, block (of iterations)
 
+**Error sink**:
+Where a kernel's failed check goes. By default it raises, as Elixir would. Inside a speculated select it sets the select's flag, and the arm taken is replayed with raising checks; inside a case guard it sets the guard's flags, and the clause fails or raises as Elixir would; inside a flagged strip it is deferred to the strip's end. The compiler lowers an expression under one sink at a time, so an operation emits the same check whichever way its failure is reported; the fast-path report names it on each kept check.
+_Avoid_: error mode, flag mode
+
 **Elixir mode**:
 A kernel compiled to plain Elixir instead of native code, for tests and debugging only. Its results define what the same code gives in Elixir, with the kernel subset's limits applied (a value that doesn't fit its type raises there too). It is never a fallback in production and never a baseline.
 _Avoid_: fallback, interpreter, pure mode

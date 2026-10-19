@@ -234,9 +234,15 @@ defmodule Defk.BitwiseTest do
   end
 
   test "bitwise expressions in if arms compile to a select" do
-    # only pick and pick_shift have if arms: the flagged forms are theirs
+    assert [{:select, _}] = notes(K, :pick, :branch)
+    assert [{:select, _}] = notes(K, :pick_shift, :branch)
+    # the arms' failures go to the select's flag
+    assert Enum.any?(notes(K, :pick, :check), fn {v, text} ->
+             v == :kept and text =~ "sets the select's flag"
+           end)
+
+    # the shifts' flagged forms (a shift's check has no report note)
     c = K.__defk_c_source__()
-    assert c =~ "defk_add_i64_s(&"
     assert c =~ "defk_bsr_i64_s(&"
     assert c =~ "defk_bsl_i64_s(&"
 

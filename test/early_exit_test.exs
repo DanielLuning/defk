@@ -380,8 +380,10 @@ defmodule Defk.EarlyExitTest do
         K.case_sel(big, 1)
       end
 
-      c = File.read!(String.replace_suffix(K.__defk_lib__(), ".so", ".c"))
-      assert c =~ "defk_mul_i64_s(&"
+      assert [{:select, _}] = notes(K, :case_sel, :branch)
+
+      assert [{:kept, text}] = for({:kept, _} = n <- notes(K, :case_sel, :check), do: n)
+      assert text =~ "sets the select's flag"
     end
 
     test "statement form" do
