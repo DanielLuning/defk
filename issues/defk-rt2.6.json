@@ -11,9 +11,15 @@
   "id": "defk-rt2.6",
   "labels": [],
   "parent": "defk-rt2",
+  "comments": [
+    {
+      "text": "PR #62: locals table at loop close + arrival/2; C unchanged; mix ci green (2294 passed).",
+      "timestamp": "2026-10-19T20:22:49Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "The emitter reads its liveness from a locals table, not from regex over the kernel's C",
   "type": "task",
-  "updated_at": "2026-10-19T20:15:47Z"
+  "updated_at": "2026-10-19T20:22:49Z"
 }
