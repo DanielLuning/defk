@@ -108,7 +108,14 @@ defmodule Defk.ProductFactsTest do
   use Defk.Properties
 
   import Defk.TestKit,
-    only: [bounds_check_free?: 2, eval_ops: 2, fits_i64?: 1, kernel_c: 2, kept_bounds: 2]
+    only: [
+      bounds_check_free?: 2,
+      bounds_proven?: 2,
+      eval_ops: 2,
+      fits_i64?: 1,
+      kernel_c: 2,
+      kept_bounds: 2
+    ]
 
   alias Defk.ProductFactsTest.K
 
@@ -128,8 +135,9 @@ defmodule Defk.ProductFactsTest do
 
   describe "a row-major index with a runtime row length" do
     test "the shape from div: no bounds or overflow check on m[r * dim + j]" do
+      assert bounds_proven?(K, :scores)
+      # end to end: the C calls no checked access
       assert bounds_check_free?(K, "scores")
-      assert kept(:scores) == []
       refute kernel_c(K, "scores") =~ ~r/defk_(add|mul)_i64\(ctx, v_r_/
 
       for {n, dim, extra} <- [{0, 1, 0}, {1, 1, 0}, {3, 4, 0}, {3, 4, 3}, {50, 7, 6}, {0, 5, 4}] do
@@ -146,7 +154,7 @@ defmodule Defk.ProductFactsTest do
     end
 
     test "the shape from a raising guard, length(m) == n * dim" do
-      assert bounds_check_free?(K, "scores_guarded")
+      assert bounds_proven?(K, :scores_guarded)
       refute kernel_c(K, "scores_guarded") =~ ~r/defk_(add|mul)_i64\(ctx, v_r_/
 
       for {n, dim} <- [{1, 1}, {3, 4}, {40, 9}] do
@@ -162,8 +170,7 @@ defmodule Defk.ProductFactsTest do
     end
 
     test "the PCM mixer's sum loop: no bounds check" do
-      assert bounds_check_free?(K, "sum_blocks")
-      assert kept(:sum_blocks) == []
+      assert bounds_proven?(K, :sum_blocks)
 
       for {n, m, held} <- [{1, 0, []}, {1, 3, [5]}, {4, 5, [1, 2]}, {3, 100, Enum.to_list(1..9)}],
           extra <- [0, 2] do
@@ -177,7 +184,7 @@ defmodule Defk.ProductFactsTest do
     end
 
     test "a divisor of either sign" do
-      assert bounds_check_free?(K, "row_sums")
+      assert bounds_proven?(K, :row_sums)
       m = G.pack(:i64, Enum.to_list(1..12))
 
       for d <- [@i64_min, -13, -5, -1, 1, 2, 5, 12, 13, @i64_max] do
@@ -188,7 +195,7 @@ defmodule Defk.ProductFactsTest do
     end
 
     test "column-major, through the product of the counter and the row count" do
-      assert bounds_check_free?(K, "col_sums")
+      assert bounds_proven?(K, :col_sums)
 
       for len <- [0, 1, 11, 12], d <- [1, 2, 5, 12, 13, 1000] do
         assert {:ok, _} = agrees(:col_sums, [G.pack(:i64, Enum.to_list(1..len//1)), d])

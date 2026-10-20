@@ -143,7 +143,14 @@ defmodule Defk.ConditionFactsTest do
   use Defk.Properties
 
   import Defk.TestKit,
-    only: [kernel_c: 2, bounds_check_free?: 2, kept_bounds: 2, eval_ops: 2, fits_i64?: 1]
+    only: [
+      kernel_c: 2,
+      bounds_check_free?: 2,
+      bounds_proven?: 2,
+      kept_bounds: 2,
+      eval_ops: 2,
+      fits_i64?: 1
+    ]
 
   alias Defk.ConditionFactsTest.K
 
@@ -161,8 +168,9 @@ defmodule Defk.ConditionFactsTest do
 
   describe "a raising guard and an if arm: a rolling window" do
     test "x[i - w] keeps no bounds check after a raise when w < 1" do
+      assert bounds_proven?(K, :rolling_diff)
+      # end to end: the C calls no checked access
       assert bounds_check_free?(K, "rolling_diff")
-      assert kept(:rolling_diff) == []
 
       for x <- [[], [1], [1, 2, 3], Enum.to_list(1..3000)], w <- [1, 2, 3, 5000, @i64_max] do
         assert {:ok, _} = agrees(:rolling_diff, [f64s(x), w])
@@ -186,7 +194,7 @@ defmodule Defk.ConditionFactsTest do
 
   describe "a range start and a raising guard: a shifted block" do
     test "acc[i - m], acc[i] and bufs[i] keep no bounds check with m >= 0" do
-      assert bounds_check_free?(K, "shift_add")
+      assert bounds_proven?(K, :shift_add)
 
       for {acc, bufs} <- [{[], []}, {[1, 2, 3], [4, 5]}, {Enum.to_list(1..3000), [7, 8, 9]}],
           m <- [0, 1, 2, 3, 4000, @i64_max] do
@@ -235,7 +243,7 @@ defmodule Defk.ConditionFactsTest do
 
   describe "conditions narrow" do
     test "the later arms of a cond, by the earlier conditions' negations" do
-      assert bounds_check_free?(K, "clamped_get")
+      assert bounds_proven?(K, :clamped_get)
       x = G.pack(:i64, [4, 5, 6])
 
       for k <- [@i64_min, -1, 0, 2, 3, @i64_max] do
@@ -244,7 +252,7 @@ defmodule Defk.ConditionFactsTest do
     end
 
     test "the rest of a for after its filters" do
-      assert bounds_check_free?(K, "filtered")
+      assert bounds_proven?(K, :filtered)
       x = G.pack(:i64, [1, 2, 3, 4])
 
       for w <- [@i64_min, -1, 0, 1, 4, 5, @i64_max] do
@@ -253,7 +261,7 @@ defmodule Defk.ConditionFactsTest do
     end
 
     test "the right side of an and" do
-      assert bounds_check_free?(K, "positive_at")
+      assert bounds_proven?(K, :positive_at)
       x = G.pack(:i64, [1, -2])
 
       for k <- [@i64_min, -1, 0, 1, 2, @i64_max] do
@@ -262,7 +270,7 @@ defmodule Defk.ConditionFactsTest do
     end
 
     test "the statements after an if whose else arm raises" do
-      assert bounds_check_free?(K, "checked_get")
+      assert bounds_proven?(K, :checked_get)
       x = G.pack(:i64, [1, -2])
 
       for k <- [0, 1], do: assert({:ok, _} = agrees(:checked_get, [x, k]))
@@ -273,7 +281,7 @@ defmodule Defk.ConditionFactsTest do
     end
 
     test "the body of a range that runs, by its start <= stop" do
-      assert bounds_check_free?(K, "first_sum")
+      assert bounds_proven?(K, :first_sum)
 
       for n <- [-1, 0, 1, 2, 300] do
         assert {:ok, _} = agrees(:first_sum, [n])

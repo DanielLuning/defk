@@ -32,10 +32,9 @@ defmodule Defk.Facts do
   # wraps); a case guard's checked arithmetic flags and computes on, so the
   # compiler drops its exact form (inexact/1). An i64 value whose C is a C
   # variable is that atom (eq/1). An atom's facts are its binding's, found
-  # in the scope the compiler passes (its env: atoms for i64 bindings by C
-  # variable, vars for arrays): a binding is assigned in one place, or is a
-  # loop counter or an accumulator, whose facts hold wherever the binding is
-  # in scope, and an array never changes length. A fact whose atom is out of
+  # in the scope (bind/2): a binding is assigned in one place, or is a loop
+  # counter or an accumulator, whose facts hold wherever the binding is in
+  # scope, and an array never changes length. A fact whose atom is out of
   # scope finds no binding and proves nothing (sound, if weak).
   #
   # The prover (le?/4) decides `form <= 0` by replacing the newest monomial
@@ -61,6 +60,7 @@ defmodule Defk.Facts do
   @i64_min -0x8000000000000000
   @i64_max 0x7FFFFFFFFFFFFFFF
   @len_max 2 ** 61 - 1
+  @max_u64 0xFFFFFFFFFFFFFFFF
 
   # the prover's step budget per query (one step: one monomial replaced);
   # measured on the suite and the examples, see docs/performance.md
@@ -104,6 +104,39 @@ defmodule Defk.Facts do
   # v without its exact form: a case guard's checked arithmetic, which
   # flags an overflow and computes on
   def inexact(v), do: put(v, %{facts(v) | eq: nil})
+
+  # ----------------------------------------------------------- the scope --
+  # The provers' index of the bindings in scope: each i64 or array binding's
+  # facts by its C variable, which is what an atom names ({:var, c},
+  # {:len, c}). The compiler's env carries it and it is lexical like the
+  # env; a binding's value keeps the same facts as its entry. An entry
+  # outlives a shadowing binding, as the C variable is assigned once where
+  # it is in scope.
+
+  def scope, do: %{}
+
+  # the scope with binding v's facts
+  def bind(scope, %{t: :i64, c: c} = v), do: Map.put(scope, c, facts(v))
+  def bind(scope, %{t: {:arr, _}, c: c} = v), do: Map.put(scope, c, facts(v))
+  def bind(scope, _v), do: scope
+
+  def facts_of(scope, c), do: Map.get(scope, c, %__MODULE__{})
+
+  # the scope where relation rel is true? (holds/2): each fact on its
+  # newest atom, in that atom's binding (a product's, in its newer
+  # factor's)
+  def narrow(scope, rel, true?) do
+    rel
+    |> holds(true?)
+    |> Enum.reduce(scope, fn d, scope ->
+      {x, kind, b} = narrowing(d)
+      c = binding_of(x)
+      Map.put(scope, c, with_fact(facts_of(scope, c), x, kind, b))
+    end)
+  end
+
+  defp binding_of({:mul, {_, c}, _}), do: c
+  defp binding_of({_, c}), do: c
 
   # ------------------------------------------------------------- queries --
   # lo/hi/len_lo are the raw constant bounds; lo_of/hi_of fold the relative
@@ -254,13 +287,13 @@ defmodule Defk.Facts do
   # comparison, and both sides of an `and` that holds or an `or` that does
   # not. A disjunction and `!=` give nothing; a constant form (a test that
   # is always or never true) gives nothing either.
-  def holds(nil, _true?), do: []
-  def holds({:not, x}, true?), do: holds(x, not true?)
-  def holds({:and, x, y}, true), do: holds(x, true) ++ holds(y, true)
-  def holds({:or, x, y}, false), do: holds(x, false) ++ holds(y, false)
-  def holds({op, _, _}, _true?) when op in [:and, :or], do: []
+  defp holds(nil, _true?), do: []
+  defp holds({:not, x}, true?), do: holds(x, not true?)
+  defp holds({:and, x, y}, true), do: holds(x, true) ++ holds(y, true)
+  defp holds({:or, x, y}, false), do: holds(x, false) ++ holds(y, false)
+  defp holds({op, _, _}, _true?) when op in [:and, :or], do: []
 
-  def holds({:cmp, op, a, b}, true?) do
+  defp holds({:cmp, op, a, b}, true?) do
     op = if true?, do: op, else: negated_op(op)
 
     case op do
@@ -295,56 +328,41 @@ defmodule Defk.Facts do
     end
   end
 
-  # the carrier (a binding of atom x, or of a product's newer factor) with
+  # the facts f (of atom x's binding, or of a product's newer factor's) with
   # the fact `kind`, `b` added; a narrowed bound comes first, as it is the
   # one the branch is about
-  def narrow(carrier, {:mul, _, y}, kind, b) do
-    f = facts(carrier)
-
-    put(
-      carrier,
-      case kind do
-        :lo -> %{f | mlbs: cap([{y, {1, form_const(b)}} | f.mlbs])}
-        :hi -> %{f | mubs: cap([{y, {1, form_const(b)}} | f.mubs])}
-        :lb -> %{f | mlbs: cap([{y, b} | f.mlbs])}
-        :ub -> %{f | mubs: cap([{y, b} | f.mubs])}
-      end
-    )
+  defp with_fact(f, {:mul, _, y}, kind, b) do
+    case kind do
+      :lo -> %{f | mlbs: cap([{y, {1, form_const(b)}} | f.mlbs])}
+      :hi -> %{f | mubs: cap([{y, {1, form_const(b)}} | f.mubs])}
+      :lb -> %{f | mlbs: cap([{y, b} | f.mlbs])}
+      :ub -> %{f | mubs: cap([{y, b} | f.mubs])}
+    end
   end
 
-  def narrow(carrier, {:var, _}, kind, b) do
-    f = facts(carrier)
-
-    put(
-      carrier,
-      case kind do
-        :lo -> %{f | lo: either(f.lo, b, &max/2)}
-        :hi -> %{f | hi: either(f.hi, b, &min/2)}
-        :lb -> %{f | lbs: cap([b | f.lbs])}
-        :ub -> %{f | ubs: cap([b | f.ubs])}
-      end
-    )
+  defp with_fact(f, {:var, _}, kind, b) do
+    case kind do
+      :lo -> %{f | lo: either(f.lo, b, &max/2)}
+      :hi -> %{f | hi: either(f.hi, b, &min/2)}
+      :lb -> %{f | lbs: cap([b | f.lbs])}
+      :ub -> %{f | ubs: cap([b | f.ubs])}
+    end
   end
 
-  def narrow(carrier, {:len, _}, kind, b) do
-    f = facts(carrier)
-
-    put(
-      carrier,
-      case kind do
-        :lo -> %{f | len_lo: either(f.len_lo, b, &max/2)}
-        :hi -> %{f | len_ubs: cap([{1, form_const(b)} | f.len_ubs])}
-        :lb -> %{f | len_lbs: cap([b | f.len_lbs])}
-        :ub -> %{f | len_ubs: cap([b | f.len_ubs])}
-      end
-    )
+  defp with_fact(f, {:len, _}, kind, b) do
+    case kind do
+      :lo -> %{f | len_lo: either(f.len_lo, b, &max/2)}
+      :hi -> %{f | len_ubs: cap([{1, form_const(b)} | f.len_ubs])}
+      :lb -> %{f | len_lbs: cap([b | f.len_lbs])}
+      :ub -> %{f | len_ubs: cap([b | f.len_ubs])}
+    end
   end
 
   # ------------------------------------------------------------- proving --
   # The only functions whose answers may drop a check. A proof carries its
   # support: the C variables of the atoms it reasoned about, which the
-  # flagged-strip classifier must see (ADR-0007). `scope` is the compiler's
-  # env: where an atom's facts are (atom_facts/2).
+  # flagged-strip classifier must see (ADR-0007). `scope` is where an
+  # atom's facts are (bind/2).
 
   # a value within lo..hi needs no i64 overflow check
   def prove_i64(lo, hi),
@@ -494,19 +512,8 @@ defmodule Defk.Facts do
   defp lookup(scope, a) do
     fn
       {:len, c} when a != nil and c == a.c -> facts(a)
-      m -> atom_facts(scope, m)
+      {_, c} -> facts_of(scope, c)
     end
-  end
-
-  # scope: the compiler's env, whose atoms map an i64 binding's C variable
-  # to its facts, and whose vars hold the array bindings
-  defp atom_facts(scope, {:var, c}), do: (scope[:atoms] || %{})[c] || %__MODULE__{}
-
-  defp atom_facts(scope, {:len, c}) do
-    Enum.find_value(scope[:vars] || %{}, %__MODULE__{}, fn
-      {_, %{c: ^c, t: {:arr, _}} = b} -> facts(b)
-      _ -> nil
-    end)
   end
 
   # Prove c * v + rest <= 0 for a value v (c = 1 or -1): v is replaced by
@@ -908,7 +915,12 @@ defmodule Defk.Facts do
     }
   end
 
-  # every value of a * b, with the bounds the relative facts give (lo_of, hi_of)
+  # every value of a + b, a - b and a * b, with the bounds the relative
+  # facts give (lo_of, hi_of)
+  def add_range(a, b), do: {add(lo_of(a), lo_of(b)), add(hi_of(a), hi_of(b))}
+
+  def sub_range(a, b), do: {add(lo_of(a), neg(hi_of(b))), add(hi_of(a), neg(lo_of(b)))}
+
   def mul_range(a, b), do: mul_bounds({lo_of(a), hi_of(a)}, {lo_of(b), hi_of(b)})
 
   defp mul_bounds({a1, a2}, {b1, b2})
@@ -1031,16 +1043,22 @@ defmodule Defk.Facts do
     end
   end
 
+  # a u64 shifted right by a literal k in 0..63
+  def u64_bsr_facts(a, k), do: %__MODULE__{lo: 0, hi: Bitwise.bsr(hi(a) || @max_u64, k)}
+
+  # bnot reverses the order: ~x = -x - 1
+  def bnot_facts(a), do: %__MODULE__{lo: bnot(hi(a)), hi: bnot(lo(a))}
+
   # 2^k - 1 for the bit length k of h >= 0: every value of at most k bits
   defp ones(h), do: Bitwise.bsl(1, length(Integer.digits(h, 2))) - 1
 
-  def bnot(x) when is_integer(x), do: -x - 1
-  def bnot(_), do: nil
+  defp bnot(x) when is_integer(x), do: -x - 1
+  defp bnot(_), do: nil
 
-  def add(x, y), do: both(x, y, &+/2)
+  defp add(x, y), do: both(x, y, &+/2)
 
-  def neg(x) when is_integer(x), do: -x
-  def neg(_), do: nil
+  defp neg(x) when is_integer(x), do: -x
+  defp neg(_), do: nil
 
   # a value's exact form as a bound, when it has atoms (a constant one is
   # its lo and hi)

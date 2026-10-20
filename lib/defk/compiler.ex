@@ -713,6 +713,7 @@ defmodule Defk.Compiler do
 
     env = %{
       vars: vars,
+      facts: Enum.reduce(vars, Facts.scope(), fn {_, b}, s -> Facts.bind(s, b) end),
       sigs: sigs,
       inlining: [{k.name, k.arity}],
       ret: k.ret,
@@ -921,7 +922,7 @@ defmodule Defk.Compiler do
   # A nested plain block binds into the scope around it, as in Elixir: `env`
   # is the block's env at its end, `outer` the env the block is nested in.
   defp leave(env, outer),
-    do: %{outer | vars: Copies.leave_block(env.vars, env.scope, outer.scope)}
+    do: %{outer | vars: Copies.leave_block(env.vars, env.scope, outer.scope), facts: env.facts}
 
   # a nested block's value, and the env with its bindings; any other expression
   # binds nothing
@@ -1280,15 +1281,10 @@ defmodule Defk.Compiler do
     end
   end
 
-  # an i64 binding's facts are also kept by its C variable (env.atoms), where
-  # the prover finds an atom's (Defk.Facts); it outlives a shadowing
-  # binding, as the variable is assigned once where it is in scope
+  # a binding's facts are also in the facts scope, where the prover finds an
+  # atom's (Facts.bind/2)
   defp put_var(env, name, v) do
-    env = %{env | vars: Map.put(env.vars, name, Map.put(v, :var, v.c))}
-
-    if v.t == :i64,
-      do: Map.put(env, :atoms, Map.put(env[:atoms] || %{}, v.c, Facts.facts(v))),
-      else: env
+    %{env | vars: Map.put(env.vars, name, Map.put(v, :var, v.c)), facts: Facts.bind(env.facts, v)}
   end
 
   defp tuple_items({a, b}), do: [a, b]
@@ -1395,7 +1391,7 @@ defmodule Defk.Compiler do
 
   defp copy_var(name, b, env) do
     {s, nb} = copied(b, name)
-    {s, %{env | vars: Map.put(env.vars, name, nb)}}
+    {s, %{env | vars: Map.put(env.vars, name, nb), facts: Facts.bind(env.facts, nb)}}
   end
 
   # {stmts, value}: array `a` copied into a buffer of the kernel's own, in
@@ -1518,7 +1514,7 @@ defmodule Defk.Compiler do
 
           {s, b} = copied(a, n)
           note(:copy, arr, :copied, "#{n} is copied before this write: #{copy_why(a)}")
-          {s, b, %{env | vars: Map.put(env.vars, n, b)}}
+          {s, b, %{env | vars: Map.put(env.vars, n, b), facts: Facts.bind(env.facts, b)}}
 
         _ ->
           {s, b} = copied(a, "arr")
@@ -2287,23 +2283,14 @@ defmodule Defk.Compiler do
   defp i64_arith(op, va, vb, node, env) do
     {fun, facts, {lo, hi}} =
       case op do
-        :+ ->
-          {"add", Facts.add_facts(va, vb),
-           {Facts.add(Facts.lo_of(va), Facts.lo_of(vb)),
-            Facts.add(Facts.hi_of(va), Facts.hi_of(vb))}}
-
-        :- ->
-          {"sub", Facts.sub_facts(va, vb),
-           {Facts.add(Facts.lo_of(va), Facts.neg(Facts.hi_of(vb))),
-            Facts.add(Facts.hi_of(va), Facts.neg(Facts.lo_of(vb)))}}
-
-        :* ->
-          {"mul", Facts.mul_facts(va, vb), Facts.mul_range(va, vb)}
+        :+ -> {"add", Facts.add_facts(va, vb), Facts.add_range(va, vb)}
+        :- -> {"sub", Facts.sub_facts(va, vb), Facts.sub_range(va, vb)}
+        :* -> {"mul", Facts.mul_facts(va, vb), Facts.mul_range(va, vb)}
       end
 
     v = Facts.put(val(nil, :i64), facts)
 
-    if Facts.prove_i64(lo, hi) or Facts.fits_i64?(v, env) do
+    if Facts.prove_i64(lo, hi) or Facts.fits_i64?(v, env.facts) do
       note_overflow(node, :dropped)
       %{v | c: "(#{va.c} #{op} #{vb.c})"}
     else
@@ -2576,7 +2563,8 @@ defmodule Defk.Compiler do
     {s, c}
   end
 
-  # a condition's statements and C, and what it says (Facts.holds/2)
+  # a condition's statements and C, and what it says (its relation, which
+  # Facts.narrow/3 reads)
   defp lower_test(cond, env) do
     {s, v} = lower_expr(cond, env)
     bool!(v, cond, "a condition")
@@ -3129,11 +3117,7 @@ defmodule Defk.Compiler do
   end
 
   defp bitwise_val(:bnot, [a], _args, _node, _env),
-    do:
-      Facts.assert(val("(~#{a.c})", :i64),
-        lo: Facts.bnot(Facts.hi(a)),
-        hi: Facts.bnot(Facts.lo(a))
-      )
+    do: Facts.put(val("(~#{a.c})", :i64), Facts.bnot_facts(a))
 
   defp bitwise_val(f, [a, b], _args, node, _env) when f in [:band, :bor, :bxor] do
     cop = %{band: "&", bor: "|", bxor: "^"}[f]
@@ -3151,10 +3135,7 @@ defmodule Defk.Compiler do
 
     case int_literal(n) do
       k when f == :bsr and is_integer(k) and k in 0..63 ->
-        Facts.assert(val("(#{a.c} >> #{k})", :u64),
-          lo: 0,
-          hi: Bitwise.bsr(Facts.hi(a) || @max_u64, k)
-        )
+        Facts.put(val("(#{a.c} >> #{k})", :u64), Facts.u64_bsr_facts(a, k))
 
       _ ->
         val("defk_#{f}_u64#{check(env, :ovf)}, #{a.c}, #{b.c})", :u64)
@@ -3615,11 +3596,8 @@ defmodule Defk.Compiler do
       end)
       |> Enum.unzip()
 
-    # The parameters' facts may name the caller's atoms, which stay in scope
-    # in the inlined body (env.atoms, see put_var/3).
-    atoms =
-      for {_, %{t: :i64, c: c} = b} <- vars, into: env[:atoms] || %{}, do: {c, Facts.facts(b)}
-
+    # The parameters' facts may name the caller's atoms, which stay in the
+    # facts scope in the inlined body (Facts.bind/2).
     # The callee's declared return type and returned fors: a rejected for in
     # the inlined body gets the hint the callee's own compile gives, since a
     # caller lowered first records the rejection (one per code and position).
@@ -3627,7 +3605,7 @@ defmodule Defk.Compiler do
     # callee (Copies.inline_call/3).
     cenv = %{
       vars: Map.new(vars),
-      atoms: atoms,
+      facts: Enum.reduce(vars, env.facts, fn {_, b}, s -> Facts.bind(s, b) end),
       sigs: env.sigs,
       inlining: [key | env.inlining],
       ret: k.ret,
@@ -5648,10 +5626,11 @@ defmodule Defk.Compiler do
   end
 
   # ---------------------------------------------------------- range facts --
-  # The lattice lives in Defk.Facts: what a value is known to
-  # satisfy, the derivations, and the proofs (in_bounds?, in_i64?) that drop
-  # checks. This file creates facts and asks those questions; it holds no
-  # fact algebra of its own.
+  # The lattice lives in Defk.Facts: what a value is known to satisfy, the
+  # derivations, the facts scope (env.facts) and the proofs (check,
+  # fits_i64?) that drop checks. This file creates facts, binds them
+  # (put_var/3) and asks those questions; it holds no fact algebra of its
+  # own.
 
   # A comparison's relation (Facts.relation/3), from i64 operands computed
   # without a check: a flagged strip computes on past a failed check, so a
@@ -5672,39 +5651,24 @@ defmodule Defk.Compiler do
   # through ctx (may_raise?/1)
   defp check_free?(%{c: c} = v), do: not may_raise?(v) and not (c =~ "defk_")
 
-  # `env` where relation `rel` is `true?` (Facts.holds/2): each fact on its
-  # newest atom, in that atom's binding (env.atoms and the i64 binding for a
-  # C variable, the array binding for a length), so a read of the binding
-  # and the prover both see it. The env is lexical: the facts end with the
-  # branch, filter or loop body they were made for.
+  # `env` where relation `rel` is `true?` (Facts.narrow/3): the facts
+  # scope, and the bindings whose facts it narrowed, so a read of the
+  # binding and the prover both see them. The env is lexical: the facts end
+  # with the branch, filter or loop body they were made for.
   defp narrow(env, rel, true?) do
-    rel
-    |> Facts.holds(true?)
-    |> Enum.reduce(env, fn d, env ->
-      {x, kind, b} = Facts.narrowing(d)
-      narrow_atom(env, x, kind, b)
-    end)
-  end
+    facts = Facts.narrow(env.facts, rel, true?)
 
-  # a product's fact goes on the binding of its newer factor
-  defp narrow_atom(env, {:mul, y, _} = x, kind, b), do: narrow_on(env, y, x, kind, b)
-  defp narrow_atom(env, x, kind, b), do: narrow_on(env, x, x, kind, b)
+    vars =
+      Map.new(env.vars, fn
+        {n, %{c: c} = v} = kv ->
+          f = Facts.facts_of(facts, c)
+          if f == Facts.facts_of(env.facts, c), do: kv, else: {n, Facts.put(v, f)}
 
-  defp narrow_on(env, {:var, c}, x, kind, b) do
-    atoms = env[:atoms] || %{}
-    f = Facts.facts(Facts.narrow(%{facts: atoms[c] || Facts.none()}, x, kind, b))
+        kv ->
+          kv
+      end)
 
-    Map.merge(env, %{atoms: Map.put(atoms, c, f), vars: narrow_vars(env.vars, c, x, kind, b)})
-  end
-
-  defp narrow_on(env, {:len, c}, x, kind, b),
-    do: %{env | vars: narrow_vars(env.vars, c, x, kind, b)}
-
-  defp narrow_vars(vars, c, x, kind, b) do
-    Map.new(vars, fn
-      {n, %{c: ^c} = v} -> {n, Facts.narrow(v, x, kind, b)}
-      kv -> kv
-    end)
+    %{env | facts: facts, vars: vars}
   end
 
   # A raising guard: the statements after `if c` see the condition of the
@@ -5760,7 +5724,7 @@ defmodule Defk.Compiler do
   # records its strip row (srec_proven/4); either verdict is noted
   # (note_bounds/4). The site keeps its own C templates for the two forms.
   defp access(kind, node, a, i, w, env) do
-    proven = Facts.check(a, i, w, env)
+    proven = Facts.check(a, i, w, env.facts)
     if match?({:proven, _}, proven), do: srec_proven(kind, a, i, proven)
     note_bounds(node, w, proven, {a, i, env})
     match?({:proven, _}, proven)
@@ -6341,7 +6305,7 @@ defmodule Defk.Compiler do
         {arr, idx} = {src_text(arr), src_text(idx)}
 
         named = fn h, what ->
-          case Facts.residual(a, i, w, h, env) |> hint_text(env) do
+          case Facts.residual(a, i, w, h, env.facts) |> hint_text(env) do
             nil -> what
             fact -> "#{what} (it would follow from #{fact})"
           end

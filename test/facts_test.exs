@@ -289,6 +289,50 @@ defmodule Defk.FactsTest do
              Facts.prove_in_bounds(a, Facts.put(%{c: "v_op_14"}, Facts.add_facts(three_j, three)))
   end
 
+  # ---------------------------------------------------------- the scope ----
+
+  test "the scope keeps an i64 or array binding's facts by its C variable" do
+    n = Facts.assert(%{t: :i64, c: "v_n_1"}, lo: 0, hi: 9)
+    a = Facts.assert(%{t: {:arr, :i64}, c: "p_a"}, len_lo: 3)
+    x = Facts.assert(%{t: :f64, c: "v_x_2"}, lo: 0)
+    scope = Facts.scope() |> Facts.bind(n) |> Facts.bind(a) |> Facts.bind(x)
+
+    assert Facts.facts_of(scope, "v_n_1") == Facts.facts(n)
+    assert Facts.facts_of(scope, "p_a") == Facts.facts(a)
+    assert Facts.facts_of(scope, "v_x_2") == Facts.none()
+    assert Facts.facts_of(scope, "v_y_3") == Facts.none()
+  end
+
+  test "a relation narrows its newest atom's binding, where the prover finds it" do
+    a = %{t: {:arr, :i64}, c: "p_a"}
+    k = %{t: :i64, c: "v_k_1"}
+    zero = Facts.assert(%{t: :i64, c: "0"}, lo: 0, hi: 0)
+    len = Facts.len_value(%{t: :i64, c: "(int64_t)p_a_len"}, a, true)
+    scope = Facts.scope() |> Facts.bind(a) |> Facts.bind(k)
+    assert {:unproven, :both} = Facts.check(a, k, 1, scope)
+
+    # 0 <= k and k < length(a)
+    rel = {:and, Facts.relation(:>=, k, zero), Facts.relation(:<, k, len)}
+    narrowed = Facts.narrow(scope, rel, true)
+    assert {:proven, support} = Facts.check(a, k, 1, narrowed)
+    assert "v_k_1" in support
+    assert Facts.facts_of(narrowed, "p_a") == Facts.facts_of(scope, "p_a")
+
+    # the negation of an and is a disjunction: nothing
+    assert Facts.narrow(scope, rel, false) == scope
+  end
+
+  test "a product's relation narrows the binding of its newer factor" do
+    m = %{t: {:arr, :f32}, c: "p_m"}
+    {r, d} = {%{t: :i64, c: "v_r_1"}, %{t: :i64, c: "v_d_2"}}
+    rd = Facts.put(%{t: :i64, c: "v_op_3"}, Facts.mul_facts(r, d))
+    len = Facts.len_value(%{t: :i64, c: "(int64_t)p_m_len"}, m, true)
+    scope = Facts.narrow(Facts.scope(), Facts.relation(:<=, rd, len), true)
+
+    assert Facts.facts_of(scope, "v_d_2") != Facts.none()
+    assert Facts.facts_of(scope, "v_r_1") == Facts.none()
+  end
+
   # ------------------------------------------------- the carry protocol ----
 
   property "weaken drops exactly what carries? reports" do
