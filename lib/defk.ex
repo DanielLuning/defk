@@ -452,7 +452,7 @@ defmodule Defk do
     # renamed, and the kernel's function passes the hint
     all_sigs = Enum.map(all_sigs, &Map.update!(&1, :yields, fn y -> adaptive? and y end))
 
-    if dump = System.get_env("DEFK_DUMP_C"), do: dump_c!(dump, env.module, c_src)
+    if dump = System.get_env("DEFK_DUMP_C"), do: dump_c!(dump, env.module, c_src, report)
 
     {report, placement} = library(env, c_src, report)
 
@@ -514,12 +514,19 @@ defmodule Defk do
   end
 
   # DEFK_DUMP_C=<dir>: every module compiled while it is set writes its
-  # generated C to <dir>/<Module>.c — the byte-identical gate for compiler
-  # refactors (dev/dump_c.exs). A pure side channel: the build
-  # and the module are unchanged.
-  defp dump_c!(dir, module, c_src) do
+  # generated C to <dir>/<Module>.c, and the compiler's report notes (the
+  # fast-path report before `report: :full` adds clang's) to
+  # <dir>/<Module>.report — the byte-identical gate for compiler refactors
+  # (dev/dump_c.exs). A pure side channel: the build and the module are
+  # unchanged.
+  defp dump_c!(dir, module, c_src, report) do
     File.mkdir_p!(dir)
     File.write!(Path.join(dir, "#{inspect(module)}.c"), c_src)
+
+    File.write!(
+      Path.join(dir, "#{inspect(module)}.report"),
+      Enum.map(report, &[inspect(&1, limit: :infinity, printable_limit: :infinity), "\n"])
+    )
   end
 
   # DEFK_COMPILE_TIME=<file>: every module compiled while it is set appends
