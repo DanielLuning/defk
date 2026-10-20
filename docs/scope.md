@@ -127,8 +127,10 @@ arrive in a minor release.
 
 Every compile error the compiler marks as planned:
 
+<!-- planned:start -->
 - [`bitstring-segment`](compile-errors.md#bitstring-segment): An append to a bitstring accumulator takes big-endian integer segments, unsigned or `signed`: `v::size(n)`, `v::k` or `v`.
 - [`bitstring-use`](compile-errors.md#bitstring-use): A bitstring accumulator starts from `<<>>`, is appended to (also in a kernel it is passed to), measured with `bit_size/1` and returned; nothing else.
+<!-- planned:end -->
 
 ## Under exploration: no promise either way
 
@@ -189,6 +191,7 @@ good say "not in the kernel subset" in the compile error.
 
 Every compile error the compiler marks as outside the kernel subset for good:
 
+<!-- subset:start -->
 - [`tuple-parameter`](compile-errors.md#tuple-parameter): Tuples are only for returning several values; a kernel takes its inputs as separate parameters.
 - [`clause-pattern`](compile-errors.md#clause-pattern): A clause parameter is an integer literal (i64), true/false (bool), a variable or _, each variable once, with an optional guard.
 - [`tuple-binding`](compile-errors.md#tuple-binding): A tuple is taken apart where it is bound: `{a, b} = ...`.
@@ -221,11 +224,12 @@ Every compile error the compiler marks as outside the kernel subset for good:
 - [`binary-literal`](compile-errors.md#binary-literal): A binary literal in a kernel is a string or <<...>> of integer bytes (0..255); anything else is built in Elixir.
 - [`raise-message`](compile-errors.md#raise-message): A kernel's `raise` message is a string literal, which may interpolate integers: no other computed value.
 - [`raise-module`](compile-errors.md#raise-module): A kernel raises ArgumentError, ArithmeticError or RuntimeError.
+<!-- subset:end -->
 
 ## Keeping this page true
 
 The two lists of compile errors are generated from `Defk.Errors` and checked
-by the test suite (maintainers: `docs/agents/generated-docs.md`). The tests
+by the docs task (maintainers: `docs/agents/generated-docs.md`). The tests
 also check that every planned code is named in the "Not yet" list with a
 ticket, and that every code named in "Won't be" is outside the subset for
 good. The example kernel above runs in native code and in Elixir mode in the

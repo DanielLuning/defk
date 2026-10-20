@@ -2,7 +2,8 @@ defmodule Defk.Examples.Tables do
   @moduledoc false
   # Renders the catalog's result tables from the stored scoreboard
   # (`Defk.Examples.Snapshot`) and the hand-written text in
-  # examples/_tables.exs, and writes them between marker comments:
+  # examples/_tables.exs; `mix defk.docs` (Defk.Docs) writes them between
+  # marker comments:
   #
   #   examples/README.md  <!-- scoreboard:start --> ... <!-- scoreboard:end -->
   #   README.md           <!-- summary:start --> ... <!-- summary:end -->
@@ -39,34 +40,6 @@ defmodule Defk.Examples.Tables do
       problems -> {:error, Enum.uniq(problems)}
     end
   end
-
-  @doc "`content` with the block between `marker`'s comments replaced by `block`."
-  def put(content, marker, block) do
-    case split(content, marker) do
-      {:ok, before, _old, after_} -> {:ok, before <> block <> after_}
-      :error -> {:error, "no #{start_tag(marker)} ... #{end_tag(marker)} pair"}
-    end
-  end
-
-  @doc "The block between `marker`'s comments in `content`, or `:error`."
-  def get(content, marker) do
-    case split(content, marker) do
-      {:ok, _, old, _} -> {:ok, old}
-      :error -> :error
-    end
-  end
-
-  defp split(content, marker) do
-    with [before, rest] <- String.split(content, start_tag(marker) <> "\n", parts: 2),
-         [old, after_] <- String.split(rest, end_tag(marker), parts: 2) do
-      {:ok, before <> start_tag(marker) <> "\n", old, end_tag(marker) <> after_}
-    else
-      _ -> :error
-    end
-  end
-
-  defp start_tag(marker), do: "<!-- #{marker}:start -->"
-  defp end_tag(marker), do: "<!-- #{marker}:end -->"
 
   # ---- the snapshot ---------------------------------------------------
 

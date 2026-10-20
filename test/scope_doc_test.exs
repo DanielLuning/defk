@@ -1,9 +1,9 @@
 defmodule Defk.ScopeDocTest do
-  # docs/scope.md, the scope page: its two lists of compile errors are the
-  # registry's text (Defk.Errors.scope/1), the hand-written "Not yet" list
-  # names every planned code (its tickets live in the tracker, not on this
-  # user page), the hand-written "Won't be" list
-  # names only codes outside the subset for good. Its links are checked in
+  # docs/scope.md, the scope page: the hand-written "Not yet" list names
+  # every planned code (its tickets live in the tracker, not on this user
+  # page), the hand-written "Won't be" list names only codes outside the
+  # subset for good. That its two generated lists are the registry's text
+  # is `mix defk.docs --check` (Defk.Docs). Its links are checked in
   # test/docs_checks_test.exs, and its example kernel runs in
   # test/language_doc_examples_test.exs.
   use ExUnit.Case, async: true
@@ -36,26 +36,6 @@ defmodule Defk.ScopeDocTest do
   end
 
   defp codes(kind), do: for(%{kind: ^kind, code: code} <- Defk.Errors.entries(), do: code)
-
-  # the generated list of a section: from the blank line after "Every compile
-  # error the compiler marks ..." to the next blank line
-  defp generated(doc, title) do
-    [_, after_intro] =
-      String.split(section(doc, title), "\nEvery compile error the compiler marks", parts: 2)
-
-    [_, rest] = String.split(after_intro, "\n\n", parts: 2)
-    [list | _] = String.split(rest, "\n\n", parts: 2)
-    String.trim_trailing(list, "\n") <> "\n"
-  end
-
-  # the whole list, not just a match inside it: a stray line pasted with the
-  # output (mix run's "Compiling N files (.ex)") fails here
-  test "the generated lists are the registry's text and nothing else", %{doc: doc} do
-    for {kind, title} <- [planned: "Not yet: planned", subset: "Won't be: by design"] do
-      assert generated(doc, title) == Defk.Errors.scope(kind),
-             "regenerate with: mix run -e 'IO.write(Defk.Errors.scope(#{inspect(kind)}))'"
-    end
-  end
 
   test "\"Not yet\" names every planned code", %{doc: doc} do
     text = hand_written(doc, "Not yet: planned")

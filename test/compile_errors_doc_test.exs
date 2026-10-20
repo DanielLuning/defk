@@ -1,8 +1,9 @@
 defmodule Defk.CompileErrorsDocTest do
   # docs/compile-errors.md, the error catalogue: every error code
   # has its anchor (the compile error footer links <page>#<code>), and the
-  # "Codes" section with the "Retired" section after it are the registry's
-  # text. Its links are checked in test/docs_checks_test.exs.
+  # "Codes" section with the "Retired" section after it hold one heading
+  # per code. That their text is the registry's is `mix defk.docs --check`
+  # (Defk.Docs); the links are checked in test/docs_checks_test.exs.
   use ExUnit.Case, async: true
 
   import Defk.LanguageDoc, only: [headings: 1, anchors: 1]
@@ -11,12 +12,6 @@ defmodule Defk.CompileErrorsDocTest do
 
   setup_all do
     %{doc: File.read!(@doc_path)}
-  end
-
-  # the generated part: from the "Codes" heading to the end of the file
-  defp generated(doc) do
-    [_, rest] = String.split(doc, ~r/^## Codes$/m, parts: 2)
-    rest
   end
 
   # the text of the `## <title>` section, up to the next ## heading
@@ -52,12 +47,5 @@ defmodule Defk.CompileErrorsDocTest do
     for %{code: code} <- Defk.Errors.entries() do
       assert code =~ ~r/^[a-z0-9]+(-[a-z0-9]+)*$/, "code #{inspect(code)} is not a plain slug"
     end
-  end
-
-  # the whole generated part, not just a match inside it: a stray line pasted
-  # with the output (mix run's "Compiling N files (.ex)") fails here
-  test "the Codes and Retired sections are the registry's text and nothing else", %{doc: doc} do
-    assert generated(doc) == "\n\n" <> Defk.Errors.reference(),
-           "regenerate with: mix run -e 'IO.write(Defk.Errors.reference())' (docs/agents/generated-docs.md)"
   end
 end

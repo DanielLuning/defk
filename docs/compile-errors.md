@@ -12,7 +12,7 @@ Each entry gives the code's summary, its kind, the default why and hint (an
 error may say more about your code), and a failing example with the rewrite;
 the test suite checks that each example is rejected with its code and each
 rewrite compiles. The entries are generated from the registry in
-`lib/defk/errors.ex` and checked by the test suite (maintainers:
+`lib/defk/errors.ex` by the docs task (maintainers:
 `docs/agents/generated-docs.md`). A code whose construct became valid is
 retired, never removed or reused: the retired codes close the page, under
 [Retired](#retired).
@@ -22,6 +22,7 @@ anchor `#<code>` is the same on GitHub and on HexDocs.
 
 ## Codes
 
+<!-- codes:start -->
 ### kernel-head
 
 A kernel head is `name(arg :: type, ...) :: return_type`.
@@ -1983,3 +1984,4 @@ A kernel that returns a tuple is called from Elixir only.
 Arrays are not accumulators; allocate the array before the loop and write it in the body.
 
 - retired in 0.0.1: an owned array is threaded through a reduce accumulator
+<!-- codes:end -->

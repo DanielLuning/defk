@@ -158,7 +158,7 @@ loop.
 
 Every construct the compiler rejects for good, with the code of its error:
 
-<!-- generated: mix run -e 'IO.write(Defk.Errors.scope(:subset, :hexdocs))' -->
+<!-- subset-hexdocs:start -->
 - [`tuple-parameter`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#tuple-parameter): Tuples are only for returning several values; a kernel takes its inputs as separate parameters.
 - [`clause-pattern`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#clause-pattern): A clause parameter is an integer literal (i64), true/false (bool), a variable or _, each variable once, with an optional guard.
 - [`tuple-binding`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#tuple-binding): A tuple is taken apart where it is bound: `{a, b} = ...`.
@@ -191,4 +191,4 @@ Every construct the compiler rejects for good, with the code of its error:
 - [`binary-literal`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#binary-literal): A binary literal in a kernel is a string or <<...>> of integer bytes (0..255); anything else is built in Elixir.
 - [`raise-message`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#raise-message): A kernel's `raise` message is a string literal, which may interpolate integers: no other computed value.
 - [`raise-module`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#raise-module): A kernel raises ArgumentError, ArithmeticError or RuntimeError.
-<!-- end generated -->
+<!-- subset-hexdocs:end -->

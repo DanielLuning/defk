@@ -10,7 +10,7 @@ defmodule Defk.Messages do
   #   * `header/0` renders `priv/defk_messages.h`, one `DEFK_MSG_<NAME>`
   #     define per entry with each hole as its C conversion (`%lld`, `%s`,
   #     ...). The runtime header's raise sites use the defines, never a
-  #     literal. `mix defk.messages` writes the file; `test/messages_test.exs`
+  #     literal. `mix defk.docs` writes the file; `test/messages_test.exs`
   #     fails when it is out of date.
   #   * `text/2`, a macro, gives Elixir mode (`Defk.ElixirMode.Ops`,
   #     `Defk.Bits`) the template as a compile-time interpolation, so a site
@@ -249,7 +249,7 @@ defmodule Defk.Messages do
     """
     /*
      * The runtime's error messages, generated from Defk.Messages
-     * (lib/defk/messages.ex) by `mix defk.messages`: do not edit. Each define
+     * (lib/defk/messages.ex) by `mix defk.docs`: do not edit. Each define
      * is a printf format; the runtime header passes it to defk_fail with the
      * values of its holes.
      */

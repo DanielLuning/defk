@@ -3,8 +3,9 @@ defmodule Defk.UsageRulesTest do
   # `mix usage_rules.sync` copies into their AGENTS.md or skills. They are a
   # condensed view of the docs, so these checks keep them from drifting:
   #
-  #   - each generated list is the registry's text (Defk.Errors.scope/2)
   #   - each row of the main file's rewrite table is a row of the cheatsheet's
+  #     (that each generated list is the registry's text is
+  #     `mix defk.docs --check`, Defk.Docs)
   #   - every link is a URL (the rules are read inside another project), a
   #     HexDocs one names this version, an extra and a heading of it
   #   - no ticket ids or ADRs: the rules are for users
@@ -21,29 +22,6 @@ defmodule Defk.UsageRulesTest do
 
   setup_all do
     %{rules: Map.new(LanguageDoc.usage_rules(), &{&1, File.read!(&1)})}
-  end
-
-  # {kind, text} of each generated block: the lines between
-  # `<!-- generated: ... Defk.Errors.scope(:kind, :hexdocs) ... -->` and
-  # `<!-- end generated -->`
-  defp generated(text) do
-    for [_, kind, list] <-
-          Regex.scan(
-            ~r/<!-- generated: [^\n]*Defk\.Errors\.scope\(:(\w+), :hexdocs\)[^\n]* -->\n(.*?)<!-- end generated -->/s,
-            text
-          ),
-        do: {String.to_existing_atom(kind), list}
-  end
-
-  test "the generated lists are the registry's text", %{rules: rules} do
-    blocks = for {path, text} <- rules, {kind, list} <- generated(text), do: {path, kind, list}
-
-    for {path, kind, list} <- blocks do
-      assert list == Defk.Errors.scope(kind, :hexdocs),
-             "#{path}: regenerate with mix run -e 'IO.write(Defk.Errors.scope(#{inspect(kind)}, :hexdocs))'"
-    end
-
-    assert Enum.sort(for {_, kind, _} <- blocks, do: kind) == [:planned, :subset]
   end
 
   # the first two cells of each body row of the table under `heading`

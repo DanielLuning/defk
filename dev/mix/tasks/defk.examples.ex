@@ -39,7 +39,7 @@ defmodule Mix.Tasks.Defk.Examples do
   run's commit and load before and after. With `--all` it replaces the file;
   with `--only` it replaces those examples' rows and keeps the others, which
   must come from the same machine. That file is the one source of the
-  catalog's numbers; `mix defk.examples.tables` rewrites the README tables
+  catalog's numbers; `mix defk.docs` rewrites the README tables
   from it. It is written only when every example behaves as claimed.
 
   **`--stale`** reports the rows of examples/scoreboard.json whose kernels'
@@ -319,7 +319,7 @@ defmodule Mix.Tasks.Defk.Examples do
 
     IO.puts(
       "stored #{length(new["examples"])} row(s) in #{Path.relative_to_cwd(Snapshot.path())}" <>
-        loaded_note(loaded) <> "; run mix defk.examples.tables to rewrite the README tables"
+        loaded_note(loaded) <> "; run mix defk.docs to rewrite the README tables"
     )
   end
 
