@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-o08",
+  "comments": [
+    {
+      "text": "PR #72: guard 'if w \u003c 1 or w \u003e n' in mean_std; report 3 -\u003e 0 kept bounds checks; non_finite_test's mixed-error case on an unguarded copy; mix ci green.",
+      "timestamp": "2026-10-20T12:42:53Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "rolling_stats mean_std: a raising guard on w, so x[i - w] and the out writes drop their checks",
   "type": "task",
-  "updated_at": "2026-10-20T12:36:24Z"
+  "updated_at": "2026-10-20T12:42:53Z"
 }
