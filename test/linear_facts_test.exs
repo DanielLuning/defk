@@ -104,7 +104,7 @@ defmodule Defk.LinearFactsTest do
   use ExUnit.Case, async: true
   use Defk.Properties
 
-  import Defk.TestKit, only: [kernel_c: 2, bounds_check_free?: 2]
+  import Defk.TestKit, only: [kernel_c: 2, bounds_check_free?: 2, bounds_proven?: 2]
 
   alias Defk.LinearFactsTest.K
 
@@ -113,14 +113,16 @@ defmodule Defk.LinearFactsTest do
   @i64_min -0x8000000000000000
   @i64_max 0x7FFFFFFFFFFFFFFF
 
-  defp check_free?(name), do: bounds_check_free?(K, name)
+  defp proven?(kernel), do: bounds_proven?(K, kernel)
 
   defp agrees(fun, args),
     do: Defk.Test.assert_agrees(K, fun, args, forced_yields: true)
 
   describe "alloc(e, n) has length n" do
     test "out[i], a[i] and b[i] keep no bounds check for n = min(length(a), length(b))" do
-      assert check_free?("mix2")
+      assert proven?(:mix2)
+      # end to end: the C calls no checked access
+      assert bounds_check_free?(K, "mix2")
 
       for {a, b} <- [{[], []}, {[2], []}, {[1, 3, -5], [3, 1]}, {Enum.to_list(1..3000), [7]}] do
         {a, b} = {G.pack(:i16, a), G.pack(:i16, b)}
@@ -131,7 +133,7 @@ defmodule Defk.LinearFactsTest do
 
   describe "a block at a variable offset" do
     test "bufs[base + i] and sums[i] keep no bounds check, and base + i no overflow check" do
-      assert check_free?("add_blocks")
+      assert proven?(:add_blocks)
       refute kernel_c(K, "add_blocks") =~ ~r/defk_add_i64\([^;]*v_base_\d+ *,/
       assert kernel_c(K, "add_blocks") =~ ~r/\(v_base_\d+ \+ v_i_\d+\)/
     end
@@ -153,7 +155,7 @@ defmodule Defk.LinearFactsTest do
 
   describe "a range counting down" do
     test "out[n - 1 - i] and a[i] keep no bounds check" do
-      assert check_free?("reverse")
+      assert proven?(:reverse)
 
       for a <- [[], [1], [1, 2, 3], Enum.to_list(1..3000)] do
         assert {:ok, _} = agrees(:reverse, [G.pack(:i64, a)])
@@ -161,7 +163,7 @@ defmodule Defk.LinearFactsTest do
     end
 
     test "a step of -2 from min(k, length(a) - 1) keeps no bounds check" do
-      assert check_free?("odd_down")
+      assert proven?(:odd_down)
       a = G.pack(:i64, [1, 2, 3, 4, 5])
 
       for k <- [@i64_min, -1, 0, 1, 2, 4, 5, 100, @i64_max] do
@@ -172,7 +174,7 @@ defmodule Defk.LinearFactsTest do
 
   describe "the value of a branch" do
     test "keeps the bound every arm shares" do
-      assert check_free?("head")
+      assert proven?(:head)
 
       for flag <- [0, 1], {a, b} <- [{[], []}, {[1, 2], [5]}, {[1, 2, 3], [4, 5, 6, 7]}] do
         assert {:ok, _} = agrees(:head, [G.pack(:i64, a), G.pack(:i64, b), flag])
@@ -194,7 +196,7 @@ defmodule Defk.LinearFactsTest do
 
   describe "an offset argument" do
     test "a[x + i] keeps no bounds check, and x + i no overflow check" do
-      assert check_free?("window")
+      assert proven?(:window)
       refute kernel_c(K, "window") =~ "defk_add_i64(ctx, v_x"
 
       for x <- [@i64_min, -1, 0, 1, 3, 7, 8, @i64_max] do

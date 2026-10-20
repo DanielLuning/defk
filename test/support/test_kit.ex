@@ -122,6 +122,16 @@ defmodule Defk.TestKit do
   @doc "The texts of kernel `name`'s kept bounds checks."
   def kept_bounds(mod, name), do: for({:kept, text} <- notes(mod, name, :bounds), do: text)
 
+  @doc """
+  The prover dropped every bounds check of kernel `name` in `mod`: its
+  report has bounds notes, and each one is :dropped. The decision, where
+  bounds_check_free?/2 reads the C.
+  """
+  def bounds_proven?(mod, name) do
+    verdicts = for {verdict, _} <- notes(mod, name, :bounds), do: verdict
+    verdicts != [] and Enum.all?(verdicts, &(&1 == :dropped))
+  end
+
   # ------------------------------------------------ soundness properties --
   # The range-fact soundness properties compile generated kernels and check
   # each dropped check against the arithmetic, evaluated here.
