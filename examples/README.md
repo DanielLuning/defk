@@ -43,7 +43,7 @@ script tried and what to take from it; the numbers behind them are in each
 script's header.
 
 <!-- scoreboard:start -->
-Measured on Apple M4 Pro (12 logical cores) in 4 runs, from 2026-10-19 to 2026-10-20. The newest at commit `71e29777`, OTP 29.0.3, Elixir 1.20.2: `mix defk.examples --bench --only tape_csv --snapshot --fresh`. A quiet measurement: other processes used at most 1.0 cores before and after it. A row from an earlier run says when it was measured, and at which commit.
+Measured on Apple M4 Pro (12 logical cores) in 5 runs, from 2026-10-19 to 2026-10-20. The newest at commit `3602f17d`, OTP 29.0.3, Elixir 1.20.2: `mix defk.examples --bench --only threshold_cross --snapshot --fresh`. A quiet measurement: other processes used at most 1.0 cores before and after it. A row from an earlier run says when it was measured, and at which commit.
 
 | | Example | The job | defk vs best Elixir | vs the package's NIF | In one line |
 |---|---|---|---|---|---|
@@ -69,8 +69,9 @@ Measured on Apple M4 Pro (12 logical cores) in 4 runs, from 2026-10-19 to 2026-1
 | ✅ | [`geo_nearest`](geo_nearest.exs) (measured 2026-10-19 at `8fa900b7`) | 10 nearest of 500k locations | **3.2×** | – | 14× in one process; a grid prefilter helps both sides |
 | ✅ | [`numeric_loader`](numeric_loader.exs) (measured 2026-10-20 at `0d6e7c78`) | numeric CSV of 26 MB into packed f64s | **2.7×** | – | a JSON array of numbers 4.0×; a fixed number grammar, and NimbleCSV or Jason for anything else |
 | ✅ | [`cdcl_sat_per_call`](cdcl_sat_per_call.exs) (measured 2026-10-19 at `8fa900b7`) | one SAT solve per call, 26–28 vars | **2.6×** | 1.6× picosat | ≈1× on tiny formulas; batch the solves when one question makes several |
+| ✅ | [`threshold_cross`](threshold_cross.exs) | first packet past a byte budget, 64k packets | **2.5×** | 13× Nx + EXLA `while` | EXLA costs ~40 µs a call and scales 1.9× over 48 callers; Elixir beats it up to ~1M packets |
 | ✅ | [`gorilla_encode`](gorilla_encode.exs) (measured 2026-10-19 at `684a3592`) | Gorilla encoding of 100-point blocks | **2.4×** | 4.2× gorilla_stream's NIF | close to the bar at this size; 4.1× at 1M points |
-| ✅ | [`tape_csv`](tape_csv.exs) | CSV of 20 MB to NimbleCSV's rows, a fresh process per parse | **2.1×** | 0.38× rusty_csv | in a long-lived process 0.8–2.1× run to run; an [i64] tape of field events is slower than the cleaned copy |
+| ✅ | [`tape_csv`](tape_csv.exs) (measured 2026-10-20 at `71e29777`) | CSV of 20 MB to NimbleCSV's rows, a fresh process per parse | **2.1×** | 0.38× rusty_csv | in a long-lived process 0.8–2.1× run to run; an [i64] tape of field events is slower than the cleaned copy |
 | ✅ | [`fuzzy_search/`](fuzzy_search) | a search service over 234k words behind Bandit | its own measurement, see its README | – | Myers on both sides; `/health` latency stays at Elixir's while a blocking NIF raises it |
 | 🟡 | [`batched_levenshtein`](batched_levenshtein.exs) (measured 2026-10-19 at `8fa900b7`) | one query against 234k words, 12 chunks each side | 1.5× | 13× ex_strsim per pair | Myers bit-parallel in plain Elixir is close; use it |
 | 🟡 | [`ws_masking`](ws_masking.exs) (measured 2026-10-19 at `8fa900b7`) | mask 125-byte WebSocket frames | 1.5× | 1.2× bandit_native | the call is the cost; 3.4× at 1 MiB, crossover 1024 B |

@@ -42,10 +42,10 @@
 #   1M         249       91-92   319-344     1333-1341  1896-2355
 #   16M        4336-4467 1473-1478 4272-4359 24780-25650 41807-48137
 #
-#   The report, 64k packets (realistic size: a few seconds of traffic):
-#   Elixir 0.017 ms, defk 0.006 ms (2.8x, good), EXLA while 0.07 ms (defk
-#   11.7x). Ticker gap on one scheduler while 16M packets are summed: about
-#   2 ms on every side (the floor under load): Elixir is preempted, the
+#   The report, 64k packets, best of 15 in four runs (the last stored, quiet):
+#   Elixir 0.015-0.031 ms, defk 0.006-0.009 ms (2.5-3.4x, good), EXLA while
+#   0.07-0.12 ms (defk 11.7-13.2x). Ticker gap on one scheduler, 16M packets:
+#   about 2 ms on every side (the floor under load): Elixir is preempted, the
 #   kernel yields, EXLA runs on a dirty scheduler.
 #
 # Crossovers: the kernel is faster than EXLA at every size, from 790x at 16
