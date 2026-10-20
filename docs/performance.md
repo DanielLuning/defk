@@ -722,7 +722,7 @@ if g(st, olval + g(st, owblock + node)) == 1, do: walk(st, fl, node, nxt, o)
 # slow: clauses as lists rewritten per assignment (DPLL), or a tuple per table
 ```
 
-### 2.18 Numeric CSV and JSON into packed f64s: match bytes and append to one binary; a fused kernel is still 2.7-4.3x faster
+### 2.18 Numeric CSV and JSON into packed f64s: match bytes and append to one binary; a fused kernel is still 2.7-4x faster
 
 To load numbers into packed f64s, the fastest Elixir we found parses the
 digits itself with binary matching (a mantissa and a power of ten, one
@@ -733,11 +733,11 @@ appends each f64 to one binary. Building on the library's terms costs more.
   `String.to_float` 788-845 ms; `:binary.split` + `binary_to_float`
   385-403 ms; `:binary.match` for each delimiter + `binary_to_float` 324 ms;
   binary matching with an iolist of 8-byte binaries 199-265 ms, appending
-  to one binary 138.8-142.3 ms. NimbleCSV's own iolist was about 2x faster
-  than appending there. The kernel (two passes) 50.5-53.0 ms: 2.68-2.75x.
+  to one binary 138.8-143.7 ms. NimbleCSV's own iolist was about 2x faster
+  than appending there. The kernel (two passes) 50.5-53.0 ms: 2.68-2.78x.
   JSON, 2.2 MB (153,600 floats): Jason + pack 26.2-27.5 ms, OTP's
   `:json` + pack 16.4-16.8 ms, binary matching 13.7-17.1 ms (best of 15:
-  9.0-9.1 ms); the kernel 2.08-2.34 ms: 3.90-4.32x.
+  9.0-12.4 ms, as GC lands or not); the kernel 2.08-2.34 ms: 3.90-5.87x.
 - **Two passes are cheap:** counting the rows (newlines) or values (commas)
   first and parsing into one alloc costs 6% (CSV) and 11% (JSON) of the
   kernel's time, so the loader needs no growable output. The count loop
@@ -745,7 +745,7 @@ appends each f64 to one binary. Building on the library's terms costs more.
   12.9 ms instead of 2.8.
 - **Kernel shape:** one byte-at-a-time state machine beat a loop over the
   fields with an `Enum.reduce_while` per field's digits by 15%.
-- **Conditions:** M-series Mac, five runs; the last passed the quiet test.
+- **Conditions:** M-series Mac, eight runs; the last passed the quiet test.
 - **Source:** [`numeric_loader.exs`](https://github.com/DanielLuning/defk/blob/main/examples/numeric_loader.exs), `defk-9p6.21`.
 - **Status:** measured (the last run); the variant lines provisional.
 

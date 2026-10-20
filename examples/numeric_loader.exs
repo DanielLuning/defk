@@ -76,26 +76,26 @@
 # loader's limits).
 #
 # Measured (M-series Mac, OTP 29, Elixir 1.20, 2026-10-20; the reports
-# best of 15 in five runs, three of them through mix defk.examples; the
+# best of 15 in eight runs, six of them through mix defk.examples; the
 # variant lines best of 5 in the two direct runs). The last stored run
 # passed the quiet test for both reports (other processes 0.3-0.6 cores);
 # the CSV numbers of the others are provisional (up to 1.9 cores after).
 #
 #   CSV, 26 MB      E1 788-845 ms, E2 385-403 ms, E3 (best of 15)
-#                   138.8-142.3 ms; defk 50.5-53.0 ms
-#                   (pass 1 2.8-2.9 ms)                 2.68-2.75x  good
-#                   Sweep 4k rows 2.8-3.2x, 40k 2.7-3.1x, 1.6M 2.75-3.15x.
+#                   138.8-143.7 ms; defk 50.5-53.0 ms
+#                   (pass 1 2.8-2.9 ms)                 2.68-2.78x  good
+#                   Sweep 4k rows 2.8-3.5x, 40k 2.7-3.1x, 1.6M 2.75-3.2x.
 #                   Slicing one column out of the packed result in Elixir:
 #                   2.9-3.4 ms.
 #   JSON, 2.2 MB    J1 26.2-27.5 ms, J2 16.4-16.8 ms, J3 13.7-17.1 ms
-#                   (best of 15: 9.0-9.1 ms, median 17.8-19.7; the best is
-#                   a rare run without a GC); defk 2.08-2.34 ms
-#                                                       3.90-4.32x  good
-#                   Sweep (three runs, best of 3, noisy) 1 vector 7.4-7.9x,
-#                   10 vectors 4.1-8.3x, 1000 vectors (22 MB) 4.0-4.1x.
+#                   (best of 15: 9.0-12.4 ms, median 17.8-19.8; the best
+#                   is a rare run without a GC); defk 2.08-2.34 ms
+#                                                       3.90-5.87x  good
+#                   Sweep (five runs, best of 3, noisy) 1 vector 7.4-9.0x,
+#                   10 vectors 4.1-11.4x, 1000 vectors (22 MB) 4.0-5.5x.
 #
 # Recommendation: to load numeric CSV or JSON number arrays into packed
-# values, a fused kernel is 2.7x (CSV) and 3.9-4.3x (JSON) faster than the
+# values, a fused kernel is 2.7x (CSV) and 3.9-5.9x (JSON) faster than the
 # best Elixir, and 15-16x NimbleCSV with String.to_float. Write the grammar
 # down and reject the rest. For anything with quotes, strings, mixed types or
 # a tree, NimbleCSV and Jason (or :json) stay the tools: the product is

@@ -43,7 +43,7 @@ script tried and what to take from it; the numbers behind them are in each
 script's header.
 
 <!-- scoreboard:start -->
-Measured on Apple M4 Pro (12 logical cores) in 2 runs, on 2026-10-19. The newest at commit `684a3592`, OTP 29.0.3, Elixir 1.20.2: `mix defk.examples --bench --only codecs,gorilla_encode,monte_carlo_rtp,sort_u64_keys --snapshot`. A quiet measurement: other processes used at most 1.0 cores before and after it. A row from an earlier run says when it was measured, and at which commit.
+Measured on Apple M4 Pro (12 logical cores) in 3 runs, from 2026-10-19 to 2026-10-20. The newest at commit `0d6e7c78`, OTP 29.0.3, Elixir 1.20.2: `mix defk.examples --bench --only numeric_loader --snapshot --fresh`. A quiet measurement: other processes used at most 1.0 cores before and after it. A row from an earlier run says when it was measured, and at which commit.
 
 | | Example | The job | defk vs best Elixir | vs the package's NIF | In one line |
 |---|---|---|---|---|---|
@@ -61,14 +61,15 @@ Measured on Apple M4 Pro (12 logical cores) in 2 runs, on 2026-10-19. The newest
 | ✅ | [`byte_histogram`](byte_histogram.exs) (measured 2026-10-19 at `8fa900b7`) | histogram of 16 MB, 12 chunks each side | **8.4×** | – | windowed entropy 11×; one process vs one call 11–18× |
 | ✅ | [`keccak`](keccak.exs) (measured 2026-10-19 at `8fa900b7`) | Keccak-256 of 10k × 32 B per call | **7.7×** | 0.63× ex_keccak | the NIF blocks its scheduler on a 16 MB message; SHA3-256 against `:crypto` is 0.81× |
 | ✅ | [`image_blur`](image_blur.exs) (measured 2026-10-19 at `8fa900b7`) | grayscale + 3×3 box blur, 1080p, 12 bands each side | **7.4×** | – | one process against one call 26–29× |
-| ✅ | [`codecs`](codecs.exs) | base64 round trip of 1 MB | **6.1×** | 4.2× fast64 | hex 4.4×, base58 3.5× per batch; one key per call is no faster |
-| ✅ | [`sort_u64_keys`](sort_u64_keys.exs) | sort 1M packed keys | **6.0×** | – | 3.8× when the caller needs a list back |
+| ✅ | [`codecs`](codecs.exs) (measured 2026-10-19 at `684a3592`) | base64 round trip of 1 MB | **6.1×** | 4.2× fast64 | hex 4.4×, base58 3.5× per batch; one key per call is no faster |
+| ✅ | [`sort_u64_keys`](sort_u64_keys.exs) (measured 2026-10-19 at `684a3592`) | sort 1M packed keys | **6.0×** | – | 3.8× when the caller needs a list back |
 | ✅ | [`lz4_snappy_decode`](lz4_snappy_decode.exs) (measured 2026-10-19 at `8fa900b7`) | Snappy block decode of 64 KB | **5.1×** | 2.4× snappyer as installed (-O0) | slower than the same libraries built -O2; LZ4 the same picture |
-| ✅ | [`monte_carlo_rtp`](monte_carlo_rtp.exs) | 100M slot spins on all schedulers | **3.9×** | – | ≈1× at 1M spins: short kernel chunks stay on few schedulers |
+| ✅ | [`monte_carlo_rtp`](monte_carlo_rtp.exs) (measured 2026-10-19 at `684a3592`) | 100M slot spins on all schedulers | **3.9×** | – | ≈1× at 1M spins: short kernel chunks stay on few schedulers |
 | ✅ | [`per_pair_distance`](per_pair_distance.exs) (measured 2026-10-19 at `8fa900b7`) | Levenshtein on 50k short pairs, one call each | **3.6×** | – | stay in Elixir for very short strings |
 | ✅ | [`geo_nearest`](geo_nearest.exs) (measured 2026-10-19 at `8fa900b7`) | 10 nearest of 500k locations | **3.2×** | – | 14× in one process; a grid prefilter helps both sides |
+| ✅ | [`numeric_loader`](numeric_loader.exs) | numeric CSV of 26 MB into packed f64s | **2.7×** | – | a JSON array of numbers 4.0×; a fixed number grammar, and NimbleCSV or Jason for anything else |
 | ✅ | [`cdcl_sat_per_call`](cdcl_sat_per_call.exs) (measured 2026-10-19 at `8fa900b7`) | one SAT solve per call, 26–28 vars | **2.6×** | 1.6× picosat | ≈1× on tiny formulas; batch the solves when one question makes several |
-| ✅ | [`gorilla_encode`](gorilla_encode.exs) | Gorilla encoding of 100-point blocks | **2.4×** | 4.2× gorilla_stream's NIF | close to the bar at this size; 4.1× at 1M points |
+| ✅ | [`gorilla_encode`](gorilla_encode.exs) (measured 2026-10-19 at `684a3592`) | Gorilla encoding of 100-point blocks | **2.4×** | 4.2× gorilla_stream's NIF | close to the bar at this size; 4.1× at 1M points |
 | ✅ | [`fuzzy_search/`](fuzzy_search) | a search service over 234k words behind Bandit | its own measurement, see its README | – | Myers on both sides; `/health` latency stays at Elixir's while a blocking NIF raises it |
 | 🟡 | [`batched_levenshtein`](batched_levenshtein.exs) (measured 2026-10-19 at `8fa900b7`) | one query against 234k words, 12 chunks each side | 1.5× | 13× ex_strsim per pair | Myers bit-parallel in plain Elixir is close; use it |
 | 🟡 | [`ws_masking`](ws_masking.exs) (measured 2026-10-19 at `8fa900b7`) | mask 125-byte WebSocket frames | 1.5× | 1.2× bandit_native | the call is the cost; 3.4× at 1 MiB, crossover 1024 B |
@@ -184,6 +185,14 @@ has them in full.
 - [`sort_u64_keys.exs`](sort_u64_keys.exs): heapsort kernel on 1M packed
   keys against decode plus `:lists.sort`; still good when the caller needs a
   list back, with the decode counted.
+- [`numeric_loader.exs`](numeric_loader.exs): a numeric CSV (26 MB) and a
+  JSON array of embedding floats into packed f64s, in two passes (count,
+  then parse into one alloc; the count is 6–11% of the time). A
+  written-down grammar keeps the floats bit-exact with `String.to_float/1`.
+  The best Elixir is a binary-matching parser that appends to one binary,
+  5.7–5.9× faster than NimbleCSV with `String.to_float`; the kernel is 2.7×
+  that on CSV, and about 4× on JSON against Jason, OTP's `:json` and the
+  same parser.
 - [`lz4_snappy_decode.exs`](lz4_snappy_decode.exs): Snappy and LZ4 block
   decode from scratch on untrusted input, against snappyer, lz4_erl and
   nimble_lz4. Against the NIFs as installed from Hex (built with no `-O`)
@@ -289,7 +298,7 @@ Nothing here is excluded on principle: each row names the condition that would r
 | Job | Wrapped today | Why not from scratch | What would change it |
 |---|---|---|---|
 | Signing, key exchange, secret-dependent crypto (secp256k1, ed25519, X25519, AEAD) | libsodium, secp256k1, ring via Rustler; `:crypto` | The one rule says nothing about timing: clang `-O3` may turn a select into a branch or a table lookup into a secret-dependent access, and a process dump or yielded frame holds key material. Public-input verification is allowed but gains little. | A constant-time mode: a restricted subset checked at compile time, codegen verified with dudect or ctgrind in CI, frame zeroisation, and an external audit. Until then, `:crypto`. |
-| Parsers that produce trees or term streams (HTML, Markdown, tree-sitter, JSON/CSV to terms, protobuf, msgpack) | html5ever, comrak, tree-sitter, jsont, rusty_csv, protox | The product is BEAM terms and building them is the cost: `docs/research/string-workloads.md` measured a 13x gap between scanning and term creation, and a NIF builds terms serially at the same price. A kernel cannot build terms, and if it could it would be no faster. | A "tape" output (flat `[i64]` of kind/start/len events, of which a fused CSV parser is one form), plus a benchmark showing tape plus Elixir tree building beats Jason or NimbleCSV end to end. BPE tokenisation to `[i64]` ids is the exception: its product is packed. |
+| Parsers that produce trees or term streams (HTML, Markdown, tree-sitter, JSON/CSV to terms, protobuf, msgpack) | html5ever, comrak, tree-sitter, jsont, rusty_csv, protox | The product is BEAM terms and building them is the cost: `docs/research/string-workloads.md` measured a 13x gap between scanning and term creation, and a NIF builds terms serially at the same price. A kernel cannot build terms, and if it could it would be no faster. | A "tape" output (flat `[i64]` of kind/start/len events, of which a fused CSV parser is one form), plus a benchmark showing tape plus Elixir tree building beats Jason or NimbleCSV end to end. BPE tokenisation to `[i64]` ids is the exception: its product is packed, and so is a numeric CSV or JSON number array loaded into f64s (`numeric_loader`, good: about 2.7× and 4×). |
 | Regular expressions | `:re` (PCRE in C), Rust regex via Rustler | `:re` is already native and compiled once per pattern; a kernel cannot take a pattern as data without becoming an interpreter, and fixed-string search is `:binary.match`. | A specific pattern class with a known kernel form (glob, or a simple byte DFA compiled at Elixir compile time) and a benchmark showing `:re` loses on it. |
 | Large codecs and encoders (brotli, zstd encode, audio and video, PDF/typst rendering) | brotli, zstd, membrane_* FFmpeg/opus bindings, typst | The cost is spec surface and tuning, not the loop: 10^4-10^5 lines with SIMD everywhere. A kernel would be a worse implementation of a solved problem. | A narrow, named need: one compression level with fixed tables (zstd level 1 is the lz4-encode ticket plus FSE) or a decoder-only requirement for untrusted input. Each reopens one row, not the category. |
 | Systems: databases, dataframes, tensor compilers (SQLite, DuckDB, Polars/Explorer, XLA/EXLA, LibTorch) | exqlite, duckdbex, explorer, exla, torchx | The value is the library: query planners, columnar engines, autodiff, device backends. defk is a kernel, not a system. | Interop, not rewriting: zero-copy views over their packed buffers so a per-element loop beside them runs as a kernel. `docs/research/nx-boundary.md` says where that line is; file an interop ticket when a workload asks. |
