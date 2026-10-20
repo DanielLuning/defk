@@ -13,11 +13,15 @@
     {
       "text": "The tape benchmark (defk-9p6.30) is a candidate workload for this: it can use a worst-case alloc + {array, count} today and measure whether that form costs enough to justify this construct. Same for defk-9p6.21.",
       "timestamp": "2026-10-12T09:52:11Z"
+    },
+    {
+      "text": "Closed 2026-10-20: the measurement this ticket waited for is done. defk-9p6.21 (numeric loader) recorded in docs/performance.md that two passes (count, then parse into one alloc) cost 6% of the kernel time for CSV and 11% for JSON, so the loader needs no growable output; defk-9p6.30 (tape) used a worst-case alloc and {array, count} with no cost finding against it. docs/language.md's row for results of unknown length already lists both forms. Reopen if a workload measures the two-pass or {array, count} form above ~20%.",
+      "timestamp": "2026-10-20T20:25:53Z"
     }
   ],
   "priority": 4,
   "status": "open",
   "title": "Output arrays whose length depends on the data: a growable [i64] (when a workload needs it)",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:20Z"
+  "updated_at": "2026-10-20T20:25:53Z"
 }
