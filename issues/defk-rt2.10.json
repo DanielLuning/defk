@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-20T08:33:12Z",
   "created": "2026-10-19T18:42:42Z",
   "description": "The compiler emits 126 distinct `defk_`/`DEFK_` tokens, 94 of them header symbols; `priv/defk_runtime.h` (2,444 lines; the compiler map says ~1,900) holds 98 defines and 146 static functions with nothing separating the symbols the compiler calls from the ~150 internal ones. The interface must be learned from compiler.ex's emit strings.\n\nSettled shape (grilling 2026-10-19):\n- One comment block at the top of the header lists the emitted symbols (the interface), beside the \"Responsibilities\" index; the topic banners stay where they are.\n- One unit test compares that list with the set the compiler emits (grep over lib/defk/compiler.ex), both ways: a symbol in the list that the compiler does not emit fails, and the reverse.\n- Fix the line count in docs/agents/compiler-map.md.\n\nNo C changes. Gate: `mix ci`; PR per AGENTS.md.",
   "id": "defk-rt2.10",
@@ -18,8 +19,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "priv/defk_runtime.h lists the interface the compiler emits, checked by one test",
   "type": "task",
-  "updated_at": "2026-10-20T08:28:35Z"
+  "updated_at": "2026-10-20T08:33:12Z"
 }
