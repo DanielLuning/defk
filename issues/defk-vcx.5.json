@@ -17,6 +17,10 @@
     {
       "text": "Correction 2026-10-20 (owner): handwired was a prototype and research run; the tickets carry what was valuable. The branch and its files are deleted and will not be restored. Do not recover d289e27d. The numbers in this description are the record.",
       "timestamp": "2026-10-20T20:25:51Z"
+    },
+    {
+      "text": "2026-10-20: stays open for the owner's decision between option 1 (recipe) and option 2 (builtin), or neither.",
+      "timestamp": "2026-10-20T20:25:54Z"
     }
   ],
   "priority": 3,
