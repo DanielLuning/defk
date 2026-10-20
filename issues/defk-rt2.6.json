@@ -6,6 +6,7 @@
   "blocks": [
     "defk-rt2.7"
   ],
+  "closed_at": "2026-10-20T06:08:40Z",
   "created": "2026-10-19T18:42:41Z",
   "description": "x3a.10 recorded each loop's C as it closes (`lowering.loops_c`). What a safepoint spills is still decided by counting `v_\\w+` in the whole kernel's C and in each loop's C (`safepoint_saves/2` ~L5844, `mentions/1` ~L5870); `arrival_blocks/3` ~L4680 inserts labels by regex replace; `emit_statics/1` ~L6130 picks statics by `String.contains?`.\n\nSettled shape (grilling 2026-10-19):\n- Every reference to a C local is string interpolation, so there is no hook that sees a use. `fresh/2` records where a local is declared; `in_loop/1` scans each loop's C once as it closes and records the locals it mentions. One scan, one home; the table is the interface.\n- `safepoint_saves/2` reads the table. `loop/6` emits its own arrival labels, since the safepoint paths are known at close; `arrival_blocks/3` goes.\n- `emit_statics/1` reads the table too if the same scan answers it; else it stays.\n- The `/* defk:loop */` remark markers stay (x3a.10: line ranges of the compiled file).\n\nRisk: the Keccak spill regression. Gate (settled): byte-identical `mix dump_c` over every test module and every example; if the C is identical no run is needed, if it is not the ticket is not done. `mix ci`; PR per AGENTS.md. Tests: resume_test needles ~L431, yield_false_strip_test ~L21. Compiler map: \"resume dispatch\" and \"emitting\" rows.",
   "id": "defk-rt2.6",
@@ -18,8 +19,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "The emitter reads its liveness from a locals table, not from regex over the kernel's C",
   "type": "task",
-  "updated_at": "2026-10-19T20:22:49Z"
+  "updated_at": "2026-10-20T06:08:40Z"
 }
