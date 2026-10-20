@@ -11,6 +11,8 @@ defmodule Defk.Examples.Tables do
   # The numbers come only from the snapshot, so a number a report measures is
   # never typed into a table.
 
+  alias Defk.Examples.Result
+
   @text "examples/_tables.exs"
   @targets [{"examples/README.md", "scoreboard"}, {"README.md", "summary"}]
 
@@ -47,12 +49,16 @@ defmodule Defk.Examples.Tables do
   defp rows(snapshot) do
     for %{"name" => name, "results" => [first | _]} <- snapshot["examples"],
         into: %{},
-        do: {name, first}
+        do: {name, Result.decode(first)}
   end
 
   # report name => report; an example name no report has => its first report
   defp index(snapshot) do
-    reports = for e <- snapshot["examples"], r <- e["results"], into: %{}, do: {r["example"], r}
+    reports =
+      for e <- snapshot["examples"], r <- Enum.map(e["results"], &Result.decode/1), into: %{} do
+        {r.example, r}
+      end
+
     Map.merge(rows(snapshot), reports)
   end
 
@@ -84,7 +90,7 @@ defmodule Defk.Examples.Tables do
         {line, p2} = fill(t.line, name, index)
 
         cells = [
-          mark(r["verdict"]),
+          Result.mark(r),
           "[`#{name}`](#{name}.exs)" <>
             note(r, runs[name], newest, loaded == :some and quiet[name] != true),
           t.job,
@@ -93,15 +99,15 @@ defmodule Defk.Examples.Tables do
           line
         ]
 
-        {{{rank(r["verdict"]), 0, -(r["speedup"] || 0)}, cells}, acc ++ p1 ++ p2}
+        {{{Result.rank(r), 0, -(r.speedup || 0)}, cells}, acc ++ p1 ++ p2}
       end)
 
     # an app's row comes after the measured rows of its verdict
     apps =
       for a <- text.apps do
-        {{rank(a.verdict), 1, 0},
+        {{Result.rank(a.verdict), 1, 0},
          [
-           mark(a.verdict),
+           Result.mark(a.verdict),
            "[`#{a.name}/`](#{a.name})",
            a.job,
            a.value,
@@ -179,7 +185,7 @@ defmodule Defk.Examples.Tables do
   # its report's stamp; a row not measured quietly among quiet ones says
   # provisional.
   defp note(r, run, newest, provisional?) do
-    earlier? = run != newest or r["cache"] == "reused"
+    earlier? = run != newest or Result.reused?(r)
 
     parts =
       if(earlier?, do: ["measured " <> measured(r, run)], else: []) ++
@@ -188,19 +194,19 @@ defmodule Defk.Examples.Tables do
     if parts == [], do: "", else: " (" <> Enum.join(parts, ", ") <> ")"
   end
 
-  defp measured(%{"stamp" => %{"measured_at" => at} = stamp}, _run),
+  defp measured(%Result{stamp: %{"measured_at" => at} = stamp}, _run),
     do: String.slice(at, 0, 10) <> at_commit(stamp["commit"])
 
-  defp measured(%{"cache" => "reused", "measured_at" => at}, _run), do: String.slice(at, 0, 10)
+  defp measured(%Result{cache: "reused", measured_at: at}, _run), do: String.slice(at, 0, 10)
   defp measured(_r, run), do: day(run) <> at_commit(run["commit"])
 
   defp at_commit(nil), do: ""
   defp at_commit(commit), do: " at `#{commit}`"
 
-  defp speedup_cell(%{"speedup" => s, "verdict" => "good"}) when is_number(s),
+  defp speedup_cell(%Result{speedup: s, verdict: "good"}) when is_number(s),
     do: "**#{times(s)}**"
 
-  defp speedup_cell(%{"speedup" => s}) when is_number(s), do: times(s)
+  defp speedup_cell(%Result{speedup: s}) when is_number(s), do: times(s)
   defp speedup_cell(_), do: "–"
 
   # ---- README.md ------------------------------------------------------
@@ -210,7 +216,7 @@ defmodule Defk.Examples.Tables do
       Enum.map_reduce(text.summary, [], fn g, acc ->
         {verdict, value, p1} = group(g, rows, text)
         {job, p2} = fill(g.text, nil, index)
-        {"| #{mark(verdict)} | #{job} | #{value} |", acc ++ p1 ++ p2}
+        {"| #{Result.mark(verdict)} | #{job} | #{value} |", acc ++ p1 ++ p2}
       end)
 
     block =
@@ -234,7 +240,7 @@ defmodule Defk.Examples.Tables do
       [] ->
         found = Enum.map(names, &rows[&1])
 
-        case Enum.uniq(Enum.map(found, & &1["verdict"])) do
+        case Enum.uniq(Enum.map(found, & &1.verdict)) do
           [verdict] ->
             {verdict, Map.get_lazy(g, :value, fn -> range(found) end), []}
 
@@ -251,7 +257,7 @@ defmodule Defk.Examples.Tables do
   end
 
   defp range(reports) do
-    case reports |> Enum.map(& &1["speedup"]) |> Enum.filter(&is_number/1) |> Enum.sort() do
+    case reports |> Enum.map(& &1.speedup) |> Enum.filter(&is_number/1) |> Enum.sort() do
       [] ->
         "–"
 
@@ -289,19 +295,19 @@ defmodule Defk.Examples.Tables do
   defp value(_field, nil), do: {:error, "names no report"}
 
   defp value("crossover", r) do
-    case Map.fetch(r, "crossover") do
-      {:ok, nil} -> {:ok, "none"}
-      {:ok, c} -> {:ok, to_string(c)}
-      :error -> {:error, "but report #{r["example"]} has no sweep"}
+    cond do
+      not Result.crossover?(r) -> {:error, "but report #{r.example} has no sweep"}
+      is_nil(r.crossover) -> {:ok, "none"}
+      true -> {:ok, to_string(r.crossover)}
     end
   end
 
   defp value(field, r) do
-    key = if field == "native", do: "native_speedup", else: "speedup"
+    key = if field == "native", do: :native_speedup, else: :speedup
 
-    case r[key] do
+    case Map.fetch!(r, key) do
       x when is_number(x) -> {:ok, times(x)}
-      _ -> {:error, "but report #{r["example"]} recorded no #{key}"}
+      _ -> {:error, "but report #{r.example} recorded no #{key}"}
     end
   end
 
@@ -312,16 +318,4 @@ defmodule Defk.Examples.Tables do
   defp number(x) when x >= 10, do: Integer.to_string(round(x))
   defp number(x) when x >= 1, do: :erlang.float_to_binary(x * 1.0, decimals: 1)
   defp number(x), do: :erlang.float_to_binary(x * 1.0, decimals: 2)
-
-  defp rank("good"), do: 0
-  defp rank("marginal"), do: 1
-  defp rank("poor"), do: 2
-  defp rank("out_of_scope"), do: 3
-  defp rank(_), do: 4
-
-  defp mark("good"), do: "✅"
-  defp mark("marginal"), do: "🟡"
-  defp mark("poor"), do: "❌"
-  defp mark("out_of_scope"), do: "⛔"
-  defp mark(other), do: "#{other || "?"}"
 end

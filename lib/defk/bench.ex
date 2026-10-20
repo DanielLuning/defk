@@ -314,7 +314,7 @@ defmodule Defk.Bench do
       c -> IO.puts("  correct    #{c}  [check only, not timed]")
     end
 
-    IO.puts("\nDEFK_RESULT " <> JSON.encode!(result))
+    put_result(result)
     # the returned map claims the expected verdict: scripts assert their own
     # verdicts after `report/1`, and nothing was measured to contradict them
     %{result | verdict: expected}
@@ -709,8 +709,12 @@ defmodule Defk.Bench do
     print_gaps(r)
     print_sweep(r)
     if cache_line, do: IO.puts(cache_line)
-    IO.puts("\nDEFK_RESULT " <> JSON.encode!(r))
+    put_result(r)
   end
+
+  # the one line the catalog's runner reads, after a report's table
+  # (Defk.Examples.Result decodes it); a check-only report prints it too
+  defp put_result(r), do: IO.puts("\nDEFK_RESULT " <> JSON.encode!(r))
 
   defp native_line(r) do
     vs = if r.native_speedup, do: "   (defk #{r.native_speedup}x vs native)", else: ""

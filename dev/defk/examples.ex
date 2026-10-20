@@ -19,7 +19,7 @@ defmodule Defk.Examples do
           name: String.t(),
           status: :ok | :incorrect | :unexpected_verdict | :crashed | :timeout,
           secs: float(),
-          results: [map()],
+          results: [Defk.Examples.Result.t()],
           out: String.t(),
           err: String.t(),
           note: String.t()
@@ -277,13 +277,13 @@ defmodule Defk.Examples do
 
   defp verdict_of(mode, _status, [first | _] = results) do
     cond do
-      Enum.any?(results, &(&1["correct"] not in [true, "skipped"])) ->
+      not Enum.all?(results, &Defk.Examples.Result.correct?/1) ->
         %{status: :incorrect, note: "an agreement check returned #{inspect(wrong(results))}"}
 
-      mode == :bench and first["verdict"] != first["expected"] ->
+      mode == :bench and first.verdict != first.expected ->
         %{
           status: :unexpected_verdict,
-          note: "measured #{first["verdict"]}, expected #{first["expected"]}"
+          note: "measured #{first.verdict}, expected #{first.expected}"
         }
 
       true ->
@@ -297,7 +297,7 @@ defmodule Defk.Examples do
   defp noun(:bench, _), do: "reports"
 
   defp wrong(results),
-    do: Enum.find(results, &(&1["correct"] not in [true, "skipped"]))["correct"]
+    do: Enum.find(results, &(not Defk.Examples.Result.correct?(&1))).correct
 
   defp judge_app(name, ran, secs) do
     base = %{name: name, secs: secs, err: "", results: []}
@@ -322,11 +322,11 @@ defmodule Defk.Examples do
     end
   end
 
-  @doc "Every `DEFK_RESULT` line of an example's stdout, decoded, in order."
+  @doc "Every `DEFK_RESULT` line of an example's stdout as a `Defk.Examples.Result`, in order."
   def parse_results(out) do
     for [_, json] <- Regex.scan(~r/^DEFK_RESULT (.*)$/m, out),
         {:ok, r} <- [JSON.decode(json)],
-        do: r
+        do: Defk.Examples.Result.decode(r)
   end
 
   # ---- running a process ----------------------------------------------
