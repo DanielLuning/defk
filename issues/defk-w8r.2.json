@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-w8r",
+  "comments": [
+    {
+      "text": "The research note docs/research/handwired.md and the bench scripts were deleted with their unmerged branch on 2026-10-20 (last commit d289e27d, recoverable from the reflog until git gc). The numbers this ticket needs are in its description.",
+      "timestamp": "2026-10-20T12:48:43Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Record the handwired study's speed lessons in docs/performance.md and the GPU evidence in docs/scope.md",
   "type": "task",
-  "updated_at": "2026-10-20T12:35:36Z"
+  "updated_at": "2026-10-20T12:48:43Z"
 }
