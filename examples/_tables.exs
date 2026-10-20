@@ -161,9 +161,9 @@
       line: "{speedup:sort_to_list} when the caller needs a list back"
     },
     "tape_csv" => %{
-      job: "CSV of 20 MB to NimbleCSV's rows, through a kernel tape",
+      job: "CSV of 20 MB to NimbleCSV's rows, a fresh process per parse",
       native: "{native} rusty_csv",
-      line: "the scan is fast; building the rows in Elixir costs more than NimbleCSV's whole parse"
+      line: "in a long-lived process 0.8–2.1× run to run; an [i64] tape of field events is slower than the cleaned copy"
     },
     "utf8_valid" => %{
       job: "validate 16 MB of UTF-8",
@@ -234,6 +234,11 @@
     },
     %{
       text:
+        "CSV to NimbleCSV's rows through a kernel that cleans the separators for `:binary.split` (rusty_csv's NIF is faster still)",
+      examples: ["tape_csv"]
+    },
+    %{
+      text:
         "a fuzzy-search web service, Myers bit-parallel on both sides: `/health` latency stays at Elixir's while a blocking NIF raises it",
       app: "fuzzy_search",
       value:
@@ -251,11 +256,6 @@
       text:
         "anything `:crypto` does (a SHA-256 chain) and memory-hard password hashing (Argon2: the C runs its lanes on threads)",
       examples: ["hash_chain", "argon2"]
-    },
-    %{
-      text:
-        "CSV to rows of binaries through a kernel tape: building the terms is the cost (rusty_csv's NIF builds them in C, 3.5× NimbleCSV)",
-      examples: ["tape_csv"]
     },
     %{text: "one kernel call per element", examples: ["poor_tiny_calls"]},
     %{

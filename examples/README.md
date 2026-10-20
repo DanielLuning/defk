@@ -194,12 +194,12 @@ has them in full.
   that on CSV, and about 4× on JSON against Jason, OTP's `:json` and the
   same parser.
 - [`tape_csv.exs`](tape_csv.exs): CSV to NimbleCSV's rows of binaries
-  through a kernel tape (field events, or a cleaned copy split by
-  `:binary.split`). The scan takes 28–36 ms of 20 MB; building the rows in
-  Elixir costs more than NimbleCSV's whole parse, so the tape is poor
-  (0.81–0.93×). rusty_csv's NIF builds the same sub-binaries in C, 3.5–4×
-  faster than NimbleCSV. Benchmarks of term building must start each run
-  from a collected heap: without it the rows looked 1.5–4× cheaper.
+  through a kernel tape. An `[i64]` tape of field events loses to a
+  cleaned copy (separators as bytes 30 and 31) that two `:binary.split`
+  passes turn into rows. In a fresh process per parse the copy is 2.2× the
+  best Elixir; rusty_csv's NIF builds the same sub-binaries in C, 2.6×
+  faster again. Timed in one long-lived process, the verdict moved from
+  0.8× to 2.1× run to run with the heap the earlier runs left.
 - [`lz4_snappy_decode.exs`](lz4_snappy_decode.exs): Snappy and LZ4 block
   decode from scratch on untrusted input, against snappyer, lz4_erl and
   nimble_lz4. Against the NIFs as installed from Hex (built with no `-O`)
@@ -305,7 +305,7 @@ Nothing here is excluded on principle: each row names the condition that would r
 | Job | Wrapped today | Why not from scratch | What would change it |
 |---|---|---|---|
 | Signing, key exchange, secret-dependent crypto (secp256k1, ed25519, X25519, AEAD) | libsodium, secp256k1, ring via Rustler; `:crypto` | The one rule says nothing about timing: clang `-O3` may turn a select into a branch or a table lookup into a secret-dependent access, and a process dump or yielded frame holds key material. Public-input verification is allowed but gains little. | A constant-time mode: a restricted subset checked at compile time, codegen verified with dudect or ctgrind in CI, frame zeroisation, and an external audit. Until then, `:crypto`. |
-| Parsers that produce trees or term streams (HTML, Markdown, tree-sitter, JSON/CSV to terms, protobuf, msgpack) | html5ever, comrak, tree-sitter, jsont, rusty_csv, protox | The product is BEAM terms and building them is the cost: `docs/research/string-workloads.md` measured a 13x gap between scanning and term creation. [`tape_csv`](tape_csv.exs) measured the tape route: a kernel scans 20 MB of CSV in 28–36 ms, and Elixir then takes 135–314 ms to build the rows from its events, so the whole is 0.81–0.93× NimbleCSV (poor). rusty_csv builds the same sub-binaries in C, 3.5–4× faster than NimbleCSV: here the NIF builds terms far cheaper than Elixir does. A kernel cannot build terms. | Closed with evidence for a tape (`tape_csv`). It would take a kernel that builds the sub-binaries and lists itself, which the kernel subset leaves out. BPE tokenisation to `[i64]` ids is the exception: its product is packed, and so is a numeric CSV or JSON number array loaded into f64s (`numeric_loader`, good: about 2.7× and 4×). |
+| Parsers that produce trees or term streams (HTML, Markdown, tree-sitter, JSON/CSV to terms, protobuf, msgpack) | html5ever, comrak, tree-sitter, jsont, rusty_csv, protox | The product is BEAM terms and building them is the cost: `docs/research/string-workloads.md` measured a 13x gap between scanning and term creation. [`tape_csv`](tape_csv.exs) measured the tape route for CSV: a kernel cleans 20 MB in 36 ms, and two `:binary.split` passes then take 125–131 ms to build the rows, 2.2× the best Elixir in a fresh process per parse (in one long-lived process 0.8–2.1×, with the heap). rusty_csv builds the same sub-binaries in C, 2.6× faster again: a NIF builds terms far cheaper than Elixir does. A kernel cannot build terms. | Reopened narrowly for CSV to rows (`tape_csv`, good) where an extra NIF is not wanted; rusty_csv stays the fastest. JSON to terms is not measured. BPE tokenisation to `[i64]` ids is the exception: its product is packed, and so is a numeric CSV or JSON number array loaded into f64s (`numeric_loader`, good: about 2.7× and 4×). |
 | Regular expressions | `:re` (PCRE in C), Rust regex via Rustler | `:re` is already native and compiled once per pattern; a kernel cannot take a pattern as data without becoming an interpreter, and fixed-string search is `:binary.match`. | A specific pattern class with a known kernel form (glob, or a simple byte DFA compiled at Elixir compile time) and a benchmark showing `:re` loses on it. |
 | Large codecs and encoders (brotli, zstd encode, audio and video, PDF/typst rendering) | brotli, zstd, membrane_* FFmpeg/opus bindings, typst | The cost is spec surface and tuning, not the loop: 10^4-10^5 lines with SIMD everywhere. A kernel would be a worse implementation of a solved problem. | A narrow, named need: one compression level with fixed tables (zstd level 1 is the lz4-encode ticket plus FSE) or a decoder-only requirement for untrusted input. Each reopens one row, not the category. |
 | Systems: databases, dataframes, tensor compilers (SQLite, DuckDB, Polars/Explorer, XLA/EXLA, LibTorch) | exqlite, duckdbex, explorer, exla, torchx | The value is the library: query planners, columnar engines, autodiff, device backends. defk is a kernel, not a system. | Interop, not rewriting: zero-copy views over their packed buffers so a per-element loop beside them runs as a kernel. `docs/research/nx-boundary.md` says where that line is; file an interop ticket when a workload asks. |
