@@ -7,7 +7,9 @@
   "created": "2026-10-20T09:24:14Z",
   "description": "Found while profiling the compiler (2026-10-20).\n\nProblem: the method in use (a temporary :timer.tc around Defk.Compiler.compile in Defk.__before_compile__, summed over a mix dump_c round) includes waiting. mix dump_c runs compile --force, so lib and test/support compile in parallel, and the first kernel module (Examples.Kernels, test/support/examples.ex) waits about 1 s for the compiler's own modules. Of a 2.5 s round, about 1.0 s is that wait; the same module needs 13 ms warm. Warm, the real work over all 116 modules is about 1.4-1.5 s (single rounds vary about 10% on the laptop). Percentages measured the old way are diluted by the wait, so the chain's +14.1% (of the 15% ceiling, ADR-0007 Consequences: Cost) is probably more of the real work.\n\nDo:\n- A dev harness for compiler time, so no step needs a temporary patch: per module, compile once (warm-up), then time a second Defk.Compiler.compile; write module and microseconds to a log (for example DEFK_COMPILE_TIME=\u003cfile\u003e read in __before_compile__, or a dev/ script). Keep it out of HexDocs and the user's path; it must cost nothing when off.\n- Measure the chain again with it: main at 23e27970 (before step 1) against current main, three rounds interleaved, total and total without SatEx.Kernels.\n- Record the corrected numbers in docs/performance.md (the compiler-time entries 6.32 onward) and ADR-0007's cost note; say what the old method measured.\n\nSettled by the owner: these numbers decide whether the next symbolic-bounds step needs a cut first; the copy-analysis cut is its own ticket.\n\nGate: mix ci; PR per AGENTS.md.",
   "id": "defk-o08.2",
-  "labels": [],
+  "labels": [
+    "ready-for-agent"
+  ],
   "parent": "defk-o08",
   "priority": 3,
   "status": "open",
