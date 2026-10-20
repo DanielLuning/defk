@@ -9,9 +9,9 @@
     "ready-for-agent"
   ],
   "parent": "defk-vcx",
-  "priority": 3,
+  "priority": 2,
   "status": "open",
   "title": "Measure Elixir mode at small sizes: could it ever be the fast side below a crossover?",
   "type": "task",
-  "updated_at": "2026-10-14T07:27:56Z"
+  "updated_at": "2026-10-20T20:25:57Z"
 }
