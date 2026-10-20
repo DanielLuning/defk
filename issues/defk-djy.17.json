@@ -8,9 +8,15 @@
   "labels": [
     "ready-for-agent"
   ],
+  "comments": [
+    {
+      "text": "Moved out of defk-djy (epic closed 2026-10-20) and deferred: owner priority of 2026-10-17 puts bounds proofs (defk-w8r.3) and call cost (defk-25s) before interop guides. Undefer when the measurement map is done or a user asks for Nx or Explorer interop.",
+      "timestamp": "2026-10-20T20:25:52Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Guide and tests: moving data between Nx/Explorer and kernels",
   "type": "task",
-  "updated_at": "2026-10-20T20:25:51Z"
+  "updated_at": "2026-10-20T20:25:52Z"
 }
