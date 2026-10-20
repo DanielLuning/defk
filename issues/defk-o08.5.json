@@ -4,6 +4,7 @@
     "defk-o08.3"
   ],
   "blocks": [],
+  "closed_at": "2026-10-20T11:56:38Z",
   "created": "2026-10-20T10:47:22Z",
   "description": "Found in the compiler profile of 2026-10-20 (docs/performance.md 6.38).\n\nFor every kept bounds check, note_bounds/4 asks Facts.residual/5 for the fact that would drop it (the report's 'it would follow from ...' hint): a search to its end within @hint_budget, which fails whenever the check is kept. It took about 2.4% of the compiler's time over all modules, and about 6% on SatEx.Kernels (28 of 485 ms, 2,300 kept checks). The text goes into __defk_report__/0 for every module, read or not.\n\nOptions, cheapest for the user first:\n1. Same output, less work: the same (array, index, half) is searched again when the lowering redoes a loop body (with_acc_facts/2, u64 retries) or inlines a callee more than once; memoise the hint per query in the lowering ctx (its snapshot covers it), or check whether the retried attempts' notes are dropped anyway and skip the search there.\n2. Same output, cheaper search: measure how many hints are found at all and at what budget; a smaller @hint_budget that finds the same hints on the suite and the examples.\n3. Different output (owner's call, __defk_report__/0 is an unstable surface): compute hints only when a report is asked for (report: :full, or a new option), and leave the plain kept note otherwise. Tests that assert hint texts (kept_bounds/2 in condition_facts_test, product_facts_test and others) would turn the option on.\n\nTry 1 and 2 first; ask the owner before 3. Measure with the harness (DEFK_COMPILE_TIME, dev/compile_time.exs --reductions). Gate: mix ci; for 1 and 2, __defk_report__/0 unchanged on every module (compare the report of every module before and after, as mix dump_c compares the C); PR per AGENTS.md. Blocked by defk-o08.3 (measured against that state).",
   "id": "defk-o08.5",
@@ -22,8 +23,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Report hint search: cut its cost (2.4% of compile time, 6% on SatEx)",
   "type": "task",
-  "updated_at": "2026-10-20T11:51:46Z"
+  "updated_at": "2026-10-20T11:56:38Z"
 }
