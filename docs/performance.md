@@ -2556,6 +2556,27 @@ else: 0))`; it now says `if first < 0 and n > 0, do: raise(ArgumentError,
   `Defk.__before_compile__` (`timed_compile/2`).
 - **Status:** measured, provisional.
 
+### 6.39 The copy analysis asked each arm's reads in one pass: -9% of the compiler's work
+
+- **Numbers:** `Copies.nested/3` asked, for every block nested in a
+  statement, `arm?/2`, `taken/2` and `reads_outside/2`: five walks of the
+  whole statement, one of them quadratic (`taken/2` called `holds_arm?/2`,
+  a walk of the arms, on every node). `arm_reads/2` does it in three
+  linear walks, rebuilding only the path to the arm. Over the 108 modules
+  of `mix dump_c`, two rounds each, interleaved with main plus the harness:
+  138.6 -> 125.8 M reductions (-9.2%; without `SatEx.Kernels` -5.0%),
+  1,101 -> 996 ms (-9.6%; -2.9%); `SatEx.Kernels` -8.4 M reductions,
+  -86 ms. Against the compiler before step 1 (6.38's baseline, by
+  reductions, which repeat between runs): +17.6% (+8.4% without
+  `SatEx.Kernels`), from +29.5%.
+- **Same C:** `mix dump_c` byte-identical for all 108 modules. The old
+  functions stay as the spec: a property test compares `arm_reads/2` with
+  them on every subterm of generated statements (if, cond, case, matches,
+  blocks, few names so that a node appears twice).
+- **Conditions:** M-series Mac on battery, no quiet check; `cc` not run.
+- **Source:** `defk-o08.3`; `test/copies_test.exs`.
+- **Status:** measured, provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -2863,4 +2884,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
   `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`,
   `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`,
-  `defk-o08.2`.
+  `defk-o08.2`, `defk-o08.3`.
