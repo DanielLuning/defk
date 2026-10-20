@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-20T12:35:37Z",
+  "description": "Evidence: docs/research/handwired.md, stage 2 (bench/handwired_f32.exs against bench/handwired_f32_ref.c, a hardware float reference built with -ffp-contract=off). defk computes in f64 and has f32 only as an array element. An f64 operation followed by one [f32] write equals the f32 result: 0 differences in 15,000,030 results for + - * / and sqrt, subnormals and ties included. The boolean atom (x + 8388609) - 8388609 is the identity in f64 (749,972 of 1M inputs differ from f32) and exact with a scratch write and read after the add. A sparse layer with a rounding after every operation: 0 differences in 6,400,000 outputs, 0.378 us per item against 0.417 for f64 (no cost). Today the workaround is a one-element [f32] scratch array: s[0] = a * b; p = s[0].\n\nOptions:\n1. Recipe only: a short section in docs/language.md (Floats) and docs/guides stating the pattern, plus a unit test of ties. No new surface.\n2. A builtin that rounds an f64 to the nearest f32 and returns an f64 (name to settle). Same rules as an [f32] write: raises when the value does not fit (docs/language.md, f32 write). Typing as a row in Defk.Builtins (ADR-0008); C in priv/defk_runtime.h (defk_to_f32 exists); Elixir in Ops via \u003c\u003cx::float-32\u003e\u003e; agreement kernels from the table. A builtin is a promised surface: CHANGELOG entry and a line in docs/guides/stability.md; a contract test (test/contracts/) if the owner wants the exactness promised.\n\nThe vcx rule applies: a construct enters the subset when a workload needs it, it costs nothing over the hand loop (stage 2: true), and it has an Elixir-mode implementation and agreement tests. The workload is thin: handwired-style per-item f32 circuits and f32 numeric pipelines; none in the catalog needs it today. Not covered: inf and NaN (defk raises where f32 hardware produces them) and GPU rounding of division and sqrt.\nOwner decides between 1 and 2, or neither. Done when decided; option 1 or 2 implemented and documented.",
+  "id": "defk-vcx.5",
+  "labels": [],
+  "parent": "defk-vcx",
+  "priority": 3,
+  "status": "open",
+  "title": "Decide: an f32 rounding builtin, or only a documented recipe, for exact float32 in kernels",
+  "type": "task",
+  "updated_at": "2026-10-20T12:35:37Z"
+}
