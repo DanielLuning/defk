@@ -13,6 +13,10 @@
     {
       "text": "The research note docs/research/handwired.md and the bench scripts were deleted with their unmerged branch on 2026-10-20 (last commit d289e27d, recoverable from the reflog until git gc). The numbers this ticket needs are in its description.",
       "timestamp": "2026-10-20T12:48:43Z"
+    },
+    {
+      "text": "Correction 2026-10-20 (owner): handwired was a prototype and research run; the tickets carry what was valuable. The branch and its files are deleted and will not be restored. Do not recover d289e27d. The numbers in this description are the record.",
+      "timestamp": "2026-10-20T20:25:50Z"
     }
   ],
   "priority": 3,
