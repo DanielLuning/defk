@@ -21,11 +21,15 @@
     {
       "text": "Deferred 2026-10-13: an exploration outside the map; revisit after the verdict (defk-sgw.6).",
       "timestamp": "2026-10-13T19:08:39Z"
+    },
+    {
+      "text": "Deferral trigger corrected 2026-10-20: the written trigger (defk-sgw.6 closing) fired on 2026-10-14 with the verdict go = keep developing. The real gate is the owner's next map: this work waits until the measurement map (defk-w8r) is done and the owner charts what comes after. The date 2027-01-15 is a placeholder so that bw list --overdue stays quiet; set the real date when the plan is charted.",
+      "timestamp": "2026-10-20T20:26:12Z"
     }
   ],
   "priority": 4,
   "status": "deferred",
   "title": "Explore Cranelift JIT backend for runtime-specialised kernels",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:49Z"
+  "updated_at": "2026-10-20T20:26:12Z"
 }
