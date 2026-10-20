@@ -123,6 +123,10 @@
       job: "100M slot spins on all schedulers",
       line: "≈1× at 1M spins: short kernel chunks stay on few schedulers"
     },
+    "numeric_loader" => %{
+      job: "numeric CSV of 26 MB into packed f64s",
+      line: "a JSON array of numbers {speedup:numeric_loader_json}; a fixed number grammar, and NimbleCSV or Jason for anything else"
+    },
     "out_of_scope_word_count" => %{
       job: "strings in, a map out",
       line: "not expressible: the compiler refuses, as it should"
@@ -217,6 +221,11 @@
       text:
         "sorting packed keys, nearest of 500k locations, Monte Carlo slot simulation with `:rand` bit for bit, Gorilla encoding",
       examples: ["sort_u64_keys", "geo_nearest", "monte_carlo_rtp", "gorilla_encode"]
+    },
+    %{
+      text:
+        "a numeric CSV or a JSON array of numbers straight into packed f64s (NimbleCSV and Jason stay for anything else)",
+      examples: ["numeric_loader"]
     },
     %{
       text:
