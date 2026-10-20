@@ -407,4 +407,33 @@ defmodule Defk.CopiesTest do
       assert Copies.arm_reads(twice, node) == nil
     end
   end
+
+  describe "block_liveness/1, each statement's reads walked once" do
+    property "a statement's reads are its stmt_reads, and the lives are live_after's" do
+      check all(es <- StreamData.list_of(stmt_gen(), min_length: 1, max_length: 5), max_runs: 300) do
+        for e <- es, do: assert(Copies.reads(e) == Copies.stmt_reads(e), Macro.to_string(e))
+
+        liveness = Copies.block_liveness(es)
+        assert Enum.map(liveness, &elem(&1, 0)) == Copies.live_after(es)
+        assert Enum.map(liveness, &elem(&1, 1)) == Enum.map(es, &Copies.reads/1)
+      end
+    end
+
+    test "an array write reads its target, a match does not read its left side" do
+      [{_, write}, {_, match}] =
+        Copies.block_liveness(
+          quote(
+            do:
+              (
+                a[i] = v
+                x = f(y)
+              )
+          )
+          |> elem(2)
+        )
+
+      assert write == MapSet.new([:a, :i, :v])
+      assert match == MapSet.new([:y])
+    end
+  end
 end

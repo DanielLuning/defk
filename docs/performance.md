@@ -2577,6 +2577,30 @@ else: 0))`; it now says `if first < 0 and n > 0, do: raise(ArgumentError,
 - **Source:** `defk-o08.3`; `test/copies_test.exs`.
 - **Status:** measured, provisional.
 
+### 6.40 Each statement's reads walked once: another -9% of the compiler's work
+
+- **Numbers:** entering a statement computed its reads three times: in
+  `Copies.live_after/1` (`stmt_reads/1`), in the compiler's `hoist/3` and
+  in `Copies.enter_stmt/4` (`reads/1`, the same set: `read_counts/1` skips a
+  match's left side as `stmt_reads/1` does). `Copies.block_liveness/1` keeps
+  each statement's reads beside its live set, and `enter/3` hands them on.
+  Over the 108 modules of `mix dump_c`, two rounds each, interleaved with
+  main: 125.9 -> 115.0 M reductions (-8.6%, the same without
+  `SatEx.Kernels`), 987 -> 934 ms (-5.4%); `HashChain.Kernels` and its
+  Elixir-mode twin -2.2 M reductions each, `SatEx.Kernels` -3.6 M. Against
+  the compiler before step 1 (6.38's baseline, by reductions): +7.4%
+  (-1.0% without `SatEx.Kernels`), from +17.6%: under ADR-0007's ceiling.
+- **Same C:** `mix dump_c` byte-identical for all 108 modules; a property
+  test checks `reads/1 == stmt_reads/1` and that `block_liveness/1` agrees
+  with `live_after/1` on generated blocks.
+- **Not done:** a statement nested d blocks deep is still walked once per
+  enclosing statement (its reads are part of theirs); building a
+  statement's reads from its blocks' would need the walk to follow the
+  lowering's order.
+- **Conditions:** M-series Mac on battery, no quiet check; `cc` not run.
+- **Source:** `defk-o08.4`; `test/copies_test.exs`.
+- **Status:** measured, provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -2884,4 +2908,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
   `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`,
   `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`,
-  `defk-o08.2`, `defk-o08.3`.
+  `defk-o08.2`, `defk-o08.3`, `defk-o08.4`.
