@@ -15,9 +15,9 @@
       "timestamp": "2026-10-11T21:24:16Z"
     }
   ],
-  "priority": 3,
+  "priority": 4,
   "status": "open",
   "title": "Free dead owned buffers early, so a per-iteration copy or alloc no longer accumulates until return",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:07Z"
+  "updated_at": "2026-10-20T20:25:59Z"
 }
