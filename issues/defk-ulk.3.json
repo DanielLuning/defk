@@ -8,7 +8,7 @@
     "defk-ulk.6"
   ],
   "created": "2026-10-10T14:54:35Z",
-  "defer_until": "2026-11-15",
+  "defer_until": "2027-01-15",
   "description": "How do architecture builds get from a build machine to production? Prototype and record, like examples/release_debian did for the C-compiler stance.\n\nScenarios:\n- mix release built on CI, run on a different CPU (older x86, Graviton vs Ampere, Apple dev machine vs Linux prod).\n- Docker buildx multi-arch (linux/amd64 + linux/arm64) from one Dockerfile.\n- A mixed fleet behind one release: does one release carry several variants (portable + x86-64-v3, or per-arm level) and pick at load? Compare: several .so per module chosen by a load-time CPU check; one .so with function multiversioning (__attribute__((target_clones)) / ifunc, GCC and clang, glibc vs musl vs macOS support); leaving it to the user (one target per release).\n- What the release contains and how big it gets; build time per variant; what a failed match looks like in logs.\n\nDepends on .so files shipping in releases at all (defk-n8f).\n\nDone when each scenario has a working recipe or a recorded reason it doesn't work, with a recommendation, in docs/research/simd.md and an examples/release_* directory if a recipe needs one.",
   "id": "defk-ulk.3",
   "labels": [
@@ -19,5 +19,5 @@
   "status": "deferred",
   "title": "Prototype: deploying architecture builds (releases, CI, Docker, mixed fleets)",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:46Z"
+  "updated_at": "2026-10-20T20:26:28Z"
 }
