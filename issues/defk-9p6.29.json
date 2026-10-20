@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "PR #76, stacked on #75.",
+      "timestamp": "2026-10-20T18:02:17Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Example: early-exit loop and small-input crossover against Nx defn + EXLA",
   "type": "task",
-  "updated_at": "2026-10-20T13:29:52Z"
+  "updated_at": "2026-10-20T18:02:17Z"
 }
