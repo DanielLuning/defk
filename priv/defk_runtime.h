@@ -6,6 +6,65 @@
  *   - checked arithmetic / bounds checks that raise Elixir exceptions
  *   - timeslice accounting so long kernels yield back to the scheduler
  *   - the frame resource that holds a suspended kernel between yields
+ *
+ * Interface: the names the generated C uses (the strings of
+ * lib/defk/compiler.ex, raise.ex and strip.ex); every other name here is
+ * internal. <T> is an element type (u8 i16 i32 i64 u64 f32 f64), <arg> an
+ * argument kind, <op> a float operation or builtin. A test
+ * (test/runtime_interface_test.exs) checks this list against the
+ * compiler's strings both ways.
+ *
+ * interface:start
+ *   results and raises: DEFK_DONE DEFK_YIELD DEFK_ERR DEFK_E_ARG DEFK_E_ARITH
+ *     DEFK_E_RUNTIME defk_raise defk_fail defk_user_raise defk_user_raise_ints
+ *     defk_no_clause defk_no_fun_clause defk_range_limit DEFK_LIKELY
+ *     DEFK_UNLIKELY
+ *   the context, frames and the library image: defk_ctx defk_cur_ctx
+ *     defk_frame_of defk_promote defk_finish defk_slice_init defk_load
+ *     defk_upgrade defk_unload DEFK_HEADER_HASH DEFK_MAX_OWNED DEFK_FAULT_HOOKS
+ *     defk_stats_nif defk_force_yields_nif defk_inject_fault_nif
+ *     defk_corrupt_tags_nif
+ *   yields: DEFK_BUDGET0 DEFK_ZERO_TICKS defk_clock defk_clock_init defk_tick
+ *     defk_lost_resume defk_stat_yields
+ *   arguments and results: defk_get_<arg>_arg defk_make_arr defk_make_arr_view
+ *     defk_make_bits defk_make_bool defk_make_f64
+ *   arrays: defk_arr_<T> defk_alloc_<T> defk_alloc_raw_<T> defk_copy_<T>
+ *     defk_copy_raw_<T> defk_get_<T> defk_put_<T> defk_to_<T> defk_to_i64_elem
+ *     defk_rcopy_<T> defk_rcopy_back_<T> defk_bind defk_bind_strip
+ *     defk_zero_strip defk_copy_strip defk_back_strip defk_move_strip
+ *     DEFK_ZERO_STRIP DEFK_COPY_STRIP DEFK_STRIP
+ *   bitstrings and word loads: defk_bits defk_bits_put defk_bits_put_signed
+ *     defk_bits_put_u64 defk_u16_le defk_u16_be defk_u32_le defk_u32_be
+ *     defk_u64_le defk_u64_be defk_u16_le_at defk_u16_be_at defk_u32_le_at
+ *     defk_u32_be_at defk_u64_le_at defk_u64_be_at
+ *   integers: defk_add_i64 defk_sub_i64 defk_mul_i64 defk_neg_i64 defk_abs_i64
+ *     defk_div_i64 defk_rem_i64 defk_bsl_i64 defk_bsr_i64 defk_add_i64_s
+ *     defk_sub_i64_s defk_mul_i64_s defk_neg_i64_s defk_abs_i64_s
+ *     defk_bsl_i64_s defk_bsr_i64_s defk_div_i64_g defk_rem_i64_g
+ *     defk_add_u64 defk_sub_u64 defk_mul_u64 defk_div_u64 defk_rem_u64
+ *     defk_bsl_u64 defk_bsr_u64 defk_add_u64_s defk_sub_u64_s defk_div_u64_g
+ *     defk_rem_u64_g defk_bsr_nn defk_wbsl defk_mulhi defk_u64_sat
+ *     defk_i64_to_u64 defk_u64_to_i64 defk_f64_to_u64 defk_to_u64
+ *     defk_cmp_i64_f64 defk_cmp_u64_f64 defk_cmp_u64_i64 defk_min_i64
+ *     defk_max_i64 defk_min_u64 defk_max_u64 defk_clz defk_ctz defk_clz_i
+ *     defk_clz_u defk_ctz_i defk_ctz_u defk_popcount defk_rotl_i defk_rotl_u
+ *     defk_rotr_i defk_rotr_u defk_rotl64 defk_rotr64 defk_crc32c_ii
+ *     defk_crc32c_iu defk_crc32c_uu
+ *   floats and non-finite values: defk_fadd defk_fsub defk_fmul defk_fdiv
+ *     defk_fadd_s defk_fmul_s defk_fdiv_s defk_min_f64 defk_max_f64 defk_sqrt
+ *     defk_exp defk_log defk_log2 defk_log10 defk_pow defk_trunc defk_round
+ *     defk_trunc_s defk_feq_exact defk_in_f64 defk_in_f64_later defk_get_in_f64
+ *     DEFK_FCHECK DEFK_NONFIN DEFK_NF_FCHECK DEFK_NF_<op> defk_nf defk_nf_sink
+ *     defk_sink defk_nonfinite_lost
+ * interface:end
+ *
+ * The generated C defines these itself (<n> is a counter):
+ *
+ * kernel:start
+ *   DEFK_SP DEFK_SAVE DEFK_SAVE<n> DEFK_SHORT DEFK_TICKS DEFK_RESUMING defk_rs
+ *   defk_ticks defk_budget defk_clk defk_funcs defk_slot defk_z0 defk_a<n>
+ *   defk_l<n> defk_halt<n> defk_r<n> defk_rp<n> defk_s<n>_<n> defk_lit_<hash>
+ * kernel:end
  */
 #ifndef DEFK_RUNTIME_H
 #define DEFK_RUNTIME_H

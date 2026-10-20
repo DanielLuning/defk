@@ -140,14 +140,19 @@ of rows the lowering declares as it emits; defk-ch4), not from the C text.
   key), warning once per use site. How to add an entry:
   `docs/agents/deprecations.md`.
 
-## priv/defk_runtime.h (~1,900 lines)
+## priv/defk_runtime.h (~2,500 lines)
 
 The C runtime included in every generated file: the `defk_ctx` (owned
 buffers, `owned_bytes` budget, stats), frames and safepoints (yield,
 resume, forced yields), input binding on every entry (binaries move across
 GC), `defk_make_arr` / `defk_make_arr_view`, strips
 (`DEFK_ZERO_STRIP`/`DEFK_COPY_STRIP`), range copies, crc32c. The
-"Responsibilities" comment at the top is the index. Its raise sites use the
+"Responsibilities" comment at the top is the index. Beside it, the
+interface list names every runtime symbol the generated C uses, and a
+second list names what the generated C defines itself; every other name is
+internal. `test/runtime_interface_test.exs` checks both lists against the
+strings of `compiler.ex`, `raise.ex` and `strip.ex`: a name the compiler
+starts to emit goes into a list in the same change. The header's raise sites use the
 `DEFK_MSG_` defines of the generated `priv/defk_messages.h`, never a
 literal message (`Defk.Messages`).
 
