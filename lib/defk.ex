@@ -458,7 +458,7 @@ defmodule Defk do
     sigs = Enum.reject(all_sigs, &Defk.Bitstring.helper?/1)
 
     elixir_mode =
-      if elixir?, do: Defk.ElixirMode.definitions(kernels, all_sigs, env.file), else: []
+      if elixir?, do: Defk.ElixirMode.definitions(kernels, all_sigs), else: []
 
     Defk.Generated.defs(
       placement: placement,

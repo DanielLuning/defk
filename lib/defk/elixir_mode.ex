@@ -146,20 +146,16 @@ defmodule Defk.ElixirMode do
 
   @doc false
   # Quoted definitions: `__defk_elixir__/2` and one private function per kernel.
-  def definitions(raw_kernels, sigs, file) do
-    # the compiler's ctx keeps the file for the rejections this translation
-    # raises (err! reads it); the translation's own state is `@state`, gone
-    # when this returns
-    Defk.Compiler.Ctx.set(:file, file)
+  # The translation's state is `@state`, gone when this returns; it never
+  # reads the compiler's ctx (a rejection reaching it raises plainly,
+  # raise_form!/4).
+  def definitions(raw_kernels, sigs) do
+    by_key = Map.new(sigs, &{{&1.name, &1.arity}, &1})
 
-    try do
-      by_key = Map.new(sigs, &{{&1.name, &1.arity}, &1})
-
-      Enum.zip_with(raw_kernels, sigs, fn raw, sig -> kernel(raw.body, sig, by_key) end)
-      |> definitions_of(sigs)
-    after
-      Process.delete(@state)
-    end
+    Enum.zip_with(raw_kernels, sigs, fn raw, sig -> kernel(raw.body, sig, by_key) end)
+    |> definitions_of(sigs)
+  after
+    Process.delete(@state)
   end
 
   defp definitions_of(kernels, sigs) do
@@ -204,7 +200,7 @@ defmodule Defk.ElixirMode do
   # holding one struct (as the compiler's :defk_ctx): the binding counter,
   # the writes log (write tracking), the leaf types a reduce_while look
   # ahead collects, and the u64 candidates and hits of settle_accs/3. Fresh
-  # per kernel, deleted when definitions/3 returns. The `env` map (vars,
+  # per kernel, deleted when definitions/2 returns. The `env` map (vars,
   # sigs) is threaded explicitly; this is the rest.
 
   defmodule State do

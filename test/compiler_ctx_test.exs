@@ -34,8 +34,8 @@ defmodule Defk.CompilerCtxTest do
 
   # Elixir mode's translation keeps its own state the same way, in one key
   # (:defk_em) holding one struct, fresh per kernel and gone when
-  # definitions/3 returns: no translation state outlives a compile either.
-  test "after ElixirMode.definitions/3, the ctx is still the only defk-prefixed key" do
+  # definitions/2 returns: no translation state outlives a compile either.
+  test "after ElixirMode.definitions/2, the ctx is still the only defk-prefixed key" do
     for k <- defk_keys(), do: Process.delete(k)
 
     kernel = %{
@@ -55,7 +55,7 @@ defmodule Defk.CompilerCtxTest do
     }
 
     {_c, sigs, _report} = Defk.Compiler.compile(Defk.CompilerCtxTest.E, [kernel], nil)
-    defs = Defk.ElixirMode.definitions([kernel], sigs, "ctx_test.ex")
+    defs = Defk.ElixirMode.definitions([kernel], sigs)
 
     assert match?([_ | _], defs)
     assert defk_keys() == [:defk_ctx]
