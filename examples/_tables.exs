@@ -160,6 +160,11 @@
       job: "sort 1M packed keys",
       line: "{speedup:sort_to_list} when the caller needs a list back"
     },
+    "tape_csv" => %{
+      job: "CSV of 20 MB to NimbleCSV's rows, a fresh process per parse",
+      native: "{native} rusty_csv",
+      line: "in a long-lived process 0.8–2.1× run to run; an [i64] tape of field events is slower than the cleaned copy"
+    },
     "utf8_valid" => %{
       job: "validate 16 MB of UTF-8",
       line: "`String.valid?` is C already"
@@ -226,6 +231,11 @@
       text:
         "a numeric CSV or a JSON array of numbers straight into packed f64s (NimbleCSV and Jason stay for anything else)",
       examples: ["numeric_loader"]
+    },
+    %{
+      text:
+        "CSV to NimbleCSV's rows through a kernel that cleans the separators for `:binary.split` (rusty_csv's NIF is faster still)",
+      examples: ["tape_csv"]
     },
     %{
       text:
