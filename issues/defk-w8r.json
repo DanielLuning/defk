@@ -6,9 +6,15 @@
   "description": "Groups the measurement tickets that are not part of the verdict's frozen snapshot (defk-sgw.4): the base cost of a kernel call (defk-25s, defk-cao), runtime costs that show in hot loops (defk-c1e, defk-oed, defk-w8l), timing noise (defk-wnu), refreshing published numbers (defk-yzw, defk-7tk), and the first Linux run (defk-a1p).\n\nThe per-call cost decides the crossover size where defk starts to help (ws_masking at 125 B, geohash one point per call, poor_tiny_calls), so cutting it moves verdicts; the rest keeps the published numbers honest. Rules: AGENTS.md (measure the alternatives, mark loaded runs provisional, record what you learned in docs/performance.md).\n\nDone when: each child has a measured result recorded in docs/performance.md or the ticket, and the per-call cost figure in docs/project.md is current.",
   "id": "defk-w8r",
   "labels": [],
+  "comments": [
+    {
+      "text": "Started 2026-10-20 as the measurement map after defk-xoh. Order: defk-w8r.2 first (docs only, records the handwired lessons), then defk-25s and defk-vcx.2 together (both answer the small-input crossover), then defk-w8r.3 (prove checks away), then defk-w8l (yield bookkeeping; defk-w8r.1 merged into it). defk-c1e and defk-wnu wait for an owner design call.",
+      "timestamp": "2026-10-20T20:25:59Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Measurement and per-call cost",
   "type": "epic",
-  "updated_at": "2026-10-20T20:25:56Z"
+  "updated_at": "2026-10-20T20:25:59Z"
 }
