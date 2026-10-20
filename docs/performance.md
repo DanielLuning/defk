@@ -2633,6 +2633,29 @@ else: 0))`; it now says `if first < 0 and n > 0, do: raise(ArgumentError,
   without `report: :full`).
 - **Status:** measured, provisional.
 
+### 6.42 A raising guard on the window drops every bounds check in rolling_stats' loop
+
+- **Change:** `mean_std` in `rolling_stats.exs` raises `ArgumentError` for a
+  window outside `1..length(x)`, one guard `if w < 1 or w > n` before the
+  loop. Past it `1 <= w <= n` (an `or` that is false narrows both sides),
+  which proves `x[i - w]` under `i >= w`, and `out[i - w + 1]` and
+  `out[m + i - w + 1]` with `m = n - w + 1 >= 1` and `length(out) == 2 * m`.
+- **The C** (fast-path report under `report: :full`): bounds checks kept
+  3 -> 0; the loop's flagged strip carried float, overflow and bounds checks
+  and now carries float checks only (the index arithmetic's overflow checks
+  went with the bounds facts). clang still does not vectorise the loop: its
+  remark lost "cannot identify array bounds" but keeps the sliding sums,
+  a recurrence ("value that could not be identified as reduction is used
+  outside the loop"), so no speed-up is expected from vector code. Not
+  timed: the stored row is stale until the maintainer asks for a new
+  measurement (docs/agents/runs.md).
+- **Behaviour:** a window of 0, a negative one or one longer than the input
+  raises `ArgumentError` at the call instead of failing later in the loop;
+  the example's check (one valid window) passes.
+- **Source:** `defk-o08.6`, [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs); the
+  compiler side is `defk-9za` / `defk-b38` (6.34).
+- **Status:** C and report checked; not timed.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -2940,4 +2963,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
   `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`,
   `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`,
-  `defk-o08.2`, `defk-o08.3`, `defk-o08.4`, `defk-o08.5`.
+  `defk-o08.2`, `defk-o08.3`, `defk-o08.4`, `defk-o08.5`, `defk-o08.6`.

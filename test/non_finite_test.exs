@@ -261,6 +261,38 @@ defmodule Defk.NonFiniteTest.K do
   end
 end
 
+# examples/rolling_stats.exs's mean_std before its raising guard on w: a bad
+# window reaches the loop, so a strip mixes a non-finite read with a read
+# past the end or a zero divisor
+defmodule Defk.NonFiniteTest.Rolling do
+  use Defk
+
+  defk mean_std(x :: [f64], w :: i64) :: [f64] do
+    n = length(x)
+    m = n - w + 1
+    out = alloc(f64, 2 * m)
+
+    _ =
+      for i <- 0..(n - 1)//1, reduce: {0.0, 0.0} do
+        {s, q} ->
+          v = x[i]
+          old = if i >= w, do: x[i - w], else: 0.0
+          s2 = s + v - old
+          q2 = q + v * v - old * old
+
+          if i >= w - 1 do
+            mean = s2 / w
+            out[i - w + 1] = mean
+            out[m + i - w + 1] = sqrt(max(q2 / w - mean * mean, 0.0))
+          end
+
+          {s2, q2}
+      end
+
+    out
+  end
+end
+
 defmodule Defk.NonFiniteTest do
   use ExUnit.Case, async: true
   use Defk.Properties
@@ -617,7 +649,9 @@ defmodule Defk.NonFiniteTest do
   end
 
   test "rolling mean_std raises its first error: a NaN read before the read past the end" do
-    rolling = fn x, w -> Defk.Test.assert_agrees(Rolling.Kernels, :mean_std, [x, w]) end
+    rolling = fn x, w ->
+      Defk.Test.assert_agrees(Defk.NonFiniteTest.Rolling, :mean_std, [x, w])
+    end
 
     for n <- [100, 2 * @strip + 3], p <- G.strip_positions(n), p < n - 1 do
       # w = -1 reads x[i + 1]: past the end at i = n - 1, after the NaN
@@ -631,9 +665,34 @@ defmodule Defk.NonFiniteTest do
     end
 
     # the window sums check the reads they add, once per strip (seen_later/1)
-    c = File.read!(String.replace_suffix(Rolling.Kernels.__defk_lib__(), ".so", ".c"))
+    c =
+      File.read!(String.replace_suffix(Defk.NonFiniteTest.Rolling.__defk_lib__(), ".so", ".c"))
+
     assert c =~ "defk_in_f64_later(ctx, "
     assert c =~ "#define defk_get_f64 DEFK_NF_get_f64"
+  end
+
+  test "the catalog's mean_std raises on a bad window before reading, and keeps its strip checks" do
+    rolling = fn x, w -> Defk.Test.assert_agrees(Rolling.Kernels, :mean_std, [x, w]) end
+    n = 2 * @strip + 3
+
+    # its raising guard runs before the loop: no read, no zero divisor
+    for w <- [-1, 0, n + 1] do
+      assert {:raise, %ArgumentError{message: "the window must be in 1..length(x)"}} =
+               rolling.(with_bad(n, 5, 1.0e200), w)
+    end
+
+    for p <- G.strip_positions(n) do
+      assert {:raise, %ArgumentError{}} = rolling.(with_bad(n, p, :nan), 3)
+    end
+
+    assert {:ok, _} = rolling.(with_bad(n, -1, nil), n)
+
+    # past the guard every access is in range; the window sums still check
+    # the reads they add once per strip
+    c = File.read!(String.replace_suffix(Rolling.Kernels.__defk_lib__(), ".so", ".c"))
+    assert c =~ "defk_in_f64_later(ctx, "
+    refute c =~ "#define defk_get_f64 DEFK_NF_get_f64"
   end
 
   test "mixed-error strips run flagged, with no unchecked access to a computed index" do
