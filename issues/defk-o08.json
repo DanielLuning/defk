@@ -6,9 +6,15 @@
   "description": "Groups the range-fact tickets that implement ADR-0007 (docs/adr/0007-symbolic-bounds.md). Each child removes a bounds or overflow check that a catalog kernel still pays, found while building the target workloads (PCM mixing, cosine top-k, rolling stats). A range fact never changes a kernel's meaning: with every fact forgotten, the kernel returns and raises the same (CONTEXT.md).\n\nOrder: the core move onto ADR-0007's representation (defk-u1u, after defk-fun) comes first; linear facts (defk-qdz) and condition facts (defk-b38) build on it; the proof tickets (defk-pic, defk-siy, defk-9za, defk-n7k, defk-pvt) each close one catalog gap; the flagged-strip tickets (defk-5qk, defk-agp) and unzeroed alloc (defk-i5r) are independent.\n\nDone when: every child is closed or recorded as not worth it, and the fast-path report of the catalog kernels named in the children no longer lists the bounds check in question.",
   "id": "defk-o08",
   "labels": [],
+  "comments": [
+    {
+      "text": "Closing check 2026-10-20 (main 514ff6d2, mix dump_c reports): cosine_topk m[r*dim+j] and out[r] check-free; pcm_mix sum loop check-free (4 kept in the rescale loop, out of scope per performance.md 6.37); resize_bilinear, monte_carlo_rtp draws/uniforms, encode16 unzeroed (encode64 still zeroed in strips: i5r accepted 'whichever shapes landed'; not a bounds check). Gap: rolling_stats mean_std keeps x[i - w] and two out writes (no raising guard in the catalog kernel): defk-o08.6. The epic closes when defk-o08.6 lands.",
+      "timestamp": "2026-10-20T12:35:20Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Symbolic bounds: prove more indices in range (ADR-0007)",
   "type": "epic",
-  "updated_at": "2026-10-13T19:07:54Z"
+  "updated_at": "2026-10-20T12:35:20Z"
 }
