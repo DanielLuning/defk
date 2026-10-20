@@ -14,9 +14,15 @@
   "labels": [
     "wayfinder:map"
   ],
+  "comments": [
+    {
+      "text": "Done 2026-10-20: all four steps closed (defk-l2g, defk-djy.18, defk-vcx.1, defk-9p6.31) and CI run 39491749110 on main at f983d5ef passed on macos-arm64-clang, linux-x86_64-clang, linux-x86_64-gcc and linux-aarch64-clang. Hex publishing stays the owner's call. The next map is defk-w8r (measurement and per-call cost).",
+      "timestamp": "2026-10-20T20:29:45Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Map: honest results and first-user docs around 0.1.0",
   "type": "epic",
-  "updated_at": "2026-10-15T09:11:30Z"
+  "updated_at": "2026-10-20T20:29:45Z"
 }
