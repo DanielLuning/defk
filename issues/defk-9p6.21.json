@@ -15,11 +15,15 @@
     {
       "text": "PR opened (see gh pr list); stored row quiet at 0d6e7c78.",
       "timestamp": "2026-10-20T13:21:54Z"
+    },
+    {
+      "text": "PR #74.",
+      "timestamp": "2026-10-20T13:22:04Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Example: fused CSV/JSON numeric loader into packed columns vs NimbleCSV",
   "type": "task",
-  "updated_at": "2026-10-20T13:21:54Z"
+  "updated_at": "2026-10-20T13:22:04Z"
 }
