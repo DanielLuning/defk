@@ -11,11 +11,15 @@
     {
       "text": "Branch defk-rt2.10/header-interface pushed (fcdb398f): interface and kernel lists at the top of the header, test/runtime_interface_test.exs (wildcard templates, owner's choice), map line count fixed; mix ci green. PR waits for the owner.",
       "timestamp": "2026-10-20T08:24:43Z"
+    },
+    {
+      "text": "PR #66 (https://github.com/DanielLuning/defk/pull/66).",
+      "timestamp": "2026-10-20T08:28:35Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "priv/defk_runtime.h lists the interface the compiler emits, checked by one test",
   "type": "task",
-  "updated_at": "2026-10-20T08:24:43Z"
+  "updated_at": "2026-10-20T08:28:35Z"
 }
