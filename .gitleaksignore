@@ -6,4 +6,4 @@ examples/hashes.exs:generic-api-key:866
 # Keys.Kernels module's generated C ("Keys.Kernels":"<md5>"), not a credential.
 # The fingerprint is the row's line; a scoreboard with rows added above it
 # moves the line.
-examples/scoreboard.json:generic-api-key:34
+examples/scoreboard.json:generic-api-key:35
