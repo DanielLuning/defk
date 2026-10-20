@@ -23,5 +23,5 @@
   "status": "open",
   "title": "Yield bookkeeping in hot short loops: Keccak spills 6-11 per round, and fuzzy_search Myers pays a safepoint per word (+19%)",
   "type": "task",
-  "updated_at": "2026-10-20T20:25:55Z"
+  "updated_at": "2026-10-20T20:25:58Z"
 }
