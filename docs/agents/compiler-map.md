@@ -126,7 +126,11 @@ of rows the lowering declares as it emits; defk-ch4), not from the C text.
   test (`wait_quiet/0`, `other_cpu/0`, `quiet?/1`); rules in
   `examples/README.md` and AGENTS.md. The result cache of `mix
   defk.examples --bench` is the runner's adapter, `dev/defk/bench/cache.ex`,
-  loaded into each example's process with `elixir -r` (ADR-0011).
+  loaded into each example's process with `elixir -r` (ADR-0011). The
+  runner, the scoreboard, the stored scoreboard and the README tables read
+  each report through `Defk.Examples.Result` (`dev/defk/examples/result.ex`):
+  one `DEFK_RESULT` line decoded once, then asked (`reused?`, `quiet?`,
+  `provisional?`, `rank`, `mark`), never indexed by key.
 - `lib/defk/report.ex`, `lib/defk/bits.ex`, `lib/defk/test.ex`
   (`assert_agrees`): user-facing helpers.
 - `lib/defk/deprecations.ex`: the deprecation table and the renames it

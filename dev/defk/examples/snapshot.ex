@@ -11,6 +11,7 @@ defmodule Defk.Examples.Snapshot do
   # generated: never edit it by hand, measure again.
 
   alias Defk.Bench.Cache
+  alias Defk.Examples.Result
 
   # 3: quiet is per row, from the reports' stamps; the run keeps the limit,
   # not the load average
@@ -43,7 +44,7 @@ defmodule Defk.Examples.Snapshot do
           do: %{
             "name" => o.name,
             "status" => to_string(o.status),
-            "results" => o.results,
+            "results" => Enum.map(o.results, &Result.decode(&1).raw),
             "quiet" => quiet?(o.results),
             "run" => run
           }
@@ -52,7 +53,7 @@ defmodule Defk.Examples.Snapshot do
   end
 
   @doc "Whether every report of a row passed the quiet test."
-  def quiet?(results), do: Enum.all?(results, &(get_in(&1, ["stamp", "quiet", "quiet"]) == true))
+  def quiet?(results), do: Enum.all?(results, &Result.quiet?(Result.decode(&1)))
 
   @doc """
   `{:ok, snapshot}`: `old` with the rows of `new` in place of its rows of
@@ -91,7 +92,7 @@ defmodule Defk.Examples.Snapshot do
   def stale(snapshot, digests) do
     for %{"name" => name, "results" => results} <- snapshot["examples"],
         Map.has_key?(digests, name) do
-      stamps = Enum.map(results, & &1["stamp"])
+      stamps = Enum.map(results, &Result.decode(&1).stamp)
 
       if stamps == [] or nil in stamps do
         %{name: name, status: :unstamped}

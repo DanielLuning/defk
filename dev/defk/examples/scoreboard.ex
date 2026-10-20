@@ -1,8 +1,10 @@
 defmodule Defk.Examples.Scoreboard do
   @moduledoc false
   # The `--bench` scoreboard: what `examples/run_all.exs` printed, over the
-  # first `DEFK_RESULT` line of each example. Also the check-only
+  # first report (Defk.Examples.Result) of each example. Also the check-only
   # summary.
+
+  alias Defk.Examples.Result
 
   @doc "The check-only summary: one line per outcome."
   def print_check(outcomes) do
@@ -33,13 +35,13 @@ defmodule Defk.Examples.Scoreboard do
 
     for {o, r} <- Enum.zip(outcomes, results) do
       IO.puts(
-        pad(r["example"], 26) <>
-          pad(r["expected"], 14) <>
-          pad(r["verdict"], 14) <>
+        pad(r.example, 26) <>
+          pad(r.expected, 14) <>
+          pad(r.verdict, 14) <>
           pad(speedup(r), 10) <>
-          pad(num(r["elixir_ms"]), 11) <>
-          pad(num(r["defk_ms"]), 10) <>
-          pad(r["baseline"] || "?", 12) <> if(o.status == :ok, do: "yes", else: "NO")
+          pad(num(r.elixir_ms), 11) <>
+          pad(num(r.defk_ms), 10) <>
+          pad(r.baseline || "?", 12) <> if(o.status == :ok, do: "yes", else: "NO")
       )
 
       case extra_line(r) do
@@ -60,68 +62,62 @@ defmodule Defk.Examples.Scoreboard do
   # the first report's
   defp print_cache(outcomes) do
     reports = for o <- outcomes, r <- o.results, do: r
-    reused = Enum.filter(reports, &(&1["cache"] == "reused"))
-    unstored = Enum.filter(reports, &(&1["cache"] == "not_stored"))
+    reused = Enum.filter(reports, &Result.reused?/1)
+    unstored = Enum.filter(reports, &Result.unstored?/1)
 
     if reused != [] do
       IO.puts(
         "#{length(reused)} report(s) reused a cached result (inputs unchanged; --fresh measures them): " <>
-          Enum.map_join(reused, ", ", &"#{&1["example"]} (#{measured_on(&1)})")
+          Enum.map_join(reused, ", ", &"#{&1.example} (#{Result.measured_on(&1)})")
       )
     end
 
     if unstored != [] do
       IO.puts(
         "#{length(unstored)} report(s) not cached, the machine was not quiet: " <>
-          Enum.map_join(unstored, ", ", & &1["example"])
+          Enum.map_join(unstored, ", ", & &1.example)
       )
     end
   end
 
-  defp measured_on(r), do: String.slice(r["measured_at"] || "?", 0, 10)
-
-  # the first result line, or a stand-in for an example that crashed
+  # the first report, or a stand-in for an example that crashed
   defp row(%{results: [first | _], status: status}) when status != :crashed, do: first
-
-  defp row(%{name: name}),
-    do: %{"example" => name, "expected" => "?", "verdict" => "crashed", "correct" => false}
+  defp row(%{name: name}), do: Result.crashed(name)
 
   defp print_provisional(results) do
-    provisional =
-      Enum.filter(results, &(&1["verdict"] == "good" and &1["baseline"] != "optimized"))
+    provisional = Enum.filter(results, &Result.provisional?/1)
 
     if provisional != [] do
       IO.puts(
         "#{length(provisional)} 'good' claim(s) are provisional: the Elixir baseline is not optimised yet " <>
-          "(#{Enum.map_join(provisional, ", ", & &1["example"])})"
+          "(#{Enum.map_join(provisional, ", ", & &1.example)})"
       )
     end
   end
 
   defp print_skipped(outcomes) do
-    skipped =
-      for o <- outcomes, r <- o.results, r["correct"] == "skipped", do: r
+    skipped = for o <- outcomes, r <- o.results, Result.skipped?(r), do: r
 
     if skipped != [] do
       IO.puts(
         "#{length(skipped)} check(s) skipped by their examples:\n" <>
-          Enum.map_join(skipped, "\n", &"  #{&1["example"]}: #{&1["reason"]}")
+          Enum.map_join(skipped, "\n", &"  #{&1.example}: #{&1.reason}")
       )
     end
   end
 
-  # second line per example, only for the keys a script reports
+  # second line per example, only for what a script reports
   defp extra_line(r) do
     parts =
       Enum.filter(
         [
-          r["realistic_size"] && "realistic size #{r["realistic_size"]}",
-          r["native_speedup"] &&
-            "vs #{r["native_label"]}: defk #{r["native_speedup"]}x (native #{r["native_ms"]} ms)",
-          r["native_ms"] && is_nil(r["native_speedup"]) &&
-            "native #{r["native_ms"]} ms [#{r["native_label"]}]",
+          r.realistic_size && "realistic size #{r.realistic_size}",
+          r.native_speedup &&
+            "vs #{r.native_label}: defk #{r.native_speedup}x (native #{r.native_ms} ms)",
+          r.native_ms && is_nil(r.native_speedup) &&
+            "native #{r.native_ms} ms [#{r.native_label}]",
           gaps(r) != [] && "tick gap ms: " <> Enum.join(gaps(r), "; "),
-          Map.has_key?(r, "crossover") && "crossover #{r["crossover"] || "none"}"
+          Result.crossover?(r) && "crossover #{r.crossover || "none"}"
         ],
         & &1
       )
@@ -129,16 +125,7 @@ defmodule Defk.Examples.Scoreboard do
     if parts == [], do: "", else: "    " <> Enum.join(parts, " | ")
   end
 
-  defp gaps(r) do
-    for {k, label} <- [
-          {"elixir_gap_ms", "elixir"},
-          {"defk_gap_ms", "defk"},
-          {"native_gap_ms", "native"}
-        ],
-        %{"max" => m, "p99" => p} <- [r[k]] do
-      "#{label} max #{m} / p99 #{p}"
-    end
-  end
+  defp gaps(r), do: for({side, m, p} <- r.gaps, do: "#{side} max #{m} / p99 #{p}")
 
   # The markdown table for the scoreboard pages (examples/README.md,
   # docs/verdict.md): the verdict mark first, rows sorted by verdict and
@@ -150,41 +137,32 @@ defmodule Defk.Examples.Scoreboard do
         "Tick gap ms, max / p99 | Crossover |\n|---|---|---|---|---|---|---|---|---|"
     )
 
-    for r <- Enum.sort_by(results, &{verdict_rank(&1["verdict"]), -(&1["speedup"] || 0)}) do
+    for r <- Enum.sort_by(results, &{Result.rank(&1), -(&1.speedup || 0)}) do
       cells = [
-        verdict_mark(r["verdict"]),
-        if(r["cache"] == "reused",
-          do: "#{r["example"]} (reused, measured #{measured_on(r)})",
-          else: r["example"]
+        verdict_mark(r),
+        if(Result.reused?(r),
+          do: "#{r.example} (reused, measured #{Result.measured_on(r)})",
+          else: r.example
         ),
-        cell(r["realistic_size"]),
+        cell(r.realistic_size),
         speedup(r),
-        cell(r["elixir_ms"]),
-        cell(r["defk_ms"]),
+        cell(r.elixir_ms),
+        cell(r.defk_ms),
         native_cell(r),
         gap_cell(r),
-        if(Map.has_key?(r, "crossover"), do: r["crossover"] || "none", else: "-")
+        if(Result.crossover?(r), do: r.crossover || "none", else: "-")
       ]
 
       IO.puts("| " <> Enum.join(cells, " | ") <> " |")
     end
   end
 
-  defp verdict_rank("good"), do: 0
-  defp verdict_rank("marginal"), do: 1
-  defp verdict_rank("poor"), do: 2
-  defp verdict_rank("out_of_scope"), do: 3
-  defp verdict_rank(_), do: 4
+  # a known verdict with its mark; another word as it is
+  defp verdict_mark(r),
+    do: if(Result.rank(r) < 4, do: "#{Result.mark(r)} #{Result.label(r)}", else: Result.label(r))
 
-  defp verdict_mark("good"), do: "✅ good"
-  defp verdict_mark("marginal"), do: "🟡 marginal"
-  defp verdict_mark("poor"), do: "❌ poor"
-  defp verdict_mark("out_of_scope"), do: "⛔ out of scope"
-  defp verdict_mark(other), do: "#{other || "?"}"
-
-  defp native_cell(%{"native_speedup" => nil}), do: "-"
-  defp native_cell(%{"native_speedup" => x, "native_label" => l}), do: "#{x}x (#{l})"
-  defp native_cell(_), do: "-"
+  defp native_cell(%Result{native_speedup: nil}), do: "-"
+  defp native_cell(%Result{native_speedup: x, native_label: l}), do: "#{x}x (#{l})"
 
   defp gap_cell(r) do
     case gaps(r) do
@@ -193,9 +171,8 @@ defmodule Defk.Examples.Scoreboard do
     end
   end
 
-  defp speedup(%{"speedup" => nil}), do: "-"
-  defp speedup(%{"speedup" => s}), do: "#{s}x"
-  defp speedup(_), do: "-"
+  defp speedup(%Result{speedup: nil}), do: "-"
+  defp speedup(%Result{speedup: s}), do: "#{s}x"
 
   defp cell(nil), do: "-"
   defp cell(x), do: to_string(x)

@@ -110,7 +110,11 @@ defmodule Defk.ExamplesTaskTest do
     out =
       ~s(noise\nDEFK_RESULT {"example":"a","correct":true}\nDEFK_RESULT not json\nDEFK_RESULT {"example":"b"}\n)
 
-    assert [%{"example" => "a"}, %{"example" => "b"}] = Examples.parse_results(out)
+    assert [
+             %Defk.Examples.Result{example: "a", correct: true},
+             %Defk.Examples.Result{example: "b"}
+           ] =
+             Examples.parse_results(out)
   end
 
   describe "the C of an example's kernels (--stale)" do

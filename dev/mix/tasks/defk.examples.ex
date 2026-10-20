@@ -259,7 +259,7 @@ defmodule Mix.Tasks.Defk.Examples do
 
   # a reused result must be visible where the example's line is read
   defp reused_note(o) do
-    case Enum.count(o.results, &(&1["cache"] == "reused")) do
+    case Enum.count(o.results, &Defk.Examples.Result.reused?/1) do
       0 -> ""
       n -> "  CACHED: #{n} of #{length(o.results)} report(s) reused, not measured"
     end
