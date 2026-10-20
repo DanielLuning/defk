@@ -165,6 +165,11 @@
       native: "{native} rusty_csv",
       line: "in a long-lived process 0.8–2.1× run to run; an [i64] tape of field events is slower than the cleaned copy"
     },
+    "threshold_cross" => %{
+      job: "first packet past a byte budget, 64k packets",
+      native: "{native} Nx + EXLA `while`",
+      line: "EXLA costs ~40 µs a call and scales 1.9× over 48 callers; Elixir beats it up to ~1M packets"
+    },
     "utf8_valid" => %{
       job: "validate 16 MB of UTF-8",
       line: "`String.valid?` is C already"
@@ -236,6 +241,11 @@
       text:
         "CSV to NimbleCSV's rows through a kernel that cleans the separators for `:binary.split` (rusty_csv's NIF is faster still)",
       examples: ["tape_csv"]
+    },
+    %{
+      text:
+        "an early-exit loop (the first packet past a byte budget), where Nx with EXLA pays ~40 µs a call and recompiles per shape",
+      examples: ["threshold_cross"]
     },
     %{
       text:
