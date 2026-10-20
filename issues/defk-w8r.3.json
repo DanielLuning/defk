@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-w8r",
+  "comments": [
+    {
+      "text": "The research note docs/research/handwired.md and the bench scripts were deleted with their unmerged branch on 2026-10-20 (last commit d289e27d, recoverable from the reflog until git gc). The numbers this ticket needs are in its description.",
+      "timestamp": "2026-10-20T12:48:43Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Gather loops: find which runtime checks Defk.Facts could prove away (f32 layer is 5.5x slower than C float)",
   "type": "task",
-  "updated_at": "2026-10-20T12:35:37Z"
+  "updated_at": "2026-10-20T12:48:43Z"
 }
