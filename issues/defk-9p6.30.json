@@ -13,11 +13,15 @@
     {
       "text": "PR opened, stacked on #74.",
       "timestamp": "2026-10-20T17:54:25Z"
+    },
+    {
+      "text": "PR #75.",
+      "timestamp": "2026-10-20T17:54:32Z"
     }
   ],
   "priority": 4,
   "status": "in_progress",
   "title": "Tape output for parsers: benchmark a kernel that emits flat events plus Elixir tree building",
   "type": "task",
-  "updated_at": "2026-10-20T17:54:25Z"
+  "updated_at": "2026-10-20T17:54:32Z"
 }
