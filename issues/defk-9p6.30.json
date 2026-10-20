@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "PR opened, stacked on #74.",
+      "timestamp": "2026-10-20T17:54:25Z"
+    }
+  ],
   "priority": 4,
   "status": "in_progress",
   "title": "Tape output for parsers: benchmark a kernel that emits flat events plus Elixir tree building",
   "type": "task",
-  "updated_at": "2026-10-20T13:19:44Z"
+  "updated_at": "2026-10-20T17:54:25Z"
 }
