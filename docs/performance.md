@@ -2906,7 +2906,7 @@ output array would).
 - **Source:** [`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs), [`bench/port_echo.c`](https://github.com/DanielLuning/defk/blob/main/bench/port_echo.c), `defk-7dm`.
 - **Status:** one quiet run; rerun with `defk-sgw.4`'s snapshot if the verdict cites it.
 
-### 7.11 CSV to terms: a kernel that cleans the separators for `:binary.split` is 2.2x the best Elixir; rusty_csv builds the sub-binaries in C, 2.6x faster again
+### 7.11 CSV to terms: a kernel that cleans the separators for `:binary.split` is 2.1-2.2x the best Elixir; rusty_csv builds the sub-binaries in C, 2.6x faster again
 
 A kernel cannot build terms, but it can make the input easy for the BIFs:
 a cleaned copy with byte 31 between fields and byte 30 after each row,
@@ -2917,10 +2917,10 @@ costs as much as the splits.
 - **Numbers** (20 MB, a 200k-row export with quoted fields; a fresh process
   per parse): NimbleCSV 308-315 ms; the best Elixir (lines by
   `:binary.split`, unquoted lines split on commas, quoted lines walked with
-  `:binary.match`) 288-299 ms; the cleaned copy 131-142 ms end to end
-  (2.23x; the copy 36 ms, the splits 125-131 ms); an `[i64]` tape of start
+  `:binary.match`) 274-299 ms; the cleaned copy 131-142 ms end to end
+  (2.09-2.23x; the copy 36 ms, the splits 125-131 ms); an `[i64]` tape of start
   and length per field 152-158 ms (scan 28 ms, rows from it 119-127 ms;
-  only walking its 1.4M entries took 39 ms); rusty_csv 0.4.6 49.6-53.5 ms.
+  only walking its 1.4M entries took 39 ms); rusty_csv 0.4.6 49.5-53.5 ms.
 - **Heap state decides term-building benchmarks:** timed in one long-lived
   process, best of 15, the same code gave NimbleCSV 134-358 ms and the copy
   96-264 ms, 0.81x to 2.08x between runs, with or without a GC before each
@@ -2931,10 +2931,10 @@ costs as much as the splits.
   sub-binaries cost little. For CSV to rows, rusty_csv is the fastest; a
   kernel's cleaned copy is a middle option without another NIF, and yields
   on a normal scheduler. JSON to terms is not measured.
-- **Conditions:** M-series Mac, OTP 29, Elixir 1.20.2; three runs with a
+- **Conditions:** M-series Mac, OTP 29, Elixir 1.20.2; four runs with a
   fresh process, five before in a long-lived one.
 - **Source:** [`tape_csv.exs`](https://github.com/DanielLuning/defk/blob/main/examples/tape_csv.exs), `defk-9p6.30`.
-- **Status:** provisional until the stored run.
+- **Status:** measured (the stored run, quiet); the rest provisional.
 
 ---
 

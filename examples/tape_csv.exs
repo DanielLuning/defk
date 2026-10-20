@@ -56,20 +56,20 @@
 # and the spread is 2% (median against best).
 #
 # Measured (M-series Mac, OTP 29, Elixir 1.20, 2026-10-20, fresh process
-# per run; the report best of 15, the variant lines best of 5; three runs
-# with E2, provisional until the stored run):
+# per run; the report best of 15, the variant lines best of 5; four runs
+# with E2, the last stored and quiet; the others provisional):
 #
-#   20 MB           E1 308-315 ms, E2 288-299 ms, E3 300-305 ms;
-#                   the copy 130.7-141.9 ms        2.23x over E2  good
-#                   rusty_csv 49.6-53.5 ms: 5.8x E2, 2.6x the copy.
+#   20 MB           E1 308-315 ms, E2 274-299 ms, E3 300-305 ms;
+#                   the copy 130.7-141.9 ms   2.09-2.23x over E2  good
+#                   rusty_csv 49.5-53.5 ms: 5.5-5.9x E2, 2.6-2.7x the copy.
 #   The parts       pass 1 4.8-5.1 ms, scan to the [i64] tape 28 ms, rows
 #   (best of 5)     from it 119-127 ms (the tape 152-158 ms end to end);
 #                   the copy 36 ms, its two splits 125-131 ms.
-#   Sweep           2k rows 1.7x, 20k 1.7x, 1M rows (100 MB) 2.5x.
+#   Sweep           2k rows 1.6-1.7x, 20k 1.6-1.7x, 1M rows (100 MB) 2.4-2.5x.
 #
 # What it means: a kernel scans CSV at 0.5-0.7 GB/s, and Elixir then
 # spends 3.5-4.5x the scan building the rows. The cleaned copy, split by
-# the BIFs, beats the best Elixir by about 2.2x in a fresh process, so a
+# the BIFs, beats the best Elixir by about 2.1-2.2x in a fresh process, so a
 # tape does reopen the wrapper table's row, narrowly. rusty_csv builds the
 # same sub-binaries in C, 2.6x faster again, on a dirty scheduler: where
 # the speed matters, it is still the choice. The kernel route needs no

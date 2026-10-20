@@ -43,6 +43,7 @@ Speedups over an optimised Elixir baseline, measured end to end on Apple M4 Pro 
 | ✅ | base64, hex and base58 codecs (4.2× the fast64 NIF); Snappy and LZ4 block decode on untrusted input | 5.1–6.1× |
 | ✅ | sorting packed keys, nearest of 500k locations, Monte Carlo slot simulation with `:rand` bit for bit, Gorilla encoding | 2.4–6.0× |
 | ✅ | a numeric CSV or a JSON array of numbers straight into packed f64s (NimbleCSV and Jason stay for anything else) | 2.7× |
+| ✅ | CSV to NimbleCSV's rows through a kernel that cleans the separators for `:binary.split` (rusty_csv's NIF is faster still) | 2.1× |
 | ✅ | a fuzzy-search web service, Myers bit-parallel on both sides: `/health` latency stays at Elixir's while a blocking NIF raises it | [its own measurement](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) |
 | 🟡 | a dictionary-wide Levenshtein batch over all schedulers: Myers bit-parallel in Elixir is close | 1.5× |
 | 🟡 | small WebSocket frames, UTF-8 validation, substring search: the BIFs are native already | 1.0–1.5× |
