@@ -6,9 +6,15 @@
   "description": "Prototype branch to measure what handwired-style per-item programs would ask of defk. Context: docs/research/handwired.md. Not a commitment to a GPU backend: docs/scope.md puts GPU with Nx, and a change needs an owner decision and an ADR.\n\nStages (each ends with numbers or a finding in docs/research/handwired.md; the owner picks whether the next stage runs):\n1. CPU baseline. The SEARCH step (the 4.6 to 13.2 ms numbers are for the search, not the highlighter), as literal patterns (error, connection reset) in a shift-and bitmask kernel over 100,000 JSON documents of up to 512 bytes. Compare optimised Elixir (:binary.matches, :re, chunked over all schedulers), defk on one core and over all cores. Reference: handwired lab/json-search/README.md (RegExp 8 to 43 ms one thread, 1.9 to 6.7 ms in 8 workers, GPU 4.5 to 5.2 ms; the author machine, never compared as equals). The script lives in bench/, outside the catalog.\n2. f32 cost. Exact FP32 rounding through an [f32] scratch write against f64 defk: exactness and time.\n3. Compiler impact inventory. Where the lowering and emitting sections of Defk.Compiler assume C. What a second backend would hook into. Text-level only first.\n4. Dialect choice: GPU from C. Check what this Mac supports (Metal, OpenCL, none, via headers and a tiny probe, no heavy run). List what a Linux server would need (OpenMP offload, CUDA or HIP). Hand-write one pure per-item f32 kernel in the dialects that work here and compare it with the existing defk CPU loop as test oracle: agreement, FMA and bit-exactness (defk promises bit-exact results with Elixir mode), launch and transfer cost per call. Pairs with the vector-value study (defk-ulk.5), which covers SIMD and comes first.\n5. Optional, owner decides: a throwaway emitter that writes the per-item body once and wraps it per dialect, and a device run.\n\nRules: Elixir is the default, optimise it first. Read handwired only, never run its code. No sweeping runs, no heavy runs on battery without saying the cost.",
   "id": "defk-snm",
   "labels": [],
+  "comments": [
+    {
+      "text": "Stage 1 done on branch defk-snm/handwired-research: bench/handwired_search.exs, result in docs/research/handwired.md (Elixir :binary.matches in 12 chunks 6.8-8.6 ms, defk shift-and 9.2-9.5 ms, quiet machine). Next stage needs the owner's pick.",
+      "timestamp": "2026-10-20T11:32:13Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Research spike: per-document circuit kernels (handwired) and a GPU target, impact on defk",
   "type": "task",
-  "updated_at": "2026-10-20T11:28:41Z"
+  "updated_at": "2026-10-20T11:32:13Z"
 }
