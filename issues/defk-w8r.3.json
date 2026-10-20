@@ -17,11 +17,15 @@
     {
       "text": "Correction 2026-10-20 (owner): handwired was a prototype and research run; the tickets carry what was valuable. The branch and its files are deleted and will not be restored. Do not recover d289e27d. The numbers in this description are the record.",
       "timestamp": "2026-10-20T20:25:50Z"
+    },
+    {
+      "text": "Rewritten 2026-10-20: steps 1 and 4 now build and measure a small gather-loop kernel on the ticket branch instead of the deleted bench scripts.",
+      "timestamp": "2026-10-20T20:25:51Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Gather loops: find which runtime checks Defk.Facts could prove away (f32 layer is 5.5x slower than C float)",
   "type": "task",
-  "updated_at": "2026-10-20T20:25:50Z"
+  "updated_at": "2026-10-20T20:25:51Z"
 }
