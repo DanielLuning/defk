@@ -11,9 +11,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-o08",
+  "comments": [
+    {
+      "text": "Branch defk-o08.2/compile-time pushed (0c5f208a), mix ci green. Chain +13.4% time / +20.8% reductions, refactors +13.5% / +7.3%, total ~+29% vs before step 1 (performance.md 6.38). PR not opened yet.",
+      "timestamp": "2026-10-20T10:25:40Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Compiler time: measure warm compiles, and measure the symbolic-bounds chain again against its budget",
   "type": "task",
-  "updated_at": "2026-10-20T09:42:30Z"
+  "updated_at": "2026-10-20T10:25:40Z"
 }
