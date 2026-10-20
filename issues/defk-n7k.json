@@ -28,11 +28,15 @@
     {
       "text": "Fixed by defk-pvt, PR #39: both variants (div shape and raising-guard shape) compile with no bounds checks; closes after the owner merges.",
       "timestamp": "2026-10-18T21:16:23Z"
+    },
+    {
+      "text": "Solved by defk-pvt (PR #39, merged 2026-10-19): both variants check-free; cosine_topk runtime dim 27-28 -\u003e 25-26 ms (docs/performance.md 6.2).",
+      "timestamp": "2026-10-20T07:29:16Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Row-major m[r * dim + j] with a runtime dim keeps its bounds checks; out[r] too when out = alloc(f64, div(len(m), dim))",
   "type": "task",
-  "updated_at": "2026-10-18T21:16:23Z"
+  "updated_at": "2026-10-20T07:29:16Z"
 }
