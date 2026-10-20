@@ -7,9 +7,15 @@
   "id": "defk-rt2.8",
   "labels": [],
   "parent": "defk-rt2",
+  "comments": [
+    {
+      "text": "PR #63: Defk.Docs + mix defk.docs [--check] in mix ci; the two old tasks deleted; mix ci green (2290 passed).",
+      "timestamp": "2026-10-20T06:19:31Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "mix defk.docs [--check]: every generated doc region behind one task",
   "type": "task",
-  "updated_at": "2026-10-20T06:08:45Z"
+  "updated_at": "2026-10-20T06:19:31Z"
 }
