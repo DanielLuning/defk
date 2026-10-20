@@ -56,7 +56,7 @@
     "codecs" => %{
       job: "base64 round trip of 1 MB",
       native: "{native} fast64",
-      line: "hex {speedup:codecs_hex}, base58 {speedup:codecs_base58} per batch; one key per call is no faster"
+      line: "hex {speedup:codecs_hex}, base58 {speedup:codecs_base58} per batch; one key per call is about as fast as Elixir"
     },
     "cosine_topk" => %{
       job: "top-10 of 100k × 384 f32 embeddings",

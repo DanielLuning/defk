@@ -16,8 +16,8 @@
 #
 # Pre-registered (ticket): base64 good only if a table-driven kernel reaches a
 # few GB/s, hex marginal (the BEAM's hex is a C BIF), base58 good.
-# Expected verdicts, as measured: base64 good, hex good (at the 2x line,
-# differs from the ticket), base58 good.
+# Expected verdicts, as measured: base64 good, hex good (3.6x, differs from
+# the ticket), base58 good.
 #
 # Kernels: [u8] in. encode64 and encode16 return [u8] of the exact length
 # (4 * ceil(n / 3), 2n); decode64 returns {buffer, length} (3 per quad less
@@ -53,8 +53,8 @@
 #   base58  b58 1.0.3 and erl_base58 0.0.1 from Hex (bignum, digit by digit),
 #           and Codecs.Elixir below: one bignum divided by 58^9 per step
 #           (nine digits from a small integer) and decoded nine characters
-#           per step: encode 3.8x faster than b58 and 7x than erl_base58,
-#           decode 9.7x and 1.6x. Both packages raise ArithmeticError on a
+#           per step: encode 5.4-5.6x faster than b58 and 10.4-10.8x than
+#           erl_base58, decode 9.7-10.8x and 3.0-3.1x. Both packages raise ArithmeticError on a
 #           bad character, not ArgumentError, and erl_base58 decodes "1" to
 #           two bytes; neither is in the bad-input check.
 #   Not tried: a batch Elixir base58 (no shared work between keys to save).
@@ -76,33 +76,40 @@
 # Codecs.Kernels.__defk_elixir__/2) on the small inputs and every
 # bad input.
 #
-# Measured (M-series Mac, OTP 29, Elixir 1.20, best of 15; three runs):
+# Measured (M-series Mac, OTP 29, Elixir 1.20, best of 15; three runs on
+# 2026-10-20, provisional: other processes used 0.6-2.3 cores beside them):
 #
-#   base64, 1 MB    Elixir 3.08-3.17 ms  defk 1.04-1.05 ms  2.94-3.04x  good
-#                   (encode 0.49 ms = 2.1 GB/s, decode 0.56 ms = 2.5 GB/s of
-#                   input); fast64 2.19-2.22 ms, so the kernel is 2.1x
-#                   faster than the anchor NIF. Sweep 64 KB 2.6-2.8x, 16 MB
-#                   3.1-3.4x. Ticker gap while encoding 64 MB on one
-#                   scheduler: Elixir 8.8-10.1 ms, defk 4.6-4.8 ms, fast64
-#                   4.4-5.0 ms (defk yields every 250 us in its loop; the gap
-#                   left is the 85 MB output alloc before the loop: a kernel
-#                   that only allocs 85 MB gives a 5.0 ms gap).
-#   hex, 1 MB       Elixir 2.55-2.59 ms  defk 1.25-1.28 ms  2.02-2.04x  good
-#                   (encode 1.5x over :binary.encode_hex, decode 2.5x over
-#                   :binary.decode_hex); sweep 1.74-2.05x. At the 2x line:
-#                   the 5% tie band (good from 1.9x) keeps a slower
-#                   run good, and for encoding alone the BIF is the
-#                   recommendation.
-#   base58, 10k     Elixir 12.7-13.2 ms  defk 4.8-5.1 ms    2.59-2.68x  good
-#   keys per call   (kernel encode 1.9 ms, decode 2.3 ms). One key per call:
-#                   Elixir 0.94 us, defk 1.04 us per round trip, so a
-#                   single-key call is no faster than Elixir (sweep: 1 key
-#                   per call 1.13x, 100 keys 2.5x, 10k keys 2.3-2.9x).
+#   base64, 1 MB    Elixir 3.05-3.11 ms  defk 0.47-0.50 ms  6.1-6.7x    good
+#                   (encode 0.23 ms = 4.6 GB/s, decode 0.24-0.25 ms = 5.5-5.8
+#                   GB/s of input); fast64 2.03-2.04 ms, so the kernel is
+#                   4.1-4.4x faster than the anchor NIF. Sweep 64 KB
+#                   5.0-5.2x, 16 MB 6.4-6.6x. Ticker gap while encoding 64 MB
+#                   on one scheduler: Elixir 6.9-9.3 ms, defk 2.15-2.23 ms,
+#                   fast64 4.2-5.1 ms (defk yields in its loop and zeroes the
+#                   85 MB output in strips; a 1 ms ticker reads about 2 ms
+#                   under load on every side).
+#   hex, 1 MB       Elixir 2.38-2.43 ms  defk 0.67 ms       3.56-3.63x  good
+#                   (encode 2.6-2.7x over :binary.encode_hex, decode 4.3-4.7x
+#                   over :binary.decode_hex); sweep 64 KB 2.9-3.3x, 16 MB
+#                   3.3-4.0x.
+#   base58, 10k     Elixir 11.2-11.8 ms  defk 3.28-3.35 ms  3.35-3.55x  good
+#   keys per call   (kernel encode 1.7 ms, decode 1.5-1.6 ms). One key per
+#                   call: Elixir 0.86-1.43 us, defk 0.91-1.06 us per round
+#                   trip (sweep: 1 key per call 1.3-1.4x, 100 keys 3.9-4.0x,
+#                   10k keys 2.5-4.1x).
 #
-# Recommendation: base64 over a few KB and batched base58 are kernel jobs
-# (and need no hand-written chunking); for hex, :binary.encode_hex and
-# :binary.decode_hex are within 2x and already native; for one base58 key at
-# a time, the Elixir function below is as fast.
+# The kernels were 2-2.5x slower when this block was first written
+# (2026-10-09: base64 1.04 ms, hex 1.25 ms, base58 4.8-5.1 ms). For base64
+# and hex the change is the compiler's range facts for constant multiples
+# of a loop index: the loops index s[3 * g] and out[4 * g] (hex: 2 * i),
+# and those bounds and overflow checks went (encode64 alone 489 -> 251-260
+# us, bisected to that change). The base58 gain was not bisected.
+#
+# Recommendation: base64 over a few KB, hex over a few KB and batched
+# base58 are kernel jobs (and need no hand-written chunking); for hex the
+# BIFs are already native and need no C compiler, so they stay the choice
+# where 2.6x does not matter; for one base58 key at a time, the Elixir
+# function below is about as fast.
 
 Mix.install([
   {:defk, path: Path.expand("..", __DIR__)},
@@ -880,7 +887,7 @@ _r64 =
       native: fn -> Fast64.encode64(big) end
     ],
     reason:
-      "a table-driven kernel reaches 2-2.5 GB/s, 3x Base and 2x the fast64 NIF, with yielding instead of hand-written chunking"
+      "a table-driven kernel reaches 4.5-5.5 GB/s, 6x Base and 4x the fast64 NIF, with yielding instead of hand-written chunking"
   )
 
 sweep16 = fn size ->
@@ -904,7 +911,7 @@ r16 =
     sweep: {[64 * 1024, mb, 16 * mb], sweep16},
     sweep_runs: 5,
     reason:
-      "at the 2x line: decode 2.5x over :binary.decode_hex, encode 1.5x over :binary.encode_hex, which is a C BIF already"
+      "decode 4.5x over :binary.decode_hex and encode 2.6x over :binary.encode_hex, though both are C BIFs already"
   )
 
 per_call = fn n ->
@@ -937,7 +944,7 @@ r58 =
       end,
     sweep_runs: 5,
     reason:
-      "bignum base58 in Elixir against limb arithmetic in a kernel, batched; one key per call is no faster than Elixir"
+      "bignum base58 in Elixir against limb arithmetic in a kernel, batched; one key per call is about as fast as Elixir"
   )
 
 for r <- [r16, r58], not r.correct or r.verdict != r.expected do

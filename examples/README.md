@@ -61,7 +61,7 @@ Measured on Apple M4 Pro (12 logical cores) in 2 runs, on 2026-10-19. The newest
 | ✅ | [`byte_histogram`](byte_histogram.exs) (measured 2026-10-19 at `8fa900b7`) | histogram of 16 MB, 12 chunks each side | **8.4×** | – | windowed entropy 11×; one process vs one call 11–18× |
 | ✅ | [`keccak`](keccak.exs) (measured 2026-10-19 at `8fa900b7`) | Keccak-256 of 10k × 32 B per call | **7.7×** | 0.63× ex_keccak | the NIF blocks its scheduler on a 16 MB message; SHA3-256 against `:crypto` is 0.81× |
 | ✅ | [`image_blur`](image_blur.exs) (measured 2026-10-19 at `8fa900b7`) | grayscale + 3×3 box blur, 1080p, 12 bands each side | **7.4×** | – | one process against one call 26–29× |
-| ✅ | [`codecs`](codecs.exs) | base64 round trip of 1 MB | **6.1×** | 4.2× fast64 | hex 4.4×, base58 3.5× per batch; one key per call is no faster |
+| ✅ | [`codecs`](codecs.exs) | base64 round trip of 1 MB | **6.1×** | 4.2× fast64 | hex 4.4×, base58 3.5× per batch; one key per call is about as fast as Elixir |
 | ✅ | [`sort_u64_keys`](sort_u64_keys.exs) | sort 1M packed keys | **6.0×** | – | 3.8× when the caller needs a list back |
 | ✅ | [`lz4_snappy_decode`](lz4_snappy_decode.exs) (measured 2026-10-19 at `8fa900b7`) | Snappy block decode of 64 KB | **5.1×** | 2.4× snappyer as installed (-O0) | slower than the same libraries built -O2; LZ4 the same picture |
 | ✅ | [`monte_carlo_rtp`](monte_carlo_rtp.exs) | 100M slot spins on all schedulers | **3.9×** | – | ≈1× at 1M spins: short kernel chunks stay on few schedulers |
@@ -178,9 +178,9 @@ has them in full.
   level at 16 MB, where it blocks its scheduler 19 ms. For SHA3-256,
   `:crypto` (OpenSSL) beats the kernel.
 - [`codecs.exs`](codecs.exs): base64, hex and base58 round trips. base64 at
-  2–2.5 GB/s, well ahead of the fast64 C NIF; hex sits at the 2× bar
-  (encode alone 1.5×: use the BIF); base58 is good on a batch of 10k keys
-  and no faster one key per call.
+  4.5–5.5 GB/s, 4× the fast64 C NIF; hex 3.6× (encode alone 2.6× the
+  BIF, decode 4.5×); base58 is good on a batch of 10k keys and about as
+  fast as Elixir one key per call.
 - [`sort_u64_keys.exs`](sort_u64_keys.exs): heapsort kernel on 1M packed
   keys against decode plus `:lists.sort`; still good when the caller needs a
   list back, with the decode counted.
