@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-18T17:46:53Z",
@@ -10,8 +10,8 @@
   ],
   "parent": "defk-9p6",
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "codecs: refresh the header's Measured block",
   "type": "task",
-  "updated_at": "2026-10-18T17:46:59Z"
+  "updated_at": "2026-10-20T12:53:03Z"
 }
