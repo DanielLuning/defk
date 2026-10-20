@@ -201,6 +201,14 @@ has them in full.
   best Elixir; rusty_csv's NIF builds the same sub-binaries in C, 2.6×
   faster again. Timed in one long-lived process, the verdict moved from
   0.8× to 2.1× run to run with the heap the earlier runs left.
+- [`threshold_cross.exs`](threshold_cross.exs): the first packet whose
+  running total passes a byte budget, an early-exit loop, in Elixir, a
+  kernel and Nx `defn` on EXLA (a `while` with a stop flag, and a
+  cumulative sum). The kernel is faster than EXLA at every size, 790× at
+  16 packets and 2.9× at 16M; optimised Elixir beats EXLA up to about 1M.
+  EXLA costs ~40 µs a call, scales 1.6–1.9× over 48 callers (one host
+  lock), and compiles each new input length (~6.4 ms; power-of-two buckets
+  bring 298 compiles down to 8).
 - [`lz4_snappy_decode.exs`](lz4_snappy_decode.exs): Snappy and LZ4 block
   decode from scratch on untrusted input, against snappyer, lz4_erl and
   nimble_lz4. Against the NIFs as installed from Hex (built with no `-O`)

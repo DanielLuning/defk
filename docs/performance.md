@@ -910,6 +910,30 @@ Elixir answer for BLAKE2b; BLAKE3 is not in OpenSSL.
 - **Source:** [`blake.exs`](https://github.com/DanielLuning/defk/blob/main/examples/blake.exs), `defk-52v.2`.
 - **Status:** provisional.
 
+### 3.10 Nx with EXLA on an early-exit loop: ~40 us a call, a compile per shape, and plain Elixir is faster up to ~1M elements
+
+EXLA's strength is whole-tensor work (3.8, `cosine_topk`). On a sequential
+loop that stops early it loses to a kernel at every size, and to plain
+Elixir below about a million elements.
+
+- **Numbers** (the first index where a running i64 sum passes a budget,
+  passed at 25%; per call): 16 elements Elixir 0.14 us, kernel 0.05, EXLA
+  `while` 40-48 (compiled with `Nx.Defn.compile/3`, tensors resident); 64k
+  Elixir 15.7-17.0 us, kernel 4.4-4.6, EXLA 62-63; 16M Elixir 4.3-4.5 ms,
+  kernel 1.47-1.48, EXLA 4.3-4.4. The tensor form (`cumulative_sum` +
+  `argmax`, no early exit) is 1.5 ns an element and slower than Elixir at
+  every size; building the tensor from a binary adds up to 2x at 16M.
+- **Concurrency** (4096 elements): one process EXLA 24.5k calls/s, 48
+  processes 46.8k (the host device's lock); the kernel 3.2M and 22.3M.
+- **Variable length:** 300 calls of 298 lengths: the jit compiles each new
+  shape, ~6.4 ms (1.9 s in all; 20 ms once compiled). Padding to 8
+  power-of-two buckets: 0.25 s cold, 36 ms warm. Elixir 0.8-1.0 ms, the
+  kernel 0.4 ms.
+- **Conditions:** M-series Mac, OTP 29, Elixir 1.20.2, Nx and EXLA 0.13.1
+  CPU; two runs, one beside a `mix ci`.
+- **Source:** [`threshold_cross.exs`](https://github.com/DanielLuning/defk/blob/main/examples/threshold_cross.exs), `defk-9p6.29`; [`nx-boundary.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/nx-boundary.md).
+- **Status:** provisional.
+
 ---
 
 ## 4. Parallelism and schedulers

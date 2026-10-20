@@ -231,10 +231,26 @@ normal schedulers, free the frame on process death) targets exactly that gap.
 
 ## Gaps and open questions
 
-- Not measured here: EXLA-CPU per-call latency, compile time for small
-  kernels, and `while` iteration cost on each compiler. A catalog entry that
-  writes one early-exit kernel in Elixir, defk, and `defn`+EXLA would turn the
-  inferences above into numbers (fits defk-9p6.3's "measure against Nx" style).
+- **Measured since** (`examples/threshold_cross.exs`, `defk-9p6.29`,
+  2026-10-20, Nx and EXLA 0.13.1 on the CPU, provisional): one early-exit
+  job (the first index where a running sum of i64 passes a budget) in
+  Elixir, defk, `defn` with `while` and `defn` with `Nx.cumulative_sum`.
+  These inferences above are now numbers:
+  - Per-call cost: EXLA-CPU takes 37-48 us a call on a 16-element tensor
+    (compiled with `Nx.Defn.compile/3`, tensors resident), against 0.05 us
+    for the kernel and 0.14 us for Elixir.
+  - `while` iteration cost on EXLA: about 1.0 ns a step at 16M elements
+    (4.3 ms for 4.2M steps), 3x the kernel's 0.35; the `cumulative_sum` form
+    costs 1.5 ns an element and loses to plain Elixir at every size.
+  - The per-device lock: 48 concurrent callers raised EXLA's throughput
+    only 1.6-1.9x over one caller (the kernel 7x).
+  - Compile per shape: about 6.4 ms per new input length; padding to 8
+    power-of-two buckets cut 300 variable-length calls from 1.9 s to
+    0.25 s cold, at 2x the warm cost.
+  - Responsiveness: a 1 ms ticker on one normal scheduler saw the same gap
+    (about 2 ms, the floor under load) for all three: EXLA's dirty NIF does
+    not hold a normal scheduler.
+  Still not measured: Evaluator and Torchx `while` costs, and GPU.
 - Whether XLA CPU parallelises a single executable across threads internally
   (intra-op thread pool) was not traced in source; it affects how much one
   EXLA call occupies the machine beyond its one dirty scheduler.

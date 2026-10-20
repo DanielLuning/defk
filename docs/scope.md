@@ -97,9 +97,13 @@ the call must stay preemptible and stop with its process, or when it is the
 one numeric job in an app that doesn't otherwise need Nx and a compiled
 backend. Some overlap with Nx is fine: a kernel that saves you adding EXLA for
 one loop is a good use of defk. A kernel takes the same packed layout as
-`Nx.to_binary/1`, so the two work side by side. The small-input and
-early-exit cases are not measured
-against EXLA yet.
+`Nx.to_binary/1`, so the two work side by side. On an early-exit loop (the
+first element where a running sum passes a limit) a kernel was faster than
+Nx with EXLA at every size measured: about 800x at 16 elements, where EXLA
+costs some 40 us a call, and 2.9x at 16M. Plain Elixir beat EXLA up to about
+a million elements. With 48 concurrent callers EXLA's throughput rose only
+1.6-1.9x (one host device, one lock), and an input of a new length costs
+EXLA a compile of about 6 ms (provisional).
 
 **A wrapper NIF (Rustler, Zigler or an existing binding) is the right
 choice** when the value is in an existing native library rather than in a
