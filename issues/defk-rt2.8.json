@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-20T06:23:47Z",
   "created": "2026-10-19T18:42:42Z",
   "description": "Five generated regions, three mechanisms (docs/agents/generated-docs.md): `docs/compile-errors.md`, the two lists in `docs/scope.md`, `usage-rules.md` and `usage-rules/language.md` are regenerated with `mix run -e` and pasted by hand, each guarded by its own doc test (compile_errors_doc_test, scope_doc_test, usage_rules_test); `priv/defk_messages.h` and the scoreboard tables each have a task with `--check`. The marker machinery (`Defk.Examples.Tables.put/3`, `get/2`) exists and serves only the tables.\n\nSettled shape (grilling 2026-10-19):\n- One task `mix defk.docs [--check]` owns every region. `mix defk.messages` and `mix defk.examples.tables` fold in as regions and are deleted; no aliases (their only callers are docs/agents/generated-docs.md and the CI alias).\n- `docs/compile-errors.md` is a whole generated file; the lists in `docs/scope.md` and the two usage-rules files get marker regions as HTML comments (`\u003c!-- defk:generated ... --\u003e`), which render as nothing in the shipped package.\n- The three doc tests are deleted; `mix ci` runs `defk.docs --check`.\n- Update docs/agents/generated-docs.md, AGENTS.md's \"Generated docs\" paragraph, the compiler map's errors and messages bullets.\n\nDeletion test: deleting the paste instructions concentrates regeneration in one place. Gate: `mix ci` (with the new check); PR per AGENTS.md; CHANGELOG only if a shipped file's text changes.",
   "id": "defk-rt2.8",
@@ -14,8 +15,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "mix defk.docs [--check]: every generated doc region behind one task",
   "type": "task",
-  "updated_at": "2026-10-20T06:19:31Z"
+  "updated_at": "2026-10-20T06:23:47Z"
 }
