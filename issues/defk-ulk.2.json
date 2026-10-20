@@ -7,7 +7,7 @@
     "defk-ulk.6"
   ],
   "created": "2026-10-10T14:54:35Z",
-  "defer_until": "2026-11-15",
+  "defer_until": "2027-01-15",
   "description": "Prototype the 'build for architecture' side of the choice so the API decision has something concrete.\n\n- A build option selecting the target: portable (today, default) or an architecture level (native, or a named level such as x86-64-v3, armv8.2-a+crc). Try more than one spelling: config :defk, target: ...; use Defk, target: ...; DEFK_TARGET env var for CI. Note what each feels like in a real mix.exs/config and in a Mix.install script.\n- The target goes into the build cache key and the .so name (Defk.Build.cache_key/2).\n- The .so records the features it was built with; on load it checks the running CPU (cpuid / getauxval / sysctl) and fails with a clear error naming the missing features and how to rebuild (portable), instead of SIGILL. Prototype the fallback alternative too (also build portable, load it on mismatch) and compare.\n- Measure on real x86-64 and arm64 hardware with the research ticket's kernels: speedup per level, build time, .so size.\n- Benchmark reporting: DEFK_RESULT and Defk.Bench.report include the target, so no example silently compares an architecture build.\n\nDone when the prototype branch builds and loads both ways, the mismatch path is demonstrated (e.g. a v3 build loaded under an emulated older CPU), and the numbers are in docs/research/simd.md.",
   "id": "defk-ulk.2",
   "labels": [
@@ -18,5 +18,5 @@
   "status": "deferred",
   "title": "Prototype: opt-in architecture build with a load-time CPU check",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:45Z"
+  "updated_at": "2026-10-20T20:26:29Z"
 }
