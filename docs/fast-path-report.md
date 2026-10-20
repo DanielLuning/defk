@@ -40,10 +40,11 @@ next_sum/1  test/report_test.exs:16
   20 |   end
 ```
 
-When one small fact about the kernel's values would prove the missing
-half, the note names it. Here a raising guard `if w < 1, do: raise(...)`
-before the loop (docs/language.md, "Preconditions: raising guards") would
-drop both checks:
+With `use Defk, report: :full` (below), when one small fact about the
+kernel's values would prove the missing half, the note names it. Here a
+raising guard `if w < 1, do: raise(...)` before the loop
+(docs/language.md, "Preconditions: raising guards") would drop both
+checks:
 
 ```text
   6 |       n -> if x[i] > x[i - w], do: n + 1, else: n  # x[i]: bounds check kept; nothing proves 0 <= i (it would follow from w >= 0)
@@ -52,7 +53,9 @@ drop both checks:
 
 The fact is a hint: the residual with the fewest terms that the proof
 search reached, when it has at most two variables or lengths and a small
-constant. Another fact could also do.
+constant. Another fact could also do. The search runs once per kept check,
+so a module asks for it with `report: :full`; without it the note ends at
+what nothing proves.
 
 An `if`, `cond` or `case` value whose arms are pure arithmetic becomes a
 select, which computes every arm. An arm that dropped a check only because
@@ -88,7 +91,7 @@ it before the loop and clearing each pass) and `:vectorize`.
 defk's own facts are noted while the kernel is lowered. They cost no extra
 compiler pass and nothing at run time.
 
-## Vectorisation: `report: :full`
+## Hints and vectorisation: `report: :full`
 
 ```elixir
 defmodule Stats do
@@ -97,7 +100,8 @@ defmodule Stats do
 end
 ```
 
-This adds a `{:vectorize, verdict, text}` fact to each loop, taken from
+This names the fact that would drop a kept bounds check, as shown above,
+and adds a `{:vectorize, verdict, text}` fact to each loop, taken from
 clang's `-Rpass=loop-vectorize`, `-Rpass-missed=loop-vectorize` and
 `-Rpass-analysis=loop-vectorize` remarks. The verdict is `:vectorized`,
 `:missed` (with clang's reasons), `:partial` (some of the loop's C forms,

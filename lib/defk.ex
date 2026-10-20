@@ -47,8 +47,10 @@ defmodule Defk do
       `Mix.install` script, for instance). The kernels' own functions still
       run natively. Default `false`. See `Defk.ElixirMode`.
     * `report: :full` adds the C compiler's vectorisation of each loop to the
-      [fast-path report](`Defk.Report`), at the cost of a second C compile.
-      What it adds is unstable.
+      [fast-path report](`Defk.Report`), at the cost of a second C compile,
+      and names, for a kept bounds check, a small fact that would drop it,
+      at the cost of a proof search per kept check. What it adds is
+      unstable.
     * `adaptive_slice: false` turns off the short first slice on a crowded
       run queue. By default a yielding kernel's function reads
       `:erlang.statistics(:total_run_queue_lengths)` (about 9 ns) and, when
@@ -444,7 +446,8 @@ defmodule Defk do
           nif_name: nif_name,
           fault_hooks: fault_hooks?,
           adaptive_slice: adaptive?,
-          max_owned_bytes: max_owned_bytes!(env.module)
+          max_owned_bytes: max_owned_bytes!(env.module),
+          hints: Module.get_attribute(env.module, :defk_report) == :full
         )
       end)
 
@@ -452,7 +455,7 @@ defmodule Defk do
     # renamed, and the kernel's function passes the hint
     all_sigs = Enum.map(all_sigs, &Map.update!(&1, :yields, fn y -> adaptive? and y end))
 
-    if dump = System.get_env("DEFK_DUMP_C"), do: dump_c!(dump, env.module, c_src)
+    if dump = System.get_env("DEFK_DUMP_C"), do: dump_c!(dump, env.module, c_src, report)
 
     {report, placement} = library(env, c_src, report)
 
@@ -514,12 +517,19 @@ defmodule Defk do
   end
 
   # DEFK_DUMP_C=<dir>: every module compiled while it is set writes its
-  # generated C to <dir>/<Module>.c — the byte-identical gate for compiler
-  # refactors (dev/dump_c.exs). A pure side channel: the build
-  # and the module are unchanged.
-  defp dump_c!(dir, module, c_src) do
+  # generated C to <dir>/<Module>.c, and the compiler's report notes (the
+  # fast-path report before `report: :full` adds clang's) to
+  # <dir>/<Module>.report — the byte-identical gate for compiler refactors
+  # (dev/dump_c.exs). A pure side channel: the build and the module are
+  # unchanged.
+  defp dump_c!(dir, module, c_src, report) do
     File.mkdir_p!(dir)
     File.write!(Path.join(dir, "#{inspect(module)}.c"), c_src)
+
+    File.write!(
+      Path.join(dir, "#{inspect(module)}.report"),
+      Enum.map(report, &[inspect(&1, limit: :infinity, printable_limit: :infinity), "\n"])
+    )
   end
 
   # DEFK_COMPILE_TIME=<file>: every module compiled while it is set appends

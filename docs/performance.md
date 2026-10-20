@@ -2601,6 +2601,38 @@ else: 0))`; it now says `if first < 0 and n > 0, do: raise(ArgumentError,
 - **Source:** `defk-o08.4`; `test/copies_test.exs`.
 - **Status:** measured, provisional.
 
+### 6.41 The report's hint search runs only under `report: :full`: -3.6% of the compiler's work
+
+- **Numbers:** the search for "it would follow from ..." (`Facts.residual/5`
+  for every kept bounds check) took about 2.4% of the compiler's time, 6% on
+  `SatEx.Kernels`. It now runs only in a module with `use Defk, report:
+  :full` (maintainer's call, 2026-10-20). Over the 108 modules of `mix
+  dump_c`, two rounds each, interleaved with 6.40's state: 114.9 -> 110.8 M
+  reductions (-3.6%; -1.2% without `SatEx.Kernels`, which alone saves
+  3.2 M), 932 -> 922 ms (-1.1%, within drift). Same C (but for the path-hashed
+  loop markers of the two test modules that took `report: :full`); every
+  report the same less its hints, and two notes of `HashChain.Kernels` that
+  differed only by their hints now kept once (a note made twice is kept
+  once). Against the compiler before step 1 (6.38's baseline, by
+  reductions): +3.5% (-2.2% without `SatEx.Kernels`).
+- **Tried first, not adopted** (both keep every report the same, checked
+  with `mix dump_c`'s `.report` files, two rounds interleaved against
+  main):
+  - A text made only when the note survives (a closure, rendered in
+    `report/0`, so a lowering that is undone and redone drops its notes
+    unrendered): -1.5% of the work (reductions), all on `SatEx.Kernels`
+    (-1.85 M; no other module redoes a lowering), but +9.0% time (+4.3%
+    without `SatEx.Kernels`, both rounds): every kept note's closure holds
+    the env and the facts scope of its moment until the compile ends, and
+    the collector copies them. Not adopted.
+  - A smaller `@hint_budget`: 8 drops the hints of two notes (a kernel of
+    `{:load, 9}`) for -0.5% of the work, 4 drops hints in four modules for
+    -0.9%. Not adopted: 16 stays.
+- **Conditions:** M-series Mac on battery, no quiet check; `cc` not run.
+- **Source:** `defk-o08.5`; `test/condition_facts_test.exs` (a kernel with and
+  without `report: :full`).
+- **Status:** measured, provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -2908,4 +2940,4 @@ example or close a workload ticket, add its entries and its line here.
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
   `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`,
   `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`,
-  `defk-o08.2`, `defk-o08.3`, `defk-o08.4`.
+  `defk-o08.2`, `defk-o08.3`, `defk-o08.4`, `defk-o08.5`.

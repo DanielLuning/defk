@@ -12,7 +12,12 @@ no more.
   `dev/dump_c.exs`): the kernels compile, their C goes to `<dir>`, and no
   library is built (`DEFK_NO_CC=1`, set by the alias). Every test file and
   example took 68 s on 2026-10-19 with a cold library cache; named files take
-  seconds. Diff two dumps to see which modules' C changed.
+  seconds. Diff two dumps to see which modules' C changed. Beside each
+  `<Module>.c` the dump writes `<Module>.report`, the compiler's report notes
+  (`__defk_report__/0` without `report: :full`'s clang part), so the same
+  diff shows a change to the report; its notes name absolute paths only for
+  a note in another file, so dump both sides from the same directory when a
+  report diff matters.
 - **An example's check** (`mix defk.examples --only a,b`): builds the
   libraries and runs the example's `:check`, defk against Elixir. No timing.
 - **`mix test`, `mix ci`**: before the PR, as `AGENTS.md` says.

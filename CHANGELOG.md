@@ -87,8 +87,9 @@
   the body of a range that runs, and after a raising guard,
   `if w < 1, do: raise(ArgumentError, "...")`. docs/language.md now
   recommends raising guards for what a kernel needs of its arguments. When
-  a check stays, the fast-path report names a small fact that would drop
-  it: `nothing proves i - w < length(x) (it would follow from w >= 0)`. An
+  a check stays, the fast-path report of a module with `report: :full`
+  names a small fact that would drop it:
+  `nothing proves i - w < length(x) (it would follow from w >= 0)`. An
   `if` value whose arm relies on its condition to drop a check is a branch,
   not a select. Results are unchanged.
 - Faster: a row-major index with a runtime row length, `m[r * dim + j]`,

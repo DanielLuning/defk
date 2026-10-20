@@ -15,6 +15,7 @@ defmodule Defk.Compiler.Ctx do
             broken: MapSet.new(),
             statics: %{},
             report: [],
+            hints: false,
             bits_names: %{},
             lowering: nil
 

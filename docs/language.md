@@ -1229,7 +1229,8 @@ lengths, through:
 It does not use products of three variables (`(y * w + x) * ch`), a `!=`
 or an `or` that holds, or `case` guards yet: such an index keeps its check, and the
 fast-path report says which half (`0 <= i` or `i < length(a)`) nothing
-proves, and, when one small fact would prove it, that fact:
+proves, and, with `use Defk, report: :full`, when one small fact would
+prove it, that fact:
 `nothing proves i - w < length(x) (it would follow from w >= 0)`. That
 is a hint, not a promise: another fact could also do.
 
@@ -2156,7 +2157,8 @@ iex> M.rises(<<1::64-native>>, 0)
 `x[i]` and `x[i - w]` have no bounds check: `i >= w` from the range and
 `w >= 1` from the guard give `0 <= i - w` and `0 <= i`, and
 `i <= length(x) - 1` gives the rest. Without the guard both keep their
-checks, and the fast-path report names the fact they lack:
+checks, and the fast-path report (with `use Defk, report: :full`) names
+the fact they lack:
 `x[i - w]: bounds check kept; nothing proves i - w < length(x) (it would
 follow from w >= 0)`. The guard costs one compare per call; a check in the
 loop costs one per element and may keep clang from vectorising it.
