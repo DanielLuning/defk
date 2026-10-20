@@ -10,11 +10,15 @@
     {
       "text": "Stage 1 done on branch defk-snm/handwired-research: bench/handwired_search.exs, result in docs/research/handwired.md (Elixir :binary.matches in 12 chunks 6.8-8.6 ms, defk shift-and 9.2-9.5 ms, quiet machine). Next stage needs the owner's pick.",
       "timestamp": "2026-10-20T11:32:13Z"
+    },
+    {
+      "text": "Stage 1b done: bench/handwired_classes.exs, result in docs/research/handwired.md. defk bit-parallel NFA 14-15 ms in 12 chunks vs :re 19-33 ms; hand-written Elixir anchor+:binary.matches 7-10 ms beats defk; defk wins only without a literal anchor. Quiet machine, one run.",
+      "timestamp": "2026-10-20T11:43:08Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Research spike: per-document circuit kernels (handwired) and a GPU target, impact on defk",
   "type": "task",
-  "updated_at": "2026-10-20T11:32:13Z"
+  "updated_at": "2026-10-20T11:43:08Z"
 }
