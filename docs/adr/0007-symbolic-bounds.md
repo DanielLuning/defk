@@ -87,7 +87,9 @@ Replace the fact model with one representation:
   The compiler is at about +29% of its time before step 1, past the
   ceiling; the next step cuts first. The copy analysis's one pass per arm
   (`defk-o08.3`, 6.39) took 9% off: +17.6% of the work before step 1, still
-  past the ceiling.
+  past the ceiling. Each statement's reads walked once (`defk-o08.4`, 6.40)
+  took 8.6% more off: +7.4% of the work before step 1 (-1.0% without
+  `SatEx.Kernels`), under the ceiling again.
 - **Raising guards become the way to state facts about arguments** in a
   kernel, which the language docs would describe.
 - **Out of scope:** degree 3 and nested products, facts across loop

@@ -369,7 +369,8 @@ defmodule Defk.Compiler do
     case Code.string_to_quoted(src) do
       # the statements are lowered in the block of the statement env is at
       {:ok, ast} ->
-        probe(fn -> stmt_list(exprs(ast), Copies.live_after(exprs(ast)), env) end) != :error
+        probe(fn -> stmt_list(exprs(ast), Copies.block_liveness(exprs(ast)), env) end) !=
+          :error
 
       _ ->
         false
@@ -906,7 +907,7 @@ defmodule Defk.Compiler do
   defp lower_block_env(ast, env) do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
-    lives = Copies.live_after(es)
+    lives = Copies.block_liveness(es)
     {s1, env} = stmt_list(init, lives, nested(env, ast))
 
     {s2, v, env} =
@@ -957,10 +958,11 @@ defmodule Defk.Compiler do
   # A block evaluated only for effect, nested like lower_block's.
   defp lower_stmts(ast, env) do
     es = exprs(ast)
-    stmt_list(es, Copies.live_after(es), nested(env, ast))
+    stmt_list(es, Copies.block_liveness(es), nested(env, ast))
   end
 
-  # statements `es` of one block; `lives` has the names read after each
+  # statements `es` of one block; `lives` has, for each, the names read after
+  # it and the names it reads (Copies.block_liveness/1)
   defp stmt_list(es, lives, env) do
     Enum.zip(AllocZeroing.mark(es), lives)
     |> Enum.reduce({[], env}, fn {e, live}, {acc, env} ->
@@ -1349,12 +1351,13 @@ defmodule Defk.Compiler do
   defp array_ids({:arr, _}), do: %{id: make_ref(), buf: make_ref(), fin: false, depth: 1}
   defp array_ids(_t), do: %{}
 
-  # Before statement `e` of a block, `live` the names read after it: copy
-  # what its nested writes need (hoist/3), then note what is live.
-  defp enter(e, live, env) do
+  # Before statement `e` of a block, `live` the names read after it and
+  # `reads` those it reads: copy what its nested writes need (hoist/4), then
+  # note what is live.
+  defp enter(e, {live, reads}, env) do
     names = Copies.live_names(e, live)
-    {sh, env} = hoist(e, names, env)
-    {sh, %{env | scope: Copies.enter_stmt(env.scope, e, names, env.vars)}}
+    {sh, env} = hoist(e, names, reads, env)
+    {sh, %{env | scope: Copies.enter_stmt(env.scope, e, names, reads, env.vars)}}
   end
 
   # A variable bound outside the branches and loop bodies of `e` and written
@@ -1363,8 +1366,8 @@ defmodule Defk.Compiler do
   # only binding of an owned buffer, so its writes are in place, and a loop
   # copies once. An input array written in a branch is copied even when the
   # branch is not taken.
-  defp hoist(e, names, env) do
-    seen = MapSet.union(names, Copies.reads(e))
+  defp hoist(e, names, reads, env) do
+    seen = MapSet.union(names, reads)
 
     Enum.reduce(Copies.nested_writes(e), {[], env}, fn n, {acc, env} ->
       case env.vars do
@@ -5099,7 +5102,7 @@ defmodule Defk.Compiler do
   defp lower_tail(ast, env, leaf) do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
-    lives = Copies.live_after(es)
+    lives = Copies.block_liveness(es)
     {s, env} = stmt_list(init, lives, nested(env, ast))
 
     [

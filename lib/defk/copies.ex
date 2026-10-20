@@ -177,10 +177,17 @@ defmodule Defk.Copies do
   def stmt_reads(e), do: reads(e)
 
   # for each statement of a block, the names read after it in the block
-  def live_after(es) do
+  def live_after(es), do: es |> block_liveness() |> Enum.map(&elem(&1, 0))
+
+  # for each statement of a block, {the names read after it in the block,
+  # the names it reads}: what entering it needs (enter_stmt/5), from one
+  # walk of it. stmt_reads/1 is reads/1 of the statement: read_counts/1
+  # skips a match's left side as stmt_reads/1 does.
+  def block_liveness(es) do
     {lives, _} =
       List.foldr(es, {[], MapSet.new()}, fn e, {acc, live} ->
-        {[live | acc], live |> MapSet.difference(binds(e)) |> MapSet.union(stmt_reads(e))}
+        reads = stmt_reads(e)
+        {[{live, reads} | acc], live |> MapSet.difference(binds(e)) |> MapSet.union(reads)}
       end)
 
     lives
@@ -289,9 +296,12 @@ defmodule Defk.Copies do
   # with `vars` the bindings after the copies hoisted before `e`: what is
   # live after `e`, and for the blocks nested in it (which also see what `e`
   # reads, as a later iteration or a later arm does).
-  def enter_stmt(%Scope{} = s, e, names, vars) do
+  # `reads` is reads(e), when the caller has it (block_liveness/1).
+  def enter_stmt(%Scope{} = s, e, names, vars), do: enter_stmt(s, e, names, reads(e), vars)
+
+  def enter_stmt(%Scope{} = s, e, names, reads, vars) do
     live = MapSet.union(pairs(vars, names), s.out)
-    nest = MapSet.union(live, pairs(vars, reads(e)))
+    nest = MapSet.union(live, pairs(vars, reads))
     %{s | stmt: e, live: live, live_names: names, nest: nest}
   end
 
