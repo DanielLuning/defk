@@ -15,7 +15,7 @@
     "defk-n4r.9"
   ],
   "created": "2026-10-09T18:40:51Z",
-  "defer_until": "2026-11-15",
+  "defer_until": "2027-01-15",
   "description": "The core milestone: examples/one_brc/ with the Elixir baseline (sibling ticket), the kernel version, agreement checks and the end-to-end measurement at 100M rows.\n\nKernel design:\n- `aggregate(chunk :: [u8], slots :: mut [i64], arena :: mut [u8], stats :: mut [i64]) :: i64` processes one newline-aligned chunk into an open-addressing table: slots holds (hash, key offset, key len, stats index) per bucket, arena holds the station names, stats holds min, max, sum, count per station as i64 (temperatures x10). Returns the number of distinct stations. Hash: FNV-1a or a multiply-shift over u64_le words with masked arithmetic. Probe: linear, compare lengths then bytes (a byte-range equality helper or an inline loop; measure both).\n- Parse: scan to `;` (byte loop first; a SWAR variant with u64_le once it works), then the temperature as sign, 1-2 digits, `.`, 1 digit, as in the upstream rules.\n- Elixir side: :file.pread 32-64 MB chunks aligned to `\\n`, Task.async_stream with one table set per task (alloc'd by a tiny `new_table/0` kernel or in Elixir as zeroed binaries), merge the decoded tables into one map, format as upstream specifies.\n- Agreement: Defk.Test.assert_agrees on aggregate over generated chunks (small N, several seeds) and over hostile inputs (a chunk without a trailing newline, a name longer than 100 bytes: upstream guarantees \u003c= 100, so that is a documented limit that raises).\n\nMeasure as examples/README.md says: end to end from file on disk to the output string, best of 5, GC before each, on the quiet machine profile; report the per-scheduler scaling (1, 2, 4, all) because the Elixir merge and the I/O will dominate at some point. Record the kernel's code size (generated C lines, .so size) since every helper is inlined (defk-6ag).\n\nBlocked by: the baseline ticket, defk-w38, word loads, sub-array views (local values only), writable array parameters, string literals.\n\nDone when: Defk.Bench.report runs with expected: :good or whatever it measures, the output matches the baseline for two seeds, and the header records what the kernel needed from the subset and what it cost.",
   "id": "defk-n4r.6",
   "labels": [
@@ -36,5 +36,5 @@
   "status": "deferred",
   "title": "1BRC kernel example at the development size (100M rows)",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:43Z"
+  "updated_at": "2026-10-20T20:26:24Z"
 }
