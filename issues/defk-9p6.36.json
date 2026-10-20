@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "PR #73. Bisect: encode64 489 -\u003e 251-260 us at the defk-upc merge 1ba18380 (range facts for constant multiples).",
+      "timestamp": "2026-10-20T13:00:55Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "codecs: refresh the header's Measured block",
   "type": "task",
-  "updated_at": "2026-10-20T12:53:03Z"
+  "updated_at": "2026-10-20T13:00:55Z"
 }
