@@ -11,9 +11,15 @@
     "ready-for-human"
   ],
   "parent": "defk-9p6",
+  "comments": [
+    {
+      "text": "Done by defk-9p7 (PR #44, commit 307a96ef): scoreboard.json stored from a quiet run at 8fa900b7, markers in both READMEs, tables generated; defk-q58 (PR #45) re-measured the four provisional rows. test/scoreboard_doc_test.exs passes on main 25954894.",
+      "timestamp": "2026-10-20T12:51:25Z"
+    }
+  ],
   "priority": 2,
   "status": "open",
   "title": "Seed examples/scoreboard.json on a quiet machine and switch the README tables to the generator",
   "type": "task",
-  "updated_at": "2026-10-15T09:11:30Z"
+  "updated_at": "2026-10-20T12:51:25Z"
 }
