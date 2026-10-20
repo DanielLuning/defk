@@ -9,9 +9,15 @@
     "needs-triage"
   ],
   "parent": "defk-vcx",
+  "comments": [
+    {
+      "text": "The research note docs/research/handwired.md and the bench scripts were deleted with their unmerged branch on 2026-10-20 (last commit d289e27d, recoverable from the reflog until git gc). The numbers this ticket needs are in its description.",
+      "timestamp": "2026-10-20T12:48:43Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "Decide: an f32 rounding builtin, or only a documented recipe, for exact float32 in kernels",
   "type": "task",
-  "updated_at": "2026-10-20T12:35:37Z"
+  "updated_at": "2026-10-20T12:48:43Z"
 }
