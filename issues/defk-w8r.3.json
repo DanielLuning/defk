@@ -27,5 +27,5 @@
   "status": "open",
   "title": "Gather loops: find which runtime checks Defk.Facts could prove away (f32 layer is 5.5x slower than C float)",
   "type": "task",
-  "updated_at": "2026-10-20T20:25:51Z"
+  "updated_at": "2026-10-20T20:25:58Z"
 }
