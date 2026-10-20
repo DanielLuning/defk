@@ -15,7 +15,9 @@
 # every dropped bounds and overflow check where the condition holds.
 
 defmodule Defk.ConditionFactsTest.K do
-  use Defk
+  # the report names the fact that would drop a kept check only under
+  # report: :full, and the tests below read those hints
+  use Defk, report: :full
 
   # x[i - w] under i >= w, after a raise when w < 1: 0 <= i - w from the
   # arm, i - w < length(x) from i <= length(x) - 1 and w >= 1
@@ -138,6 +140,22 @@ defmodule Defk.ConditionFactsTest.K do
   end
 end
 
+# the same unguarded kernel without report: :full: its note names no fact
+defmodule Defk.ConditionFactsTest.Plain do
+  use Defk
+
+  defk rolling_diff_unguarded(x :: [f64], w :: i64) :: [f64] do
+    out = alloc(f64, length(x))
+
+    for i <- 0..(length(x) - 1)//1 do
+      old = if i >= w, do: x[i - w], else: 0.0
+      out[i] = x[i] - old
+    end
+
+    out
+  end
+end
+
 defmodule Defk.ConditionFactsTest do
   use ExUnit.Case, async: true
   use Defk.Properties
@@ -184,6 +202,11 @@ defmodule Defk.ConditionFactsTest do
     test "without the guard, the report names w >= 0" do
       assert kept(:rolling_diff_unguarded) == [
                "x[i - w]: bounds check kept; nothing proves i - w < length(x) (it would follow from w >= 0)"
+             ]
+
+      # the hint is searched for only under report: :full
+      assert kept_bounds(Defk.ConditionFactsTest.Plain, :rolling_diff_unguarded) == [
+               "x[i - w]: bounds check kept; nothing proves i - w < length(x)"
              ]
 
       for w <- [@i64_min, -3, -1, 0, 1, 2, @i64_max] do

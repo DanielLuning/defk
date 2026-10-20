@@ -2601,13 +2601,23 @@ else: 0))`; it now says `if first < 0 and n > 0, do: raise(ArgumentError,
 - **Source:** `defk-o08.4`; `test/copies_test.exs`.
 - **Status:** measured, provisional.
 
-### 6.41 The report's hint search: what keeps its output saves under 2%, and a lazy text costs time
+### 6.41 The report's hint search runs only under `report: :full`: -3.6% of the compiler's work
 
 - **Numbers:** the search for "it would follow from ..." (`Facts.residual/5`
   for every kept bounds check) took about 2.4% of the compiler's time, 6% on
-  `SatEx.Kernels`. Two ways that keep every report the same, both checked
-  with `mix dump_c`'s `.report` files (all 108 modules identical), two
-  rounds interleaved against main:
+  `SatEx.Kernels`. It now runs only in a module with `use Defk, report:
+  :full` (maintainer's call, 2026-10-20). Over the 108 modules of `mix
+  dump_c`, two rounds each, interleaved with 6.40's state: 114.9 -> 110.8 M
+  reductions (-3.6%; -1.2% without `SatEx.Kernels`, which alone saves
+  3.2 M), 932 -> 922 ms (-1.1%, within drift). Same C (but for the path-hashed
+  loop markers of the two test modules that took `report: :full`); every
+  report the same less its hints, and two notes of `HashChain.Kernels` that
+  differed only by their hints now kept once (a note made twice is kept
+  once). Against the compiler before step 1 (6.38's baseline, by
+  reductions): +3.5% (-2.2% without `SatEx.Kernels`).
+- **Tried first, not adopted** (both keep every report the same, checked
+  with `mix dump_c`'s `.report` files, two rounds interleaved against
+  main):
   - A text made only when the note survives (a closure, rendered in
     `report/0`, so a lowering that is undone and redone drops its notes
     unrendered): -1.5% of the work (reductions), all on `SatEx.Kernels`
@@ -2618,12 +2628,9 @@ else: 0))`; it now says `if first < 0 and n > 0, do: raise(ArgumentError,
   - A smaller `@hint_budget`: 8 drops the hints of two notes (a kernel of
     `{:load, 9}`) for -0.5% of the work, 4 drops hints in four modules for
     -0.9%. Not adopted: 16 stays.
-- **What is left:** the search for notes that survive, which only a report
-  computed on demand (a hint only when a report is asked for) could skip;
-  that changes `__defk_report__/0` and is the maintainer's call. The
-  compiler is under ADR-0007's ceiling without it (6.40).
 - **Conditions:** M-series Mac on battery, no quiet check; `cc` not run.
-- **Source:** `defk-o08.5`.
+- **Source:** `defk-o08.5`; `test/condition_facts_test.exs` (a kernel with and
+  without `report: :full`).
 - **Status:** measured, provisional.
 
 ---

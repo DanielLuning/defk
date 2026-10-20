@@ -104,9 +104,15 @@ defmodule Defk.Compiler do
   #       adaptive_slice - a yielding kernel's NIF is `__defk_native_<name>__`
   #         with the run-queue hint as an extra last argument (default false);
   #       max_owned_bytes - the byte budget of a call's owned buffers (DEFK_MAX_OWNED
-  #         in priv/defk_runtime.h; default nil: half of physical memory)
+  #         in priv/defk_runtime.h; default nil: half of physical memory);
+  #       hints - a kept bounds check's note names the fact that would drop
+  #         it (note_bounds/4: a proof search per kept check; default false,
+  #         `report: :full` turns it on)
   def compile(module, raw_kernels, file, opts \\ []) do
-    Process.put(@ctx, Ctx.new(file, module, source_lines(file)))
+    Process.put(@ctx, %{
+      Ctx.new(file, module, source_lines(file))
+      | hints: Keyword.get(opts, :hints, false)
+    })
 
     kernels =
       raw_kernels
@@ -6290,9 +6296,10 @@ defmodule Defk.Compiler do
   # a[i], or the word load u64_le(bytes, i), of width w: its bounds check
   # dropped, or kept with the facts that would drop it. `proof` is the
   # access's own (Facts.check/4), which names the half that fails, so what
-  # is named is what the proof would accept. A failing half names the fact
-  # it would follow from when that is small (Facts.residual/5): a value `a`
-  # indexed by `i`, in `env`.
+  # is named is what the proof would accept. Under `report: :full` (ctx
+  # hints), a failing half also names the fact it would follow from when
+  # that is small (Facts.residual/5, a search per kept check, so not for
+  # every compile): a value `a` indexed by `i`, in `env`.
   defp note_bounds(node, w, proof, {a, i, env}) do
     {text, arr, idx} =
       case node do
@@ -6307,10 +6314,14 @@ defmodule Defk.Compiler do
       {:unproven, half} ->
         {arr, idx} = {src_text(arr), src_text(idx)}
 
+        hints? = ctx(:hints)
+
         named = fn h, what ->
-          case Facts.residual(a, i, w, h, env.facts) |> hint_text(env) do
-            nil -> what
-            fact -> "#{what} (it would follow from #{fact})"
+          with true <- hints?,
+               fact when fact != nil <- Facts.residual(a, i, w, h, env.facts) |> hint_text(env) do
+            "#{what} (it would follow from #{fact})"
+          else
+            _ -> what
           end
         end
 

@@ -16,7 +16,9 @@
 # arithmetic.
 
 defmodule Defk.ProductFactsTest.K do
-  use Defk
+  # the report names the fact that would drop a kept check only under
+  # report: :full, and a test below reads one
+  use Defk, report: :full
 
   # the rows of m (dim = length(q) values each) scored against q: r * dim + j
   # is below n * dim <= length(m), from n = div(length(m), dim)
