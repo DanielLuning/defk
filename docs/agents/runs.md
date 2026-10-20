@@ -61,9 +61,23 @@ cores it uses.
 
 ## Compiler time
 
-The compiler-time rounds (a temporary `:timer.tc` around
-`Defk.Compiler.compile` in `Defk.__before_compile__`, interleaved `mix
-dump_c` rounds on both sides) measure defk's compile, not `cc`, so they run
-without `cc` too. Name the files when the change touches only some kernels,
-and report `SatEx.Kernels` (`examples/cdcl_sat.exs`) on its own: it
-dominates the prover's cost.
+The compiler-time rounds measure defk's compile, not `cc`, so they run
+without `cc` too. With `DEFK_COMPILE_TIME=<file>` set, every module compiles
+once more in a fresh process and logs that compile's microseconds and
+reductions (`Defk.__before_compile__`, `timed_compile/2`). Run interleaved
+rounds on both sides and compare them:
+
+    DEFK_COMPILE_TIME=tmp/base1.log DEFK_DUMP_C=tmp/c_base mix dump_c   # base checkout
+    DEFK_COMPILE_TIME=tmp/new1.log  DEFK_DUMP_C=tmp/c_new  mix dump_c   # branch
+    ... base2, new2 ...
+    elixir dev/compile_time.exs --reductions tmp/base*.log -- tmp/new*.log
+    elixir dev/compile_time.exs tmp/base*.log -- tmp/new*.log
+
+Two rounds a side are enough for reductions, which repeat to about 0.1%;
+microseconds drift with the machine (about 25% between runs on a laptop
+on battery), so report them with the conditions. A full round takes about
+a minute and a half. Name the files when the change touches only some
+kernels, and report `SatEx.Kernels` (`examples/cdcl_sat.exs`) on its own:
+it dominates the prover's cost. Do not time a module's first compile: under
+`mix compile` it waits for the compiler's own modules (`docs/performance.md`
+6.38).
