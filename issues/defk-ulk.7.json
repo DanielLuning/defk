@@ -6,7 +6,7 @@
   ],
   "blocks": [],
   "created": "2026-10-10T14:54:36Z",
-  "defer_until": "2026-11-15",
+  "defer_until": "2027-01-15",
   "description": "From the builtin prototype and the vector ceiling study, decide which hardware builtins to adopt (and how they dispatch), and whether portable vector values enter the subset (now, later, never). Record the evidence and rejected options; file implementation tickets for what is adopted.",
   "id": "defk-ulk.7",
   "labels": [
@@ -17,5 +17,5 @@
   "status": "deferred",
   "title": "Decide: hardware builtins and vector types, build or not",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:47Z"
+  "updated_at": "2026-10-20T20:26:29Z"
 }
