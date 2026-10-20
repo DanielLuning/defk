@@ -203,7 +203,8 @@ Elixir job can use every scheduler.
   layout alone moves a kernel about ±3% (count_primes yielding 177 vs 180-182
   ms, with `count_primes_via_call` moving the other way). Verdicts near a
   line flip run to run: `poor_substring_search` 1.03-1.11x read 1.0x on the
-  scoreboard; `codecs` hex 2.02-2.04x reads marginal on a slow run;
+  scoreboard; `codecs` hex 2.02-2.04x read marginal on a slow run (3.6x
+  since `defk-upc`, 6.2, so no longer near the line);
   `gorilla_encode` 1.96-2.38x was marginal in 1 run of 8.
 - **Conditions:** loaded runs (load average 5-90 across sessions).
 - **Source:** `defk-wnu` (open), `defk-9p6.24` (open: proposes a ±5% tie band), `defk-9p6.13`/`.15`/`.16` comments.
@@ -815,8 +816,8 @@ For GB/s validation wrap simdutf8; a scalar kernel cannot beat the BIF by much.
 - **Numbers:** research, 16 MiB random: `:binary.encode_hex` 1,091 MB/s,
   `Base.encode16` 475 MB/s, `Base.encode64` 764 MB/s, `Base.decode64!` 551
   MB/s. `codecs`: `:binary.encode_hex/decode_hex` beat `Base` both ways; a hex
-  encode kernel is only 1.5x the BIF (now ~2.6x after `defk-upc`, under
-  load); `Base` encodes base64 faster than `:base64`, and `:base64` decodes
+  encode kernel was only 1.5x the BIF, and is 2.6-2.7x since `defk-upc`
+  (decode 4.3-4.7x; 2026-10-20, provisional); `Base` encodes base64 faster than `:base64`, and `:base64` decodes
   about 4% faster.
 - **Source:** [`string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs) (e81ee3f), `defk-9p6.19`, `defk-upc` comment 2026-10-10.
 - **Status:** research provisional; codecs measured.
@@ -1182,7 +1183,9 @@ If you must pack, see 2.2.
     it was 4.2-4.6x at 4 bytes.
   - `geohash` one point per call 0.77-0.85x (10k calls).
   - `codecs` base58: one 32-byte key per call 1.04 us against Elixir 0.94
-    us; 100 keys 2.5x; 10k keys 2.59-2.68x.
+    us; 100 keys 2.5x; 10k keys 2.59-2.68x. On 2026-10-20 (provisional):
+    one key 0.91-1.06 us against 0.86-1.43 us, 100 keys 3.9-4.0x, 10k
+    keys 3.35-3.55x; one key per call is still about level.
   - `hash_chain` HMAC: 1 nonce 0.5x, 100 nonces 0.86-0.91x, 10k 1.1-1.2x, 1M
     1.33-1.47x.
   - `utf8_valid`: at 1 KB the kernel's fixed cost (tables built per call)
@@ -1420,6 +1423,13 @@ names each kept bounds check and the fact that would drop it. See
 - **Numbers:** cosine top-k one call, 100k x 384: literal `@dim 384` 20 ms,
   `dim = length(q)` 25 ms (every access kept its check). Range facts for `2 * i`
   (`defk-upc`): 1 MB hex encode 0.601 -> 0.333 ms, decode 0.644 -> 0.503 ms.
+  The same facts for `3 * g` and `4 * g` made base64 `encode64` on 1 MB
+  489 -> 251-260 us (best of 41, three rounds, bisected over the merges of
+  `main` from 7365e4a5 to 25954894: the first fast commit is the `defk-upc`
+  merge 1ba18380, 2026-10-10). The whole codecs base64 round trip went from
+  1.04 ms (2.9-3.0x) in the example's first header to 0.47-0.50 ms
+  (6.1-6.7x) on 2026-10-20 (`defk-9p6.36`, provisional: other processes
+  used 0.6-2.3 cores).
   `pcm_mix`: a variable block offset keeps two bounds checks in the sum loop,
   which then runs scalar and takes ~70% of the kernel (0.2-0.29 of 0.3-0.37
   ms); the check-free clamp loop beside it vectorises at width 8. Since
@@ -2726,7 +2736,8 @@ The wrapper jobs and what would reopen each are in
     against 12.6-12.7 ms for its inner-product index on pre-normalised
     vectors.
   - Level: siphash's C NIF and the kernel batch on 1k keys (0.96-1.0x); the
-    fast64 C NIF is 2.1x slower than the base64 kernel.
+    fast64 C NIF is 4.1-4.4x slower than the base64 kernel (2.1x before
+    `defk-upc`, 6.2).
 - **Conditions:** pcm_mix, ws_masking, batched_levenshtein, hll, gorilla,
   cosine under load; hashes and codecs load not recorded.
 - **Source:** [`pcm_mix.exs`](https://github.com/DanielLuning/defk/blob/main/examples/pcm_mix.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`batched_levenshtein.exs`](https://github.com/DanielLuning/defk/blob/main/examples/batched_levenshtein.exs), [`hll_update_many.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hll_update_many.exs), [`gorilla_encode.exs`](https://github.com/DanielLuning/defk/blob/main/examples/gorilla_encode.exs), [`cosine_topk.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cosine_topk.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs), [`codecs.exs`](https://github.com/DanielLuning/defk/blob/main/examples/codecs.exs).
