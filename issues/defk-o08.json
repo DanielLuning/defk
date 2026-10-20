@@ -10,11 +10,15 @@
     {
       "text": "Closing check 2026-10-20 (main 514ff6d2, mix dump_c reports): cosine_topk m[r*dim+j] and out[r] check-free; pcm_mix sum loop check-free (4 kept in the rescale loop, out of scope per performance.md 6.37); resize_bilinear, monte_carlo_rtp draws/uniforms, encode16 unzeroed (encode64 still zeroed in strips: i5r accepted 'whichever shapes landed'; not a bounds check). Gap: rolling_stats mean_std keeps x[i - w] and two out writes (no raising guard in the catalog kernel): defk-o08.6. The epic closes when defk-o08.6 lands.",
       "timestamp": "2026-10-20T12:35:20Z"
+    },
+    {
+      "text": "All children closed: defk-o08.6 (PR #72, b-merged 2026-10-20) closed the last gap; the closing check's catalog kernels list none of the children's bounds checks (cosine_topk, pcm_mix sum loop, rolling_stats mean_std). Compile time: +3.5% of the work before step 1 after defk-o08.2-o08.5.",
+      "timestamp": "2026-10-20T12:48:20Z"
     }
   ],
   "priority": 3,
   "status": "open",
   "title": "Symbolic bounds: prove more indices in range (ADR-0007)",
   "type": "epic",
-  "updated_at": "2026-10-20T12:35:20Z"
+  "updated_at": "2026-10-20T12:48:20Z"
 }
