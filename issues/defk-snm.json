@@ -18,11 +18,15 @@
     {
       "text": "Stage 3 done: compiler impact inventory in docs/research/handwired.md. No IR (lowering returns C text values); about 4,400 of 6,513 compiler lines entangled; GPU cannot keep yield/siglongjmp/normal-scheduler promises as written; recommended attach: small device-kernel frontend (option C), sized by a throwaway spike.",
       "timestamp": "2026-10-20T11:50:21Z"
+    },
+    {
+      "text": "Stage 2 done: bench/handwired_f32.exs + handwired_f32_ref.c, result in docs/research/handwired.md. f64 op + [f32] store equals C float on 15M results; the atom needs the rounding; sparse layer with per-op scratch rounding: 0 differences, 0.378 us/item vs f64 0.417 (no cost), 5.5x C float, 60x exact Elixir. FP32 is not a blocker. Nx not tried (not a dep).",
+      "timestamp": "2026-10-20T11:59:35Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Research spike: per-document circuit kernels (handwired) and a GPU target, impact on defk",
   "type": "task",
-  "updated_at": "2026-10-20T11:50:21Z"
+  "updated_at": "2026-10-20T11:59:35Z"
 }
