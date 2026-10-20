@@ -22,11 +22,15 @@
     {
       "text": "Stage 2 done: bench/handwired_f32.exs + handwired_f32_ref.c, result in docs/research/handwired.md. f64 op + [f32] store equals C float on 15M results; the atom needs the rounding; sparse layer with per-op scratch rounding: 0 differences, 0.378 us/item vs f64 0.417 (no cost), 5.5x C float, 60x exact Elixir. FP32 is not a blocker. Nx not tried (not a dep).",
       "timestamp": "2026-10-20T11:59:35Z"
+    },
+    {
+      "text": "Study complete on branch defk-snm/handwired-research (7 local commits, not pushed). Follow-up tickets: defk-w8r.2 (perf docs + scope note), defk-w8r.3 (check elimination in gather loops), defk-vcx.5 (decide f32 rounding builtin). Open and optional: stage 4 (GPU dialect probe), stage 5 (throwaway emitter). Next: push + PR when the owner says; ticket stays in progress until merge.",
+      "timestamp": "2026-10-20T12:36:18Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Research spike: per-document circuit kernels (handwired) and a GPU target, impact on defk",
   "type": "task",
-  "updated_at": "2026-10-20T11:59:35Z"
+  "updated_at": "2026-10-20T12:36:18Z"
 }
