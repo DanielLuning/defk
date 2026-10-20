@@ -6,6 +6,7 @@
 # runtime contract holds.
 defmodule Defk.CopiesTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
   alias Defk.Copies
 
@@ -346,6 +347,64 @@ defmodule Defk.CopiesTest do
       callee = Copies.inline_call(at(es, stmt, vars), call, vars)
       assert {vars.b.id, vars.b.buf} in Copies.live(callee)
       refute {vars.a.id, vars.a.buf} in Copies.live(callee)
+    end
+  end
+
+  describe "arm_reads/2, nested/3's one pass" do
+    # the spec: arm?/2, then reads_outside(taken(stmt, node), node)
+    defp spec(stmt, node),
+      do: if(Copies.arm?(stmt, node), do: Copies.reads_outside(Copies.taken(stmt, node), node))
+
+    # statements of variables, calls, matches, blocks and nested if, cond
+    # and case; few names, so equal subterms (a node twice) are common
+    defp stmt_gen do
+      leaf = StreamData.member_of([:a, :b, :c, :d] |> Enum.map(&{&1, [], nil}))
+
+      StreamData.tree(leaf, fn inner ->
+        StreamData.one_of([
+          StreamData.map(StreamData.list_of(inner, max_length: 2), &{:f, [], &1}),
+          StreamData.map({leaf, inner}, fn {v, e} -> {:=, [], [v, e]} end),
+          StreamData.map(
+            StreamData.list_of(inner, min_length: 1, max_length: 3),
+            &{:__block__, [], &1}
+          ),
+          StreamData.map({inner, inner, inner}, fn {c, t, e} ->
+            {:if, [], [c, [do: t, else: e]]}
+          end),
+          StreamData.map({inner, inner}, fn {c, t} -> {:if, [], [c, [do: t]]} end),
+          StreamData.map({inner, inner, inner}, fn {c, t, e} ->
+            {:cond, [], [[do: [{:->, [], [[c], t]}, {:->, [], [[true], e]}]]]}
+          end),
+          StreamData.map({inner, leaf, inner, inner}, fn {s, p, t, e} ->
+            {:case, [], [s, [do: [{:->, [], [[p], t]}, {:->, [], [[{:_, [], nil}], e]}]]]}
+          end)
+        ])
+      end)
+    end
+
+    defp subterms(ast) do
+      {_, acc} = Macro.prewalk(ast, [], &{&1, [&1 | &2]})
+      acc
+    end
+
+    property "gives what the spec gives, for every subterm of a statement" do
+      check all(stmt <- stmt_gen(), max_runs: 300) do
+        for node <- subterms(stmt) do
+          assert Copies.arm_reads(stmt, node) == spec(stmt, node),
+                 "stmt #{Macro.to_string(stmt)}, node #{inspect(node)}"
+        end
+      end
+    end
+
+    test "an arm read beside a branch in an expression, and an arm twice" do
+      node = quote do: helper(a)
+      stmt = quote do: f(if(keep, do: unquote(node), else: g(b)), peek(c))
+      # keep chose the arm, g(b) runs instead of it: only c is read beside it
+      assert Copies.arm_reads(stmt, node) == MapSet.new([:c])
+      assert Copies.arm_reads(stmt, node) == spec(stmt, node)
+
+      twice = quote do: if(keep, do: unquote(node), else: unquote(node))
+      assert Copies.arm_reads(twice, node) == nil
     end
   end
 end

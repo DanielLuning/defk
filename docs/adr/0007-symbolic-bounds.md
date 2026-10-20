@@ -85,7 +85,9 @@ Replace the fact model with one representation:
   and heap noise): the chain cost +13.4% of the time but +20.8% of the
   work (reductions), and the refactors after it another +13.5% / +7.3%.
   The compiler is at about +29% of its time before step 1, past the
-  ceiling; the next step cuts first (the copy analysis, `defk-o08.3`).
+  ceiling; the next step cuts first. The copy analysis's one pass per arm
+  (`defk-o08.3`, 6.39) took 9% off: +17.6% of the work before step 1, still
+  past the ceiling.
 - **Raising guards become the way to state facts about arguments** in a
   kernel, which the language docs would describe.
 - **Out of scope:** degree 3 and nested products, facts across loop

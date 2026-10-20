@@ -303,11 +303,131 @@ defmodule Defk.Copies do
   # body, run again) keeps what is live for nested blocks.
   def nested(%Scope{} = s, ast, vars) do
     out =
-      if arm?(s.stmt, ast),
-        do: MapSet.union(s.live, pairs(vars, reads_outside(taken(s.stmt, ast), ast))),
-        else: s.nest
+      case arm_reads(s.stmt, ast) do
+        nil -> s.nest
+        names -> MapSet.union(s.live, pairs(vars, names))
+      end
 
     %{s | out: out, depth: s.depth + 1}
+  end
+
+  # What nested/3 asks of statement `stmt`, in three linear walks: nil when
+  # `node` is not an arm of it (arm?/2), else the names
+  # reads_outside(taken(stmt, node), node) gives, the spec (copies_test
+  # compares the two). taken/2 changes only the if, cond and case nodes on
+  # the path to `node`, so cut/2 rebuilds that path with `node` cut out and
+  # the rest shared, and what is read is what is left.
+  def arm_reads(nil, _node), do: nil
+
+  def arm_reads(stmt, node) do
+    {_, found} =
+      Macro.prewalk(stmt, {0, false}, fn x, {n, arm} ->
+        {x, {if(x == node, do: n + 1, else: n), arm or node in arms(x)}}
+      end)
+
+    if found == {1, true}, do: stmt |> cut(node) |> elem(0) |> reads()
+  end
+
+  # {`x` with `node` (in it once) replaced by nil and each if, cond and case
+  # holding it in an arm cut as other_arms_out/2 cuts it, whether `node` was
+  # in `x`}; it walks what Macro.prewalk/3 walks
+  defp cut(x, node) do
+    if x == node, do: {nil, true}, else: cut_in(x, node)
+  end
+
+  # each part is walked once: an if, cond or case not holding `node` in an
+  # arm is rebuilt from the parts already cut
+  defp cut_in({:if, m, [c, kw]} = x, node) when is_list(kw) do
+    {c2, in_c} = cut(c, node)
+    parts = Enum.map(kw, &{&1, cut(&1, node)})
+
+    cond do
+      Enum.any?(parts, fn {e, {_, f}} -> f and match?({k, _} when k in [:do, :else], e) end) ->
+        arms = for {{k, _}, {{_, b}, f}} <- parts, do: {k, if(f, do: b)}
+        {{:if, m, [nil, arms]}, true}
+
+      in_c or Enum.any?(parts, fn {_, {_, f}} -> f end) ->
+        {{:if, m, [c2, Enum.map(parts, fn {_, {e, _}} -> e end)]}, true}
+
+      true ->
+        {x, false}
+    end
+  end
+
+  defp cut_in({:cond, m, [[do: clauses]]} = x, node) when is_list(clauses) do
+    case cut_clauses(clauses, node) do
+      {:arm, out} -> {{:cond, m, [[do: out]]}, true}
+      {:in, clauses2} -> {{:cond, m, [[do: clauses2]]}, true}
+      :no -> {x, false}
+    end
+  end
+
+  defp cut_in({:case, m, [subject, [do: clauses]]} = x, node) when is_list(clauses) do
+    {subject2, in_s} = cut(subject, node)
+
+    case cut_clauses(clauses, node) do
+      {:arm, out} -> {{:case, m, [nil, [do: out]]}, true}
+      {:in, clauses2} -> {{:case, m, [subject2, [do: clauses2]]}, true}
+      :no when in_s -> {{:case, m, [subject2, [do: clauses]]}, true}
+      :no -> {x, false}
+    end
+  end
+
+  defp cut_in(x, node), do: cut_args(x, node)
+
+  # {:arm, the clauses as clauses_out/2 gives them} when `node` is in a
+  # clause body, {:in, the clauses cut} when it is elsewhere in them, :no
+  defp cut_clauses(clauses, node) do
+    parts =
+      Enum.map(clauses, fn
+        {:->, cm, [head, body]} -> {:clause, cm, cut(head, node), cut(body, node)}
+        e -> {:other, cut(e, node)}
+      end)
+
+    cond do
+      Enum.any?(parts, &match?({:clause, _, _, {_, true}}, &1)) ->
+        {:arm, for({:clause, cm, _, {b, f}} <- parts, do: {:->, cm, [[nil], if(f, do: b)]})}
+
+      Enum.any?(
+        parts,
+        &(match?({:clause, _, {_, true}, _}, &1) or match?({:other, {_, true}}, &1))
+      ) ->
+        {:in,
+         Enum.map(parts, fn
+           {:clause, cm, {h, _}, {b, _}} -> {:->, cm, [h, b]}
+           {:other, {e, _}} -> e
+         end)}
+
+      true ->
+        :no
+    end
+  end
+
+  # Macro.prewalk/3's descent: a call's form (unless an atom) and its
+  # arguments, both halves of a pair, every element of a list
+  defp cut_args({form, m, args} = x, node) do
+    {form2, f1} = if is_atom(form), do: {form, false}, else: cut(form, node)
+    {args2, f2} = if is_list(args), do: cut_list(args, node), else: {args, false}
+    if f1 or f2, do: {{form2, m, args2}, true}, else: {x, false}
+  end
+
+  defp cut_args({a, b} = x, node) do
+    {a2, f1} = cut(a, node)
+    {b2, f2} = cut(b, node)
+    if f1 or f2, do: {{a2, b2}, true}, else: {x, false}
+  end
+
+  defp cut_args(l, node) when is_list(l), do: cut_list(l, node)
+  defp cut_args(x, _node), do: {x, false}
+
+  defp cut_list(l, node) do
+    {l2, found} =
+      Enum.map_reduce(l, false, fn e, f ->
+        {e2, f2} = cut(e, node)
+        {e2, f or f2}
+      end)
+
+    if found, do: {l2, true}, else: {l, false}
   end
 
   # Leaving a nested plain block, which binds into the scope around it as in
