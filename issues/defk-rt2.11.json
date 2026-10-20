@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-rt2.7"
   ],
@@ -10,8 +10,8 @@
   "labels": [],
   "parent": "defk-rt2",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Spike: can the compiler hand Elixir mode its node types, so Elixir mode only emits?",
   "type": "task",
-  "updated_at": "2026-10-19T18:42:46Z"
+  "updated_at": "2026-10-20T08:50:07Z"
 }
