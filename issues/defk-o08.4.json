@@ -4,6 +4,7 @@
     "defk-o08.3"
   ],
   "blocks": [],
+  "closed_at": "2026-10-20T11:56:38Z",
   "created": "2026-10-20T10:47:21Z",
   "description": "Found in the compiler profile of 2026-10-20 (warm compiles, all test and example modules; docs/performance.md 6.38-6.39).\n\nAfter the arm_reads/2 cut (defk-o08.3), the copy analysis's next cost is the reads of each statement: Copies.enter_stmt/4 took about 4.5% of the compiler's time (SatEx.Kernels 16 of 485 ms) and live_around/4 about 1.9%. Two sources of repeated work:\n- A block's statements are walked twice: live_after/1 walks each with stmt_reads/1, then enter_stmt/4 walks the same statement again with reads/1 (the rhs only, or the whole statement, for the same term).\n- Nesting: reads/1 of a statement walks every statement nested in it, and each nested statement is walked again when its own block is entered, so a statement d blocks deep is walked d+1 times.\n\nDo: walk each statement's reads once. For example, compute per block in one pass what both live_after/1 and enter_stmt/4 need (the statement's reads and its rhs reads), and pass it down; or build a statement's reads from its nested blocks' reads where the shapes allow. Keep reads/1, stmt_reads/1 and live_after/1 as the spec (property test, as copies_test does for arm_reads/2).\n\nMeasure with the harness (DEFK_COMPILE_TIME, dev/compile_time.exs --reductions, docs/agents/runs.md). Context: after defk-o08.3 the compiler is at +17.6% of its work before the symbolic-bounds chain; the ceiling is +15% (ADR-0007).\n\nGate: byte-identical mix dump_c against an untouched main checkout; mix ci; PR per AGENTS.md. Blocked by defk-o08.3 (same module, and it measures against that state).",
   "id": "defk-o08.4",
@@ -22,8 +23,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Copy analysis: each statement's reads walked once (enter_stmt/4 and live_after/1 walk them again per level)",
   "type": "task",
-  "updated_at": "2026-10-20T11:50:42Z"
+  "updated_at": "2026-10-20T11:56:38Z"
 }
