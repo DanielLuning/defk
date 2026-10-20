@@ -65,7 +65,7 @@ above.
 | `Defk.Test.reason/1` | `@doc` in hidden module | tests 9 | **public** | what "same reason" means in agreement; users need it to assert a raise. Rename candidate |
 | `Defk.Case.in_both_modes/1` (macro) | hidden module | tests 2 | **hidden** | see open question 4 |
 | `Defk.ElixirMode.with_mode/2` | `@doc` | tests 6, 1 example, README, `language.md` | **public** | the documented per-process switch |
-| `Defk.ElixirMode.setup!/4`, `native_name/1`, `process_mode_key/0`, `definitions/3`, `fun_name/1` | `@doc false` | `Defk` at compile time | **hidden** | |
+| `Defk.ElixirMode.setup!/4`, `native_name/1`, `process_mode_key/0`, `definitions/2`, `fun_name/1` | `@doc false` | `Defk` at compile time | **hidden** | |
 | `Defk.Bits.wrap64/1`, `mulhi/2`, `clz/1`, `ctz/1`, `popcount/1`, `rotl64/2`, `rotr64/2`, `clz/2`, `ctz/2`, `rotl/3`, `rotr/3`, `f64_to_u64/1` (12) | `@doc`, `@spec`, doctests | Elixir mode, tests, `language.md` | **public** | each is a kernel builtin's meaning; renaming one is a language change |
 | `Defk.Report.print/1` | `@doc`, `@spec` | 1 test, 1 example, README, `performance.md`, `fast-path-report.md` | **public** | the way to read the report |
 | `Defk.Report.format/1` | `@doc`, `@spec` | `print/1` | **public** | the same text as a string (for tests and tools) |
