@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-w8r",
+  "comments": [
+    {
+      "text": "Merged into defk-w8l on 2026-10-20: both tickets are the per-iteration yield bookkeeping of short loops, and defk-w8l already cited the fuzzy_search case. The evidence and scope of this ticket are now in defk-w8l's description.",
+      "timestamp": "2026-10-20T20:25:55Z"
+    }
+  ],
   "priority": 3,
   "status": "open",
   "title": "A word loop whose body holds a short inner loop pays a safepoint per word: fuzzy_search Myers yields +19% over yield: false",
   "type": "task",
-  "updated_at": "2026-10-15T08:11:51Z"
+  "updated_at": "2026-10-20T20:25:55Z"
 }
