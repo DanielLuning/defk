@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-20T12:48:20Z",
   "created": "2026-10-20T12:35:19Z",
   "description": "Found in the epic's closing check (2026-10-20, mix dump_c of the named catalog kernels on main 514ff6d2). defk-9za was opened for examples/rolling_stats.exs mean_std: 'old = if i \u003e= w, do: x[i - w], else: 0.0' keeps a bounds check. defk-b38 made the compiler drop it once an earlier guard establishes w \u003e= 1 (test/condition_facts_test.exs rolling_diff, which raises when w \u003c 1), and 9za closed on that test. The catalog kernel never got the guard, so its report still lists three kept checks:\n- x[i - w]: nothing proves i - w \u003c length(x)   (line 66)\n- out[i - w + 1]: nothing proves 0 \u003c= i - w + 1 and i - w + 1 \u003c length(out)   (line 72)\n- out[m + i - w + 1]: nothing proves 0 \u003c= m + i - w + 1   (line 73)\n(m = n - w + 1, out = alloc(f64, 2 * m).)\n\nDo: add a raising guard at the top of mean_std, for example 'if w \u003c 1 or w \u003e length(x), do: raise(ArgumentError, \"...\")' (or two guards; an 'or' that holds narrows nothing, so check which form the compiler narrows by: the report's hints under use Defk, report: :full name what is missing). Done when the module's report lists none of the three checks (mix dump_c writes Rolling.Kernels.report).\n\nBehaviour: mean_std then raises ArgumentError for w \u003c 1 or w \u003e length(x), where it now fails later (a zero divisor, an out-of-range write) or returns. The example's check compares defk and Elixir only for its one valid w, so it is unaffected; the kernel's Elixir mode compiles the same guard. Say the new raise in the example's header.\n\nRuns (docs/agents/runs.md): mix defk.examples --only rolling_stats (the check, no timing). The module's C changes, so its stored scoreboard row becomes stale; it is measured again only if the owner asks. Record what the guard did to the C (checks gone, vectorisation verdict of the loop) in docs/performance.md.\n\nCloses the last gap of epic defk-o08 (its 'Done when': the catalog kernels named in the children no longer list the check). Gate: mix ci; PR per AGENTS.md.",
   "id": "defk-o08.6",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "rolling_stats mean_std: a raising guard on w, so x[i - w] and the out writes drop their checks",
   "type": "task",
-  "updated_at": "2026-10-20T12:42:53Z"
+  "updated_at": "2026-10-20T12:48:20Z"
 }
