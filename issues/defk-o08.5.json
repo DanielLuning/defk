@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [
     "defk-o08.3"
   ],
@@ -12,8 +12,8 @@
   ],
   "parent": "defk-o08",
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Report hint search: cut its cost (2.4% of compile time, 6% on SatEx)",
   "type": "task",
-  "updated_at": "2026-10-20T10:47:23Z"
+  "updated_at": "2026-10-20T11:01:21Z"
 }
