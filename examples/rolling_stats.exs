@@ -10,7 +10,9 @@
 # step), so both versions start from the same bytes.
 #
 # Both sides return the same thing: one packed binary of the n - w + 1 means
-# followed by the n - w + 1 standard deviations (f64, native endian).
+# followed by the n - w + 1 standard deviations (f64, native endian). The
+# kernel raises ArgumentError for a window outside 1..n: that raising guard
+# is what lets the compiler drop every bounds check in its loop.
 #
 # Elixir baseline: optimised. Best of 7 runs after a warm-up, 1M samples,
 # w = 60, 12 schedulers, shared machine (provisional: other benchmarks were
@@ -52,9 +54,15 @@ defmodule Rolling.Kernels do
   use Defk
 
   # Sliding sums: O(n) regardless of window size. Returns means then stddevs,
-  # n - w + 1 values each, packed into one array.
+  # n - w + 1 values each, packed into one array. A window outside
+  # 1..length(x) raises ArgumentError.
   defk mean_std(x :: [f64], w :: i64) :: [f64] do
     n = length(x)
+
+    # a raising guard: past it 1 <= w <= n, which proves x[i - w] and both
+    # out writes in range (docs/language.md, "Preconditions: raising guards")
+    if w < 1 or w > n, do: raise(ArgumentError, "the window must be in 1..length(x)")
+
     m = n - w + 1
     out = alloc(f64, 2 * m)
 
