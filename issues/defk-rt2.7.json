@@ -7,6 +7,7 @@
   "blocks": [
     "defk-rt2.11"
   ],
+  "closed_at": "2026-10-20T07:50:26Z",
   "created": "2026-10-19T18:42:41Z",
   "description": "The compiler keeps i64 facts twice (on the binding and in `env.atoms` by C name, `put_var/3` ~L1281) and keeps them in step by hand; `Facts.lookup/atom_facts` (facts.ex ~L494-510) reads `scope[:atoms]` and scans `scope[:vars]` for `%{c: ^c, t: {:arr, _}}`, so both sides know both layouts. The compiler builds a fake carrier `%{facts: atoms[c] || Facts.none()}` to call `Facts.narrow` (~L5686). The Facts interface is wide: 42 functions used at 123 sites; lattice arithmetic leaks into the bitwise section (`Facts.bnot(Facts.hi(a))` ~L3140, `Facts.hi(a) || @max_u64` ~L3162).\n\nSettled shape (grilling 2026-10-19):\n- `Defk.Facts` owns a scope keyed by C name: `bind/2` (a binding in, the scope out), `narrow/3` (a relation in), `facts_of/2`; the provers (`check`, `prove_i64`, `fits_i64?`) take that scope instead of env. env carries it under one key.\n- A value keeps its own `facts` field, as every value does; the scope is the prover's index of bindings, written once by `bind/2` where `put_var/3` writes twice now.\n- The compiler's \"range facts\" section shrinks to `relation/3` and `guarded/4`; the lattice arithmetic in bitwise moves behind Facts.\n- ADR-0007's representation is untouched; only who owns the scope changes.\n\nBlocked by defk-pvt (in progress in facts.ex) and by the liveness-scope ticket (env). Tests: linear, condition and product facts tests ask the scope directly where they use `bounds_check_free?` (16 C-regex sites), keeping a few end-to-end checks; facts_test already tests the lattice.\n\nGate: byte-identical `mix dump_c`; `mix ci`; PR per AGENTS.md. Compiler map: \"range facts\" row and the Facts bullet.",
   "id": "defk-rt2.7",
@@ -19,8 +20,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Defk.Facts owns the range-facts scope; the provers stop reading the compiler's env",
   "type": "task",
-  "updated_at": "2026-10-20T07:45:13Z"
+  "updated_at": "2026-10-20T07:50:26Z"
 }
