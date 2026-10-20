@@ -15,11 +15,15 @@
     {
       "text": "Branch defk-o08.5/lazy-hints pushed, stacked on defk-o08.4's branch. Finding: lazy hint rendering -1.5% reductions but +9% time (closures retain env/facts until compile end); @hint_budget 8 drops hints for -0.5%. Neither adopted (performance.md 6.41). Kept: DEFK_DUMP_C writes \u003cModule\u003e.report (report gate). Option 3 (hints on demand) changes __defk_report__/0: owner's call, not done. PR not opened yet.",
       "timestamp": "2026-10-20T11:14:32Z"
+    },
+    {
+      "text": "Owner chose hints on demand via report: :full (2026-10-20). Done on the branch (db0d8d02): -3.6% reductions, +3.5% of the work before step 1. PR #71, stacked on #70 (merge #70 first).",
+      "timestamp": "2026-10-20T11:51:46Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Report hint search: cut its cost (2.4% of compile time, 6% on SatEx)",
   "type": "task",
-  "updated_at": "2026-10-20T11:14:32Z"
+  "updated_at": "2026-10-20T11:51:46Z"
 }
