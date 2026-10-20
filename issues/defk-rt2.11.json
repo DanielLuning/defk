@@ -9,9 +9,15 @@
   "id": "defk-rt2.11",
   "labels": [],
   "parent": "defk-rt2",
+  "comments": [
+    {
+      "text": "Spike finding (2026-10-20). Seam: the compiler runs before Elixir mode on the same desugared kernels; a unique defk_id stamped into every node's meta after desugar keys a node (line+column fails: ~58k nodes of macro-built kernels have no column). Stamping left the C of all 108 modules byte-identical. Probe (lower_expr vs expr/2, mix dump_c): 58,361 keyed Elixir-mode typings, 57,877 (99.2%) equal the compiler's own lowering of the kernel; the rest: 71 bitstring vs [u8] naming, 35 typed twice by the compiler (u64 retries, case-in), 92 never through lower_expr (float trees), 286 in helpers that are only inlined; 24,068 literals need no key. Gain: ~100 of 1,549 lines (settle_accs, note_u64_mix, body_type, leaf_types, 3 State fields); expr/2's type plumbing and trial/1 (write discovery) stay. Against: the u64 accumulator inference decides results (3 - 5 raises as u64, -2 as i64), so sharing it retires the oracle's check of that decision (ADR-0008). Owner decision: close, extend ADR-0008; drop the dead Ctx.set(:file) write in the same PR.",
+      "timestamp": "2026-10-20T08:50:15Z"
+    }
+  ],
   "priority": 3,
   "status": "in_progress",
   "title": "Spike: can the compiler hand Elixir mode its node types, so Elixir mode only emits?",
   "type": "task",
-  "updated_at": "2026-10-20T08:50:07Z"
+  "updated_at": "2026-10-20T08:50:15Z"
 }
