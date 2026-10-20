@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-20T19:37:41Z",
   "created": "2026-10-12T09:52:03Z",
   "description": "Why: examples/README.md's 'Where a wrapper is the right choice' table keeps parsers that produce trees or term streams (HTML, Markdown, JSON/CSV to terms, protobuf, msgpack) out, because the product is BEAM terms and building them is the cost (docs/research/string-workloads.md measured a 13x gap between scanning and term creation). It names what would reopen the row: 'A tape output (flat [i64] of kind/start/len events) ... plus a benchmark showing tape plus Elixir tree building beats Jason or NimbleCSV end to end.' No ticket asks for that benchmark; defk-9p6.21 is the fused numeric CSV form, which avoids terms entirely and so does not answer it.\n\nScope:\n1. Pick one format with a strong Elixir baseline: JSON to terms against Jason (optimised settings), or CSV to lists of binaries against NimbleCSV.\n2. A kernel that scans the input and returns a tape ([i64] of kind/start/len, sized by worst case or two passes; see the growable-[i64] ticket), and Elixir that builds the terms from the tape with binary_part (sub-binaries, no copies).\n3. Measure end to end at a realistic size against the baseline and against the jiffy/jsont-style NIF if one builds here, with the time split between scan and tree building.\n4. Record the verdict as usual; an Elixir win is a result and closes the question with numbers in the wrapper table.\n\nDone when: the example runs under run_all.exs with its expected verdict, and the wrapper table's parser row is updated with the result (reopened or closed with evidence).",
   "id": "defk-9p6.30",
@@ -20,8 +21,8 @@
     }
   ],
   "priority": 4,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Tape output for parsers: benchmark a kernel that emits flat events plus Elixir tree building",
   "type": "task",
-  "updated_at": "2026-10-20T17:54:32Z"
+  "updated_at": "2026-10-20T19:37:41Z"
 }
