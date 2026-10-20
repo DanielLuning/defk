@@ -439,12 +439,14 @@ defmodule Defk do
     adaptive? = Module.get_attribute(env.module, :defk_adaptive_slice)
 
     {c_src, all_sigs, report} =
-      Defk.Compiler.compile(env.module, kernels, env.file,
-        nif_name: nif_name,
-        fault_hooks: fault_hooks?,
-        adaptive_slice: adaptive?,
-        max_owned_bytes: max_owned_bytes!(env.module)
-      )
+      timed_compile(env.module, fn ->
+        Defk.Compiler.compile(env.module, kernels, env.file,
+          nif_name: nif_name,
+          fault_hooks: fault_hooks?,
+          adaptive_slice: adaptive?,
+          max_owned_bytes: max_owned_bytes!(env.module)
+        )
+      end)
 
     # a yielding kernel's NIF takes the run-queue hint: it is
     # renamed, and the kernel's function passes the hint
@@ -518,6 +520,48 @@ defmodule Defk do
   defp dump_c!(dir, module, c_src) do
     File.mkdir_p!(dir)
     File.write!(Path.join(dir, "#{inspect(module)}.c"), c_src)
+  end
+
+  # DEFK_COMPILE_TIME=<file>: every module compiled while it is set appends
+  # "<Module> <microseconds> <reductions>" to <file>, of a second compile
+  # run in a fresh process (dev/compile_time.exs). The first compile, whose
+  # result the module uses, is not measured: under `mix compile` it may wait
+  # for the compiler's own modules, compiled in parallel with the kernels,
+  # and that wait is not compiler work. A fresh process starts with a small
+  # heap, so the time does not depend on what the first compile left. Like
+  # DEFK_DUMP_C, a side channel: the module is unchanged.
+  defp timed_compile(module, compile) do
+    case System.get_env("DEFK_COMPILE_TIME") do
+      nil ->
+        compile.()
+
+      log ->
+        result = compile.()
+        {us, reductions} = measured(compile)
+        File.write!(log, "#{inspect(module)} #{us} #{reductions}\n", [:append])
+        result
+    end
+  end
+
+  defp measured(compile) do
+    parent = self()
+
+    {pid, mref} =
+      spawn_monitor(fn ->
+        {:reductions, r0} = Process.info(self(), :reductions)
+        {us, _} = :timer.tc(compile)
+        {:reductions, r1} = Process.info(self(), :reductions)
+        send(parent, {self(), us, r1 - r0})
+      end)
+
+    receive do
+      {^pid, us, reductions} ->
+        Process.demonitor(mref, [:flush])
+        {us, reductions}
+
+      {:DOWN, ^mref, :process, ^pid, reason} ->
+        raise "DEFK_COMPILE_TIME: the measured compile failed: #{inspect(reason)}"
+    end
   end
 
   # `use Defk, max_owned_bytes: n`: a positive integer of bytes that fits in

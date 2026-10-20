@@ -80,7 +80,12 @@ Replace the fact model with one representation:
   (products, `defk-pvt`) +1.7% (+0.9% without `SatEx.Kernels`) after
   cutting a second fact lookup per step and the ranking of one-term forms;
   the chain is at about +14%, under the ceiling, with about 1% left
-  (`docs/performance.md` 6.37).
+  (`docs/performance.md` 6.37). Measured again (2026-10-20) with a warm
+  compile in a fresh process (6.38; the method before included waiting
+  and heap noise): the chain cost +13.4% of the time but +20.8% of the
+  work (reductions), and the refactors after it another +13.5% / +7.3%.
+  The compiler is at about +29% of its time before step 1, past the
+  ceiling; the next step cuts first (the copy analysis, `defk-o08.3`).
 - **Raising guards become the way to state facts about arguments** in a
   kernel, which the language docs would describe.
 - **Out of scope:** degree 3 and nested products, facts across loop

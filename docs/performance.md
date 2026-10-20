@@ -2514,6 +2514,48 @@ else: 0))`; it now says `if first < 0 and n > 0, do: raise(ArgumentError,
   the whole suite under AddressSanitizer.
 - **Status:** measured, provisional.
 
+### 6.38 Compiler time: measure a second compile in a fresh process; the chain and the refactors cost ~29% together
+
+- **The method before** (6.32-6.37) timed `Defk.Compiler.compile` once per
+  module under `mix dump_c`. That run is `compile --force`, so `lib` and
+  `test/support` compile in parallel, and the first kernel module
+  (`Examples.Kernels`) waited about 1 s for the compiler's own modules: of
+  a 2.5 s round, about 1.0 s was that wait (the module needs 13 ms warm).
+  A second compile in the same process was no better: `SatEx.Kernels`
+  then took either ~240 or ~510 ms on the same code (what the first
+  compile left on the heap), and a whole round moved by ~25% between two
+  runs on the laptop.
+- **The method now:** `DEFK_COMPILE_TIME=<file>` makes every module compile
+  once for its result and once more in a fresh process, which is measured:
+  microseconds and the process's reductions. `dev/compile_time.exs`
+  compares interleaved rounds of two checkouts on the modules both have.
+  Five compiles of `SatEx.Kernels`: 355-369 ms, 50.64-50.68 M reductions
+  (±2% and ±0.05%). Reductions are the figure to compare for a change to
+  the compiler's own work; time is the one a user feels.
+- **Numbers** (99 modules both checkouts have, two rounds each,
+  interleaved, medians): before step 1 (`23e27970`) 105.8 M reductions /
+  801 ms; after step 4 (`a371dcab`) 127.8 M / 909 ms; main (`b90ed0ff`)
+  137.1 M / 1,032 ms. The symbolic-bounds chain: +20.8% reductions, +13.4%
+  time (without `SatEx.Kernels` +6.8%, +3.9%). The readability refactors
+  after it (`x3a`, `rt2`): +7.3% reductions, +13.5% time (+6.7%, +3.3%).
+  Together +29.5% reductions, +28.8% time (+14.0%, +7.3%). `SatEx.Kernels`
+  alone went from ~150 to ~340 ms.
+- **What it means:** the chain's own +14% (6.37) holds for time but not for
+  work, and the compiler is about twice as far past its state before step
+  1 as the +15% ceiling of ADR-0007 allows, half of it from refactors no
+  budget covered. Where the time is (one warm round, 2026-10-20): the copy
+  analysis's per-statement walks ~16% (`Copies.nested/3` 9.7%), the
+  prover ~3.5%, the report's hint search 2.4%, the strip classifier 2.4%;
+  the rest is spread over the lowering.
+- **Conditions:** M-series Mac on battery, no quiet check; `cc` not run
+  (`DEFK_NO_CC=1`; the baseline with the `DEFK_NO_CC` change applied, a
+  tooling change). A few examples and test kernels changed between the
+  checkouts (`hash_chain.exs` gained a raising guard), so the 99 modules are
+  not all identical; `SatEx.Kernels` (`cdcl_sat.exs`) is.
+- **Source:** `defk-o08.2`; `dev/compile_time.exs`; the harness in
+  `Defk.__before_compile__` (`timed_compile/2`).
+- **Status:** measured, provisional.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -2820,4 +2862,5 @@ example or close a workload ticket, add its entries and its line here.
   `defk-l2g`, `defk-yzw`, `defk-dtw.2`, `defk-dtw.20`, `defk-dtw.21`,
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
   `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`,
-  `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`.
+  `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`,
+  `defk-o08.2`.
