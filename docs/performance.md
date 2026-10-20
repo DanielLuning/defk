@@ -2906,6 +2906,33 @@ output array would).
 - **Source:** [`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs), [`bench/port_echo.c`](https://github.com/DanielLuning/defk/blob/main/bench/port_echo.c), `defk-7dm`.
 - **Status:** one quiet run; rerun with `defk-sgw.4`'s snapshot if the verdict cites it.
 
+### 7.11 CSV to terms: a kernel tape plus Elixir row building loses to NimbleCSV; rusty_csv builds the sub-binaries in C, 3.5-4x faster
+
+A kernel can scan the CSV and hand Elixir flat events, but Elixir then
+builds every row and field, and that half costs more than NimbleCSV's
+whole parse. A NIF that makes the sub-binaries itself is the fast route.
+
+- **Numbers:** 20 MB, a 200k-row export with quoted fields: NimbleCSV
+  201-238 ms; rusty_csv 0.4.6 57.6-57.7 ms; the kernel's cleaned copy
+  (separators as bytes 30 and 31, split twice by `:binary.split/3`)
+  249-257 ms end to end, 0.81-0.93x. Its parts: the copy 36 ms, the two
+  splits 135 ms. An `[i64]` tape of start and length per field: scan 28
+  ms, rows built from it with binary matching and `binary_part/3` 314 ms.
+  Walking 1.4M tape entries without building anything took 39 ms. At 100
+  MB the copy is 2.4-2.65x NimbleCSV, whose garbage costs most there.
+- **Heap state matters for term building:** without a GC between timed
+  runs, each run reused the heap the last one grew, and the rows from the
+  tape took 83-92 ms instead of 314 ms (NimbleCSV 134-138 instead of
+  201-238). `Defk.Bench.report/1` collects before each run; variant loops
+  in a script must do the same.
+- **What it means:** the 13x gap between scanning and term creation that
+  `string-workloads.md` measured holds for Elixir, not for C: rusty_csv's
+  sub-binaries cost little. For CSV or JSON to terms, use NimbleCSV or
+  Jason, or the NIF when the speed matters.
+- **Conditions:** M-series Mac, OTP 29, Elixir 1.20.2, two runs.
+- **Source:** [`tape_csv.exs`](https://github.com/DanielLuning/defk/blob/main/examples/tape_csv.exs), `defk-9p6.30`.
+- **Status:** provisional.
+
 ---
 
 ## 8. Myths we disproved and open questions

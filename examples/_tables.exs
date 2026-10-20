@@ -160,6 +160,11 @@
       job: "sort 1M packed keys",
       line: "{speedup:sort_to_list} when the caller needs a list back"
     },
+    "tape_csv" => %{
+      job: "CSV of 20 MB to NimbleCSV's rows, through a kernel tape",
+      native: "{native} rusty_csv",
+      line: "the scan is fast; building the rows in Elixir costs more than NimbleCSV's whole parse"
+    },
     "utf8_valid" => %{
       job: "validate 16 MB of UTF-8",
       line: "`String.valid?` is C already"
@@ -246,6 +251,11 @@
       text:
         "anything `:crypto` does (a SHA-256 chain) and memory-hard password hashing (Argon2: the C runs its lanes on threads)",
       examples: ["hash_chain", "argon2"]
+    },
+    %{
+      text:
+        "CSV to rows of binaries through a kernel tape: building the terms is the cost (rusty_csv's NIF builds them in C, 3.5× NimbleCSV)",
+      examples: ["tape_csv"]
     },
     %{text: "one kernel call per element", examples: ["poor_tiny_calls"]},
     %{
