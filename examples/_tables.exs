@@ -1,5 +1,5 @@
 # The hand-written text of the catalog's result tables. The numbers are not
-# here: `mix defk.examples.tables` fills them in from examples/scoreboard.json
+# here: `mix defk.docs` fills them in from examples/scoreboard.json
 # (written by `mix defk.examples --bench --all --snapshot`) and rewrites the
 # tables in examples/README.md and README.md. A test fails when a table and
 # the stored scoreboard disagree.

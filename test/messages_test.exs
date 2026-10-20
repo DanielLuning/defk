@@ -13,7 +13,7 @@ defmodule Defk.MessagesTest do
 
   test "priv/defk_messages.h is the registry's text" do
     assert File.read!(@header) == Messages.header(),
-           "regenerate with: mix defk.messages (docs/agents/generated-docs.md)"
+           "regenerate with: mix defk.docs (docs/agents/generated-docs.md)"
   end
 
   test "each template names its holes once, in order, and names are unique" do

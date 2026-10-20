@@ -1,37 +1,14 @@
 defmodule Defk.ScoreboardDocTest do
   # The catalog's result tables (examples/README.md's scoreboard, README.md's
   # summary) are rendered from examples/scoreboard.json and the text in
-  # examples/_tables.exs by `mix defk.examples.tables`; a table that differs
-  # from the stored scoreboard fails here. The renderer's rules are tested on
-  # a small made-up scoreboard.
+  # examples/_tables.exs by `mix defk.docs`, whose `--check` fails on a table
+  # that differs from the stored scoreboard. The renderer's rules are tested
+  # on a small made-up scoreboard.
   use ExUnit.Case, async: true
 
   alias Defk.Examples.{Snapshot, Tables}
 
   describe "the README tables" do
-    test "match the stored scoreboard, or neither exists yet" do
-      case Snapshot.read() do
-        {:ok, snapshot} ->
-          {:ok, blocks} = Tables.render(snapshot, Tables.text())
-
-          for {file, marker} <- Tables.targets() do
-            assert {:ok, block} = Tables.get(File.read!(file), marker),
-                   "#{file} has no #{marker} markers"
-
-            assert block == blocks[marker],
-                   "#{file}'s #{marker} table is out of date: run mix defk.examples.tables"
-          end
-
-        {:error, _} ->
-          # before the first stored run the tables are hand-written; a marker
-          # without a scoreboard would be a table nothing can check
-          for {file, marker} <- Tables.targets() do
-            assert Tables.get(File.read!(file), marker) == :error,
-                   "#{file} has #{marker} markers but #{Snapshot.path()} is missing"
-          end
-      end
-    end
-
     test "every placeholder names a report or an example that exists" do
       scripts = Path.wildcard("examples/*.exs") -- ["examples/_tables.exs"]
       examples = Enum.map(scripts, &Path.basename(&1, ".exs"))
@@ -259,12 +236,13 @@ defmodule Defk.ScoreboardDocTest do
                ])
     end
 
-    test "put and get replace only the block between the markers" do
+    test "a region's put and get replace only the block between the markers" do
       doc = "intro\n<!-- t:start -->\nold\n<!-- t:end -->\nafter\n"
-      assert {:ok, new} = Tables.put(doc, "t", "new\n")
+      assert {:ok, new} = Defk.Docs.put(doc, "t", "new\n")
       assert new == "intro\n<!-- t:start -->\nnew\n<!-- t:end -->\nafter\n"
-      assert Tables.get(new, "t") == {:ok, "new\n"}
-      assert {:error, _} = Tables.put("no markers", "t", "x")
+      assert Defk.Docs.get(new, "t") == {:ok, "new\n"}
+      assert {:error, _} = Defk.Docs.put("no markers", "t", "x")
+      assert Defk.Docs.put("whole", :file, "new") == {:ok, "new"}
     end
   end
 

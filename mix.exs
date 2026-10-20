@@ -283,6 +283,9 @@ defmodule Defk.MixProject do
         "ex_dna lib dev test --exclude-macro defk --max-clones 0",
         "reach.check --arch --smells",
         "usage_rules.sync --check",
+        # every generated doc region is the registry's, the templates' or the
+        # stored scoreboard's text (Defk.Docs)
+        "defk.docs --check",
         # the package builds (its tarball is git-ignored); publishing is a
         # decision, not a step. A fresh `mix`, because Hex's tasks are loaded
         # only when a mix process starts with them in hand, not inside an alias.

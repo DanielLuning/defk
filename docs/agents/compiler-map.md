@@ -71,13 +71,13 @@ of rows the lowering declares as it emits; defk-ch4), not from the C text.
   sanitizer build mode (`sanitize/0`, `DEFK_SANITIZE`; its C side is
   `defk_poison_slack` in the runtime header).
 - `lib/defk/errors.ex`: the error registry (code, why, fix); `reference/0`
-  and `scope/1` feed the generated docs — after changing it, follow
-  `docs/agents/generated-docs.md`. Rendering and location live in
+  and `scope/2` feed the generated docs, which `mix defk.docs` writes
+  (`docs/agents/generated-docs.md`). Rendering and location live in
   `Defk.Errors.Diagnostics`, the rewrite-suggestion engine in
   `Defk.Errors.Rewrites` (defk-vlf); a literal code passed to `err!` is
   checked against the registry when the compiler compiles.
 - `lib/defk/messages.ex`: the runtime error messages as templates, the one
-  source of `priv/defk_messages.h` (generated: `mix defk.messages`), Elixir
+  source of `priv/defk_messages.h` (generated: `mix defk.docs`), Elixir
   mode's raise texts (`text/2`) and the agreement reasons (`reason/1`);
   see `docs/agents/generated-docs.md`.
 - `lib/defk/facts.ex`: the range-facts lattice (one opaque value under

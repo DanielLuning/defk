@@ -1,6 +1,6 @@
 /*
  * The runtime's error messages, generated from Defk.Messages
- * (lib/defk/messages.ex) by `mix defk.messages`: do not edit. Each define
+ * (lib/defk/messages.ex) by `mix defk.docs`: do not edit. Each define
  * is a printf format; the runtime header passes it to defk_fail with the
  * values of its holes.
  */

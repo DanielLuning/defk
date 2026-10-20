@@ -77,7 +77,7 @@ the ticket asks. See `docs/agents/runs.md`.
 
 ### Generated docs
 
-After changing the `Defk.Errors` registry, regenerate `docs/compile-errors.md` and parts of `docs/scope.md`. See `docs/agents/generated-docs.md`.
+After changing the `Defk.Errors` registry, a message template or the stored scoreboard, run `mix defk.docs`; `mix ci` checks every generated region. See `docs/agents/generated-docs.md`.
 
 ### Stability corpus
 

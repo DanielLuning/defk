@@ -1093,7 +1093,7 @@ defmodule Defk.Errors do
   # `### <code>` heading per code (the anchor the error footer links), in
   # registry order, then the "Retired" section with one heading per retired
   # code, so a retired code keeps its anchor. Maintainer note:
-  # docs/agents/generated-docs.md. The test suite checks the document
+  # docs/agents/generated-docs.md. `mix defk.docs --check` checks the document
   # contains this text verbatim.
   @spec reference() :: String.t()
   def reference do
@@ -1109,7 +1109,7 @@ defmodule Defk.Errors do
   # The generated lists of docs/scope.md: every code of `kind` (:planned or
   # :subset), one Markdown bullet per code linking its entry in
   # docs/compile-errors.md, with its summary, in registry order. Maintainer note:
-  # docs/agents/generated-docs.md. The test suite checks the page contains
+  # docs/agents/generated-docs.md. `mix defk.docs --check` checks the page contains
   # this text verbatim. With `:hexdocs` the links are the error footer's
   # URLs, for the usage rules, which are read inside another project.
   @spec scope(:planned | :subset, :relative | :hexdocs) :: String.t()

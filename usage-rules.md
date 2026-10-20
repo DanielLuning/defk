@@ -114,10 +114,10 @@ atoms, `nil` or anonymous functions.
 
 These are planned, not built. Do not write them; use the rewrite.
 
-<!-- generated: mix run -e 'IO.write(Defk.Errors.scope(:planned, :hexdocs))' -->
+<!-- planned-hexdocs:start -->
 - [`bitstring-segment`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#bitstring-segment): An append to a bitstring accumulator takes big-endian integer segments, unsigned or `signed`: `v::size(n)`, `v::k` or `v`.
 - [`bitstring-use`](https://hexdocs.pm/defk/0.1.0/compile-errors.html#bitstring-use): A bitstring accumulator starts from `<<>>`, is appended to (also in a kernel it is passed to), measured with `bit_size/1` and returned; nothing else.
-<!-- end generated -->
+<!-- planned-hexdocs:end -->
 
 There are no sub-array views, no SIMD and no state kept between calls: pass
 state in as a binary and return the new one.
