@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-13T19:07:54Z",
@@ -7,8 +7,8 @@
   "id": "defk-vcx",
   "labels": [],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Kernel subset and devex gaps",
   "type": "epic",
-  "updated_at": "2026-10-13T19:07:54Z"
+  "updated_at": "2026-10-20T20:25:56Z"
 }
