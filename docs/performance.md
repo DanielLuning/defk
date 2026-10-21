@@ -1471,14 +1471,19 @@ which the BEAM's own NIF call and the term decoding are 6.
   no hint and no clock. The function does nothing but the BIF, so there is
   nothing to thin in it.
 - **The small-input crossovers, re-measured and stored** (`mix defk.examples
-  --bench --snapshot`, quiet, against the rows of 2026-10-19):
-  `ws_masking` 125 B frames 1.5x -> 1.77x over the best Elixir and 1.2x ->
-  1.28x over bandit_native (the crossover stays 1024 B); `geohash_crc` one
-  point per call 1.3x -> 1.62x (pre-registered poor, measured marginal,
-  accepted by the script's boundary rule: pack two floats and call, for a
-  50-bit loop); `poor_tiny_calls` 0.28x -> 0.31x and
-  `utf8_valid` 1.0x -> 1.05x, both within noise: the first has no loop, so
-  no clock, and the second is 16 MB of work per call.
+  --bench --snapshot`, quiet, the stored rows of 2026-10-19 -> this run):
+  `ws_masking`, 10,000 frames of 125 B: defk 1.231 -> 1.129 ms (123 -> 113
+  ns a frame), the ratio 1.46x -> 1.47x only because the Elixir side also
+  measured faster this session (1.79 -> 1.66 ms); over bandit_native 1.2x ->
+  1.21x; the crossover stays 1024 B. `geohash_crc` one point per call: defk
+  1.953 -> 1.657 ms, 1.29x -> 1.58x (pre-registered poor, measured
+  marginal, accepted by the script's boundary rule: pack two floats and
+  call, for a 50-bit loop). `poor_tiny_calls` 53 -> 45 ns a call, 0.28x ->
+  0.29x: its kernel has no loop, so no clock, and nothing on its path
+  changed; that is the session-to-session spread. `utf8_valid` 1.04x ->
+  1.06x: 16 MB of work per call. An earlier run of the same four, before the
+  commit, gave ws_masking 1.77x and geohash 1.62x: the ratios move with the
+  Elixir side's run, the defk times less.
 - **Found on the way:** an ERTS clock read is not free of side effects.
   `erts_get_monotonic_time` stores the time in the scheduler's data and
   resets its reduction counter, and the scheduler bumps its timer wheel from

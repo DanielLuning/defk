@@ -43,7 +43,7 @@ script tried and what to take from it; the numbers behind them are in each
 script's header.
 
 <!-- scoreboard:start -->
-Measured on Apple M4 Pro (12 logical cores) in 6 runs, from 2026-10-19 to 2026-10-21. The newest at commit `f983d5ef-dirty`, OTP 29.0.3, Elixir 1.20.2: `mix defk.examples --bench --only ws_masking,geohash_crc,poor_tiny_calls,utf8_valid --snapshot`. A quiet measurement: other processes used at most 1.0 cores before and after it. A row from an earlier run says when it was measured, and at which commit.
+Measured on Apple M4 Pro (12 logical cores) in 6 runs, from 2026-10-19 to 2026-10-21. The newest at commit `03771114`, OTP 29.0.3, Elixir 1.20.2: `mix defk.examples --bench --only ws_masking,geohash_crc,poor_tiny_calls,utf8_valid --snapshot`. A quiet measurement: other processes used at most 1.0 cores before and after it. A row from an earlier run says when it was measured, and at which commit.
 
 | | Example | The job | defk vs best Elixir | vs the package's NIF | In one line |
 |---|---|---|---|---|---|
@@ -51,8 +51,8 @@ Measured on Apple M4 Pro (12 logical cores) in 6 runs, from 2026-10-19 to 2026-1
 | ✅ | [`fft`](fft.exs) (measured 2026-10-19 at `8fa900b7`) | FFT of 4096 points; a 64-tap FIR over 2 s of audio | **82×** | – | bit-exact with Elixir; Nx's binary backend is slower than plain Elixir here |
 | ✅ | [`blake`](blake.exs) (measured 2026-10-19 at `8fa900b7`) | BLAKE2b-512 of 64 KB | **32×** | 1.0× blake2_elixir (reference C) | BLAKE3 9.9× Elixir and 0.61× the NEON NIF; against `:crypto`'s BLAKE2b only 1.2× |
 | ✅ | [`matmul`](matmul.exs) (measured 2026-10-19 at `8fa900b7`) | 256×256 f64 | **31×** | 0.21× Nx + EXLA (CPU, from binaries) | Nx with EXLA is 6× faster at 256×256 and 108× at 1024×1024; defk wins only at 64×64, where EXLA's dispatch and copies cost more than the product |
-| ✅ | [`geohash_crc`](geohash_crc.exs) | geohash encode of 100k points | **14×** | – | decode 20×; CRC-16 2.2× and CRC-64 2.3×; one point per call 1.6× |
 | ✅ | [`image_ops`](image_ops.exs) (measured 2026-10-19 at `8fa900b7`) | bilinear resize 1080p → 480×270 | **14×** | – | YUV420 19× and Floyd-Steinberg dither 21×; libvips not compared |
+| ✅ | [`geohash_crc`](geohash_crc.exs) | geohash encode of 100k points | **14×** | – | decode 18×; CRC-16 1.6× and CRC-64 2.3×; one point per call 1.6× |
 | ✅ | [`cosine_topk`](cosine_topk.exs) (measured 2026-10-19 at `8fa900b7`) | top-10 of 100k × 384 f32 embeddings | **13×** | 3.2× vettore | Nx + EXLA is faster than defk: use it for a plain dot-product top-k |
 | ✅ | [`cdcl_sat`](cdcl_sat.exs) (measured 2026-10-19 at `8fa900b7`) | Crux's whole scenario enumeration, 109 vars | **11×** | 3.6× Crux on picosat | picosat's search is stronger on hard random 3-SAT, and blocks a scheduler for the whole solve there |
 | ✅ | [`hll_update_many`](hll_update_many.exs) (measured 2026-10-19 at `8fa900b7`) | 100k hashes into a p = 14 sketch | **10×** | 7.5× the Rust NIF | the NIF's time is its own packing; fed packed input it is level |
@@ -73,12 +73,12 @@ Measured on Apple M4 Pro (12 logical cores) in 6 runs, from 2026-10-19 to 2026-1
 | ✅ | [`gorilla_encode`](gorilla_encode.exs) (measured 2026-10-19 at `684a3592`) | Gorilla encoding of 100-point blocks | **2.4×** | 4.2× gorilla_stream's NIF | close to the bar at this size; 4.1× at 1M points |
 | ✅ | [`tape_csv`](tape_csv.exs) (measured 2026-10-20 at `71e29777`) | CSV of 20 MB to NimbleCSV's rows, a fresh process per parse | **2.1×** | 0.38× rusty_csv | in a long-lived process 0.8–2.1× run to run; an [i64] tape of field events is slower than the cleaned copy |
 | ✅ | [`fuzzy_search/`](fuzzy_search) | a search service over 234k words behind Bandit | its own measurement, see its README | – | Myers on both sides; `/health` latency stays at Elixir's while a blocking NIF raises it |
-| 🟡 | [`ws_masking`](ws_masking.exs) | mask 125-byte WebSocket frames | 1.8× | 1.3× bandit_native | the call is the cost; 3.4× at 1 MiB, crossover 1024 B |
 | 🟡 | [`batched_levenshtein`](batched_levenshtein.exs) (measured 2026-10-19 at `8fa900b7`) | one query against 234k words, 12 chunks each side | 1.5× | 13× ex_strsim per pair | Myers bit-parallel in plain Elixir is close; use it |
+| 🟡 | [`ws_masking`](ws_masking.exs) | mask 125-byte WebSocket frames | 1.5× | 1.2× bandit_native | the call is the cost; 3.7× at 1 MiB, crossover 1024 B |
 | 🟡 | [`poor_substring_search`](poor_substring_search.exs) (measured 2026-10-19 at `8fa900b7`) | a 64-byte needle in 16 MB | 1.1× | – | `:binary.match` is Boyer-Moore in C already |
 | 🟡 | [`utf8_valid`](utf8_valid.exs) | validate 16 MB of UTF-8 | 1.1× | – | `String.valid?` is C already |
 | ❌ | [`hash_chain`](hash_chain.exs) (measured 2026-10-19 at `8fa900b7`) | a 10M-step SHA-256 chain | 0.57× | – | `:crypto` runs on the SHA instructions; HMAC rounds 1.5× |
-| ❌ | [`poor_tiny_calls`](poor_tiny_calls.exs) | one kernel call per element | 0.31× | – | 13 ns per call against 2 ns for an Elixir call |
+| ❌ | [`poor_tiny_calls`](poor_tiny_calls.exs) | one kernel call per element | 0.29× | – | 13 ns per call against 2 ns for an Elixir call |
 | ❌ | [`argon2`](argon2.exs) (measured 2026-10-19 at `8fa900b7`) | Argon2id at argon2_elixir's defaults | 0.27× | lane for lane 0.94× of the reference C | the C runs its four lanes on threads; the kernel runs them in sequence |
 | ❌ | [`poor_list_data`](poor_list_data.exs) (measured 2026-10-19 at `8fa900b7`) | the data arrives as a list | 0.07× | – | packing the list costs more than the whole `Enum.sum` |
 | ⛔ | [`out_of_scope_word_count`](out_of_scope_word_count.exs) (measured 2026-10-19 at `8fa900b7`) | strings in, a map out | – | – | not expressible: the compiler refuses, as it should |

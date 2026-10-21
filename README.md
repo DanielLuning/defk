@@ -47,9 +47,9 @@ Speedups over an optimised Elixir baseline, measured end to end on Apple M4 Pro 
 | ✅ | an early-exit loop (the first packet past a byte budget), where Nx with EXLA pays ~40 µs a call and recompiles per shape | 2.5× |
 | ✅ | a fuzzy-search web service, Myers bit-parallel on both sides: `/health` latency stays at Elixir's while a blocking NIF raises it | [its own measurement](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) |
 | 🟡 | a dictionary-wide Levenshtein batch over all schedulers: Myers bit-parallel in Elixir is close | 1.5× |
-| 🟡 | small WebSocket frames, UTF-8 validation, substring search: the BIFs are native already | 1.1–1.8× |
+| 🟡 | small WebSocket frames, UTF-8 validation, substring search: the BIFs are native already | 1.1–1.5× |
 | ❌ | anything `:crypto` does (a SHA-256 chain) and memory-hard password hashing (Argon2: the C runs its lanes on threads) | 0.27–0.57× |
-| ❌ | one kernel call per element | 0.31× |
+| ❌ | one kernel call per element | 0.29× |
 | ❌ | data that arrives as lists: packing costs more than the whole `Enum.sum` | 0.07× |
 | ⛔ | maps and string building | not expressible (a string literal is a read-only `[u8]`) |
 <!-- summary:end -->
