@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-w8r",
+  "comments": [
+    {
+      "text": "PR #78 opened 2026-10-21 (branch defk-25s/per-call-cost, worktree ../defk-25s). Breakdown in docs/performance.md 5.13: a kernel without a loop 11-13 ns (6 of it the BEAM's NIF call), a yielding kernel 37 -\u003e 21 ns with the mach_absolute_time slice clock on Apple platforms. Four small-input rows re-measured and stored. Local mix ci was still running when the PR opened; its result goes on the PR. Waits for the owner's merge.",
+      "timestamp": "2026-10-21T20:01:33Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Measure and cut the base per-call cost of a scalar kernel (12 ns vs Elixir's 1.6 ns)",
   "type": "task",
-  "updated_at": "2026-10-21T19:27:41Z"
+  "updated_at": "2026-10-21T20:01:33Z"
 }
