@@ -1893,6 +1893,34 @@ __attribute__((unused)) static ERL_NIF_TERM defk_make_bits(ErlNifEnv *env, defk_
 /* ---- scheduling ---------------------------------------------------------- */
 
 /*
+ * The clock the slices are measured with, in microseconds. A yielding kernel
+ * reads it once at entry and once per tick. enif_monotonic_time costs ~27 ns
+ * a read on macOS arm64, and that entry read was more than half of a tiny
+ * yielding call (37 ns; docs/performance.md 5.1). On Apple platforms
+ * mach_absolute_time is a counter read (~5 ns), converted with the timebase
+ * read once per library at load. Elsewhere the ERTS clock stays.
+ */
+#if defined(__APPLE__)
+#include <mach/mach_time.h>
+static uint64_t defk_tb_numer = 1, defk_tb_denom = 1000; /* ticks -> us */
+static void defk_clock_setup(void) {
+  mach_timebase_info_data_t tb;
+  if (mach_timebase_info(&tb) == KERN_SUCCESS && tb.numer && tb.denom) {
+    defk_tb_numer = tb.numer;
+    defk_tb_denom = (uint64_t)tb.denom * 1000;
+  }
+}
+static inline int64_t defk_now_us(void) {
+  return (int64_t)(mach_absolute_time() * defk_tb_numer / defk_tb_denom);
+}
+#else
+static void defk_clock_setup(void) {}
+static inline int64_t defk_now_us(void) {
+  return (int64_t)enif_monotonic_time(ERL_NIF_USEC);
+}
+#endif
+
+/*
  * Safepoint clock. Loops count back-edges against an adaptive budget so the
  * clock is read every DEFK_SLICE_US/10 .. /4 no matter how expensive one
  * iteration is (an outer loop may call a kernel with its own inner loop).
@@ -1970,7 +1998,7 @@ __attribute__((unused)) static void defk_slice_init(ErlNifEnv *env, defk_ctx *ct
 }
 
 static void defk_clock_init(defk_clock *c, defk_ctx *ctx) {
-  c->last = enif_monotonic_time(ERL_NIF_USEC);
+  c->last = defk_now_us();
   c->unreported = 0;
   c->ctx = ctx;
 }
@@ -1991,8 +2019,19 @@ __attribute__((noinline)) static int64_t defk_tick(ErlNifEnv *env, defk_clock *c
     else defk_inject_fault_now(inj);
   }
 #endif
-  if (atomic_load_explicit(&defk_force_yields, memory_order_relaxed)) return 0;
-  ErlNifTime now = enif_monotonic_time(ERL_NIF_USEC);
+  if (DEFK_UNLIKELY(atomic_load_explicit(&defk_force_yields, memory_order_relaxed))) {
+    /* Forced yields charge no reductions, so the scheduler never reads its
+       clock between them, and a process that sleeps on this scheduler
+       (Process.sleep in a test watching the kernel) waits until the kernel
+       ends: the timer wheel is bumped from the scheduler's last_monotonic_time,
+       which only an ERTS clock read advances (erts_get_monotonic_time stores
+       it and resets check_time_reds). With the ERTS slice clock every
+       re-entry read it (defk_clock_init); the cheap clock does not, so the
+       forced path reads it here. */
+    (void)enif_monotonic_time(ERL_NIF_USEC);
+    return 0;
+  }
+  ErlNifTime now = defk_now_us();
   ErlNifTime dt = now - c->last;
   defk_ctx *ctx = c->ctx;
   int64_t slice = ctx->slice_us;
@@ -2458,6 +2497,7 @@ static int defk_open_rt(ErlNifEnv *env, ErlNifResourceFlags flags) {
 }
 static int defk_load(ErlNifEnv *env, void **priv, ERL_NIF_TERM info) {
   (void)info;
+  defk_clock_setup();
   defk_max_owned_init();
   defk_fault_install();
   *priv = &defk_fault;
@@ -2465,6 +2505,7 @@ static int defk_load(ErlNifEnv *env, void **priv, ERL_NIF_TERM info) {
 }
 static int defk_upgrade(ErlNifEnv *env, void **priv, void **old, ERL_NIF_TERM info) {
   (void)info;
+  defk_clock_setup();
   defk_max_owned_init();
   defk_fault_pin_old(old ? *old : NULL);
   defk_fault_install();

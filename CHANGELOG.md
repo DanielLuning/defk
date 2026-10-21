@@ -14,6 +14,11 @@
 
 ## Unreleased
 
+- Changed (runtime, no promise changes): on Apple platforms the clock that
+  measures a yielding kernel's slices reads `mach_absolute_time` instead of
+  the ERTS monotonic clock. A yielding kernel's call cost about 20 ns less
+  (a tiny call 37 -> 21 ns); the slice length, the yields and the resume
+  paths are the same. Other platforms keep the ERTS clock.
 - Added (unstable, the fast-path report's facts): the `:check` topic. Each
   i64 `+`, `-` and `*` notes whether its overflow check was dropped or
   kept, and each store into an element type narrower than the value's

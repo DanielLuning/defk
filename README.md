@@ -29,7 +29,7 @@ measurement rules are in [`examples/README.md`](https://github.com/DanielLuning/
 what is planned and what stays out by design.
 
 <!-- summary:start -->
-Speedups over an optimised Elixir baseline, measured end to end on Apple M4 Pro from 2026-10-19 to 2026-10-20 (one machine, so measure your own job). ✅ defk helps; 🟡 and ❌ use Elixir.
+Speedups over an optimised Elixir baseline, measured end to end on Apple M4 Pro from 2026-10-19 to 2026-10-21 (one machine, so measure your own job). ✅ defk helps; 🟡 and ❌ use Elixir.
 
 | | The job | defk vs best Elixir |
 |---|---|---|
@@ -47,9 +47,9 @@ Speedups over an optimised Elixir baseline, measured end to end on Apple M4 Pro 
 | ✅ | an early-exit loop (the first packet past a byte budget), where Nx with EXLA pays ~40 µs a call and recompiles per shape | 2.5× |
 | ✅ | a fuzzy-search web service, Myers bit-parallel on both sides: `/health` latency stays at Elixir's while a blocking NIF raises it | [its own measurement](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md) |
 | 🟡 | a dictionary-wide Levenshtein batch over all schedulers: Myers bit-parallel in Elixir is close | 1.5× |
-| 🟡 | small WebSocket frames, UTF-8 validation, substring search: the BIFs are native already | 1.0–1.5× |
+| 🟡 | small WebSocket frames, UTF-8 validation, substring search: the BIFs are native already | 1.1–1.8× |
 | ❌ | anything `:crypto` does (a SHA-256 chain) and memory-hard password hashing (Argon2: the C runs its lanes on threads) | 0.27–0.57× |
-| ❌ | one kernel call per element | 0.28× |
+| ❌ | one kernel call per element | 0.31× |
 | ❌ | data that arrives as lists: packing costs more than the whole `Enum.sum` | 0.07× |
 | ⛔ | maps and string building | not expressible (a string literal is a read-only `[u8]`) |
 <!-- summary:end -->

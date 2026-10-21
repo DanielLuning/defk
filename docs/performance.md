@@ -1066,7 +1066,8 @@ call keeps 250 us. `use Defk, adaptive_slice: false` turns it off.
   (the caller's own queue) 60 / 81; `statistics(:run_queue)` 43 / 1954 (it
   locks every queue); `system_info(:scheduler_id)` alone 3. A tiny yielding
   call (`count_primes(10)`) goes from 40-43 to 49-58 ns with the total check
-  and to 102-132 ns with the own-queue check. The NIF API has no run-queue
+  and to 102-132 ns with the own-queue check (before the cheaper slice clock
+  of 5.13, which took ~20 ns off every yielding call). The NIF API has no run-queue
   length, so the check is a BIF call in Elixir. 9 ns is 0.0014% of a 0.65 ms call.
 - **Lone calls** (`count_primes`, median of 15 interleaved rounds, vs the
   250 us slice): 0.65 ms call -0.6 to +0.1% on 12 schedulers, -0.2 to -0.1%
@@ -1137,7 +1138,10 @@ def spin(n), do: __defk_native_spin__(n, :erlang.statistics(:total_run_queue_len
   disagree (see 8.2, open questions).
 - **Conditions:** results snapshot "noisy, single runs"; ws_masking under load.
 - **Source:** [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md#results-snapshot), [`poor_tiny_calls.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_tiny_calls.exs), [`ws_masking.exs`](https://github.com/DanielLuning/defk/blob/main/examples/ws_masking.exs), [`hashes.exs`](https://github.com/DanielLuning/defk/blob/main/examples/hashes.exs).
-- **Status:** measured; ws_masking provisional.
+- **Status:** measured; ws_masking provisional. The per-call figure is
+  superseded by 5.13: 11-13 ns for a kernel without a loop, 37 ns for a
+  yielding one before the cheaper slice clock and 21 ns after; the rule
+  (never call per element) stands.
 
 <!-- defk-example run: packed = <<1.0::float-64-native>>; readings = [1.0, 2.0] | defs: defmodule Clamp.Kernels do def clamp_all(packed), do: packed; def clamp(x, lo, hi), do: x |> max(lo) |> min(hi) end -->
 ```elixir
@@ -1423,6 +1427,74 @@ question makes several solves, batch it.
 - **Conditions:** load 4-11 on 12 cores, 3 runs each; provisional.
 - **Source:** `defk-oed`, [`bench/tick_gap.exs`](https://github.com/DanielLuning/defk/blob/main/bench/tick_gap.exs), `test/strip_copies_test.exs`.
 - **Status:** measured, provisional (loaded machine).
+
+### 5.13 Where a call's nanoseconds go: the BEAM's NIF call first, then the clock read of a yielding kernel
+
+A kernel call stage by stage, measured on the generated C itself:
+`bench/call_cost.exs` takes the bench module's C, removes one piece per
+variant (the `sigsetjmp`, the fault-containment stores, the entry clock
+read, the slice init) and loads each variant as its own library. Each
+number is the median of 9 interleaved rounds of 1M calls, minus the empty
+loop. The non-yielding figure settles 8.2's per-call question: 11-13 ns, of
+which the BEAM's own NIF call and the term decoding are 6.
+
+- **The floor** (ns): an Elixir remote call 0.2 (inside the loop's noise); a
+  bare NIF that returns its argument 3.7; a plain NIF that decodes two i64
+  and encodes one 6.2; the same with a `sigsetjmp(jb, 0)` 7.7.
+- **A non-yielding kernel** (`add/2`, no loop, so the NIF is the function):
+  11.5. The `sigsetjmp` is 2.5 of it (9.0 without), the fault-containment
+  store pair 1.2 (10.3 without), and the frame's field stores, the slice
+  init, the two `noinline` calls and `defk_finish` about 1.6 (8.2 with
+  neither). Three f64 in and one out (`clamp/3`, `poor_tiny_calls`' kernel)
+  13.0; one `[i64]` argument 11.7.
+- **A yielding kernel with one loop trip** (`loop1/1`), before the change:
+  its NIF alone 33.4; without the entry clock read 11.8, so
+  `enif_monotonic_time` cost 21.6 per call; the slice init (the hint's
+  decode) 0; the kernel's function (the hint BIF
+  `statistics(:total_run_queue_lengths)` and one more call) 3.9 on top,
+  37.3 in all; the BIF alone 7.8. The same loop with `yield: false` 10.4.
+- **Clock reads** on top of the bare NIF: `enif_monotonic_time(ERL_NIF_USEC)`
+  26.7; `clock_gettime(CLOCK_MONOTONIC)` 15.6; `mach_absolute_time` 4.5.
+- **The change:** the slice clock is `defk_now_us` in the runtime header.
+  On Apple platforms it reads `mach_absolute_time`, converted with the
+  timebase read once per library at load; elsewhere it is still
+  `enif_monotonic_time` (Linux is not measured; its clock is a vDSO
+  `clock_gettime`). After (two runs, the second on the final header): the
+  yielding NIF alone 12.4-12.6 (the clock read 1.2-1.5 over the variant
+  without it), through its function 21.2-21.6; `add/2` 10.7-11.0,
+  unchanged within noise. A tiny yielding call went from 37 to 21 ns. What
+  remains over a non-yielding call is the hint BIF and its function, about
+  9 ns, which cannot be skipped without knowing the call is short.
+- **Not changed, and why:** the `sigsetjmp` is where an argument error and
+  a contained fault land; the store pair is fault containment (6.29); the
+  hint is what spreads short calls (4.9); a kernel with no loop already has
+  no hint and no clock. The function does nothing but the BIF, so there is
+  nothing to thin in it.
+- **The small-input crossovers, re-measured and stored** (`mix defk.examples
+  --bench --snapshot`, quiet, against the rows of 2026-10-19):
+  `ws_masking` 125 B frames 1.5x -> 1.77x over the best Elixir and 1.2x ->
+  1.28x over bandit_native (the crossover stays 1024 B); `geohash_crc` one
+  point per call 1.3x -> 1.62x (pre-registered poor, measured marginal,
+  accepted by the script's boundary rule: pack two floats and call, for a
+  50-bit loop); `poor_tiny_calls` 0.28x -> 0.31x and
+  `utf8_valid` 1.0x -> 1.05x, both within noise: the first has no loop, so
+  no clock, and the second is 16 MB of work per call.
+- **Found on the way:** an ERTS clock read is not free of side effects.
+  `erts_get_monotonic_time` stores the time in the scheduler's data and
+  resets its reduction counter, and the scheduler bumps its timer wheel from
+  that stored time. Forced yields (`__defk_force_yields__/1`, the test mode)
+  charge no reductions, so with the cheap clock nothing advanced the
+  scheduler's time during a forced-yield kernel, and a test process that
+  slept 1 ms on the same scheduler woke only when the kernel ended
+  (`bitstring_test`, "a process killed mid-build"). The forced path now
+  reads the ERTS clock once per forced yield, as the old slice clock did at
+  every re-entry; a normal yield charges reductions through
+  `enif_consume_timeslice`, so the scheduler reads its own clock there.
+- **Conditions:** M-series Mac, 12 schedulers, OTP 29, Elixir 1.20.2, Apple
+  clang, on battery; other processes at 0.1-0.8 cores (the ps quiet test)
+  before each block; before and after are two runs of the same script.
+- **Source:** `defk-25s`, [`bench/call_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/call_cost.exs), [`bench/call_cost_nif.c`](https://github.com/DanielLuning/defk/blob/main/bench/call_cost_nif.c); `defk_now_us` in [`priv/defk_runtime.h`](https://github.com/DanielLuning/defk/blob/main/priv/defk_runtime.h).
+- **Status:** measured.
 
 ---
 
@@ -2996,11 +3068,14 @@ costs as much as the splits.
 
 ### 8.2 Open questions
 
-- **Per-call cost.** Sources give ~10 ns (`poor_tiny_calls`), 12 ns (results snapshot
+- **Per-call cost** (settled by 5.13). Sources gave ~10 ns (`poor_tiny_calls`), 12 ns (results snapshot
   micro-benchmark), ~35 ns more than a NIF call (`hashes`), ~0.1-0.2 us
   (`per_pair_distance`) and ~0.12-0.13 us (`ws_masking`, under load), and a
-  bitstring result adds ~0.1 us (`defk-cao`). No source says which costs are
-  included in each. A single micro-benchmark on a quiet machine would settle it.
+  bitstring result adds ~0.1 us (`defk-cao`). The quiet breakdown: a kernel
+  without a loop 11-13 ns (6 of it the BEAM's NIF call and the terms); a
+  yielding kernel 37 ns, 21 after the cheaper slice clock, the rest the
+  run-queue hint; a one-buffer result adds ~45 ns (5.2). `hashes`' 35 ns
+  over siphash's NIF was a yielding kernel's clock read and hint.
 - **Geohash batch break-even.** The `geohash_crc.exs` header says the encode
   crossover is about 100 points (1 point 0.5x); its report reason and the
   catalog row say a batch of 10 breaks even.
@@ -3055,4 +3130,5 @@ example or close a workload ticket, add its entries and its line here.
   `defk-sve`, `defk-sve.1` ([`state-copy-cost.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/state-copy-cost.md)), `defk-ulk`, `defk-ulk.1` ([`simd.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/simd.md)), `defk-33b`,
   `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`,
   `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`,
-  `defk-o08.2`, `defk-o08.3`, `defk-o08.4`, `defk-o08.5`, `defk-o08.6`.
+  `defk-o08.2`, `defk-o08.3`, `defk-o08.4`, `defk-o08.5`, `defk-o08.6`,
+  `defk-w8r.2`, `defk-25s` ([`bench/call_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/call_cost.exs)).
