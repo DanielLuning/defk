@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-20T12:35:36Z",
@@ -20,8 +20,8 @@
     }
   ],
   "priority": 2,
-  "status": "open",
+  "status": "in_progress",
   "title": "Record the handwired study's speed lessons in docs/performance.md and the GPU evidence in docs/scope.md",
   "type": "task",
-  "updated_at": "2026-10-20T20:25:57Z"
+  "updated_at": "2026-10-21T19:19:44Z"
 }
