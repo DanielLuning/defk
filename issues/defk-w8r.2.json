@@ -17,11 +17,15 @@
     {
       "text": "Correction 2026-10-20 (owner): handwired was a prototype and research run; the tickets carry what was valuable. The branch and its files are deleted and will not be restored. Do not recover d289e27d. The numbers in this description are the record.",
       "timestamp": "2026-10-20T20:25:50Z"
+    },
+    {
+      "text": "PR #77 opened 2026-10-21 (branch defk-w8r.2/handwired-lessons, worktree ../defk-w8r.2). Five entries in docs/performance.md (2.19, 2.20, 3.1 pointer, 6.43, 6.44) and the GPU data point in docs/research/nx-boundary.md; scope.md unchanged. mix ci green locally. Waits for the owner's merge; then bw close, bw sync, remove the worktree.",
+      "timestamp": "2026-10-21T19:25:44Z"
     }
   ],
   "priority": 2,
   "status": "in_progress",
   "title": "Record the handwired study's speed lessons in docs/performance.md and the GPU evidence in docs/scope.md",
   "type": "task",
-  "updated_at": "2026-10-21T19:19:44Z"
+  "updated_at": "2026-10-21T19:25:44Z"
 }
