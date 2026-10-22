@@ -3052,9 +3052,10 @@ the loop's exit path, once per block) beside the 16 MB time;
 
 - **Before** (quiet): Keccak 12 stack stores and 12 loads per round, 164
   instructions, against 0 / 0 and 109 under `yield: false`; 16 MB 23.1 /
-  23.3 ms (best / median of 7) against 17.2 / 17.6, 1.32-1.34x. The
-  6.8 figures (9-11 spills, 20.7 vs 18.3 ms) were under load and counted
-  the exit path differently; quiet, the gap is a third. fuzzy_search:
+  23.3 ms (best / median of 7) against 17.2 / 17.6, 1.32-1.34x. 6.8's
+  9-11 spills were counted on the compiler of 2026-10-10 and its 20.7 vs
+  18.3 ms under load; today, with the exit path left out, the count is 12
+  / 12, and quiet the gap is a third. fuzzy_search:
   yielding 5.1-5.4 ms a query against 3.9-4.1 blocking, +30-31% (three
   runs; `defk-l2g`'s +19% was under load), 18-19 yields a query: about
   5 ns per word on 17.

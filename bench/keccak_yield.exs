@@ -81,7 +81,6 @@ defmodule KY.Spills do
 end
 
 big = :crypto.strong_rand_bytes(16 * 1024 * 1024)
-^big = big
 true = KY.Yield.keccak256(big) == KY.Blocking.keccak256(big)
 
 for {name, mod} <- [{"yielding", KY.Yield}, {"blocking", KY.Blocking}] do
