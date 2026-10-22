@@ -9,9 +9,15 @@
     "ready-for-agent"
   ],
   "parent": "defk-vcx",
+  "comments": [
+    {
+      "text": "PR #79 opened 2026-10-22: bench/elixir_mode.exs and docs/performance.md 5.14. Elixir mode is 7-17x the kernel at 1 B, 12-15x on a no-loop kernel (entry ~230 ns), 1.6-3.4x the optimised Elixir on reads, 100-200x on writes. No size-based switch, no decision ticket filed; the ticket stays in progress until the merge.",
+      "timestamp": "2026-10-22T09:38:12Z"
+    }
+  ],
   "priority": 2,
   "status": "in_progress",
   "title": "Measure Elixir mode at small sizes: could it ever be the fast side below a crossover?",
   "type": "task",
-  "updated_at": "2026-10-22T09:26:25Z"
+  "updated_at": "2026-10-22T09:38:12Z"
 }
