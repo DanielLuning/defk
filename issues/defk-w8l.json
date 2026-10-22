@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-22T10:39:52Z",
   "created": "2026-10-10T11:40:21Z",
   "description": "Follow-up of defk-zep. After safepoints spill only live locals, the Keccak round loop (a short flat loop, no safepoint inside) still has 6-11 stack stores+loads per round in the yielding kernel and 0 under yield: false; 16 MB is ~20.7 ms vs ~18.3 ms (under load). What stays live across the hot loop only in yielding kernels: defk_ticks and defk_budget (two registers where one countdown would do: DEFK_SP as (defk_left -= W) \u003c= 0), defk_rs (read by every loop header's resume dispatch), and the short loop's rem, live across the loop only for DEFK_TICKS(rem + 1) after it (charging on entry, as flat == :exits already does, is equivalent for a plain loop and frees it; tried in defk-zep: 9 -\u003e 7 spills in two orderings, inside noise on time). Measure with the spill counter approach in defk-zep's comment (cc -S with build.ex's cflags, count [sp] loads/stores in the loop with the most ror).\n\nMerged from defk-w8r.1 (2026-10-20): the same bookkeeping also shows as a safepoint per outer iteration when the body holds a short inner loop. Found in defk-l2g (2026-10-15, provisional, load 4-7). With Myers bit-parallel Levenshtein, fuzzy_search's kernel spends ~4 ms per query over 234k words, a few ns per word. The fast-path report says of the word loop: 'loop: a safepoint every iteration: the body has a nested loop'. The inner Enum.reduce_while over the word's bytes runs in strips, charged on entry. examples/fuzzy_search/bench/yield_cost.exs: yielding 4.9 ms vs yield: false 4.1-4.2 ms, +19%, at ~17 yields per query; with the DP kernel it was +3.5-4.5%. A huge slice (DEFK_SLICE_US=10000000) did not change the yields or the gap, so the cost is the per-word bookkeeping, not the yields. Under load defk serves ~21% fewer req/s than the blocking build (1790-1840 vs 2260-2370).\n\nScope: (a) the register experiments above (single countdown; charge a plain short loop on entry), and (b) the per-iteration safepoint of an outer loop with a short inner loop: what it costs (the check, the resume dispatch, registers kept live) and a cheaper shape, for example charging the outer loop in strips by the inner loop's trip count, or one safepoint per N outer iterations. Keep the worst-case scheduler gap within the slice; the runtime contract (tick gap, yields and resume, adaptive slices from defk-04y) stays intact. Adopt a change only if spills drop and time improves beyond noise, on Keccak 16 MB and the fuzzy_search yield cost script, interleaved repeats, quiet machine or marked provisional.\n\nDone when both breakdowns (Keccak spills, fuzzy_search per-word cost) are recorded in docs/performance.md and either a fix lands with mix test green, forced-yield tests and the tick-gap bench unchanged, or the ticket records why no fix was worth it.",
   "id": "defk-w8l",
@@ -24,8 +25,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Yield bookkeeping in hot short loops: Keccak spills 6-11 per round, and fuzzy_search Myers pays a safepoint per word (+19%)",
   "type": "task",
-  "updated_at": "2026-10-22T10:34:00Z"
+  "updated_at": "2026-10-22T10:39:52Z"
 }
