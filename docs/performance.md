@@ -2965,8 +2965,8 @@ A sparse layer gathers an input per term: `out[r] = sum of w[r * k + t] *
 x[base + idx[r * k + t]]` over an `[f32]` weight array, `[i32]` indices
 and an `[f32]` input (`bench/gather_layer.exs`, `layer/5`; the guarded
 twin states `k > 0`, `length(idx) == length(w)` and `0 <= base <=
-length(x)` as a raising guard). The handwired study (6.44's prototype,
-deleted; its numbers are the reference point only) had its layer at 0.378
+length(x)` as a raising guard). The handwired study (`defk-w8r.2`, 6.43 and 6.44; its
+prototype is deleted, and its numbers are the reference point only) had its layer at 0.378
 us per item against 0.069 us for the hand-written C float loop, and listed
 the checks in each term. Read again on today's compiler, most of that list
 was already gone, one proof was missing for a reason of ranking, and what
