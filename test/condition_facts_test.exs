@@ -138,6 +138,30 @@ defmodule Defk.ConditionFactsTest.K do
       acc -> if i + k >= 0 and i + k < length(x), do: acc + x[i + k], else: acc
     end
   end
+
+  # A guard between two parameters states its fact on the one declared
+  # later, whatever their names: base <= length(x) bounds base (declared
+  # after x), so base + idx[i], an i32 element, fits i64 with no check. The
+  # gather x[base + idx[i]] keeps its bounds check: it depends on the
+  # array's contents.
+  defk gather(idx :: [i32], x :: [f32], base :: i64) :: f64 do
+    if not (base >= 0 and base <= length(x)), do: raise(ArgumentError, "base")
+
+    for i <- 0..(length(idx) - 1)//1, reduce: 0.0 do
+      acc -> acc + x[base + idx[i]]
+    end
+  end
+
+  # the same with the offset's name sorting after the array's: the same
+  # proof (a guard bounds the parameter declared later, never the earlier
+  # one: declared before the array, `off` would keep its check)
+  defk gather_named(ia :: [i32], as :: [f32], off :: i64) :: f64 do
+    if not (off >= 0 and off <= length(as)), do: raise(ArgumentError, "off")
+
+    for i <- 0..(length(ia) - 1)//1, reduce: 0.0 do
+      acc -> acc + as[off + ia[i]]
+    end
+  end
 end
 
 # the same unguarded kernel without report: :full: its note names no fact
@@ -183,6 +207,7 @@ defmodule Defk.ConditionFactsTest do
   defp kept(kernel), do: kept_bounds(K, kernel)
 
   defp f64s(xs), do: G.pack(:f64, Enum.map(xs, &(&1 * 1.0)))
+  defp f32s(xs), do: G.pack(:f32, Enum.map(xs, &(&1 * 1.0)))
 
   describe "a raising guard and an if arm: a rolling window" do
     test "x[i - w] keeps no bounds check after a raise when w < 1" do
@@ -315,6 +340,39 @@ defmodule Defk.ConditionFactsTest do
     end
   end
 
+  describe "a guard between two parameters" do
+    @i32_max 0x7FFFFFFF
+    @i32_min -0x80000000
+
+    # the parameters rank in declaration order, so the guard's fact lands on
+    # the later one whichever name sorts first
+    for {kernel, sum} <- [{:gather, "base + idx[i]"}, {:gather_named, "off + ia[i]"}] do
+      test "#{kernel}: the offset plus an i32 element needs no overflow check" do
+        assert {:dropped, "#{unquote(sum)}: no overflow check"} in notes(unquote(kernel), :check)
+        # the gather itself depends on the indices: its check stays
+        assert [text] = kept(unquote(kernel))
+        assert text =~ "bounds check kept; nothing proves 0 <= #{unquote(sum)}"
+
+        x = f32s(Enum.to_list(1..8))
+
+        for idx <- [[], [0], [7, 0, 3], [-1], [8]], base <- [0, 1, 8] do
+          assert {_, _} = agrees(unquote(kernel), [G.pack(:i32, idx), x, base])
+        end
+
+        # the extremes of the dropped check: the sum fits, the access raises
+        for idx <- [@i32_max, @i32_min], base <- [0, 8] do
+          assert {:raise, %Enum.OutOfBoundsError{}} =
+                   agrees(unquote(kernel), [G.pack(:i32, [idx]), x, base])
+        end
+
+        for base <- [-1, 9, @i64_min, @i64_max] do
+          assert {:raise, %ArgumentError{}} =
+                   agrees(unquote(kernel), [G.pack(:i32, [0]), x, base])
+        end
+      end
+    end
+  end
+
   describe "flagged strips" do
     test "a guard on a value the strip computes with a check makes no access fixed" do
       c = kernel_c(K, "guarded_shift")
@@ -359,7 +417,9 @@ defmodule Defk.ConditionFactsTest do
     shift_add: [args: StreamData.fixed_list([G.array(:i64), G.array(:i64), G.i64(-3..20)])],
     shift_add_unguarded: [
       args: StreamData.fixed_list([G.array(:i64), G.array(:i64), G.i64(-3..20)])
-    ]
+    ],
+    gather: [args: StreamData.fixed_list([G.array(:i32), G.array(:f32), G.i64(-3..20)])],
+    gather_named: [args: StreamData.fixed_list([G.array(:i32), G.array(:f32), G.i64(-3..20)])]
   ])
 
   # ------------------------------------------------------ soundness --

@@ -111,9 +111,17 @@ defmodule Defk.Facts do
   # {:len, c}). The compiler's env carries it and it is lexical like the
   # env; a binding's value keeps the same facts as its entry. An entry
   # outlives a shadowing binding, as the C variable is assigned once where
-  # it is in scope.
+  # it is in scope. The scope also holds the kernel's parameter order under
+  # @order (the C names in declaration order, each with its position),
+  # which ranks the parameter atoms (rank/2): a condition between two
+  # parameters then states its fact on the later one, as it does for two
+  # bindings. A scope made with no parameters ranks them by name.
 
-  def scope, do: %{}
+  @order :order
+
+  def scope(params \\ []), do: %{@order => Map.new(Enum.with_index(params))}
+
+  defp order(scope), do: Map.get(scope, @order, %{})
 
   # the scope with binding v's facts
   def bind(scope, %{t: :i64, c: c} = v), do: Map.put(scope, c, facts(v))
@@ -129,7 +137,7 @@ defmodule Defk.Facts do
     rel
     |> holds(true?)
     |> Enum.reduce(scope, fn d, scope ->
-      {x, kind, b} = narrowing(d)
+      {x, kind, b} = narrowing(d, scope)
       c = binding_of(x)
       Map.put(scope, c, with_fact(facts_of(scope, c), x, kind, b))
     end)
@@ -310,11 +318,11 @@ defmodule Defk.Facts do
   defp negated_op(op),
     do: %{<: :>=, <=: :>, >: :<=, >=: :<, ==: :!=, ===: :!==, !=: :==, !==: :===}[op]
 
-  # D <= 0 as a fact on D's newest monomial x, over older ones only:
-  # {x, :lo | :hi, constant} when the rest of D is a constant, else
-  # {x, :lb | :ub, {q, form}}
-  def narrowing(%{t: t} = d) when map_size(t) > 0 do
-    {x, c} = newest(t)
+  # D <= 0 as a fact on D's newest monomial x (by the scope's ranking), over
+  # older ones only: {x, :lo | :hi, constant} when the rest of D is a
+  # constant, else {x, :lb | :ub, {q, form}}
+  def narrowing(%{t: t} = d, scope) when map_size(t) > 0 do
+    {x, c} = newest(t, order(scope))
     rest = %{d | t: Map.delete(t, x)}
     const? = map_size(rest.t) == 0
 
@@ -480,7 +488,7 @@ defmodule Defk.Facts do
          do: form,
          else: best
 
-    {x, c} = newest(form.t)
+    {x, c} = newest(form.t, lookup.(:order))
     rest = %{form | t: Map.delete(form.t, x)}
     {lo, hi, lbs, ubs, fx} = mono(x, lookup)
     stated = if state == :tainted, do: :tainted, else: :ok
@@ -509,8 +517,10 @@ defmodule Defk.Facts do
   # An atom's facts: array a's own (the one a proof is about), else its
   # binding's in scope, else none. A binding's exact form is never its own
   # atom (bound/1 records the value's), so it is a bound over older atoms.
+  # Asked :order, it gives the scope's parameter order (rank/2).
   defp lookup(scope, a) do
     fn
+      :order -> order(scope)
       {:len, c} when a != nil and c == a.c -> facts(a)
       {_, c} -> facts_of(scope, c)
     end
@@ -560,7 +570,7 @@ defmodule Defk.Facts do
   defp le?(_form, _lookup, 0, _support), do: {false, 0}
 
   defp le?(form, lookup, budget, support) do
-    {x, c} = newest(form.t)
+    {x, c} = newest(form.t, lookup.(:order))
     rest = %{form | t: Map.delete(form.t, x)}
     {lo, hi, lbs, ubs, _} = mono(x, lookup)
 
@@ -605,7 +615,7 @@ defmodule Defk.Facts do
 
   # a monomial's constant range and relative bounds, and an atom's facts:
   # {lo, hi, lbs, ubs, facts or nil}
-  defp mono({:mul, y, z}, lookup), do: product(y, z, lookup.(y), lookup.(z))
+  defp mono({:mul, y, z}, lookup), do: product(y, z, lookup.(y), lookup.(z), lookup.(:order))
 
   defp mono({:len, _} = x, lookup) do
     f = lookup.(x)
@@ -625,7 +635,7 @@ defmodule Defk.Facts do
   # product), y's stated constant bounds among them. A bound of y of degree
   # 2 would give degree 3 and is left out. The product's constant range is
   # the factors' multiplied.
-  defp product(y, z, fy, fz) do
+  defp product(y, z, fy, fz, order) do
     {zlo, zhi} = zr = monomial_range(z, fz)
     yr = monomial_range(y, fy)
     {ylbs, yubs} = monomial_bounds(y, fy)
@@ -635,8 +645,8 @@ defmodule Defk.Facts do
 
     {lbs, ubs} =
       cond do
-        zlo >= 0 -> {times(lows, z), times(highs, z)}
-        zhi <= 0 -> {times(highs, z), times(lows, z)}
+        zlo >= 0 -> {times(lows, z, order), times(highs, z, order)}
+        zhi <= 0 -> {times(highs, z, order), times(lows, z, order)}
         true -> {[], []}
       end
 
@@ -653,8 +663,8 @@ defmodule Defk.Facts do
   defp const_bound(k), do: [{1, form_const(k)}]
 
   # bounds {q, p} on y as bounds on y * z (the caller picks the direction)
-  defp times(bounds, z),
-    do: for({q, p} <- bounds, degree(p) <= 1, do: {q, form_mul(p, form_mono(z))})
+  defp times(bounds, z, order),
+    do: for({q, p} <- bounds, degree(p) <= 1, do: {q, form_mul(p, form_mono(z), order)})
 
   # a monomial's constant bounds: a length is always in 0..2^61 - 1, an i64
   # in -2^63..2^63 - 1
@@ -674,21 +684,21 @@ defmodule Defk.Facts do
   defp support_of({:mul, {_, a}, {_, b}}, support), do: [a, b | support]
   defp support_of({_, c}, support), do: [c | support]
 
-  # the newest monomial is replaced first: parameters are the oldest, then
-  # the bindings in fresh/2's order (their C names carry its counter); a
-  # product ranks with its newer factor, before that factor alone, then by
-  # its older factor
+  # the newest monomial is replaced first: parameters are the oldest, in
+  # declaration order (`order`, the scope's; by name in a scope that holds
+  # none), then the bindings in fresh/2's order (their C names carry its
+  # counter); a product ranks with its newer factor, before that factor
+  # alone, then by its older factor
   # the newest monomial of a form's terms and its coefficient (one term
   # needs no ranking)
-  defp newest(t) when map_size(t) == 1, do: hd(Map.to_list(t))
-  defp newest(t), do: Enum.max_by(t, fn {m, _} -> rank(m) end)
+  defp newest(t, _order) when map_size(t) == 1, do: hd(Map.to_list(t))
+  defp newest(t, order), do: Enum.max_by(t, fn {m, _} -> rank(m, order) end)
 
-  defp rank({:mul, x, y}), do: {atom_rank(x), 1, atom_rank(y)}
-  defp rank({_, "p_" <> _ = c}), do: {{0, c}, 0, 0}
-  defp rank({_, c}), do: {counter(c, byte_size(c), 0, 1), 0, 0}
+  defp rank({:mul, x, y}, order), do: {atom_rank(x, order), 1, atom_rank(y, order)}
+  defp rank(a, order), do: {atom_rank(a, order), 0, 0}
 
-  defp atom_rank({_, "p_" <> _ = c}), do: {0, c}
-  defp atom_rank({_, c}), do: counter(c, byte_size(c), 0, 1)
+  defp atom_rank({_, "p_" <> _ = c}, order), do: {0, Map.get(order, c, c)}
+  defp atom_rank({_, c}, _order), do: counter(c, byte_size(c), 0, 1)
 
   # the number after the last "_" of c, read from the end: {1, n}, or
   # {0, c} for a name without one
@@ -878,8 +888,8 @@ defmodule Defk.Facts do
   # a product: lo..hi from the operands' (nil when one is unbounded), and
   # for a constant k >= 1 times v, v's facts scaled by k; the exact form is
   # the operands' multiplied while it stays of degree 2 (`r * dim`,
-  # `(n - 1) * m`), none beyond
-  def mul_facts(a, b) do
+  # `(n - 1) * m`), none beyond; the scope ranks the product's factors
+  def mul_facts(a, b, scope \\ %{}) do
     {fa, fb} = {facts(a), facts(b)}
 
     f =
@@ -899,7 +909,7 @@ defmodule Defk.Facts do
       case {const(a), const(b)} do
         {k, _} when is_integer(k) -> (e = eq(b)) && form_scale(e, k)
         {_, k} when is_integer(k) -> (e = eq(a)) && form_scale(e, k)
-        _ -> both(eq(a), eq(b), &form_mul/2)
+        _ -> both(eq(a), eq(b), &form_mul(&1, &2, order(scope)))
       end
 
     %{f | eq: eq}
@@ -1113,15 +1123,16 @@ defmodule Defk.Facts do
     end)
   end
 
-  # the product of two forms, or nil when it would be of degree 3 or more
-  def form_mul(%{t: ta} = a, b) when map_size(ta) == 0, do: form_scale(b, a.k)
-  def form_mul(a, %{t: tb} = b) when map_size(tb) == 0, do: form_scale(a, b.k)
+  # the product of two forms, or nil when it would be of degree 3 or more;
+  # `order` ranks the factors of each product monomial
+  def form_mul(%{t: ta} = a, b, _order) when map_size(ta) == 0, do: form_scale(b, a.k)
+  def form_mul(a, %{t: tb} = b, _order) when map_size(tb) == 0, do: form_scale(a, b.k)
 
-  def form_mul(a, b) do
+  def form_mul(a, b, order) do
     if degree(a) + degree(b) <= 2 do
       cross =
         for {x, cx} <- a.t, {y, cy} <- b.t, reduce: form_const(0) do
-          acc -> form_add(acc, %{k: 0, t: %{mul_mono(x, y) => cx * cy}})
+          acc -> form_add(acc, %{k: 0, t: %{mul_mono(x, y, order) => cx * cy}})
         end
 
       form_add(form_scale(%{a | k: 0}, b.k), form_scale(%{b | k: 0}, a.k))
@@ -1131,7 +1142,8 @@ defmodule Defk.Facts do
   end
 
   # the product of two atoms, its newer factor first
-  defp mul_mono(x, y), do: if(atom_rank(x) >= atom_rank(y), do: {:mul, x, y}, else: {:mul, y, x})
+  defp mul_mono(x, y, order),
+    do: if(atom_rank(x, order) >= atom_rank(y, order), do: {:mul, x, y}, else: {:mul, y, x})
 
   def form_scale(form, 1), do: form
   def form_scale(_form, 0), do: form_const(0)

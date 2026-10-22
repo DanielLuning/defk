@@ -26,7 +26,9 @@ Replace the fact model with one representation:
 
 - **Atoms** are the C variables of i64 bindings and the lengths of array
   bindings, ranked by binding order (`fresh/2`'s counter; parameters
-  first).
+  first, in declaration order, carried in the facts scope since
+  `defk-w8r.3`: before that they ranked by name, so a guard between two
+  parameters could land on the wrong one).
 - **Facts** are `q * x <= P` and `q * x >= P` for an atom or a product of
   two atoms `x`, with `q >= 1` and `P` a polynomial of degree at most 2 over
   atoms ranked below `x`, plus the constant `lo`/`hi` kept as they are.
@@ -90,7 +92,9 @@ Replace the fact model with one representation:
   past the ceiling. Each statement's reads walked once (`defk-o08.4`, 6.40)
   took 8.6% more off: +7.4% of the work before step 1 (-1.0% without
   `SatEx.Kernels`), under the ceiling again. The report's hint search only
-  under `report: :full` (`defk-o08.5`, 6.41): +3.5% (-2.2%).
+  under `report: :full` (`defk-o08.5`, 6.41): +3.5% (-2.2%). Parameters
+  ranked in declaration order instead of by name (`defk-w8r.3`, 6.45):
+  +0.5% (+0.3%); the chain at about +4.0% (-1.9%).
 - **Raising guards become the way to state facts about arguments** in a
   kernel, which the language docs would describe.
 - **Out of scope:** degree 3 and nested products, facts across loop
