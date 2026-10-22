@@ -17,11 +17,15 @@
     {
       "text": "Another case from defk-klw: fuzzy_search's kernel with the cut-off (Enum.reduce_while over rows, short rows) is +3.5-4.5% yielding vs yield: false, and stays +3.6-4.7% with ~0 yields (DEFK_SLICE_US=10000000), so it is per-row bookkeeping (DEFK_SP every row, resume check, strip copy of the DP loop), not yields. Before the cut-off the same kernel was -2%. Under load: 0.94-0.98x the blocking build's req/s.",
       "timestamp": "2026-10-13T11:08:02Z"
+    },
+    {
+      "text": "PR #81 opened 2026-10-22 (stacked on #80, on #79): one countdown instead of two counters; fuzzy_search +30% -\u003e +16%, Keccak unchanged (its 12 spills are the saves (8) and the resume dispatch (3), not the counters; 1.3x quiet). Variants V2 (charge on entry) and V3 (no bookkeeping register) measured, not adopted. Tick gap unchanged, mix ci green. docs/performance.md 6.46. Stays in progress until the merge.",
+      "timestamp": "2026-10-22T10:34:00Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Yield bookkeeping in hot short loops: Keccak spills 6-11 per round, and fuzzy_search Myers pays a safepoint per word (+19%)",
   "type": "task",
-  "updated_at": "2026-10-22T09:54:54Z"
+  "updated_at": "2026-10-22T10:34:00Z"
 }
