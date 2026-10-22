@@ -113,8 +113,10 @@ kernel is suspended, nothing leaks: `Mod.__defk_stats__().frames_live` goes
 back down. `alloc/2` raises `ArgumentError` for a length over 2^48 bytes or
 one the allocator cannot provide, instead of failing later.
 
-A kernel's arrays live until it returns, so an `alloc` or a copy in a loop
-body keeps one per iteration. On an operating system that overcommits
+A kernel's arrays live until it returns, except a copy whose last variable
+died, which is released then ([Copies](../language.md#copies)); so an
+`alloc` in a loop body keeps one per iteration, and a copy whose variable
+is read in the next iteration does too. On an operating system that overcommits
 memory, the node would be killed long before the allocator failed, so each
 call has a budget: an allocation that would take the bytes it holds past
 `use Defk, max_owned_bytes: n` (by default half of physical memory) raises

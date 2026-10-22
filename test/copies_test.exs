@@ -436,4 +436,100 @@ defmodule Defk.CopiesTest do
       assert match == MapSet.new([:y])
     end
   end
+
+  # The early release (docs/language.md, Copies; ADR-0012): which bindings
+  # of a block die after a statement holding a copy no live holder may
+  # share. The scope is built by hand: `out` the {id, buf} pairs live after
+  # the block, `read_after` the names read after the statement.
+  describe "early release (dead/4, may_same?/3)" do
+    defp arr(buf, depth \\ 1),
+      do: %{id: make_ref(), buf: buf, t: {:arr, :i64}, owned: true, depth: depth}
+
+    defp scope(out, read_after, depth \\ 1),
+      do: %Copies.Scope{depth: depth, out: MapSet.new(out), read_after: MapSet.new(read_after)}
+
+    test "a copy whose binding is not read again, and no holder shares, dies" do
+      buf = make_ref()
+      st = Copies.mark_copy(Copies.new(), buf)
+      vars = %{b: arr(buf)}
+
+      assert [{:b, _}] = Copies.dead(st, scope([], []), vars, [])
+    end
+
+    test "an alloc's buffer never dies early: only copies are released" do
+      buf = make_ref()
+      vars = %{b: arr(buf)}
+      assert Copies.dead(Copies.new(), scope([], []), vars, []) == []
+    end
+
+    test "a name read after the statement holds its buffer, resolved after the statement" do
+      buf = make_ref()
+      st = Copies.mark_copy(Copies.new(), buf)
+      # `out2 = c`: out2 is bound by the statement and read after it
+      vars = %{c: arr(buf), out2: arr(buf)}
+
+      assert Copies.dead(st, scope([], [:out2]), vars, []) == []
+    end
+
+    test "a pair live after the block holds its buffer, unless its binding was copied in place" do
+      buf = make_ref()
+      st = Copies.mark_copy(Copies.new(), buf)
+      a = arr(buf)
+      vars = %{b: arr(buf), a: a}
+
+      # the outer a (bound at depth 0) still holds buf
+      assert Copies.dead(st, scope([{a.id, buf}], [], 1), %{vars | a: %{a | depth: 0}}, []) == []
+
+      # a was copied in place since: the same id, a new buffer
+      new = make_ref()
+      st = Copies.mark_copy(st, new)
+      vars = %{vars | a: %{a | buf: new, depth: 0}}
+      assert [{:b, _}] = Copies.dead(st, scope([{a.id, buf}], [], 1), vars, [])
+    end
+
+    test "a pair whose id the block shadows (not in vars) still holds" do
+      buf = make_ref()
+      st = Copies.mark_copy(Copies.new(), buf)
+      vars = %{b: arr(buf)}
+      assert Copies.dead(st, scope([{make_ref(), buf}], []), vars, []) == []
+    end
+
+    test "the statement's value holds its buffers" do
+      buf = make_ref()
+      st = Copies.mark_copy(Copies.new(), buf)
+      vars = %{b: arr(buf)}
+      assert Copies.dead(st, scope([], []), vars, [buf]) == []
+    end
+
+    test "physically one buffer (same/3) and a merged value (merge_bufs/2) are holders" do
+      buf = make_ref()
+      acc = make_ref()
+      st = Copies.new() |> Copies.mark_copy(buf) |> Copies.same(acc, buf)
+      assert Copies.may_same?(st, acc, buf)
+      assert Copies.dead(st, scope([{make_ref(), acc}], []), %{b: arr(buf)}, []) == []
+
+      {merged, st} = Copies.merge_bufs(st, [buf, make_ref()])
+      assert Copies.may_same?(st, merged, buf)
+      assert Copies.may_same?(st, merged, acc)
+      assert Copies.dead(st, scope([], []), %{b: arr(buf)}, [merged]) == []
+      refute Copies.may_same?(st, make_ref(), buf)
+      refute Copies.may_same?(st, nil, buf)
+    end
+
+    test "only the block's own bindings die, not an outer one it can see" do
+      buf = make_ref()
+      st = Copies.mark_copy(Copies.new(), buf)
+      assert Copies.dead(st, scope([], [], 2), %{b: arr(buf, 1)}, []) == []
+      assert [{:b, _}] = Copies.dead(st, scope([], [], 2), %{b: arr(buf, 2)}, [])
+    end
+
+    test "take_over/3 gives the shadowed outer binding's pairs to the accumulator's" do
+      {old, new, buf} = {make_ref(), make_ref(), make_ref()}
+      other = {make_ref(), make_ref()}
+      s = %Copies.Scope{out: MapSet.new([{old, buf}, other]), live: MapSet.new([{old, buf}])}
+      s = Copies.take_over(s, old, new)
+      assert s.out == MapSet.new([{new, buf}, other])
+      assert s.live == MapSet.new([{new, buf}])
+    end
+  end
 end
