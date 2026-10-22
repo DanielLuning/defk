@@ -3124,6 +3124,45 @@ the loop's exit path, once per block) beside the 16 MB time;
   `DEFK_TICKS` in `lib/defk/compiler.ex` (`sp_macro/3`, `run_preamble/1`).
 - **Status:** measured.
 
+### 6.47 Releasing a dead copy early makes a per-iteration copy 2-7x cheaper: the slot and the binary are reused instead of growing the table
+
+Since `defk-c1e` a copy is released where its last variable dies
+(docs/language.md, Copies; ADR-0012), so `b = a; a[i] = x; ... b[0]` in a
+loop body holds two copies at a time instead of one per iteration. The
+release itself is one call (a backward scan of the owned table, usually
+one step, and `enif_release_binary`), and it pays for itself at once: the
+next copy takes the freed slot and, from the allocator, usually the freed
+binary, so the table never grows and the copy stays in cache. Before, each
+iteration took a new binary and, every power of two, a bigger table.
+
+- **Numbers** (`copy_loop` of
+  [`test/owned_budget_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/owned_budget_test.exs), median of 7 calls, ns per
+  iteration): 16 i64 elements, 1M iterations: `main` 92.3, with the
+  release 41.7 (2.2x); 1024 elements, 100k iterations: `main` 864, with
+  the release 130 (6.6x). The 6.25 figure (~50 ns per copy iteration at 32
+  bytes) was measured at 200k iterations, before the table and the
+  allocator's free lists had grown far.
+- **Conditions:** M-series Mac on battery, one session, no quiet check;
+  provisional.
+- **Source:** `defk-c1e`, a scratch script of `copy_loop` on both
+  checkouts; `defk_disown` and `defk_own_raw` in [`priv/defk_runtime.h`](https://github.com/DanielLuning/defk/blob/main/priv/defk_runtime.h),
+  `Copies.dead/4` in [`lib/defk/copies.ex`](https://github.com/DanielLuning/defk/blob/main/lib/defk/copies.ex).
+- **Status:** provisional.
+
+<!-- defk-example skip: kernel-subset code, the shape that is released -->
+```elixir
+# released: b dies at the end of the iteration, and the previous
+# iteration's copy of a with it
+for i <- 0..(n - 1)//1, reduce: 0 do
+  acc ->
+    b = a
+    a[0] = i
+    acc + b[0] + a[0]
+end
+# kept until return: c may be b or a, so neither buffer is released
+c = if i > 2, do: b, else: a
+```
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer

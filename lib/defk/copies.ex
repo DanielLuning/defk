@@ -11,12 +11,14 @@ defmodule Defk.Copies do
   # ------------------------------------------------- the tracking state ---
   # What one kernel's lowering has recorded so far: the writes log (for
   # unreturned_writes!), buffer carrying (:from, a copy or accumulator holds
-  # what its source held) and alias classes (buffers an if/cond/case made
-  # indistinguishable). The module is pure: state in, state out; the
-  # compiler keeps the current state as one field of its lowering ctx, so
-  # its backtracking snapshot covers it.
+  # what its source held), alias classes (buffers an if/cond/case made
+  # indistinguishable), the buffers that are copies (:origin, for the early
+  # release) and the buffers that are physically one (:phys, two refs the
+  # lowering gave one buffer without a copy). The module is pure: state in,
+  # state out; the compiler keeps the current state as one field of its
+  # lowering ctx, so its backtracking snapshot covers it.
 
-  defstruct writes: [], from: %{}, alias: %{}
+  defstruct writes: [], from: %{}, alias: %{}, origin: %{}, phys: %{}
 
   def new, do: %__MODULE__{}
 
@@ -48,13 +50,92 @@ defmodule Defk.Copies do
     new = make_ref()
     classes = for b <- bufs, b != nil, uniq: true, do: alias_class(st, b)
     m = Map.new(st.alias, fn {b, c} -> {b, if(c in classes, do: new, else: c)} end)
-    {new, %{st | alias: Enum.reduce(classes, m, &Map.put(&2, &1, new))}}
+    st = %{st | alias: Enum.reduce(classes, m, &Map.put(&2, &1, new))}
+    # the merged value may be any arm's buffer: physically one with each
+    {new, Enum.reduce(classes, st, &phys_union(&2, new, &1))}
   end
 
   # another live binding may see array a's buffer
   def shared?(st, a, live) do
     buf = alias_class(st, a[:buf])
     buf != nil and Enum.any?(live, fn {id, b} -> alias_class(st, b) == buf and id != a[:id] end)
+  end
+
+  # ------------------------------------------------------ early release ---
+  # A copy's buffer is released before the kernel returns (defk_disown)
+  # where its last binding dies, so a copy made every iteration of a loop
+  # holds one buffer at a time. Two facts beyond the alias classes decide it:
+  #
+  #   origin - the buffers a copy made (copied/2 in the compiler, an
+  #            accumulator whose values are copies): only those are released;
+  #            an alloc/2 buffer is counted by Elixir mode's budget too and
+  #            stays until return, so the two modes keep raising at the same
+  #            allocation (docs/language.md, the owned-buffer budget)
+  #   phys   - buffers that are physically one: a loop accumulator and the
+  #            array it started from when no copy was made, the accumulator
+  #            and its body binding and its result, a merged value and each
+  #            arm's buffer. A union-find over the alias classes, so "may be
+  #            one buffer" is one question, may_same?/3.
+  #
+  # dead/4 asks: which bindings of the current block die here, holding a
+  # copy no live holder may share?
+
+  # buffer `buf` was made by a copy
+  def mark_copy(st, nil), do: st
+  def mark_copy(st, buf), do: %{st | origin: Map.put(st.origin, buf, true)}
+
+  def copy_origin?(_st, nil), do: false
+  def copy_origin?(st, buf), do: Map.get(st.origin, buf, false)
+
+  # buffers `a` and `b` are physically one (no copy between them)
+  def same(st, a, b) when a == nil or b == nil, do: st
+  def same(st, a, b), do: phys_union(st, alias_class(st, a), alias_class(st, b))
+
+  defp phys_union(st, a, b) do
+    {ra, rb} = {phys_root(st, a), phys_root(st, b)}
+    if ra == rb, do: st, else: %{st | phys: Map.put(st.phys, ra, rb)}
+  end
+
+  defp phys_root(st, c) do
+    case Map.fetch(st.phys, c) do
+      {:ok, p} -> phys_root(st, p)
+      :error -> c
+    end
+  end
+
+  # buffers `a` and `b` may be one buffer: one alias class, or physically one
+  def may_same?(_st, nil, _b), do: false
+  def may_same?(_st, _a, nil), do: false
+
+  def may_same?(st, a, b),
+    do: phys_root(st, alias_class(st, a)) == phys_root(st, alias_class(st, b))
+
+  # The bindings in `vars` bound in the current block (its depth) that die
+  # after the current statement and hold a copy no live holder may share:
+  # {name, binding} pairs. A holder is a binding of a name read after the
+  # statement in its block (`read_after`, resolved in `vars` as they are
+  # after the statement, which may have bound the name), a {id, buf} pair
+  # live after the block (`out`), or a buffer of the statement's value
+  # (`escaping`, the block's value when the statement is its last). An
+  # `out` pair whose binding was copied in place since (the same id in
+  # `vars` with a buffer that is not physically this one) names a buffer
+  # that binding no longer holds, and does not count; a pair whose id is
+  # not in `vars` (an outer binding the block shadows) counts.
+  def dead(st, %{depth: depth, out: out, read_after: names}, vars, escaping) do
+    holders =
+      for({id, buf} <- out, not stale?(st, vars, id, buf), do: buf) ++
+        for({_, buf} <- pairs(vars, names), do: buf) ++
+        escaping
+
+    for {name, %{depth: ^depth, owned: true, t: {:arr, _}, buf: buf} = b} <- vars,
+        name not in names,
+        copy_origin?(st, buf),
+        not Enum.any?(holders, &may_same?(st, buf, &1)),
+        do: {name, b}
+  end
+
+  defp stale?(st, vars, id, buf) do
+    Enum.any?(vars, fn {_, v} -> v[:id] == id and not may_same?(st, v[:buf], buf) end)
   end
 
   # Buffer `new` holds what buffer `old` held (a copy of it, or a loop
@@ -254,7 +335,9 @@ defmodule Defk.Copies do
     #   out        - {id, buf} live after the current block
     #   live       - {id, buf} live after the current statement
     #   nest       - {id, buf} live for blocks nested in the current statement
-    #   live_names - the names read after the current statement in its block
+    #   live_names - the names read after the current statement in its block,
+    #                less the names it binds (those name its new binding)
+    #   read_after - the names read after the current statement in its block
     #   stmt       - the current statement
     #   guard      - array names a loop body must not bind again (read after it)
     #   loop       - the innermost loop construct
@@ -264,6 +347,7 @@ defmodule Defk.Copies do
               live: MapSet.new(),
               nest: MapSet.new(),
               live_names: MapSet.new(),
+              read_after: MapSet.new(),
               stmt: nil,
               guard: MapSet.new(),
               loop: nil,
@@ -457,6 +541,23 @@ defmodule Defk.Copies do
     live = MapSet.new(s.live, &elem(&1, 0))
     guard = for {n, %{id: id}} <- vars, id in live, into: s.guard, do: n
     %{s | live: s.nest, guard: guard, loop: node}
+  end
+
+  # The accumulator binding `new` of a loop body stands in for the outer
+  # binding `old` it took the buffer from without a copy (reduce_accs): the
+  # pairs of `old` in the scope (the loop statement's reads of that name,
+  # resolved before the body bound it again) are `new`'s now, so a copy of
+  # `new` in place makes them stale (dead/4) instead of keeping the old
+  # buffer alive for a binding that is never read.
+  def take_over(%Scope{} = s, old, new) do
+    swap = fn pairs ->
+      MapSet.new(pairs, fn
+        {^old, buf} -> {new, buf}
+        p -> p
+      end)
+    end
+
+    %{s | out: swap.(s.out), live: swap.(s.live), nest: swap.(s.nest)}
   end
 
   # {id, buf} live around `node`, a part of the current statement: what is

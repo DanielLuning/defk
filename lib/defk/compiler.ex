@@ -375,7 +375,7 @@ defmodule Defk.Compiler do
     case Code.string_to_quoted(src) do
       # the statements are lowered in the block of the statement env is at
       {:ok, ast} ->
-        probe(fn -> stmt_list(exprs(ast), Copies.block_liveness(exprs(ast)), env) end) !=
+        probe(fn -> stmt_list(exprs(ast), Copies.block_liveness(exprs(ast)), env, false) end) !=
           :error
 
       _ ->
@@ -908,22 +908,27 @@ defmodule Defk.Compiler do
   # A block whose last expression is its value. It is nested in the statement
   # `env` is at (see "array values"), or is a kernel's body.
   defp lower_block(ast, env) do
-    {s, v, _env} = lower_block_env(ast, env)
+    {s, v, _env} = lower_block_env(ast, env, true)
     {s, v}
   end
 
-  # lower_block/2 and the env the block ends in (nested, see leave/2)
-  defp lower_block_env(ast, env) do
+  # lower_block/2 and the env the block ends in (nested, see leave/2).
+  # `release?`: the block's bindings die with it (an arm, a loop body, a
+  # callee's body, the kernel's), so a copy of its own is released where its
+  # last binding dies (release_after/2, release_tail/2); a plain block's
+  # bindings live on in the block around it (leave/2), so there nothing is.
+  defp lower_block_env(ast, env, release?) do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
     lives = Copies.block_liveness(es)
-    {s1, env} = stmt_list(init, lives, nested(env, ast))
+    {s1, env} = stmt_list(init, lives, nested(env, ast), release?)
 
     {s2, v, env} =
       in_ctx(last, fn ->
         {sh, env} = enter(last, List.last(lives), env)
         {s, v, env} = last_value(last, env)
-        {[sh, s], v, env}
+        {sr, v, env} = if release?, do: release_tail(v, env), else: {[], v, env}
+        {[sh, s, sr], v, env}
       end)
 
     {[s1, s2], v, env}
@@ -937,7 +942,7 @@ defmodule Defk.Compiler do
   # a nested block's value, and the env with its bindings; any other expression
   # binds nothing
   defp lower_expr_env({:__block__, _, _} = b, env) do
-    {s, v, inner} = lower_block_env(b, env)
+    {s, v, inner} = lower_block_env(b, env, false)
     {s, v, leave(inner, env)}
   end
 
@@ -967,23 +972,137 @@ defmodule Defk.Compiler do
   # A block evaluated only for effect, nested like lower_block's.
   defp lower_stmts(ast, env) do
     es = exprs(ast)
-    stmt_list(es, Copies.block_liveness(es), nested(env, ast))
+    stmt_list(es, Copies.block_liveness(es), nested(env, ast), true)
   end
 
   # statements `es` of one block; `lives` has, for each, the names read after
-  # it and the names it reads (Copies.block_liveness/1)
-  defp stmt_list(es, lives, env) do
+  # it and the names it reads (Copies.block_liveness/1); `release?` as
+  # lower_block_env/3's
+  defp stmt_list(es, lives, env, release?) do
     Enum.zip(AllocZeroing.mark(es), lives)
     |> Enum.reduce({[], env}, fn {e, live}, {acc, env} ->
       {s, env} =
         recover(e, env, fn ->
           {sh, env} = enter(e, live, env)
           {s, env} = lower_stmt(e, env)
-          {[sh, s], env}
+          {sr, env} = if release?, do: release_after(env), else: {[], env}
+          {[sh, s, sr], env}
         end)
 
       {[acc, s], env}
     end)
+  end
+
+  # ------------------------------------------------------ early release ---
+  # A copy's buffer lives until the kernel returns, like every owned buffer,
+  # unless its last binding dies first: then it is released there
+  # (defk_disown), and a copy made every iteration of a loop holds one
+  # buffer at a time instead of one per iteration. Which bindings die, and
+  # whether a live holder may still see the buffer, is Copies.dead/4: the
+  # block's own bindings, not read after this statement, holding a copy no
+  # live {id, buf} pair and no buffer of the statement's value may be. Only
+  # copies: an alloc/2 buffer is counted by Elixir mode's budget as well,
+  # and releasing it natively would make the two modes raise at different
+  # allocations (docs/language.md, the owned-buffer budget).
+  #
+  # After a statement (release_after/2) nothing of the dying bindings is
+  # read again. After a block's last statement (release_tail/2) the block's
+  # value is still read by whatever consumes the block, so the value's
+  # scalar C is bound to locals first (settled/1); its arrays are pointer
+  # moves whose buffers are holders, never released here.
+
+  defp release_after(env) do
+    case Copies.dead(copies(), env.scope, env.vars, []) do
+      [] -> {[], env}
+      dead -> release(dead, env)
+    end
+  end
+
+  defp release_tail(v, env) do
+    case Copies.dead(copies(), env.scope, env.vars, bufs_of(v)) do
+      [] ->
+        {[], v, env}
+
+      dead ->
+        {sv, v} = settled(v)
+        {sr, env} = release(dead, env)
+        {[sv, sr], v, env}
+    end
+  end
+
+  # the buffers an array value, or the arrays of a tuple value, may hold
+  defp bufs_of(%{elems: elems}), do: Enum.flat_map(elems, &bufs_of/1)
+  defp bufs_of(%{t: {:arr, _}} = v), do: if(v[:buf], do: [v.buf], else: [])
+  defp bufs_of(_v), do: []
+
+  # `v` with each scalar whose C is an expression bound to a local of its
+  # own: {the assignments, the value}
+  defp settled(%{elems: elems} = v) do
+    {ss, elems} = Enum.map(elems, &settled/1) |> Enum.unzip()
+    {ss, %{v | elems: elems}}
+  end
+
+  defp settled(%{t: {:arr, _}} = v), do: {[], v}
+
+  defp settled(%{c: c, t: t} = v) do
+    if Regex.match?(~r/^[A-Za-z_]\w*$/, c) do
+      {[], v}
+    else
+      tmp = fresh("value", t)
+      srec_assign(tmp, c)
+      {"#{tmp} = #{c};\n", Map.drop(%{v | c: tmp, var: tmp}, [:pure_read])}
+    end
+  end
+
+  # Release the buffers of the dying bindings `dead` ({name, binding}) and
+  # take the bindings out of the env. Each release is noted in the report.
+  # A copy noted as kept per iteration (note_per_iteration/2) in the same
+  # loop is re-noted: released when the dying binding holds that copy, or
+  # the previous iteration's when it holds what the copy was made from (`b
+  # = a; a[i] = v` copies `a` in place each iteration, and `b` still holds
+  # the copy of the iteration before), so the loop holds one or two of
+  # these copies at a time, not one per iteration.
+  defp release(dead, env) do
+    loop = List.first(low(:loops))
+
+    s =
+      for {name, b} <- dead do
+        noted =
+          Enum.find(low(:per_iter), fn {cbuf, {_at, l}} ->
+            l == loop and (cbuf == b.buf or Copies.carries?(copies(), cbuf, b.buf))
+          end)
+
+        case noted do
+          nil ->
+            note(
+              :owned,
+              env.scope.stmt,
+              :released,
+              "#{name}'s buffer, a copy, is released here: nothing reads it after this statement"
+            )
+
+          {cbuf, {at, _}} ->
+            drop_note(at, :per_iteration)
+            low_update(:per_iter, &Map.delete(&1, cbuf))
+
+            held =
+              if cbuf == b.buf,
+                do: "the loop holds one at a time",
+                else:
+                  "the previous iteration's goes where its last binding dies, so the loop holds at most two at a time"
+
+            note(
+              :owned,
+              at,
+              :released,
+              "this copy is inside a loop and is released before the kernel returns: #{held}"
+            )
+        end
+
+        "defk_disown(ctx, #{b.c}.data);\n"
+      end
+
+    {s, %{env | vars: Map.drop(env.vars, Enum.map(dead, &elem(&1, 0)))}}
   end
 
   # run `fun` with `e` as the statement that literals inside it are located in
@@ -1366,7 +1485,8 @@ defmodule Defk.Compiler do
   defp enter(e, {live, reads}, env) do
     names = Copies.live_names(e, live)
     {sh, env} = hoist(e, names, reads, env)
-    {sh, %{env | scope: Copies.enter_stmt(env.scope, e, names, reads, env.vars)}}
+    scope = %{Copies.enter_stmt(env.scope, e, names, reads, env.vars) | read_after: live}
+    {sh, %{env | scope: scope}}
   end
 
   # A variable bound outside the branches and loop bodies of `e` and written
@@ -1413,6 +1533,7 @@ defmodule Defk.Compiler do
     {:arr, e} = a.t
 
     buf = carried(make_ref(), a[:buf])
+    copies_put(Copies.mark_copy(copies(), buf))
 
     if a.owned and a[:var] != nil do
       {copy_stmts(a.c, a.c, e), Map.put(a, :buf, buf)}
@@ -1526,6 +1647,10 @@ defmodule Defk.Compiler do
 
           {s, b} = copied(a, n)
           note(:copy, arr, :copied, "#{n} is copied before this write: #{copy_why(a)}")
+
+          low(:loops) != [] &&
+            low_update(:per_iter, &Map.put(&1, b.buf, {arr, List.first(low(:loops))}))
+
           {s, b, %{env | vars: Map.put(env.vars, n, b), facts: Facts.bind(env.facts, b)}}
 
         _ ->
@@ -4902,12 +5027,7 @@ defmodule Defk.Compiler do
 
             acc =
               Facts.len_facts_of(
-                %{
-                  t: v.t,
-                  owned: true,
-                  fin: v[:fin] || false,
-                  buf: carried(make_ref(), v[:buf])
-                },
+                Map.merge(%{t: v.t, owned: true, fin: v[:fin] || false}, acc_buffer(ic, v)),
                 v
               )
 
@@ -4922,6 +5042,30 @@ defmodule Defk.Compiler do
        si,
        Enum.map(accs, fn {{_, c, _}, ic} -> assign_copy(c, ic) end)
      ], Enum.map(accs, &elem(&1, 0))}
+  end
+
+  # The buffer of an array accumulator whose initial value `v` is lowered
+  # to `ic` (loop_owned/2). Copied: the accumulator's buffer is a copy, and
+  # the body is lowered assuming its new values are too (lost_copy?/2 sends
+  # it back when one is not). Else it is physically the initial value's
+  # buffer (Copies.same/3), a copy when that was one, and `from` names the
+  # binding it came from, which the body's accumulator binding stands in
+  # for (Copies.take_over/3).
+  defp acc_buffer(ic, v) do
+    copied? = copy_parts(ic) != nil
+    buf = carried(make_ref(), v[:buf])
+
+    copies_put(
+      if copied?,
+        do: Copies.mark_copy(copies(), buf),
+        else: Copies.same(copies(), buf, v[:buf])
+    )
+
+    %{
+      buf: buf,
+      copy: copied? or Copies.copy_origin?(copies(), v[:buf]),
+      from: if(copied?, do: nil, else: v[:id])
+    }
   end
 
   # an i64 literal >= 0 may become a u64 accumulator (u64_accs/2): marked
@@ -4960,9 +5104,12 @@ defmodule Defk.Compiler do
     end
   end
 
-  defp drop_facts({name, c, a} = acc, weak) do
+  defp drop_facts({name, c, a}, weak) do
+    # the copy assumption is dropped on its own: the length facts stay
+    a = if {c, :copy} in weak, do: %{a | copy: false}, else: a
+
     cond do
-      c not in weak -> acc
+      c not in weak -> {name, c, a}
       Facts.weakest?(a) -> {name, c, Facts.weaken(%{a | fin: false})}
       true -> {name, c, Facts.weaken(a)}
     end
@@ -4983,8 +5130,14 @@ defmodule Defk.Compiler do
     (e in [:f64, :f32] and a.fin and not r[:fin]) or not Facts.covers?(a, r)
   end
 
+  # the body assumed accumulator `a` holds a copy (reduce_accs/7) and its
+  # new value `r` is not one: noted apart from the facts (drop_facts/2)
+  defp lost_copy?(a, r), do: a[:copy] == true and not Copies.copy_origin?(copies(), r[:buf])
+
   # an array accumulator with facts a new value may not have
-  defp facts?(%{t: {:arr, e}} = a), do: (e in [:f64, :f32] and a.fin) or Facts.carries?(a)
+  defp facts?(%{t: {:arr, e}} = a),
+    do: (e in [:f64, :f32] and a.fin) or a[:copy] == true or Facts.carries?(a)
+
   defp facts?(_a), do: false
 
   defp acc_env(accs, env) do
@@ -4998,8 +5151,17 @@ defmodule Defk.Compiler do
         # the outer variable it shadows)
         match?({:arr, _}, a.t) ->
           buf = carried(make_ref(), a[:buf])
-          b = Map.merge(a, %{c: c, id: make_ref(), buf: buf, depth: Copies.depth(e.scope) + 1})
-          %{put_var(e, name, b) | scope: Copies.unguard(e.scope, name)}
+          id = make_ref()
+          b = Map.merge(a, %{c: c, id: id, buf: buf, depth: Copies.depth(e.scope) + 1})
+          # physically the accumulator's buffer, a copy when the
+          # accumulator's values are (reduce_accs/7); the outer binding it
+          # took the buffer from (no copy) is read in the loop only through
+          # this binding, so the scope's pairs of that binding are its now
+          st = Copies.same(copies(), buf, a[:buf])
+          copies_put(if a[:copy], do: Copies.mark_copy(st, buf), else: st)
+          scope = Copies.unguard(e.scope, name)
+          scope = if a[:from], do: Copies.take_over(scope, a.from, id), else: scope
+          %{put_var(e, name, b) | scope: scope}
 
         # an accumulator that may become a u64 is marked (u64_mix!/2)
         a[:u64_ref] ->
@@ -5058,6 +5220,9 @@ defmodule Defk.Compiler do
           lost_facts?(a, r) &&
             low_update(:acc_fix, &Map.update!(&1, fix, fn set -> MapSet.put(set, c) end))
 
+          lost_copy?(a, r) &&
+            low_update(:acc_fix, &Map.update!(&1, fix, fn set -> MapSet.put(set, {c, :copy}) end))
+
           a[:buf] && not Copies.carries?(copies(), r[:buf], a.buf) &&
             copies_put(Copies.cut_carry(copies(), a.buf))
 
@@ -5099,8 +5264,12 @@ defmodule Defk.Compiler do
   defp acc_result(accs),
     do: %{t: {:tuple, Enum.map(accs, &elem(&1, 2).t)}, elems: Enum.map(accs, &acc_value/1)}
 
-  defp acc_value({_, c, %{t: {:arr, _}} = a}),
-    do: Map.merge(a, %{c: c, var: c, buf: carried(make_ref(), a[:buf])})
+  defp acc_value({_, c, %{t: {:arr, _}} = a}) do
+    buf = carried(make_ref(), a[:buf])
+    st = Copies.same(copies(), buf, a[:buf])
+    copies_put(if a[:copy], do: Copies.mark_copy(st, buf), else: st)
+    Map.merge(a, %{c: c, var: c, buf: buf})
+  end
 
   defp acc_value({_, c, a}), do: val(c, a.t, c)
 
@@ -5112,7 +5281,7 @@ defmodule Defk.Compiler do
     es = exprs(ast)
     {init, [last]} = Enum.split(es, -1)
     lives = Copies.block_liveness(es)
-    {s, env} = stmt_list(init, lives, nested(env, ast))
+    {s, env} = stmt_list(init, lives, nested(env, ast), true)
 
     [
       s,
@@ -6038,7 +6207,7 @@ defmodule Defk.Compiler do
     [
       "static ERL_NIF_TERM nif_#{k.cid}(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {\n",
       "#{f} local;\nERL_NIF_TERM res;\n",
-      "local.ctx.err = 0;\nlocal.ctx.owned = NULL;\nlocal.ctx.nowned = local.ctx.cap = 0;\nlocal.ctx.owned_bytes = 0;\nlocal.ctx.finished = local.ctx.is_resource = 0;\n",
+      "local.ctx.err = 0;\nlocal.ctx.owned = NULL;\nlocal.ctx.nowned = local.ctx.cap = local.ctx.free1 = 0;\nlocal.ctx.owned_bytes = 0;\nlocal.ctx.finished = local.ctx.is_resource = 0;\n",
       "local.resume = 0;\nmemset(local.copy, 0, sizeof local.copy);\n",
       # the run-queue hint, when the NIF takes one, is the last argument
       "defk_slice_init(env, &local.ctx, argc > #{k.arity} ? &argv[#{k.arity}] : NULL);\n",
@@ -6224,6 +6393,20 @@ defmodule Defk.Compiler do
     n = {kernel, note_line(at), {topic, verdict, text}}
     ctx_update(:report, &[n | &1])
     note_per_iteration(topic, at)
+  end
+
+  # take the kernel's :owned note with `verdict` at `at` out of the report
+  defp drop_note(at, verdict) do
+    {kernel, _yield?} = low(:report_kernel)
+    line = note_line(at)
+
+    ctx_update(
+      :report,
+      &Enum.reject(&1, fn
+        {^kernel, ^line, {:owned, ^verdict, _}} -> true
+        _ -> false
+      end)
+    )
   end
 
   # An alloc/2 or a copy runs inside a loop: every owned buffer lives until
