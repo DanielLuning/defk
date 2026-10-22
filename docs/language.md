@@ -2171,6 +2171,14 @@ that does not raise says, by the rules for [conditions](#reading):
 `if n != len, do: raise(...)` gives `n == len`; `if a and b, do: raise(...)`
 gives nothing, as `not a or not b` names no single fact.
 
+A condition between two arguments bounds the one declared later by the
+earlier one. In `defk gather(idx :: [i32], x :: [f32], base :: i64)`, the
+guard `if base < 0 or base > length(x), do: raise(...)` bounds `base`, so
+`base + idx[i]` needs no overflow check (an `[i32]` element is within
+32 bits). Declared as `(base :: i64, x :: [f32])`, the same guard bounds
+the length of `x` by `base` instead, which proves nothing about `base`:
+declare an offset after the array it is compared with.
+
 ### Blocks
 
 Every block that needs a value ends in an expression; an empty block is

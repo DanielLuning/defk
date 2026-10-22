@@ -718,9 +718,12 @@ defmodule Defk.Compiler do
         {p, Map.merge(val(c, t, c), array_ids(t))}
       end)
 
+    # the parameters rank in declaration order (Defk.Facts, the scope)
+    scope = Facts.scope(for {p, _} <- k.params, do: vars[p].c)
+
     env = %{
       vars: vars,
-      facts: Enum.reduce(vars, Facts.scope(), fn {_, b}, s -> Facts.bind(s, b) end),
+      facts: Enum.reduce(vars, scope, fn {_, b}, s -> Facts.bind(s, b) end),
       sigs: sigs,
       inlining: [{k.name, k.arity}],
       ret: k.ret,
@@ -2294,7 +2297,7 @@ defmodule Defk.Compiler do
       case op do
         :+ -> {"add", Facts.add_facts(va, vb), Facts.add_range(va, vb)}
         :- -> {"sub", Facts.sub_facts(va, vb), Facts.sub_range(va, vb)}
-        :* -> {"mul", Facts.mul_facts(va, vb), Facts.mul_range(va, vb)}
+        :* -> {"mul", Facts.mul_facts(va, vb, env.facts), Facts.mul_range(va, vb)}
       end
 
     v = Facts.put(val(nil, :i64), facts)
@@ -6358,7 +6361,7 @@ defmodule Defk.Compiler do
         nil
 
       map_size(d.t) == 1 ->
-        case Facts.narrowing(d) do
+        case Facts.narrowing(d, env.facts) do
           {x, :lo, b} -> "#{names[x]} >= #{b}"
           {x, :hi, b} -> "#{names[x]} <= #{b}"
         end

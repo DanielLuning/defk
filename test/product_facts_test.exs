@@ -207,7 +207,7 @@ defmodule Defk.ProductFactsTest do
     test "without the shape, the report names the product's bound" do
       assert kept(:unshaped) == [
                "m[r * dim + j]: bounds check kept; nothing proves r * dim + j < length(m) " <>
-                 "(it would follow from dim * n <= length(m))"
+                 "(it would follow from n * dim <= length(m))"
              ]
     end
   end
