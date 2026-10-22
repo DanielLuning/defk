@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-11T20:24:58Z",
@@ -24,8 +24,8 @@
     }
   ],
   "priority": 4,
-  "status": "open",
+  "status": "in_progress",
   "title": "Free dead owned buffers early, so a per-iteration copy or alloc no longer accumulates until return",
   "type": "task",
-  "updated_at": "2026-10-22T18:55:34Z"
+  "updated_at": "2026-10-22T18:55:38Z"
 }
