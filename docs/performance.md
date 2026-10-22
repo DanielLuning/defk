@@ -2956,6 +2956,83 @@ s[0] = a * b        # the write rounds to float32 (raises if the value does not 
 p = s[0]            # read back the rounded value as f64
 ```
 
+### 6.45 Gather loops: a guard now bounds the parameter declared later, which drops the offset's overflow check; the rest of the checks are about contents
+
+A sparse layer gathers an input per term: `out[r] = sum of w[r * k + t] *
+x[base + idx[r * k + t]]` over an `[f32]` weight array, `[i32]` indices
+and an `[f32]` input (`bench/gather_layer.exs`, `layer/5`; the guarded
+twin states `k > 0`, `length(idx) == length(w)` and `0 <= base <=
+length(x)` as a raising guard). The handwired study (`defk-w8r.2`, 6.43 and 6.44; its
+prototype is deleted, and its numbers are the reference point only) had its layer at 0.378
+us per item against 0.069 us for the hand-written C float loop, and listed
+the checks in each term. Read again on today's compiler, most of that list
+was already gone, one proof was missing for a reason of ranking, and what
+stays is about array contents.
+
+- **The checks in the hot loop, per term** (the fast-path report, `use
+  Defk, report: :full`; the guarded kernel unless said otherwise):
+
+  | check | before | after | why |
+  |---|---|---|---|
+  | `r * k`, `r * k + t`: overflow | dropped | dropped | the loop bounds and the product rule (6.37) |
+  | `w[r * k + t]`: bounds | dropped | dropped | `n = div(length(w), k)` (6.37) |
+  | `idx[r * k + t]`: bounds | dropped with the guard (kept without: "it would follow from k * n <= length(idx)") | the same | `length(idx) == length(w)` |
+  | `base + idx[...]`: overflow | **kept**, with or without the guard | **dropped** with the guard | the guard's `base <= length(x)` now bounds `base`; an `[i32]` element is within 32 bits |
+  | `x[base + idx[...]]`: bounds | kept | kept | depends on `idx`'s contents; ADR-0007 states no facts about contents |
+  | `w[...]`, `x[...]`: finite read (`defk_in_f64`) | kept | kept | an input `[f32]` may hold inf or NaN bits |
+  | `w * x`, `acc + ...`: non-finite result | kept | kept | float values have no facts |
+  | `out[r] = acc`: f32 range (`defk_to_f32`), once per row | kept | kept | the same |
+  | `n - 1`, `k - 1`: overflow (loop headers, once) | dropped with the guard | the same | `k > 0`, `n = div(...)` |
+
+  The NFA study's one fact, a product of two `band(_, 1)` values: `hit *
+  (1 - ext)` had no overflow check before this change either (`band`'s
+  facts give 0..1, the product rule multiplies the ranges); the
+  accumulator's add keeps its check (facts across iterations are out of
+  ADR-0007's scope). The inner loop runs flagged in both kernels: every
+  kept check sets a flag tested once per strip (6.5), so each costs an
+  operation and an or, not a branch, and clang reports the loop as not
+  vectorised for its in-order float reduction, not for a check.
+- **What blocked the one proof.** Facts are stated on the newest atom of a
+  condition, and parameters ranked by their C names (`p_base` before
+  `p_x`), so `base <= length(x)` was stored as a lower bound on `length(x)`
+  and said nothing about `base`. Parameters now rank in declaration order
+  (the design's "parameters first, by position"), carried in the facts
+  scope, so the guard bounds `base` and `base + idx[j]` is within
+  `length(x) + 2^31`. The rule to know: a condition between two arguments
+  bounds the one declared later, so declare an offset after the array it
+  is compared with (docs/language.md, raising guards).
+- **The gate** (`mix dump_c` on both sides, 113 modules): one module's C
+  changed, `Defk.ProductFactsTest.K`, which lost one range-limit test on a
+  loop bound (`dim`, now bounded by its guard); no kernel gained a check.
+  The catalog's bounds (3,301) and overflow (6,050) call sites are
+  unchanged: no example kernel has a guard between two parameters in the
+  wrong name order. The report's hint for a product now names the factors
+  in declaration order (`n * dim <= length(m)`, was `dim * n`).
+- **Run time** (`bench/gather_layer.exs`, 4,096 rows of 16 terms, best of
+  9, us per row, two interleaved runs a side): the unguarded kernel, whose C
+  did not change, 0.018 / 0.018 on `main` (one first run 0.023) and 0.018
+  / 0.018 on the branch; the guarded kernel 0.018 / 0.014 on `main` and
+  0.012 / 0.012 on the branch, about 0.75 ns per term where it was
+  0.9-1.1. So the one dropped check is worth 15-30% of this loop, and the
+  loop is now 1.5x the unguarded one. Against the prototype's 0.378 us
+  per item (a different kernel on a loaded machine) nothing is comparable;
+  the hand-written C of that study is gone with it.
+- **Compiler time** (two interleaved `mix dump_c` rounds a side,
+  `dev/compile_time.exs`): +0.5% of
+  the compiler's work (reductions; +0.3% without `SatEx.Kernels`, which
+  dominates the prover's cost), +0.8% of its time (-0.3% without), with
+  `SatEx.Kernels` +0.29M reductions. The chain of ADR-0007 is at about
+  +4.0% of the work before step 1 (-1.9% without `SatEx.Kernels`), under
+  its ceiling.
+- **Conditions:** M-series Mac, on battery; other processes at 0.1-0.7 cores before
+  each timed run (the ps quiet test); the compiler-time rounds on the same
+  machine, one job at a time.
+- **Source:** `defk-w8r.3`, [`bench/gather_layer.exs`](https://github.com/DanielLuning/defk/blob/main/bench/gather_layer.exs); the proof's
+  tests: `test/condition_facts_test.exs` ("a guard between two
+  parameters": the gather with both name orders, the extremes of the
+  dropped check, and the agreement properties).
+- **Status:** measured.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -3300,4 +3377,5 @@ example or close a workload ticket, add its entries and its line here.
   `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`,
   `defk-o08.2`, `defk-o08.3`, `defk-o08.4`, `defk-o08.5`, `defk-o08.6`,
   `defk-w8r.2`, `defk-25s` ([`bench/call_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/call_cost.exs)),
-  `defk-vcx.2` ([`bench/elixir_mode.exs`](https://github.com/DanielLuning/defk/blob/main/bench/elixir_mode.exs)).
+  `defk-vcx.2` ([`bench/elixir_mode.exs`](https://github.com/DanielLuning/defk/blob/main/bench/elixir_mode.exs)),
+  `defk-w8r.3` ([`bench/gather_layer.exs`](https://github.com/DanielLuning/defk/blob/main/bench/gather_layer.exs)).
