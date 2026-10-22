@@ -21,11 +21,15 @@
     {
       "text": "Rewritten 2026-10-20: steps 1 and 4 now build and measure a small gather-loop kernel on the ticket branch instead of the deleted bench scripts.",
       "timestamp": "2026-10-20T20:25:51Z"
+    },
+    {
+      "text": "PR #80 opened 2026-10-22 (stacked on #79): parameters rank in declaration order, so base \u003c= length(x) bounds base and base + idx[j] drops its overflow check; the table of checks and the numbers are docs/performance.md 6.45. Guarded gather loop 0.75 ns per term (was 0.9-1.1); compiler +0.5% work. Stays in progress until the merge.",
+      "timestamp": "2026-10-22T09:58:35Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Gather loops: find which runtime checks Defk.Facts could prove away (f32 layer is 5.5x slower than C float)",
   "type": "task",
-  "updated_at": "2026-10-22T09:35:36Z"
+  "updated_at": "2026-10-22T09:58:35Z"
 }
