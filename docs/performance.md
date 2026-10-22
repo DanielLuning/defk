@@ -750,6 +750,56 @@ appends each f64 to one binary. Building on the library's terms costs more.
 - **Source:** [`numeric_loader.exs`](https://github.com/DanielLuning/defk/blob/main/examples/numeric_loader.exs), `defk-9p6.21`.
 - **Status:** measured (the last run); the variant lines provisional.
 
+### 2.19 Pattern search: anchor on a literal byte with `:binary.matches/2`, then verify the bytes around it
+
+Most patterns that look like regex work contain a literal byte: a date has
+`-`, a float has `.`, a snake-case identifier has `_`. `:binary.matches/2`
+finds that anchor in C, and an Elixir clause checks the few bytes around
+each hit. For date, float and snake-case patterns over 100k JSON documents
+this beat both `:re` and a defk bit-parallel NFA kernel by 1.5 to 2 times.
+The kernel wins only where no literal anchor exists (6.43).
+
+- **Numbers:** 12 chunks, three patterns: anchor and verify 7.2-9.6 ms;
+  the defk NFA kernel 14.2-14.9 ms; `:re` 19-26 ms.
+- **What did not help:** `:re` with a backtracking spelling. `([a-z]+)+x`
+  took 8 times as long as `[a-z]+x` for the same matches. Write the simple
+  form first.
+- **Conditions:** M-series Mac, one run each, quiet machine.
+- **Source:** `defk-w8r.2` holds the numbers. The research note
+  (`docs/research/handwired.md`) and its bench scripts were deleted with
+  their unmerged branch on 2026-10-20 and are not restored, so there is no
+  file to re-run.
+- **Status:** measured, one run; cannot be re-checked from source.
+
+<!-- defk-example skip: a fragment, date?/1 (ten bytes, digits and dashes) is elided -->
+```elixir
+# "YYYY-MM-DD": the anchor is "-"; the digits around it are checked in Elixir
+dash = :binary.compile_pattern("-")          # once, e.g. in :persistent_term
+
+for {pos, 1} <- :binary.matches(doc, dash),
+    pos >= 4 and pos + 6 <= byte_size(doc),
+    date?(binary_part(doc, pos - 4, 10)),    # <<y, y, y, y, ?-, m, m, ?-, d, d>>
+    do: pos - 4
+```
+
+### 2.20 Literal search over many documents: `:binary.matches/3` with a scope matches a kernel
+
+For a literal needle over 100k JSON documents packed into one blob, a
+`:binary.matches/3` call per chunk with a `scope` of that chunk matched a
+defk shift-and kernel. Elixir is the answer for literals; see also 3.1.
+
+- **Numbers:** 12 chunks: `:binary.matches/3` 6.8-8.6 ms; the shift-and
+  kernel 9.2-9.5 ms.
+- **Conditions:** M-series Mac, one run each, quiet machine.
+- **Source:** `defk-w8r.2` (the research note was deleted; see 2.19).
+- **Status:** measured, one run; cannot be re-checked from source.
+
+<!-- defk-example skip: a fragment, the blob, the compiled pattern and the chunk bounds are elided -->
+```elixir
+# one packed blob, one scope per chunk; the matches are offsets into the blob
+:binary.matches(blob, compiled, scope: {chunk_start, chunk_len})
+```
+
 ---
 
 ## 3. BIFs and OTP libraries that are already native
@@ -767,6 +817,8 @@ they are reduction-counted, so they already keep the scheduler responsive.
   numbers single runs, noisy machine.
 - **Source:** [`poor_substring_search.exs`](https://github.com/DanielLuning/defk/blob/main/examples/poor_substring_search.exs) (a00f961), `defk-9p6.23`; [`string-workloads.md`](https://github.com/DanielLuning/defk/blob/main/docs/research/string-workloads.md).
 - **Status:** measured; research provisional.
+- **Also:** `:binary.matches/3` with a `scope` over one packed blob matched
+  a defk shift-and kernel over 100k JSON documents (2.20).
 
 <!-- defk-example run: needle = "ab"; hay = "xxabxx"; needles = ["ab", "xx"] -->
 ```elixir
@@ -2716,6 +2768,53 @@ else: 0))`; it now says `if first < 0 and n > 0, do: raise(ArgumentError,
 - **Source:** `defk-o08.6`, [`rolling_stats.exs`](https://github.com/DanielLuning/defk/blob/main/examples/rolling_stats.exs); the
   compiler side is `defk-9za` / `defk-b38` (6.34).
 - **Status:** C and report checked; not timed.
+
+### 6.43 A bit-parallel NFA kernel costs about 3.2 ns per byte whatever the pattern
+
+A regex-class matcher written as a kernel (a bit-parallel NFA over byte
+classes) ran at about 3.2 ns per byte for every pattern tried: the generated
+C makes 18 checked helper calls per byte, and several of them operate on
+values that are provably 0 or 1 (`band`/`bsr` results, `hit * (1 - ext)`).
+The kernel wins only where the
+pattern has no literal anchor byte; with an anchor, `:binary.matches/2` and
+an Elixir check are 1.5 to 2 times faster (2.19). Which of those checks
+`Defk.Facts` could prove away is `defk-w8r.3`.
+
+- **Numbers:** 100k JSON documents in 12 chunks: the kernel 14.2-14.9 ms
+  for date, float and snake-case patterns; anchor and verify in Elixir
+  7.2-9.6 ms; `:re` 19-26 ms.
+- **Conditions:** M-series Mac, one run each, quiet machine.
+- **Source:** `defk-w8r.2` (the research note was deleted; see 2.19).
+- **Status:** measured, one run; cannot be re-checked from source.
+
+### 6.44 Exact float32: an `[f32]` scratch write per operation is free, and 60x faster than rounding in Elixir
+
+defk computes in f64 and has f32 only as an array element. An f64 operation
+followed by one `[f32]` write gives the float32 result bit for bit: 0
+differences in 15,000,030 results for `+`, `-`, `*`, `/` and `sqrt` against a
+hardware float reference built with `-ffp-contract=off`, subnormals and ties
+included. A sparse layer that rounds after every operation ran at 0.91x the
+f64 time, so the write costs nothing. The same rounding in Elixir, through
+`<<v::float-32>>`, was 60x slower.
+
+- **What did not help:** the rounding trick `(x + 8388609) - 8388609` is the
+  identity in f64 (749,972 of 1M inputs differed from f32); it is exact only
+  with a scratch write and read after the add.
+- **Numbers:** sparse layer, one gather per term: 0.378 us per item with a
+  rounding after every operation, 0.417 us in f64. The hand-written C float
+  loop took 0.069 us: the 5.5x gap is the runtime checks in the hot loop
+  (`defk-w8r.3`). Whether this pattern becomes a builtin is `defk-vcx.5`.
+- **Conditions:** M-series Mac, one thread, one run each, quiet machine.
+- **Source:** `defk-w8r.2` and `defk-vcx.5` hold the numbers; the research
+  note was deleted (see 2.19).
+- **Status:** measured, one run; cannot be re-checked from source.
+
+<!-- defk-example skip: a fragment, two statements of a kernel body; the kernel around them is elided -->
+```elixir
+# s is a one-element [f32] scratch array
+s[0] = a * b        # the write rounds to float32 (raises if the value does not fit)
+p = s[0]            # read back the rounded value as f64
+```
 
 ---
 

@@ -250,7 +250,13 @@ normal schedulers, free the frame on process death) targets exactly that gap.
   - Responsiveness: a 1 ms ticker on one normal scheduler saw the same gap
     (about 2 ms, the floor under load) for all three: EXLA's dirty NIF does
     not hold a normal scheduler.
-  Still not measured: Evaluator and Torchx `while` costs, and GPU.
+  Still not measured: Evaluator and Torchx `while` costs.
+  GPU, one data point (`defk-w8r.2`; the handwired research note and its
+  scripts were deleted on 2026-10-20 and are not restored): for pattern
+  search over 100k JSON documents, the best CPU times here (7 to 15 ms in
+  12 chunks, Elixir anchor-and-verify and a defk NFA kernel) are in the range
+  of handwired's WebGPU search (4.5 to 5.2 ms on its author's machine), an
+  order of magnitude only. The scope line stays: GPU is Nx's.
 - Whether XLA CPU parallelises a single executable across threads internally
   (intra-op thread pool) was not traced in source; it affects how much one
   EXLA call occupies the machine beyond its one dirty scheduler.
