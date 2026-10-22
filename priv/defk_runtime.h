@@ -62,7 +62,7 @@
  *
  * kernel:start
  *   DEFK_SP DEFK_SAVE DEFK_SAVE<n> DEFK_SHORT DEFK_TICKS DEFK_RESUMING defk_rs
- *   defk_ticks defk_budget defk_clk defk_funcs defk_slot defk_z0 defk_a<n>
+ *   defk_ticks defk_clk defk_funcs defk_slot defk_z0 defk_a<n>
  *   defk_l<n> defk_halt<n> defk_r<n> defk_rp<n> defk_s<n>_<n> defk_lit_<hash>
  * kernel:end
  */
