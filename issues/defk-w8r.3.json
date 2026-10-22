@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-22T10:38:42Z",
   "created": "2026-10-20T12:35:36Z",
   "description": "Evidence (from the handwired prototype, deleted 2026-10-20 and not to be restored; the numbers are kept here): a sparse layer with a gather per term (kernel layer32) took 0.378 us per item, 5.5x the hand-written C float loop (0.069 us). The generated C of each term had: a bounds-checked [f32] read with a finite check (defk_get_f32, defk_in_f64), two overflow-checked i64 index operations (defk_mul_i64, defk_add_i64 on r * k + t and base + idx), a bounds-checked [i32] read, a checked float multiply, a non-finite check on the add, and a range check on each [f32] store (defk_to_f32). The NFA kernel of the same study had 17 context-taking helper calls per byte for 3.2 ns per byte; several operated on values that are provably 0 or 1 (band/bsr results, hit * (1 - ext)). Defk.Facts already has range rules for band (bit_facts/3); what remains unproven is not measured.\n\nSteps:\n1. Write a small gather-loop kernel on the ticket branch (under bench/ or test/support): a sparse layer over an [f32] weight array, indices from an [i32] array, r * k + t indexing, base + idx gathers, one [f32] store per output. Dump its C (mix dump_c) and read the fast-path report (Defk.Report); list every check that remains in the hot loop, per statement. Confirm the list matches the evidence above.\n2. For each check, name the fact that would remove it and say whether ADR-0007's representation can state it (for example: band(x, 1) is 0..1, so a product with it cannot overflow; loop bounds bound r * k + t; an [i32] element is in i32 range so base + idx cannot overflow i64).\n3. Implement the cheapest proofs only. Semantics must not change: the byte-identical gate (mix dump_c, docs/agents/runs.md) must show a diff only in kernels that gain a proof; unit tests of the area; Elixir mode agreement unchanged.\n4. Measure the new kernel once on a quiet machine, before and after (ps quiet test), and record the table of checks (removed, why not) and the us per item in docs/performance.md. The 0.378 and 0.069 us figures are the reference point only, marked as from the deleted prototype.\n\nThe NFA kernel is out of scope except its one fact: products of band(x, 1) values cannot overflow.\nRules: run what the change touches (docs/agents/runs.md); no sweeping benches. Done when the table of checks and the before/after numbers are recorded, or a closed-as-not-possible comment says which check blocks each proof.",
   "id": "defk-w8r.3",
@@ -28,8 +29,8 @@
     }
   ],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Gather loops: find which runtime checks Defk.Facts could prove away (f32 layer is 5.5x slower than C float)",
   "type": "task",
-  "updated_at": "2026-10-22T09:58:35Z"
+  "updated_at": "2026-10-22T10:38:42Z"
 }
