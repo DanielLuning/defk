@@ -65,7 +65,9 @@ documentation calls yielding "always preferred over the other alternatives".
   would still block its scheduler for the whole loop. defk therefore decides
   *to* yield from its own wall-clock safepoints and uses
   `enif_consume_timeslice` to *charge* the time: every loop back-edge counts
-  against a budget, `defk_tick` reads `enif_monotonic_time` and adapts that
+  against a budget, `defk_tick` reads the slice clock (`defk_now_us`:
+  `mach_absolute_time` on Apple platforms, `enif_monotonic_time` elsewhere;
+  the ERTS clock cost ~27 ns a read on macOS arm64) and adapts that
   budget so the clock is read every `DEFK_SLICE_US/10` … `/4`
   (around `defk_tick` in priv/defk_runtime.h), and a spent budget returns `0`, which makes
   the loop return `DEFK_YIELD`. `DEFK_SLICE_US` is 250 µs
