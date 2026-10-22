@@ -5852,7 +5852,7 @@ defmodule Defk.Compiler do
   defp run_preamble(yields?) do
     if yields?,
       do:
-        "int defk_rs = F->resume;\nint64_t defk_ticks = 0;\nint64_t defk_budget = defk_rs ? F->budget : DEFK_BUDGET0;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk, ctx);\n",
+        "int defk_rs = F->resume;\ndefk_clock defk_clk;\ndefk_clock_init(&defk_clk, ctx);\ndefk_clk.budget = defk_rs ? F->budget : DEFK_BUDGET0;\nint64_t defk_ticks = defk_clk.budget;\n",
       else: ""
   end
 
@@ -5935,8 +5935,8 @@ defmodule Defk.Compiler do
         inputs = k |> input_aliases(saved) |> Enum.flat_map(&elem(&1, 1)) |> Enum.uniq()
         "#define DEFK_SAVE#{n} #{Enum.map(saved ++ inputs, &"F->#{&1} = #{&1}; ")}\n"
       end) <>
-        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks += (W)) >= defk_budget)) { defk_ticks = 0; if (!(defk_budget = defk_tick(env, &defk_clk, defk_budget))) { if (DEFK_UNLIKELY(F->resume)) { defk_lost_resume(ctx, F->resume, N); return DEFK_ERR; } DEFK_SAVE##N F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
-        "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks += (W);\n#define DEFK_RESUMING DEFK_UNLIKELY(defk_rs)\n"
+        "#define DEFK_SP(N, W) if (DEFK_UNLIKELY((defk_ticks -= (W)) <= 0)) { if (!(defk_ticks = defk_tick(env, &defk_clk, defk_clk.budget))) { if (DEFK_UNLIKELY(F->resume)) { defk_lost_resume(ctx, F->resume, N); return DEFK_ERR; } DEFK_SAVE##N F->resume = N; F->budget = defk_clk.budget; return DEFK_YIELD; } }\n" <>
+        "#define DEFK_SHORT(R) DEFK_LIKELY((R) < DEFK_STRIP)\n#define DEFK_TICKS(W) defk_ticks -= (W);\n#define DEFK_RESUMING DEFK_UNLIKELY(defk_rs)\n"
     else
       @no_yield_macros
     end

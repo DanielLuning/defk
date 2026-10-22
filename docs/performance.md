@@ -1727,7 +1727,8 @@ for LLVM. Resuming through each loop's header fixed it.
   "a safepoint every iteration" on the word loop. Each word is now a few ns
   of work, and yielding costs +19% (4.91-4.99 vs 4.11-4.20 ms, ~17 yields
   per query); `DEFK_SLICE_US=10000000` kept the gap. Under load defk gives
-  ~0.79x the blocking build's req/s. Open as `defk-w8r.1`.
+  ~0.79x the blocking build's req/s. Quiet it was +30%; one countdown
+  instead of two counters took it to +16% (6.46).
 - **Conditions:** `defk-nua`/`defk-j3h` load not recorded; `defk-klw` quiet (load average 3-6, no builds); `defk-l2g` load average 4-7; Linux not measured.
 - **Source:** `defk-nua` comment 2026-10-05, `defk-j3h` comment 2026-10-05, `defk-klw`, `defk-l2g`, [`fuzzy_search/README.md`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/README.md), [results snapshot](https://github.com/DanielLuning/defk/blob/main/docs/project.md).
 - **Status:** measured; the Myers figures provisional.
@@ -1839,7 +1840,9 @@ changed speed by 1.5x.
   (9-11 stores per round); `yield: false` 18.2-18.6 ms with 0 spills. Side
   effects: `xxh64` 4 MB 0.36-0.40 -> 0.175-0.182 ms (about 2x); siphash 1k
   keys 0.054-0.057 -> 0.043-0.044 ms. The remaining ~10% against `yield:
-  false` is yield bookkeeping held in registers (`defk-w8l`, open).
+  false` was read as yield bookkeeping held in registers; 6.46 measured it:
+  the counters are none of it, the safepoint's saves and the resume
+  dispatch are, and quiet the gap is 1.3x.
 - **Conditions:** under load (spill counts do not depend on load).
 - **Source:** `defk-zep` comment 2026-10-10 (f81c2cd, merge 522e7f2), [`keccak.exs`](https://github.com/DanielLuning/defk/blob/main/examples/keccak.exs).
 - **Status:** provisional (timings); the older "28 ms" and "0.55x of ex_keccak" figures are superseded.
@@ -3033,6 +3036,94 @@ stays is about array contents.
   dropped check, and the agreement properties).
 - **Status:** measured.
 
+### 6.46 Yield bookkeeping: one countdown instead of two counters halves fuzzy_search's per-word cost; Keccak's spills come from the safepoint's saves and the resume dispatch, not from the counters
+
+Two hot short loops paid for yielding where the yields themselves are
+free (6.4): Keccak's round loop (24 trips, no safepoint inside; the
+block loop around it has one per iteration) spilled per round in the
+yielding kernel and not under `yield: false`, and fuzzy_search's word loop
+(a safepoint per word, as each word holds a short inner loop) ran +19-31%
+over its `yield: false` twin. `bench/keccak_yield.exs` compiles the
+example's kernels twice and counts the stack loads and stores in the
+hottest round block of the assembly (`cc -S` with the build's flags, the
+block with the most `ror`, cut at its back-edge: the stores after it are
+the loop's exit path, once per block) beside the 16 MB time;
+`examples/fuzzy_search/bench/yield_cost.exs` gives the per-word gap.
+
+- **Before** (quiet): Keccak 12 stack stores and 12 loads per round, 164
+  instructions, against 0 / 0 and 109 under `yield: false`; 16 MB 23.1 /
+  23.3 ms (best / median of 7) against 17.2 / 17.6, 1.32-1.34x. 6.8's
+  9-11 spills were counted on the compiler of 2026-10-10 and its 20.7 vs
+  18.3 ms under load; today, with the exit path left out, the count is 12
+  / 12, and quiet the gap is a third. fuzzy_search:
+  yielding 5.1-5.4 ms a query against 3.9-4.1 blocking, +30-31% (three
+  runs; `defk-l2g`'s +19% was under load), 18-19 yields a query: about
+  5 ns per word on 17.
+- **The counters** (`defk-w8l`'s experiment (a); each variant changes
+  every yielding kernel's C):
+  - *V1, one countdown.* `defk_ticks` counts down from the budget and a
+    safepoint tests `<= 0`; the budget lives only in the clock
+    (`defk_clk.budget`), where `defk_tick` keeps it anyway. Keccak: 12 / 12
+    spills, 23.3 / 23.5 ms, unchanged. fuzzy_search: 4.6-4.8 ms, +16-17%
+    (three runs: +17.4, +16.2, +15.7), 16.5 yields a query: about 3 ns
+    per word. **Adopted**: it removes one live value and one compare per
+    safepoint, and the semantics are the same (ticks >= budget is
+    budget - ticks <= 0; the resume restores the saved budget as before).
+  - *V2, charge a plain short loop on entry* (as a loop a halt can leave
+    already is): Keccak 12 / 12, 23.0 / 23.2 ms; fuzzy_search +21%. Alone
+    or with V1 (+17.5%) nothing beyond V1; not adopted.
+  - *V3, no bookkeeping register at all*: the countdown in the frame
+    (`F->ticks`), the dispatch test on `F->resume`, `env` in the clock so
+    the tick call needs no register. Keccak 12 / 12 spills, 22.6 / 23.1
+    ms: unchanged. fuzzy_search +19.6% (two runs): the memory
+    read-modify-write per word costs more than the register it frees.
+    Not adopted.
+- **Where Keccak's spills come from** (the yielding kernel's C with one
+  piece of the safepoint removed, assembled, the same count; the C of V3,
+  so no counter is in a register): as emitted 12 stores / 12 loads; the
+  tick call removed 15 / 16; the saves (`DEFK_SAVE`, the stores of the
+  enclosing loops' live locals and the 25 lanes into the frame at a yield)
+  removed 4 / 4; call and saves removed 4 / 4; no safepoint at all but the
+  resume dispatch kept 4 / 4; no dispatch either 1 / 1 and 118
+  instructions, the `yield: false` shape. So 8 of the 12 spills are the
+  saves and 3 the dispatch (the `if (resuming) switch` at each loop body's
+  top and the arrival labels in front of the loops), and the counters are
+  none of them. The 25 lanes are the block loop's accumulators, live in
+  both kernels; what the saves change is clang's allocation around a cold
+  block that reads 35 values. Neither can go without a redesign (the saves
+  are the resume; the dispatch is how a resume re-enters the loops through
+  their headers, 6.4), so Keccak keeps its 1.3x and 6.8's "bookkeeping
+  held in registers" is superseded by this entry.
+- **fuzzy_search's per-word cost, what remains after V1** (timing only,
+  the variants break resuming; two runs each): the resume
+  dispatch compiled out (`DEFK_RESUMING 0`: a resumed call re-enters only
+  through the kernel's top dispatch) +25-26%, worse, with more yields a
+  query (17.6): not a measurement of the test's cost, so it stays at "a
+  load and a branch per word"; the inner loop's strip form compiled out
+  (`DEFK_SHORT(R) 1`, so each word's loop is the plain loop and its trips
+  are charged on entry) +15-16% against V1's +17.6-18.4% in the same
+  session: about 2 points, inside the noise. What remains is the shape of
+  the word loop's body in a kernel that can yield, as in Keccak.
+- **A cheaper shape for the outer loop:** one safepoint per N words would
+  let N x DEFK_STRIP inner trips run unchecked, past the tick-gap
+  contract; charging the outer loop in strips by the inner loop's trip
+  count is what the per-iteration safepoint already does (the inner loop
+  charges its trips on entry, the outer safepoint tests the countdown),
+  and after V1 that test is one subtract and one branch per word. The
+  per-word cost that remains is code shape, as in Keccak, not the check.
+- **Checks:** `bench/tick_gap.exs` (3 runs a side): the yielding kernel's p99
+  gap 2.27 ms on the branch against 2.25 on `main`, worst 2.3-2.5 against
+  2.3; the early-exit kernel 2.27 / 2.27; unchanged. `mix test` green, the
+  forced-yield tests included (2309 passed).
+- **Conditions:** M-series Mac, on battery, other processes at 0.2-0.8
+  cores before each Keccak block (one block at 2.0: V1+V2, whose numbers
+  are not used); fuzzy_search runs on 12 schedulers, 20 queries x 5
+  rounds, medians.
+- **Source:** `defk-w8l` (and `defk-w8r.1`, merged into it), [`bench/keccak_yield.exs`](https://github.com/DanielLuning/defk/blob/main/bench/keccak_yield.exs),
+  [`examples/fuzzy_search/bench/yield_cost.exs`](https://github.com/DanielLuning/defk/blob/main/examples/fuzzy_search/bench/yield_cost.exs); `DEFK_SP` and
+  `DEFK_TICKS` in `lib/defk/compiler.ex` (`sp_macro/3`, `run_preamble/1`).
+- **Status:** measured.
+
 ---
 
 ## 7. When a hand-written or wrapper NIF is still the answer
@@ -3378,4 +3469,5 @@ example or close a workload ticket, add its entries and its line here.
   `defk-o08.2`, `defk-o08.3`, `defk-o08.4`, `defk-o08.5`, `defk-o08.6`,
   `defk-w8r.2`, `defk-25s` ([`bench/call_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/call_cost.exs)),
   `defk-vcx.2` ([`bench/elixir_mode.exs`](https://github.com/DanielLuning/defk/blob/main/bench/elixir_mode.exs)),
-  `defk-w8r.3` ([`bench/gather_layer.exs`](https://github.com/DanielLuning/defk/blob/main/bench/gather_layer.exs)).
+  `defk-w8r.3` ([`bench/gather_layer.exs`](https://github.com/DanielLuning/defk/blob/main/bench/gather_layer.exs)),
+  `defk-w8l` ([`bench/keccak_yield.exs`](https://github.com/DanielLuning/defk/blob/main/bench/keccak_yield.exs)).
