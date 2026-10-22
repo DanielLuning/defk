@@ -21,11 +21,15 @@
     {
       "text": "Decision (2026-10-22, owner): copies only. Free dead copy-origin buffers natively at the three nested-block exits (arm, loop body, inlined callee body); allocs stay until return (Elixir mode's budget agreement unchanged). Accumulators without a copy keep the source's buf ref (the one-ref invariant).",
       "timestamp": "2026-10-22T18:55:34Z"
+    },
+    {
+      "text": "PR #82 (copies only, owner's call 2026-10-22): https://github.com/DanielLuning/defk/pull/82. mix ci green, ASan clean over the nine test modules whose C changed, no catalog kernel's C changed. Measured (provisional, docs/performance.md 6.47): copy_loop 92 -\u003e 42 ns per iteration at 16 elements, 864 -\u003e 130 at 1024. Two calls beyond copies-only in ADR-0012: the release point is every block incl. the kernel's own body; a plain nested block releases nothing. Ticket stays in progress until the owner merges.",
+      "timestamp": "2026-10-22T19:38:59Z"
     }
   ],
   "priority": 4,
   "status": "in_progress",
   "title": "Free dead owned buffers early, so a per-iteration copy or alloc no longer accumulates until return",
   "type": "task",
-  "updated_at": "2026-10-22T18:55:38Z"
+  "updated_at": "2026-10-22T19:38:59Z"
 }
