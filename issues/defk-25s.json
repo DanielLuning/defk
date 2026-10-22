@@ -2,6 +2,7 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-22T08:45:07Z",
   "created": "2026-10-12T09:52:02Z",
   "description": "Why: the per-call cost decides the crossover size for small inputs, where defk loses today: poor_tiny_calls 0.38-0.43x, geohash one point per call 0.77-0.85x, ws_masking at 125 B 1.18-1.31x ('the call is the cost'), utf8_valid 0.6x at 64 KB. docs/project.md's results snapshot gives 12 ns per call for defk against 1.6 ns for an Elixir function call; since defk-04y a yielding kernel also reads :erlang.statistics(:total_run_queue_lengths) each call (count_primes(10) went from 40-43 to 49-58 ns). defk-cao covers only the extra ~0.1 us of a bitstring result; nothing tracks the base cost.\n\nScope:\n1. Break down where a tiny call's time goes, for a yielding and a yield: false kernel with a scalar result and with an array argument: the generated Elixir stub (argument checks, the run-queue read), the NIF entry (argument decoding, sigsetjmp, frame setup on the C stack, slice init and the clock read), and the result encoding. Use interleaved variants of the generated code and the C runtime, timed with repeats.\n2. Fix what is worth it without changing results or the runtime contract. Ideas to test, not conclusions: skip the clock read and slice init for a call whose loops are provably short; a cheaper run-queue check or none when the kernel has no loop; fewer checks in the stub when the NIF checks again.\n3. Record the breakdown, what helped and what didn't in docs/performance.md (provisional if loaded), and re-run the small-input crossovers of the examples above.\n\nDone when: there is a per-stage breakdown with numbers, any fixes land with mix test green, and the crossovers in the affected README rows are updated (or the result says no change was worth it). Related: defk-cao (bitstring results), defk-04y (adaptive slice).",
   "id": "defk-25s",
@@ -16,8 +17,8 @@
     }
   ],
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Measure and cut the base per-call cost of a scalar kernel (12 ns vs Elixir's 1.6 ns)",
   "type": "task",
-  "updated_at": "2026-10-21T20:01:33Z"
+  "updated_at": "2026-10-22T08:45:07Z"
 }
