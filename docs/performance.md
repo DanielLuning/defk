@@ -1553,6 +1553,69 @@ which the BEAM's own NIF call and the term decoding are 6.
 - **Source:** `defk-25s`, [`bench/call_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/call_cost.exs), [`bench/call_cost_nif.c`](https://github.com/DanielLuning/defk/blob/main/bench/call_cost_nif.c); `defk_now_us` in [`priv/defk_runtime.h`](https://github.com/DanielLuning/defk/blob/main/priv/defk_runtime.h).
 - **Status:** measured.
 
+### 5.14 Elixir mode is never the fast side of a kernel: 7-110x the kernel at 1-16 B, and a 220-250 ns floor per call
+
+defk compiles each kernel to Elixir as well as C (Elixir mode, the test
+oracle), so could a call switch to that Elixir below the crossover size,
+where the kernel's call cost still outweighs its work? Measured once, to
+close the question: no. Elixir mode's per-call floor is 10x a kernel call,
+and its loops are slower than the optimised Elixir an example compares the
+kernel against. The rule stands: Elixir mode is never a fallback in
+production and never a baseline (`Defk.ElixirMode`, CONTEXT.md); these
+numbers are an exploration, not a baseline.
+
+- **Numbers** (ns per call, median of 7 interleaved rounds of 20,000 calls,
+  two runs; kernel / Elixir mode / optimised Elixir, then Elixir mode over
+  each):
+
+  | kernel | size | kernel | Elixir mode | Elixir (opt.) | mode/kernel | mode/Elixir |
+  |---|---|---|---|---|---|---|
+  | `xxh64` (read-only) | 1 B | 36 | 603 | 178 | 17x | 3.4x |
+  | | 16 B | 36 | 875 | 350 | 24x | 2.5x |
+  | | 256 B | 48 | 5,363 | 2,882 | 112x | 1.9x |
+  | | 1 KiB | 80 | 18,100 | 9,437 | 227x | 1.9x |
+  | `siphash24` (read-only) | 1 B | 40 | 3,002 | 1,717 | 76x | 1.7x |
+  | | 16 B | 42 | 4,745 | 2,913 | 112x | 1.6x |
+  | | 256 B | 110 | 32,800 | 20,500 | 298x | 1.6x |
+  | | 1 KiB | 345 | 125,700 | 77,700 | 364x | 1.6x |
+  | `ws_mask` (alloc + writes) | 1 B | 83 | 566 | 82 | 6.8x | 6.9x |
+  | | 16 B | 87 | 3,070 | 65 | 36x | 47x |
+  | | 256 B | 123 | 36,600 | 268 | 299x | 137x |
+  | | 1 KiB | 233 | 145,500 | 707 | 624x | 206x |
+  | `add` (no loop) | | 17 | 248 | 3 | 15x | 79x |
+  | `clamp` (no loop) | | 19 | 222 | 5 | 12x | 48x |
+
+  The second run repeats every cell within a few percent (`xxh64` 1 B: 35 /
+  623 / 190; `siphash24` 1 KiB: 353 / 125,900 / 76,000; `ws_mask` 1 KiB:
+  231 / 150,000 / 716; `add` 17 / 254 / 3). The sizes 8 and 64 B lie
+  between their neighbours in both runs.
+- **Where the time goes.** The floor is the entry: `__defk_elixir__/2`
+  checks every argument's type (`Ops.args!`), reads the native library's
+  owned-buffer budget through the `__defk_stats__` NIF, and runs the body
+  under a process-dictionary budget (`Ops.owned_call`); each integer
+  operation then goes through a range-checked helper (`Ops.add`). A loop
+  over a read-only array costs 1.6-3.4x the optimised Elixir: each element
+  read is a helper call with a bounds check, where the Elixir baseline
+  matches eight bytes at a time. A write is `Ops.put_u8(out, j, v)`: a new
+  binary per write, so a loop of n writes copies n bytes n times, and
+  `ws_mask` at 1 KiB is 206x the Elixir loop and 624x the kernel.
+- **The switch does not exist.** The ticket's test for a decision ticket
+  was Elixir mode within ~2x of the optimised Elixir at small sizes, which
+  the two read-only hashes meet from 64 B up (1.6-1.9x). But a size-based
+  switch would replace the kernel call, and the kernel is 7-17x faster than
+  Elixir mode at 1 B, 12-15x on a kernel with no loop at all, where the call
+  is the whole cost (5.13): there is no size at which the generated Elixir
+  is the fast side. No decision ticket is filed. What beats a kernel below
+  the crossover is the hand-written Elixir of the example, as before.
+- **Conditions:** M-series Mac, 12 schedulers, OTP 29, Elixir 1.20.2, on
+  battery; other processes at 0.3-0.9 cores before each block (one block of the
+  first run at 1.3, repeated at 0.9) (the ps
+  quiet test).
+- **Source:** `defk-vcx.2`, [`bench/elixir_mode.exs`](https://github.com/DanielLuning/defk/blob/main/bench/elixir_mode.exs) (the kernels and
+  baselines of `hashes.exs` and `ws_masking.exs`, and `bench/call_cost.exs`'
+  no-loop kernels); the rule: `defk-dtw.6`.
+- **Status:** measured.
+
 ---
 
 ## 6. Making a defk kernel fast
@@ -3169,6 +3232,7 @@ costs as much as the splits.
 | Tiling helps a matrix multiply kernel | no faster at 64 to 1024 | 6.9 |
 | Yielding costs throughput | ~0% after reducible resume (one loaded run disagrees) | 6.4 |
 | `-ffp-contract=off` makes float kernels slow | no measurable cost on dot, sum, mean_var | 6.6 |
+| The generated Elixir (Elixir mode) could serve calls below the crossover | 7-17x slower than the kernel at 1 B, 12-15x on a kernel with no loop; its entry alone is ~230 ns | 5.14 |
 
 ### 8.2 Open questions
 
@@ -3235,4 +3299,5 @@ example or close a workload ticket, add its entries and its line here.
   `defk-ulk.4`, `defk-52v.15` ([`cdcl_sat.exs`](https://github.com/DanielLuning/defk/blob/main/examples/cdcl_sat.exs)), `defk-tif`, `defk-gqk`, `defk-6ag`,
   `defk-7dm` ([`bench/port_roundtrip.exs`](https://github.com/DanielLuning/defk/blob/main/bench/port_roundtrip.exs)), `defk-1ub`,
   `defk-o08.2`, `defk-o08.3`, `defk-o08.4`, `defk-o08.5`, `defk-o08.6`,
-  `defk-w8r.2`, `defk-25s` ([`bench/call_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/call_cost.exs)).
+  `defk-w8r.2`, `defk-25s` ([`bench/call_cost.exs`](https://github.com/DanielLuning/defk/blob/main/bench/call_cost.exs)),
+  `defk-vcx.2` ([`bench/elixir_mode.exs`](https://github.com/DanielLuning/defk/blob/main/bench/elixir_mode.exs)).
