@@ -499,6 +499,52 @@ operation, not the line); run the kernel in Elixir mode to find the line.
 (The checks cost 17-24% on float reductions and about 2x on a vectorised
 elementwise loop today.)
 
+### Exact float32 arithmetic
+
+A kernel has no `f32` scalar and no rounding builtin: `f32` exists only as an
+array element. To compute in float32, as a C `float` loop does, round each
+result with a write into a one-element `[f32]` array and read it back. An
+`f64` `+`, `-`, `*`, `/` or `sqrt` on float32 values, followed by that write,
+gives the float32 result bit for bit, ties to even and subnormals included:
+an `f64` holds more than twice the bits of an `f32`, so the second rounding
+never changes the first. Other builtins (`exp`, `log`, `pow/2`) are rounded
+twice and can differ from a float32 library in the last bit. The write raises
+where the value does not fit (see [Writing](#writing)), where float32
+hardware would give inf. The write and the read cost nothing measurable in a
+loop.
+
+```elixir
+defk add32(a :: f64, b :: f64) :: f64 do
+  s = alloc(f32, 1)
+  s[0] = a + b
+  s[0]
+end
+
+defk dot32(a :: [f32], b :: [f32]) :: f64 do
+  s = alloc(f32, 1)
+
+  for i <- 0..(length(a) - 1)//1, reduce: 0.0 do
+    acc ->
+      s[0] = a[i] * b[i]
+      s[0] = acc + s[0]
+      s[0]
+  end
+end
+```
+
+```elixir
+iex> M.add32(16_777_216.0, 1.0)
+16777216.0
+iex> M.add32(16_777_216.0, 3.0)
+16777220.0
+iex> M.dot32(<<0.1::float-32-native, 0.2::float-32-native>>, <<0.3::float-32-native, 0.4::float-32-native>>)
+0.11000000685453415
+```
+
+`2^24 + 1` lies halfway between two float32 values and rounds to the even
+one, `2^24`. A trick that rounds without a write, such as
+`(x + 8388609.0) - 8388609.0`, changes nothing in `f64`.
+
 ### Comparisons
 
 **Supported:** `==`, `!=`, `<`, `>`, `<=`, `>=`, `===`, `!==` on numbers, and
@@ -1100,6 +1146,7 @@ that compiles. The error for each says the same.
 | `unless c do ... end` | `if not c do ... end` | [`unsupported-construct`](compile-errors.md#unsupported-construct) |
 | a map of counters, `Map.update(m, k, 1, &(&1 + 1))` | an array indexed by the key: `counts = alloc(i64, 256)`, `counts[k] = counts[k] + 1` | [`unsupported-map`](compile-errors.md#unsupported-map) |
 | `xs :: list(float)` | `xs :: [f64]`, packed in Elixir with `for x <- xs, into: <<>>, do: <<x::float-64-native>>` | [`unknown-type`](compile-errors.md#unknown-type) |
+| `x :: f32`, or `<<y::float-32>> = <<x::float-32>>` to round to float32 | `x :: f64`, and a write into a one-element `[f32]` array after each operation: `s = alloc(f32, 1)`, `s[0] = a * b`, `p = s[0]` ([Exact float32 arithmetic](#exact-float32-arithmetic)) | [`unknown-type`](compile-errors.md#unknown-type) |
 | `:: String.t()` as a result | `:: [u8]`: it reaches Elixir as a binary, text if the bytes are | [`unknown-type`](compile-errors.md#unknown-type) |
 
 ## 5. Variables and binding
