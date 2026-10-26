@@ -25,11 +25,15 @@
     {
       "text": "2026-10-26 (owner): option 1, recipe only. Document the one-element [f32] scratch pattern in docs/language.md (Floats) and docs/guides, plus a unit test of ties. No new surface.",
       "timestamp": "2026-10-26T09:21:02Z"
+    },
+    {
+      "text": "PR #83 (branch defk-vcx.5/f32-rounding-recipe, worktree ../defk-vcx.5). mix ci passed. Close after merge; then defk-vcx can close.",
+      "timestamp": "2026-10-26T09:28:55Z"
     }
   ],
   "priority": 3,
   "status": "in_progress",
   "title": "Decide: an f32 rounding builtin, or only a documented recipe, for exact float32 in kernels",
   "type": "task",
-  "updated_at": "2026-10-26T09:21:08Z"
+  "updated_at": "2026-10-26T09:28:55Z"
 }
