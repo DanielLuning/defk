@@ -2,13 +2,14 @@
   "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-26T10:21:46Z",
   "created": "2026-10-13T19:07:54Z",
   "description": "Groups the small language, error-reporting and runtime-contract gaps found while building the catalog and in the cold tests, none of which a target workload blocks on: constructs (defk-nii, defk-oit, defk-pe3, defk-3rl, defk-sbp), compile-error quality (defk-10d, defk-ajj, defk-xyz), internal consistency (defk-27w) and the stats contract across reloads (defk-9qv).\n\nRule from the map (defk-dtw): a construct enters the subset only when a workload needs it, it must be what an Elixir developer writes first, cost nothing over the hand loop, and keep Elixir's meaning with an Elixir-mode implementation and agreement tests. Every new construct or limit is documented in docs/language.md and, where a code is added, in the generated docs/compile-errors.md.\n\nDone when: each child is closed, or closed as wontfix with the reason, and docs/language.md lists every limit the closed children left in place.",
   "id": "defk-vcx",
   "labels": [],
   "priority": 3,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Kernel subset and devex gaps",
   "type": "epic",
-  "updated_at": "2026-10-20T20:25:56Z"
+  "updated_at": "2026-10-26T10:21:46Z"
 }
