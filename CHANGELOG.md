@@ -14,6 +14,18 @@
 
 ## Unreleased
 
+- Changed (runtime contract, within the promise): a value-semantics copy is
+  released before the kernel returns when its last variable dies and no
+  other variable may share the buffer, instead of living until return. A
+  copy made every iteration of a loop (`b = a; a[i] = x; ... b[0]`) no
+  longer keeps one buffer per iteration under `max_owned_bytes`: the loop
+  holds at most two. `alloc/2` buffers, bitstring accumulators and aligned
+  input copies still live until return, so Elixir mode's budget still
+  raises at the same `alloc/2` as native code. The fast-path report notes
+  each release (`:owned`, `:released`), and the generated C shows them as
+  `defk_disown` calls. Results are unchanged; a kernel that raised "out of
+  memory" at the budget only because of such copies now runs to its result
+  (the budget's numbers are outside the promise, `docs/guides/stability.md`).
 - Changed (runtime, no promise changes): on Apple platforms the clock that
   measures a yielding kernel's slices reads `mach_absolute_time` instead of
   the ERTS monotonic clock. A yielding kernel's call cost about 20 ns less

@@ -27,6 +27,7 @@
  *   yields: DEFK_BUDGET0 DEFK_ZERO_TICKS defk_clock defk_clock_init defk_tick
  *     defk_lost_resume defk_stat_yields
  *   arguments and results: defk_get_<arg>_arg defk_make_arr defk_make_arr_view
+ *   early release of a dead copy: defk_disown
  *     defk_make_bits defk_make_bool defk_make_f64
  *   arrays: defk_arr_<T> defk_alloc_<T> defk_alloc_raw_<T> defk_copy_<T>
  *     defk_copy_raw_<T> defk_get_<T> defk_put_<T> defk_to_<T> defk_to_i64_elem
@@ -162,6 +163,10 @@ typedef struct {
   size_t ulen;
   ErlNifBinary *owned; /* binaries we allocated (outputs, aligned copies) */
   int nowned, cap;
+  /* the empty slots of `owned` (released early by defk_disown, or handed
+     over), as a list threaded through their `size` fields: slot + 1, 0 at
+     the end; defk_own_raw fills them before it takes a new slot */
+  int free1;
   uint64_t owned_bytes; /* bytes of the live binaries in owned, at most defk_max_owned */
   int finished;
   int is_resource;
@@ -394,6 +399,21 @@ static void defk_poison_slack(const ErlNifBinary *b) {
 /* Owned binary: off-heap, stable address across yields and GC; uninitialised. */
 static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
   defk_owned_check(ctx, bytes);
+  if (ctx->free1) {
+    /* an empty slot: a buffer released early (defk_disown) or handed over */
+    int slot = ctx->free1 - 1;
+    ErlNifBinary *b = &ctx->owned[slot];
+    size_t next1 = b->size;
+    if (!enif_alloc_binary(bytes, b)) {
+      b->data = NULL;
+      b->size = next1;
+      defk_fail(ctx, DEFK_E_ARG, DEFK_MSG_OUT_OF_MEMORY_BYTES, bytes);
+    }
+    ctx->free1 = (int)next1;
+    DEFK_POISON_SLACK(b);
+    ctx->owned_bytes += bytes;
+    return slot;
+  }
   if (ctx->nowned == ctx->cap) {
     if (!ctx->owned) {
       /* the first buffers go in the frame's own slots */
@@ -423,6 +443,34 @@ static int defk_own_raw(defk_ctx *ctx, size_t bytes) {
   DEFK_POISON_SLACK(b);
   ctx->owned_bytes += bytes;
   return ctx->nowned++;
+}
+
+/* slot `i` of `owned` is empty: put it on the free list (see defk_ctx.free1) */
+static inline void defk_slot_free(defk_ctx *ctx, int i) {
+  ctx->owned[i].data = NULL;
+  ctx->owned[i].size = (size_t)ctx->free1;
+  ctx->free1 = i + 1;
+}
+
+/*
+ * Release the owned buffer at `data` before the kernel returns: the compiler
+ * emits it where a copy's last binding dies (docs/language.md, Copies), so a
+ * copy made every iteration of a loop no longer accumulates until return.
+ * The slot is reused by the next buffer, so a loop's table stays small. The
+ * scan runs from the newest slot: the buffer that dies is usually a recent
+ * one. A `data` no slot holds (a zero-length copy, say) is left alone.
+ */
+static void defk_disown(defk_ctx *ctx, void *data) {
+  if (!data) return;
+  for (int i = ctx->nowned - 1; i >= 0; i--) {
+    ErlNifBinary *b = &ctx->owned[i];
+    if (b->data == data) {
+      ctx->owned_bytes -= b->size;
+      enif_release_binary(b);
+      defk_slot_free(ctx, i);
+      return;
+    }
+  }
 }
 
 /* Owned binary of zeros. */
@@ -710,11 +758,13 @@ DEFK_RANGE_COPY_FN(f32, float)
 
 /* Hand an owned array back to the BEAM as a binary (ownership transfers). */
 static ERL_NIF_TERM defk_make_arr(ErlNifEnv *env, defk_ctx *ctx, void *data) {
-  for (int i = 0; i < ctx->nowned; i++) {
+  /* data is NULL only for a zero-length array, which no slot holds: the
+     empty slots (data NULL) must not match it */
+  for (int i = 0; data && i < ctx->nowned; i++) {
     if (ctx->owned[i].data == data) {
       ctx->owned_bytes -= ctx->owned[i].size;
       ERL_NIF_TERM t = enif_make_binary(env, &ctx->owned[i]);
-      ctx->owned[i].data = NULL; /* no longer ours to release */
+      defk_slot_free(ctx, i); /* no longer ours to release */
       return t;
     }
   }

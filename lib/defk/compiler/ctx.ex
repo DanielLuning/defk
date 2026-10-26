@@ -46,6 +46,7 @@ defmodule Defk.Compiler.Ctx do
               report_loop: nil,
               acc_fix: %{},
               copies: %Defk.Copies{},
+              per_iter: %{},
               strip: %Defk.Strip{},
               operand_binds: [],
               guard: nil,

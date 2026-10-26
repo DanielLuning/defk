@@ -1648,20 +1648,36 @@ or clause head that chose it, which ran before it. It is conservative, so a
 kernel may copy where Elixir would not have to (for example when `b` is read
 earlier in the loop body than the write, which is not a read after it).
 The fast-path report (`Defk.Report`) notes each copy, and
-`Mod.__defk_c_source__/0` shows them as `defk_copy_*` calls. Like `alloc`,
-every copy lives until the kernel returns, so a copy in a loop body keeps
-one array per iteration (the report notes that too), counted against the
-[owned-buffer budget](#the-owned-buffer-budget).
+`Mod.__defk_c_source__/0` shows them as `defk_copy_*` calls.
+
+A copy is released before the kernel returns when its last variable dies:
+when the block that bound the variable (an `if`, `cond` or `case` arm, a
+loop body, a called kernel's body, the kernel's own) reaches a statement
+after which nothing reads it, and no other variable that may share the
+buffer is read later, in the block or after it. So the copy that `b = a; a[i]
+= x; ... b[0]` makes every iteration no longer keeps one buffer per
+iteration: when `b` dies at the end of the iteration, the previous
+iteration's copy goes with it, and the loop holds two at a time. The test
+is static and conservative, like the copy decision: a buffer an `if`,
+`cond` or `case` value may hold (`c = if p, do: b, else: a`) is never
+released early, and nor is one a loop accumulator may hold unless every
+value of the accumulator is a copy. Only copies are released early: an
+`alloc/2` buffer lives until the kernel returns, so that both modes raise
+at the same allocation under the
+[owned-buffer budget](#the-owned-buffer-budget). The report notes each
+release, and `__defk_c_source__/0` shows them as `defk_disown` calls; a
+copy in a loop that is not released is noted as kept per iteration.
 
 ### The owned-buffer budget
 
 Every array a call allocates (`alloc/2`), every copy above, the buffer of a
 [bitstring accumulator](#the-bitstring-accumulator) and the aligned copy of
-a misaligned input are the kernel's own until it returns. Elixir would
-garbage-collect an array no variable sees any more; a kernel frees them all
-at once when it returns, raises, or its process dies. So a call keeps a
-running total of the bytes it holds, and an allocation that would take it
-past the module's budget raises `ArgumentError`:
+a misaligned input are the kernel's own until it returns, except a copy
+whose last variable died (released then, see [Copies](#copies)). Elixir
+would garbage-collect an array no variable sees any more; a kernel frees
+the rest all at once when it returns, raises, or its process dies. So a
+call keeps a running total of the bytes it holds, and an allocation that
+would take it past the module's budget raises `ArgumentError`:
 
 ```
 ** (ArgumentError) out of memory (allocating 1024 bytes would take this call's buffers past max_owned_bytes, 8192 bytes)
@@ -1684,7 +1700,8 @@ fails, which would break the [runtime contract](guides/runtime-contract.md).
   the host's memory). `Mod.__defk_stats__().max_owned_bytes` shows the budget.
 - The count is per call: concurrent calls each have their own, a call
   after a raise starts from zero, and a yield keeps it. An array a kernel
-  returns counts until it returns.
+  returns counts until it returns; a copy released early stops counting
+  when it is released.
 - Elixir mode enforces the same budget on `alloc/2`: it adds up the bytes
   every `alloc/2` of the call asks for (in called kernels too), against
   the same `max_owned_bytes` (it reads `__defk_stats__().max_owned_bytes`), and raises
@@ -1694,7 +1711,9 @@ fails, which would break the [runtime contract](guides/runtime-contract.md).
   copies, bitstring accumulator buffers or aligned input copies (it
   garbage-collects those, as Elixir does), so a call whose copies pass the
   budget raises in native code and succeeds in Elixir mode: its total is
-  never above native code's, so never the reverse.
+  never above native code's, so never the reverse. That is why only copies
+  are released early: releasing an `alloc/2` buffer natively would put
+  native code's total below Elixir mode's.
 - A single allocation of 2^47 bytes or more, which no allocator serves,
   raises the plain "out of memory (allocating N bytes)" of
   [Allocating](#allocating) instead, the same in both modes.

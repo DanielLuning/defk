@@ -24,13 +24,67 @@ defmodule Defk.OwnedBudgetTest.K do
   end
 
   # `b = a` in the body, `a` written and `b` read after it: a copy of `a`
-  # every iteration (docs/language.md, Copies)
+  # every iteration (docs/language.md, Copies). `b` dies at the end of the
+  # iteration, so the previous iteration's copy is released there: the loop
+  # holds two copies at a time, not one per iteration
   defk copy_loop(a :: [i64], n :: i64) :: i64 do
     for i <- 0..(n - 1)//1, reduce: 0 do
       acc ->
         b = a
         a[0] = i
         acc + b[0] + a[0]
+    end
+  end
+
+  # the same shape with `a` as a reduce accumulator
+  defk reduce_copy(a :: [i64], n :: i64) :: {[i64], i64} do
+    for i <- 0..(n - 1)//1, reduce: {a, 0} do
+      {a, s} ->
+        b = a
+        a[0] = i
+        {a, s + b[0] + a[0]}
+    end
+  end
+
+  # the copy and the dying binding inside an if arm
+  defk arm_copy(a :: [i64], n :: i64) :: i64 do
+    for i <- 0..(n - 1)//1, reduce: 0 do
+      acc ->
+        if i > 0 do
+          b = a
+          a[0] = i
+          acc + b[0]
+        else
+          acc + a[0]
+        end
+    end
+  end
+
+  defk bump(a :: [i64]) :: [i64] do
+    a[0] = a[0] + 1
+    a
+  end
+
+  # a called kernel copies the caller's array (the caller reads it after);
+  # the copy comes back as `b` and dies with the iteration
+  defk callee_copy(a :: [i64], n :: i64) :: i64 do
+    for _ <- 0..(n - 1)//1, reduce: 0 do
+      acc ->
+        b = bump(a)
+        acc + b[0] + a[0]
+    end
+  end
+
+  # the copies stay reachable: `c` is `b` or `a`, which the compiler cannot
+  # tell apart, so neither buffer is released and the loop keeps one copy
+  # per iteration until the kernel returns
+  defk copy_kept(a :: [i64], n :: i64) :: i64 do
+    for i <- 0..(n - 1)//1, reduce: 0 do
+      acc ->
+        b = a
+        a[0] = i
+        c = if i > 2, do: b, else: a
+        acc + c[0]
     end
   end
 
@@ -94,6 +148,7 @@ end
 
 defmodule Defk.OwnedBudgetTest do
   use ExUnit.Case, async: false
+  use ExUnitProperties
 
   import Defk.Test.Frames
   import Defk.TestKit
@@ -149,15 +204,103 @@ defmodule Defk.OwnedBudgetTest do
     assert same_raise(K, :alloc_twice, [129]) =~ ~r/^out of memory \(allocating 1032 bytes/
   end
 
-  test "a copy in a loop raises out of memory past the budget" do
+  test "a copy in a loop that stays reachable raises out of memory past the budget" do
     a = i64s(Enum.to_list(1..128))
-    assert K.copy_loop(a, 3) == elixir(:copy_loop, [a, 3])
-    assert_raise ArgumentError, @oom, fn -> K.copy_loop(a, 1000) end
-    # Elixir mode counts alloc/2 only: it garbage-collects the old copies
-    # a write in a `for` body is kept for the next iteration: b[0] is the
-    # previous i (1, the input's, at i = 0), a[0] is i
-    assert elixir(:copy_loop, [a, 1000]) == 1 + Enum.sum(for i <- 1..999, do: 2 * i - 1)
-    assert K.copy_loop(a, 7) == elixir(:copy_loop, [a, 7])
+    assert K.copy_kept(a, 3) == elixir(:copy_kept, [a, 3])
+    assert_raise ArgumentError, @oom, fn -> K.copy_kept(a, 1000) end
+    # Elixir mode counts alloc/2 only: it garbage-collects the old copies.
+    # c[0] is a[0] = i for i <= 2, then b[0], the previous i
+    assert elixir(:copy_kept, [a, 1000]) == 0 + 1 + 2 + Enum.sum(for i <- 3..999, do: i - 1)
+    assert K.copy_kept(a, 7) == elixir(:copy_kept, [a, 7])
+  end
+
+  describe "early release" do
+    # the dying binding's buffer is released before the kernel returns, so
+    # 1000 iterations of a 1 KiB copy fit an 8 KiB budget
+    test "a per-iteration copy whose binding dies is released: the loop no longer accumulates" do
+      a = i64s(Enum.to_list(1..128))
+      # a write in a `for` body is kept for the next iteration: b[0] is the
+      # previous i (1, the input's, at i = 0), a[0] is i
+      expected = 1 + Enum.sum(for i <- 1..999, do: 2 * i - 1)
+      assert K.copy_loop(a, 1000) == expected
+      assert elixir(:copy_loop, [a, 1000]) == expected
+      assert K.reduce_copy(a, 1000) == elixir(:reduce_copy, [a, 1000])
+      assert K.arm_copy(a, 1000) == elixir(:arm_copy, [a, 1000])
+      assert K.callee_copy(a, 1000) == elixir(:callee_copy, [a, 1000])
+    end
+
+    defp kernel_c(name) do
+      K.__defk_c_source__()
+      |> String.split("/* ---- #{name}/2")
+      |> Enum.at(1)
+      |> String.split("/* ---- ")
+      |> hd()
+    end
+
+    test "the release is one runtime call per dying binding, in the generated C" do
+      for name <- ["copy_loop", "reduce_copy", "arm_copy", "callee_copy"] do
+        assert kernel_c(name) =~ "defk_disown(ctx, ", name
+      end
+
+      # copy_kept releases one buffer: the hoisted copy of the input, after
+      # the loop; nothing inside the body
+      [before_end, after_end] = String.split(kernel_c("copy_kept"), "/* defk:end */")
+      refute before_end =~ "defk_disown"
+      assert after_end =~ "defk_disown"
+      refute kernel_c("alloc_loop") =~ "defk_disown"
+    end
+
+    test "under forced yields the released buffers and the budget agree with Elixir mode" do
+      a = i64s(Enum.to_list(1..128))
+
+      forced(K, fn ->
+        {res, count} = yields(K, fn -> K.copy_loop(a, 200) end)
+        assert res == elixir(:copy_loop, [a, 200])
+        assert count > 0
+        assert K.reduce_copy(a, 200) == elixir(:reduce_copy, [a, 200])
+        assert K.arm_copy(a, 200) == elixir(:arm_copy, [a, 200])
+        assert K.callee_copy(a, 200) == elixir(:callee_copy, [a, 200])
+        assert_raise ArgumentError, @oom, fn -> K.copy_kept(a, 1000) end
+      end)
+
+      assert_frames_live(K)
+    end
+
+    property "every loop length and array agrees with Elixir mode under the budget" do
+      check all(
+              len <- StreamData.integer(1..64),
+              n <- StreamData.integer(0..300),
+              xs <- StreamData.list_of(StreamData.integer(-1000..1000), length: len),
+              max_runs: 40
+            ) do
+        a = i64s(xs)
+
+        for f <- [:copy_loop, :reduce_copy, :arm_copy, :callee_copy] do
+          assert apply(K, f, [a, n]) == elixir(f, [a, n]), "#{f}(#{len}, #{n})"
+        end
+      end
+    end
+
+    test "notes the release in the fast-path report" do
+      released = fn kernel ->
+        for {^kernel, line, {:owned, :released, text}} <- K.__defk_report__(), do: {line, text}
+      end
+
+      # the copy made each iteration, and the hoisted copy of the input,
+      # released after the loop
+      assert [{_, text}, {_, after_loop}] = Enum.sort(released.({:copy_loop, 2}), :desc)
+      assert text =~ "this copy is inside a loop and is released before the kernel returns"
+      assert text =~ "at most two at a time"
+      assert after_loop =~ "a's buffer, a copy, is released here"
+      assert owned_notes({:copy_loop, 2}) == []
+
+      assert [{_, text}] = released.({:callee_copy, 2})
+      assert text =~ "released"
+
+      assert [{_, text}] = released.({:copy_kept, 2})
+      assert text =~ "a's buffer, a copy, is released here"
+      assert [{_, _}] = owned_notes({:copy_kept, 2})
+    end
   end
 
   test "a returned array is counted while the kernel runs, and a call under the budget agrees" do
@@ -198,8 +341,8 @@ defmodule Defk.OwnedBudgetTest do
       assert_raise ArgumentError, @oom, fn -> K.alloc_loop(9, 128) end
       assert K.alloc_loop(8, 128) == Enum.sum(0..7)
       a = i64s(Enum.to_list(1..128))
-      assert K.copy_loop(a, 3) == elixir(:copy_loop, [a, 3])
-      assert_raise ArgumentError, @oom, fn -> K.copy_loop(a, 1000) end
+      assert K.copy_kept(a, 3) == elixir(:copy_kept, [a, 3])
+      assert_raise ArgumentError, @oom, fn -> K.copy_kept(a, 1000) end
       assert K.bits(1000) == elixir(:bits, [1000])
       assert_raise ArgumentError, ~r/^out of memory/, fn -> K.bits(10_000) end
     end)
@@ -256,7 +399,7 @@ defmodule Defk.OwnedBudgetTest do
 
       assert text =~ "Allocate before the loop and clear each pass"
 
-      assert [{_, text}] = owned_notes({:copy_loop, 2})
+      assert [{_, text}] = owned_notes({:copy_kept, 2})
       assert text =~ "this copy is inside a loop: each iteration keeps a buffer"
       assert Defk.Report.format(K) =~ "each iteration keeps a buffer until the kernel returns"
     end
