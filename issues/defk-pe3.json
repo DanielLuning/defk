@@ -21,11 +21,15 @@
     {
       "text": "Deferred 2026-10-20: a placeholder until a workload needs little-endian, float or binary segments or reading a bitstring. Undefer when that workload is named here.",
       "timestamp": "2026-10-20T20:25:53Z"
+    },
+    {
+      "text": "2026-10-26 (owner): moved out of epic defk-vcx so the epic can close. Stays deferred until a workload needs little-endian, float or binary segments or reading a bitstring.",
+      "timestamp": "2026-10-26T09:21:02Z"
     }
   ],
   "priority": 4,
   "status": "deferred",
   "title": "Bitstring accumulator: little-endian, float and binary segments, and reading a bitstring (when a workload needs them)",
   "type": "task",
-  "updated_at": "2026-10-26T09:21:01Z"
+  "updated_at": "2026-10-26T09:21:02Z"
 }
