@@ -13,11 +13,15 @@
     {
       "text": "Triage (defk-sgw plan): ready-for-human. Measurement work that needs a quiet machine and judgement about noise.",
       "timestamp": "2026-10-06T09:13:43Z"
+    },
+    {
+      "text": "2026-10-26 (owner): option 1 first: bench/layout_noise.exs builds one kernel several times with only its code layout moved (padding before it), interleaved like bench/float_checks.exs, reports median and range; docs/performance.md 1.7 gets the rule that a difference inside that range is noise. The -falign-* flag experiment is a follow-up ticket, measured with this band.",
+      "timestamp": "2026-10-26T10:30:36Z"
     }
   ],
   "priority": 4,
   "status": "open",
   "title": "Make code-layout timing noise visible or stable",
   "type": "task",
-  "updated_at": "2026-10-13T19:08:09Z"
+  "updated_at": "2026-10-26T10:30:36Z"
 }
