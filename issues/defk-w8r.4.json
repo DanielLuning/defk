@@ -1,6 +1,8 @@
 {
   "assignee": "",
-  "blocked_by": [],
+  "blocked_by": [
+    "defk-wnu"
+  ],
   "blocks": [],
   "created": "2026-10-26T10:30:37Z",
   "description": "Follow-up to defk-wnu (owner 2026-10-26: option 2 after option 1). Apple clang 21 on arm64 accepts -falign-loops=64 and -falign-functions=64 and emits .p2align 6 for them. Measure with bench/layout_noise.exs whether the layout-noise range shrinks with the flags, and what they cost, by the @cflags rule in lib/defk/build.ex (7 interleaved rounds, 2% bar). Changing @cflags rebuilds every cached kernel. Done when the result is recorded in docs/performance.md and the flags are adopted or rejected with the numbers.",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Try -falign-loops/-falign-functions in the NIF build, measured against the layout-noise band",
   "type": "task",
-  "updated_at": "2026-10-26T10:30:37Z"
+  "updated_at": "2026-10-26T10:30:38Z"
 }
