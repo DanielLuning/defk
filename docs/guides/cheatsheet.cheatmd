@@ -235,6 +235,7 @@ Or `alloc` the largest size and return `{out, count}`.
 | a hash that wraps at 64 bits | `band(expr, 0xFFFFFFFFFFFFFFFF)` | [masked arithmetic](../language.md#masked-arithmetic) |
 | a map of counters per key | `counts = alloc(i64, 256)`, `counts[k] = counts[k] + 1` | [`unsupported-map`](../compile-errors.md#unsupported-map) |
 | `xs :: list(float)` | `xs :: [f64]`, packed in Elixir | [`unknown-type`](../compile-errors.md#unknown-type) |
+| `x :: f32`, float32 arithmetic | `s = alloc(f32, 1)`, `s[0] = a * b`, `p = s[0]` | [exact float32](../language.md#exact-float32-arithmetic) |
 | returning text, `:: String.t()` | `:: [u8]`, a binary in Elixir | [`unknown-type`](../compile-errors.md#unknown-type) |
 | maps, strings, atoms | pack values into binaries in Elixir first | [`unsupported-map`](../compile-errors.md#unsupported-map) |
 

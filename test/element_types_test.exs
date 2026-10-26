@@ -49,6 +49,14 @@ defmodule Defk.ElementTypesTest.K do
     out[0] * 2.0
   end
 
+  # exact float32: a one-element [f32] scratch rounds each f64 result
+  defk mul_add32(a :: f64, b :: f64, c :: f64) :: f64 do
+    s = alloc(f32, 1)
+    s[0] = a * b
+    s[0] = s[0] + c
+    s[0]
+  end
+
   # a write into an input array copies it first; the caller's binary is kept
   defk set16(a :: [i16], i :: i64, v :: i64) :: [i16] do
     a[i] = v
@@ -257,6 +265,38 @@ defmodule Defk.ElementTypesTest do
     assert d === r * 2.0
   end
 
+  test "the [f32] scratch gives float32 arithmetic: ties round to even" do
+    tiny = :math.pow(2, -150)
+    # 1 + 2^-12 and 1 + 3 * 2^-12 are float32 values; their products are
+    # exact in f64 and halfway between two float32 values
+    a = 1.0 + :math.pow(2, -12)
+    b = 1.0 + 3 * :math.pow(2, -12)
+
+    cases = [
+      # 2^24 + 1 and 2^24 + 3: halfway, to the even neighbour
+      {{16_777_216.0, 1.0, 1.0}, 16_777_216.0},
+      {{16_777_216.0, 1.0, 3.0}, 16_777_220.0},
+      {{-16_777_216.0, 1.0, -1.0}, -16_777_216.0},
+      {{-16_777_216.0, 1.0, -3.0}, -16_777_220.0},
+      {{a, a, 0.0}, 1.0 + :math.pow(2, -11)},
+      {{a, b, 0.0}, 1.0 + :math.pow(2, -10) + :math.pow(2, -22)},
+      # half the smallest subnormal rounds to 0.0, three halves to two
+      {{0.0, 0.0, tiny}, 0.0},
+      {{0.0, 0.0, 3 * tiny}, 2 * 2 * tiny},
+      {{:math.pow(2, -75), :math.pow(2, -75), 0.0}, 0.0}
+    ]
+
+    for {{x, y, z} = args, expected} <- cases do
+      assert {:ok, ^expected} = agrees(:mul_add32, Tuple.to_list(args))
+      assert expected === round32(round32(x * y) + z)
+    end
+  end
+
+  defp round32(x) do
+    <<y::float-32-native>> = <<x::float-32-native>>
+    y
+  end
+
   test "a write into an input array copies it; the caller's binary is unchanged" do
     a = i16s([1, 2, 3])
     assert {:ok, out} = agrees(:set16, [a, 1, -5])
@@ -405,6 +445,7 @@ defmodule Defk.ElementTypesTest do
     putf32: [],
     putf32_int: [],
     roundtrip: [],
+    mul_add32: [],
     set16: [args: fixed_list([G.array(:i16), G.i64(-2..70), G.i64()])],
     setf32: [args: fixed_list([G.array(:f32), G.i64(-2..70), G.f64()])],
     sum16: [],

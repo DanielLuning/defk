@@ -2946,7 +2946,9 @@ f64 time, so the write costs nothing. The same rounding in Elixir, through
 - **Numbers:** sparse layer, one gather per term: 0.378 us per item with a
   rounding after every operation, 0.417 us in f64. The hand-written C float
   loop took 0.069 us: the 5.5x gap is the runtime checks in the hot loop
-  (`defk-w8r.3`). Whether this pattern becomes a builtin is `defk-vcx.5`.
+  (`defk-w8r.3`). The pattern stays a recipe, not a builtin (`defk-vcx.5`,
+  owner 2026-10-26: no catalog workload needs one); docs/language.md,
+  "Exact float32 arithmetic", documents it.
 - **Conditions:** M-series Mac, one thread, one run each, quiet machine.
 - **Source:** `defk-w8r.2` and `defk-vcx.5` hold the numbers; the research
   note was deleted (see 2.19).
