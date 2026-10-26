@@ -26,11 +26,15 @@
     {
       "text": "PR #82 (copies only, owner's call 2026-10-22): https://github.com/DanielLuning/defk/pull/82. mix ci green, ASan clean over the nine test modules whose C changed, no catalog kernel's C changed. Measured (provisional, docs/performance.md 6.47): copy_loop 92 -\u003e 42 ns per iteration at 16 elements, 864 -\u003e 130 at 1024. Two calls beyond copies-only in ADR-0012: the release point is every block incl. the kernel's own body; a plain nested block releases nothing. Ticket stays in progress until the owner merges.",
       "timestamp": "2026-10-22T19:38:59Z"
+    },
+    {
+      "text": "Merged in PR #82 (f43e816d) on 2026-10-26.",
+      "timestamp": "2026-10-26T10:23:16Z"
     }
   ],
   "priority": 4,
   "status": "closed",
   "title": "Free dead owned buffers early, so a per-iteration copy or alloc no longer accumulates until return",
   "type": "task",
-  "updated_at": "2026-10-26T10:23:15Z"
+  "updated_at": "2026-10-26T10:23:16Z"
 }
