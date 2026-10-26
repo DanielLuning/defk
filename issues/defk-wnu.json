@@ -6,7 +6,7 @@
   "description": "In defk-9vl, kernels whose generated C and machine code were identical to main (only at different addresses) swung about ±3% between builds (count_primes yielding 177 vs 180-182 ms, count_primes_via_call the opposite way). That noise is the same size as effects we try to measure. Options: try -falign-loops / -falign-functions in the NIF build, or have benches report a spread across several builds (e.g. perturb layout) instead of one best-of. Done when a ±3% claim can be told apart from layout noise.",
   "id": "defk-wnu",
   "labels": [
-    "ready-for-human"
+    "ready-for-agent"
   ],
   "parent": "defk-w8r",
   "comments": [
@@ -23,5 +23,5 @@
   "status": "open",
   "title": "Make code-layout timing noise visible or stable",
   "type": "task",
-  "updated_at": "2026-10-26T10:30:36Z"
+  "updated_at": "2026-10-26T10:30:37Z"
 }
