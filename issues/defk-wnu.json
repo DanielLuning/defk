@@ -24,11 +24,15 @@
     {
       "text": "PR #84 (branch defk-wnu/layout-noise-band, worktree ../defk-wnu). Quiet run 2026-10-26, 15 rounds: integer loops layout range 2.9-3.6% vs A/A control 0.2-2.1%; sum/dot 1.2-1.9%, near control. mix ci passed. Close after merge; defk-w8r.4 then unblocks.",
       "timestamp": "2026-10-26T10:41:48Z"
+    },
+    {
+      "text": "Merged in PR #84 (d832a216) on 2026-10-26.",
+      "timestamp": "2026-10-26T13:17:24Z"
     }
   ],
   "priority": 4,
   "status": "closed",
   "title": "Make code-layout timing noise visible or stable",
   "type": "task",
-  "updated_at": "2026-10-26T13:17:23Z"
+  "updated_at": "2026-10-26T13:17:24Z"
 }
