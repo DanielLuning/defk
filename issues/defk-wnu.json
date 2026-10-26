@@ -19,11 +19,15 @@
     {
       "text": "2026-10-26 (owner): option 1 first: bench/layout_noise.exs builds one kernel several times with only its code layout moved (padding before it), interleaved like bench/float_checks.exs, reports median and range; docs/performance.md 1.7 gets the rule that a difference inside that range is noise. The -falign-* flag experiment is a follow-up ticket, measured with this band.",
       "timestamp": "2026-10-26T10:30:36Z"
+    },
+    {
+      "text": "PR #84 (branch defk-wnu/layout-noise-band, worktree ../defk-wnu). Quiet run 2026-10-26, 15 rounds: integer loops layout range 2.9-3.6% vs A/A control 0.2-2.1%; sum/dot 1.2-1.9%, near control. mix ci passed. Close after merge; defk-w8r.4 then unblocks.",
+      "timestamp": "2026-10-26T10:41:48Z"
     }
   ],
   "priority": 4,
   "status": "in_progress",
   "title": "Make code-layout timing noise visible or stable",
   "type": "task",
-  "updated_at": "2026-10-26T10:30:45Z"
+  "updated_at": "2026-10-26T10:41:48Z"
 }
