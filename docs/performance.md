@@ -201,20 +201,24 @@ Elixir job can use every scheduler.
 - **Numbers:** under load a 1 ms ticker on one scheduler never reads below
   ~2 ms, for every side (cosine_topk, hll_update_many, gorilla_encode). Code
   layout alone moves a kernel about ±3% (count_primes yielding 177 vs 180-182
-  ms, with `count_primes_via_call` moving the other way). Verdicts near a
+  ms, with `count_primes_via_call` moving the other way; measured on a quiet
+  machine in 1.10). Verdicts near a
   line flip run to run: `poor_substring_search` 1.03-1.11x read 1.0x on the
   scoreboard; `codecs` hex 2.02-2.04x read marginal on a slow run (3.6x
   since `defk-upc`, 6.2, so no longer near the line);
   `gorilla_encode` 1.96-2.38x was marginal in 1 run of 8.
 - **Conditions:** loaded runs (load average 5-90 across sessions).
-- **Source:** `defk-wnu` (open), `defk-9p6.24` (open: proposes a ±5% tie band), `defk-9p6.13`/`.15`/`.16` comments.
+- **Source:** `defk-wnu` (1.10), `defk-9p6.24` (closed: `Defk.Bench` verdicts have a 5% tie band below each threshold), `defk-9p6.13`/`.15`/`.16` comments.
 - **Status:** provisional.
 
 What to do: interleave the variants in one VM, alternate which goes first,
 take best of 5 per round over several rounds, and report the run medians and
 the range ([`bench/float_checks.exs`](https://github.com/DanielLuning/defk/blob/main/bench/float_checks.exs) is the
 pattern). Don't assert wall-clock times in unit tests (`defk-m4b`), and run
-examples one at a time (`mix defk.examples --bench` does).
+examples one at a time (`mix defk.examples --bench` does). A difference of
+up to 4% between two builds of an integer kernel can be code layout alone
+(1.10): claim it only when it is larger than the kernel's layout range from
+`bench/layout_noise.exs`, or when it holds across several layouts.
 
 ### 1.8 Measure responsiveness with a ticker on one scheduler, and read the floor
 
@@ -258,6 +262,39 @@ passed or not. In a property's inner loop that is most of the run.
   kill runs, so provisional.
 - **Source:** `defk-1ub`, [`test/linear_facts_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/linear_facts_test.exs), [`test/strip_copies_test.exs`](https://github.com/DanielLuning/defk/blob/main/test/strip_copies_test.exs).
 - **Status:** provisional.
+
+### 1.10 Code layout alone moves an integer kernel up to 4%; float loops move less
+
+The same kernel, built 8 times with only its addresses moved (an unused
+function of 0 to 48 bytes put before it), runs at different speeds. The
+first build, measured under two more labels, is the control: its three
+medians differ by sampling noise only.
+
+- **Numbers:** 15 interleaved rounds, best of 3 per round, medians of the
+  round-bests; the layout range is the slowest build's median over the
+  fastest's, minus 1:
+
+  | kernel | time | layout range (8 builds) | same-build range (3 labels) |
+  |---|---|---|---|
+  | `count_primes(300_000)` | 31.5-32.6 ms | 3.6% | 0.8% |
+  | `count_primes_via_call(300_000)` | 31.7-32.7 ms | 2.9% | 0.2% |
+  | `count_primes_early(1_000_000)` | 34.6-35.9 ms | 3.6% | 2.1% |
+  | `sum`, 1M `[f64]` | 479-488 us | 1.9% | 0.8% |
+  | `dot`, 2 x 1M `[f64]` | 495-501 us | 1.2% | 1.2% |
+
+  The integer loops move more than their control; pad 40 made
+  `count_primes` about 3% faster than pad 0 in 10 of the 11 rounds outside
+  a slow stretch. The float loops' range is near their control's. Rounds 8-11 were
+  8-10% slower for every build at once (the machine, not the layout); the
+  interleaving puts that on all builds alike, so the medians hold.
+- **What did not help:** nothing tried yet. `-falign-loops=64` and
+  `-falign-functions=64` are accepted by Apple clang 21 on arm64 and emit
+  64-byte alignment; whether they shrink the range, and what they cost, is
+  `defk-w8r.4`.
+- **Conditions:** M-series Mac, one process, other processes 0.65-0.67
+  cores (quiet), one run, 2026-10-26.
+- **Source:** [`bench/layout_noise.exs`](https://github.com/DanielLuning/defk/blob/main/bench/layout_noise.exs), `defk-wnu`.
+- **Status:** measured, one run.
 
 ---
 
