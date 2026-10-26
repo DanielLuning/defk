@@ -1,5 +1,5 @@
 {
-  "assignee": "",
+  "assignee": "Daniel Lüning",
   "blocked_by": [],
   "blocks": [],
   "created": "2026-10-20T12:35:37Z",
@@ -28,8 +28,8 @@
     }
   ],
   "priority": 3,
-  "status": "open",
+  "status": "in_progress",
   "title": "Decide: an f32 rounding builtin, or only a documented recipe, for exact float32 in kernels",
   "type": "task",
-  "updated_at": "2026-10-26T09:21:06Z"
+  "updated_at": "2026-10-26T09:21:08Z"
 }
